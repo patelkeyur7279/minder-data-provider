@@ -16,6 +16,46 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./crud": {
+      "types": "./dist/crud/index.d.ts",
+      "import": "./dist/crud/index.js",
+      "require": "./dist/crud/index.cjs"
+    },
+    "./auth": {
+      "types": "./dist/auth/index.d.ts",
+      "import": "./dist/auth/index.js",
+      "require": "./dist/auth/index.cjs"
+    },
+    "./cache": {
+      "types": "./dist/cache/index.d.ts",
+      "import": "./dist/cache/index.js",
+      "require": "./dist/cache/index.cjs"
+    },
+    "./websocket": {
+      "types": "./dist/websocket/index.d.ts",
+      "import": "./dist/websocket/index.js",
+      "require": "./dist/websocket/index.cjs"
+    },
+    "./upload": {
+      "types": "./dist/upload/index.d.ts",
+      "import": "./dist/upload/index.js",
+      "require": "./dist/upload/index.cjs"
+    },
+    "./debug": {
+      "types": "./dist/debug/index.d.ts",
+      "import": "./dist/debug/index.js",
+      "require": "./dist/debug/index.cjs"
+    },
+    "./config": {
+      "types": "./dist/config/index.d.ts",
+      "import": "./dist/config/index.js",
+      "require": "./dist/config/index.cjs"
+    },
+    "./ssr": {
+      "types": "./dist/ssr/index.d.ts",
+      "import": "./dist/ssr/index.js",
+      "require": "./dist/ssr/index.cjs"
     }
   },
   "scripts": {
@@ -28,8 +68,11 @@
     "type-check": "tsc --noEmit",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build && npm run test",
-    "demo": "http-server demo -p 3000 -o index.html",
-    "start": "npm run demo"
+    "demo": "cd demo && npm run dev",
+    "demo:build": "cd demo && npm run build",
+    "start": "npm run demo",
+    "analyze": "npm run build && npx bundlesize",
+    "security-audit": "npm audit --audit-level moderate"
   },
   "keywords": [
     "react",
@@ -108,19 +151,31 @@
     }
   },
   "tsup": {
-    "entry": [
-      "src/index.ts"
-    ],
+    "entry": {
+      "index": "src/index.ts",
+      "crud/index": "src/crud/index.ts",
+      "auth/index": "src/auth/index.ts",
+      "cache/index": "src/cache/index.ts",
+      "websocket/index": "src/websocket/index.ts",
+      "upload/index": "src/upload/index.ts",
+      "debug/index": "src/debug/index.ts",
+      "config/index": "src/config/index.ts",
+      "ssr/index": "src/ssr/index.ts"
+    },
     "format": [
       "cjs",
       "esm"
     ],
     "dts": true,
-    "splitting": false,
+    "splitting": true,
     "sourcemap": true,
     "clean": true,
     "minify": true,
-    "treeshake": true
+    "treeshake": true,
+    "external": [
+      "react",
+      "react-dom"
+    ]
   },
   "repository": {
     "type": "git",

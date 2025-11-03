@@ -4,12 +4,16 @@ import { BaseModel } from '../models/BaseModel.js';
 export interface MinderConfig {
   apiBaseUrl: string;
   routes: Record<string, ApiRoute>;
+  dynamic: any;
   auth?: AuthConfig;
   cache?: CacheConfig;
   cors?: CorsConfig;
   websocket?: WebSocketConfig;
   redux?: ReduxConfig;
   performance?: PerformanceConfig;
+  debug?: DebugConfig;
+  security?: SecurityConfig;
+  ssr?: SSRConfig;
   environments?: Record<string, EnvironmentOverride>;
   defaultEnvironment?: string;
   autoDetectEnvironment?: boolean;
@@ -75,6 +79,34 @@ export interface PerformanceConfig {
   retries?: number;
   retryDelay?: number;
   timeout?: number;
+  compression?: boolean;
+  bundleAnalysis?: boolean;
+  lazyLoading?: boolean;
+}
+
+export interface DebugConfig {
+  enabled?: boolean;
+  logLevel?: 'error' | 'warn' | 'info' | 'debug';
+  performance?: boolean;
+  devTools?: boolean;
+  networkLogs?: boolean;
+}
+
+export interface SecurityConfig {
+  encryption?: boolean;
+  sanitization?: boolean;
+  csrfProtection?: boolean;
+  rateLimiting?: {
+    requests: number;
+    window: number;
+  };
+}
+
+export interface SSRConfig {
+  enabled?: boolean;
+  prefetch?: string[];
+  hydrate?: boolean;
+  fallback?: any;
 }
 
 // State management types

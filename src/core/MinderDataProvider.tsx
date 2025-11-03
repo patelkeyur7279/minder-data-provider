@@ -1,17 +1,30 @@
-import React, { createContext, useContext, useMemo } from 'react';
-import type { ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import { Provider as ReduxProvider } from 'react-redux';
-import { configureStore } from '@reduxjs/toolkit';
-import type { MinderConfig } from './types.js';
-import { createApiSlices } from './SliceGenerator.js';
-import { ApiClient } from './ApiClient.js';
-import { AuthManager } from './AuthManager.js';
-import { CacheManager } from './CacheManager.js';
-import { WebSocketManager } from './WebSocketManager.js';
-import { EnvironmentManager } from './EnvironmentManager.js';
-import { ProxyManager } from './ProxyManager.js';
+import React, { createContext, useContext, useMemo } from "react";
+import type { ReactNode } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+// import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+
+// const { dynamic } = config;
+
+// const ReactQueryDevtools = dynamic(
+//   () =>
+//     import("@tanstack/react-query-devtools").then(
+//       (mod) => mod.ReactQueryDevtools
+//     ),
+//   { ssr: false }
+// );
+
+import { Provider as ReduxProvider } from "react-redux";
+import { configureStore } from "@reduxjs/toolkit";
+import type { MinderConfig } from "./types.js";
+import { createApiSlices } from "./SliceGenerator.js";
+import { ApiClient } from "./ApiClient.js";
+import { AuthManager } from "./AuthManager.js";
+import { CacheManager } from "./CacheManager.js";
+import { WebSocketManager } from "./WebSocketManager.js";
+import { EnvironmentManager } from "./EnvironmentManager.js";
+import { ProxyManager } from "./ProxyManager.js";
+import { DebugManager } from "../debug/DebugManager.js";
 
 interface MinderContextValue {
   config: MinderConfig;
@@ -21,6 +34,7 @@ interface MinderContextValue {
   websocketManager?: WebSocketManager;
   environmentManager?: EnvironmentManager;
   proxyManager?: ProxyManager;
+  debugManager?: DebugManager;
   store: any;
   queryClient: QueryClient;
 }
@@ -32,27 +46,48 @@ interface MinderDataProviderProps {
   children: ReactNode;
 }
 
-export function MinderDataProvider({ config, children }: MinderDataProviderProps) {
+export function MinderDataProvider({
+  config,
+  children,
+}: MinderDataProviderProps) {
   const contextValue = useMemo(() => {
     // Setup environment manager if environments are configured
     let environmentManager: EnvironmentManager | undefined;
     let proxyManager: ProxyManager | undefined;
+    let debugManager: DebugManager | undefined;
     let finalConfig: MinderConfig = config;
-    
+
+    // Setup debug manager
+    const debugEnabled =
+      finalConfig.debug?.enabled ||
+      (finalConfig.environments &&
+        finalConfig.autoDetectEnvironment &&
+        typeof window !== "undefined" &&
+        window.location.hostname === "localhost");
+
+    if (debugEnabled) {
+      debugManager = new DebugManager(true);
+      debugManager.log(
+        "api",
+        "Minder Data Provider initialized with debug mode"
+      );
+    }
+
     if (config.environments) {
       environmentManager = new EnvironmentManager(config);
       finalConfig = environmentManager.getResolvedConfig();
-      
+
       // Setup proxy if CORS is enabled
       if (finalConfig.cors?.enabled && finalConfig.cors?.proxy) {
         proxyManager = new ProxyManager({
           enabled: true,
           baseUrl: finalConfig.cors.proxy,
-          headers: { 
-            'X-Environment': environmentManager?.getCurrentEnvironment() || 'development',
-            'X-Target-URL': finalConfig.apiBaseUrl
+          headers: {
+            "X-Environment":
+              environmentManager?.getCurrentEnvironment() || "development",
+            "X-Target-URL": finalConfig.apiBaseUrl,
           },
-          timeout: 30000
+          timeout: 30000,
         });
       }
     } else if (config.cors?.enabled && config.cors?.proxy) {
@@ -60,20 +95,21 @@ export function MinderDataProvider({ config, children }: MinderDataProviderProps
       proxyManager = new ProxyManager({
         enabled: true,
         baseUrl: config.cors.proxy,
-        headers: { 
-          'X-Target-URL': config.apiBaseUrl
+        headers: {
+          "X-Target-URL": config.apiBaseUrl,
         },
-        timeout: 30000
+        timeout: 30000,
       });
     }
-    
+
     // Create QueryClient with CORS and performance optimizations
     const queryClient = new QueryClient({
       defaultOptions: {
         queries: {
           staleTime: finalConfig.cache?.staleTime || 5 * 60 * 1000,
           gcTime: finalConfig.cache?.gcTime || 10 * 60 * 1000,
-          refetchOnWindowFocus: finalConfig.cache?.refetchOnWindowFocus ?? false,
+          refetchOnWindowFocus:
+            finalConfig.cache?.refetchOnWindowFocus ?? false,
           refetchOnReconnect: finalConfig.cache?.refetchOnReconnect ?? true,
           retry: finalConfig.performance?.retries || 3,
           retryDelay: finalConfig.performance?.retryDelay || 1000,
@@ -94,7 +130,7 @@ export function MinderDataProvider({ config, children }: MinderDataProviderProps
     const cacheManager = new CacheManager(queryClient);
 
     // Create WebSocket Manager if configured
-    const websocketManager = finalConfig.websocket 
+    const websocketManager = finalConfig.websocket
       ? new WebSocketManager(finalConfig.websocket, authManager)
       : undefined;
 
@@ -107,12 +143,23 @@ export function MinderDataProvider({ config, children }: MinderDataProviderProps
       middleware: (getDefaultMiddleware) =>
         getDefaultMiddleware({
           serializableCheck: {
-            ignoredActions: ['persist/PERSIST', 'persist/REHYDRATE'],
+            ignoredActions: ["persist/PERSIST", "persist/REHYDRATE"],
           },
         }),
       devTools: finalConfig.redux?.devTools ?? true,
       preloadedState: finalConfig.redux?.preloadedState,
     });
+
+    let ReactQueryDevtools;
+    if (config.dynamic) {
+      ReactQueryDevtools = config.dynamic(
+        () =>
+          import("@tanstack/react-query-devtools").then(
+            (mod) => mod.ReactQueryDevtools
+          ),
+        { ssr: false }
+      );
+    }
 
     return {
       config: finalConfig,
@@ -122,8 +169,10 @@ export function MinderDataProvider({ config, children }: MinderDataProviderProps
       websocketManager,
       environmentManager,
       proxyManager,
+      debugManager,
       store,
       queryClient,
+      ReactQueryDevtools,
     };
   }, [config]);
 
@@ -132,7 +181,14 @@ export function MinderDataProvider({ config, children }: MinderDataProviderProps
       <ReduxProvider store={contextValue.store}>
         <QueryClientProvider client={contextValue.queryClient}>
           {children}
-          {typeof window !== 'undefined' && <ReactQueryDevtools initialIsOpen={false} />}
+
+          {/* {typeof window !== "undefined" && (
+            <ReactQueryDevtools initialIsOpen={false} />
+          )} */}
+
+          {contextValue.ReactQueryDevtools && (
+            <contextValue.ReactQueryDevtools initialIsOpen={false} />
+          )}
         </QueryClientProvider>
       </ReduxProvider>
     </MinderContext.Provider>
@@ -142,7 +198,7 @@ export function MinderDataProvider({ config, children }: MinderDataProviderProps
 export function useMinderContext(): MinderContextValue {
   const context = useContext(MinderContext);
   if (!context) {
-    throw new Error('useMinderContext must be used within MinderDataProvider');
+    throw new Error("useMinderContext must be used within MinderDataProvider");
   }
   return context;
 }

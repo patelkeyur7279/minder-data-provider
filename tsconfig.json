@@ -41,7 +41,9 @@
     "skipLibCheck": true,
 
     "moduleResolution": "NodeNext",
-    "esModuleInterop": true
+    "esModuleInterop": true,
+
+    "allowSyntheticDefaultImports": true
   },
   "include": ["src/**/*"]
 }

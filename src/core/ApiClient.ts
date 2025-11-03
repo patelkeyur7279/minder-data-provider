@@ -9,6 +9,8 @@ export class ApiClient {
   private config: MinderConfig;
   private authManager: AuthManager;
   private proxyManager?: ProxyManager;
+  private requestCache: Map<string, Promise<any>> = new Map();
+  private rateLimiter: Map<string, number[]> = new Map();
 
   constructor(config: MinderConfig, authManager: AuthManager, proxyManager?: ProxyManager) {
     this.config = config;
@@ -33,12 +35,25 @@ export class ApiClient {
   }
 
   private setupInterceptors() {
-    // Request interceptor for auth and CORS
+    // Request interceptor for auth, CORS, and security
     this.axiosInstance.interceptors.request.use(
       (config) => {
         const token = this.authManager.getToken();
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
+        }
+
+        // Security headers
+        if (this.config.security?.csrfProtection) {
+          config.headers['X-CSRF-Token'] = this.generateCSRFToken();
+        }
+        
+        // Rate limiting check
+        if (this.config.security?.rateLimiting) {
+          const key = `${config.method}:${config.url}`;
+          if (!this.checkRateLimit(key)) {
+            throw new Error('Rate limit exceeded');
+          }
         }
 
         // Add CORS preflight handling
@@ -96,6 +111,53 @@ export class ApiClient {
     }
   }
 
+  private generateCSRFToken(): string {
+    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  }
+
+  private checkRateLimit(key: string): boolean {
+    if (!this.config.security?.rateLimiting) return true;
+    
+    const now = Date.now();
+    const window = this.config.security.rateLimiting.window;
+    const maxRequests = this.config.security.rateLimiting.requests;
+    
+    if (!this.rateLimiter.has(key)) {
+      this.rateLimiter.set(key, []);
+    }
+    
+    const requests = this.rateLimiter.get(key)!;
+    const validRequests = requests.filter(time => now - time < window);
+    
+    if (validRequests.length >= maxRequests) {
+      return false;
+    }
+    
+    validRequests.push(now);
+    this.rateLimiter.set(key, validRequests);
+    return true;
+  }
+
+  private sanitizeData(data: any): any {
+    if (!this.config.security?.sanitization) return data;
+    
+    if (typeof data === 'string') {
+      return data.replace(/<script[^>]*>.*?<\/script>/gi, '')
+                .replace(/javascript:/gi, '')
+                .replace(/on\w+\s*=/gi, '');
+    }
+    
+    if (typeof data === 'object' && data !== null) {
+      const sanitized: any = Array.isArray(data) ? [] : {};
+      for (const key in data) {
+        sanitized[key] = this.sanitizeData(data[key]);
+      }
+      return sanitized;
+    }
+    
+    return data;
+  }
+
   async request<T = any>(
     routeName: string,
     data?: any,
@@ -133,20 +195,43 @@ export class ApiClient {
       requestConfig.baseURL = '';
     }
 
-    // Handle different content types
-    if (data) {
-      if (data instanceof FormData) {
-        requestConfig.data = data;
-        requestConfig.headers!['Content-Type'] = 'multipart/form-data';
-      } else if (typeof data === 'string' && data.startsWith('<?xml')) {
-        requestConfig.data = data;
-        requestConfig.headers!['Content-Type'] = 'application/xml';
-      } else {
-        requestConfig.data = data;
+    // Request deduplication for GET requests
+    const cacheKey = `${route.method}:${url}:${JSON.stringify(data || {})}`;
+    if (route.method === 'GET' && this.config.performance?.deduplication) {
+      const cachedRequest = this.requestCache.get(cacheKey);
+      if (cachedRequest) {
+        return cachedRequest;
       }
     }
 
-    const response: AxiosResponse<T> = await this.axiosInstance.request(requestConfig);
+    // Handle different content types with sanitization
+    if (data) {
+      const sanitizedData = this.sanitizeData(data);
+      
+      if (sanitizedData instanceof FormData) {
+        requestConfig.data = sanitizedData;
+        requestConfig.headers!['Content-Type'] = 'multipart/form-data';
+      } else if (typeof sanitizedData === 'string' && sanitizedData.startsWith('<?xml')) {
+        requestConfig.data = sanitizedData;
+        requestConfig.headers!['Content-Type'] = 'application/xml';
+      } else {
+        requestConfig.data = sanitizedData;
+      }
+    }
+
+    // Execute request with caching for GET
+    const requestPromise = this.axiosInstance.request(requestConfig);
+    
+    if (route.method === 'GET' && this.config.performance?.deduplication) {
+      this.requestCache.set(cacheKey, requestPromise);
+      
+      // Clean up cache after request completes
+      requestPromise.finally(() => {
+        setTimeout(() => this.requestCache.delete(cacheKey), 1000);
+      });
+    }
+    
+    const response: AxiosResponse<T> = await requestPromise;
     
     // Transform response using model if specified
     if (route.model && response.data) {
