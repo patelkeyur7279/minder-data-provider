@@ -77,6 +77,10 @@ export * from './query/index.js';
 
 export * from './platform/index.js';
 
+// FeatureLoader for dynamic bundle optimization
+export { FeatureLoader, createFeatureLoader } from './core/FeatureLoader.js';
+export type { FeatureFlags, FeatureModules, FeatureLoaderOptions } from './core/FeatureLoader.js';
+
 // ============================================================================
 // DEFAULT EXPORT
 // ============================================================================
