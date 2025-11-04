@@ -1,11 +1,18 @@
 import type { AppProps } from 'next/app';
-import { MinderDataProvider } from '../../src/core/MinderDataProvider.js';
-import { completeConfig } from '../features/01-configuration.js';
+import React from 'react';
+import { configureMinder } from 'minder-data-provider';
+
+// Configure minder globally - no provider needed!
+configureMinder({
+  baseURL: 'http://localhost:8080/api',
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
 
 export default function App({ Component, pageProps }: AppProps) {
-  return (
-    <MinderDataProvider config={completeConfig}>
-      <Component {...pageProps} />
-    </MinderDataProvider>
-  );
+  console.log('✅ minder() configured globally - ready to use!');
+  
+  return <Component {...pageProps} />;
 }

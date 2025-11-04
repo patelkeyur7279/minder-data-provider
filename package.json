@@ -1,6 +1,6 @@
 {
   "name": "minder-data-provider",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "type": "module",
   "description": "Production-ready hybrid Redux + TanStack Query data provider for Next.js with CORS support, WebSocket, and advanced caching",
   "main": "./dist/index.js",
@@ -16,6 +16,16 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./core/*": {
+      "types": "./dist/core/*.d.ts",
+      "import": "./dist/core/*.js",
+      "require": "./dist/core/*.cjs"
+    },
+    "./hooks/*": {
+      "types": "./dist/hooks/*.d.ts",
+      "import": "./dist/hooks/*.js",
+      "require": "./dist/hooks/*.cjs"
     },
     "./crud": {
       "types": "./dist/crud/index.d.ts",
@@ -91,13 +101,17 @@
   "author": "Minder Data Provider Team",
   "license": "MIT",
   "dependencies": {
-    "@reduxjs/toolkit": "^2.2.1",
-    "@tanstack/react-query": "^5.28.4",
-    "@tanstack/react-query-devtools": "^5.28.4",
-    "axios": "^1.6.8",
-    "react-redux": "^9.1.0"
+    "@reduxjs/toolkit": "^2.3.0",
+    "@tanstack/react-query": "^5.59.20",
+    "axios": "^1.7.7",
+    "immer": "^10.1.1",
+    "react-redux": "^9.1.2"
   },
   "devDependencies": {
+    "@tanstack/react-query-devtools": "^5.59.20",
+    "@types/cors": "^2.8.17",
+    "@babel/core": "^7.28.5",
+    "@babel/plugin-transform-class-static-block": "^7.28.3",
     "@types/jest": "^29.5.12",
     "@types/node": "^20.11.30",
     "@types/react": "^18.2.73",
@@ -149,33 +163,6 @@
         "statements": 70
       }
     }
-  },
-  "tsup": {
-    "entry": {
-      "index": "src/index.ts",
-      "crud/index": "src/crud/index.ts",
-      "auth/index": "src/auth/index.ts",
-      "cache/index": "src/cache/index.ts",
-      "websocket/index": "src/websocket/index.ts",
-      "upload/index": "src/upload/index.ts",
-      "debug/index": "src/debug/index.ts",
-      "config/index": "src/config/index.ts",
-      "ssr/index": "src/ssr/index.ts"
-    },
-    "format": [
-      "cjs",
-      "esm"
-    ],
-    "dts": true,
-    "splitting": true,
-    "sourcemap": true,
-    "clean": true,
-    "minify": true,
-    "treeshake": true,
-    "external": [
-      "react",
-      "react-dom"
-    ]
   },
   "repository": {
     "type": "git",

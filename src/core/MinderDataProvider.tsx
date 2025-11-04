@@ -1,10 +1,19 @@
-import React, { createContext, useContext, useMemo } from "react";
-import type { ReactNode } from "react";
+'use client';
+
+// ✅ CRITICAL: Import React hooks directly to avoid bundling issues
+// When using namespace imports (import * as React), bundlers can sometimes
+// create invalid references causing "Cannot read properties of null" errors
+import { 
+  createContext, 
+  useContext, 
+  useMemo, 
+  useState, 
+  Suspense 
+} from 'react';
+import type { ReactNode, ComponentType } from 'react';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-
-// import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-
-// const { dynamic } = config;
+import type { DehydratedState } from "@tanstack/react-query";
+import { HydrationBoundary } from '@tanstack/react-query';
 
 // const ReactQueryDevtools = dynamic(
 //   () =>
@@ -35,8 +44,10 @@ interface MinderContextValue {
   environmentManager?: EnvironmentManager;
   proxyManager?: ProxyManager;
   debugManager?: DebugManager;
-  store: any;
+  store: ReturnType<typeof configureStore>;
   queryClient: QueryClient;
+  ReactQueryDevtools?: ComponentType<{ initialIsOpen?: boolean }>;
+  dehydratedState?: DehydratedState;
 }
 
 const MinderContext = createContext<MinderContextValue | null>(null);
@@ -44,12 +55,37 @@ const MinderContext = createContext<MinderContextValue | null>(null);
 interface MinderDataProviderProps {
   config: MinderConfig;
   children: ReactNode;
+  dehydratedState?: DehydratedState;
+  fallback?: ReactNode;
+}
+
+function getQueryClientConfig(config: MinderConfig) {
+  return {
+    defaultOptions: {
+      queries: {
+        staleTime: config.cache?.staleTime || 5 * 60 * 1000,
+        gcTime: config.cache?.gcTime || 10 * 60 * 1000,
+        refetchOnWindowFocus: config.cache?.refetchOnWindowFocus ?? false,
+        refetchOnReconnect: config.cache?.refetchOnReconnect ?? true,
+        retry: config.performance?.retries || 3,
+        retryDelay: config.performance?.retryDelay || 1000,
+        enabled: typeof window !== 'undefined' || !config.ssr?.enabled,
+      },
+      mutations: {
+        retry: config.performance?.retries || 1,
+      },
+    },
+  };
 }
 
 export function MinderDataProvider({
   config,
   children,
+  dehydratedState,
+  fallback,
 }: MinderDataProviderProps) {
+  const [queryClientRef] = useState(() => new QueryClient(getQueryClientConfig(config)));
+  
   const contextValue = useMemo(() => {
     // Setup environment manager if environments are configured
     let environmentManager: EnvironmentManager | undefined;
@@ -102,21 +138,18 @@ export function MinderDataProvider({
       });
     }
 
-    // Create QueryClient with CORS and performance optimizations
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        queries: {
-          staleTime: finalConfig.cache?.staleTime || 5 * 60 * 1000,
-          gcTime: finalConfig.cache?.gcTime || 10 * 60 * 1000,
-          refetchOnWindowFocus:
-            finalConfig.cache?.refetchOnWindowFocus ?? false,
-          refetchOnReconnect: finalConfig.cache?.refetchOnReconnect ?? true,
-          retry: finalConfig.performance?.retries || 3,
-          retryDelay: finalConfig.performance?.retryDelay || 1000,
-        },
-        mutations: {
-          retry: finalConfig.performance?.retries || 1,
-        },
+    // Update QueryClient options based on config
+    queryClientRef.setDefaultOptions({
+      queries: {
+        staleTime: finalConfig.cache?.staleTime || 5 * 60 * 1000,
+        gcTime: finalConfig.cache?.gcTime || 10 * 60 * 1000,
+        refetchOnWindowFocus: finalConfig.cache?.refetchOnWindowFocus ?? false,
+        refetchOnReconnect: finalConfig.cache?.refetchOnReconnect ?? true,
+        retry: finalConfig.performance?.retries || 3,
+        retryDelay: finalConfig.performance?.retryDelay || 1000,
+      },
+      mutations: {
+        retry: finalConfig.performance?.retries || 1,
       },
     });
 
@@ -127,7 +160,7 @@ export function MinderDataProvider({
     const apiClient = new ApiClient(finalConfig, authManager, proxyManager);
 
     // Create Cache Manager
-    const cacheManager = new CacheManager(queryClient);
+    const cacheManager = new CacheManager(queryClientRef);
 
     // Create WebSocket Manager if configured
     const websocketManager = finalConfig.websocket
@@ -150,8 +183,8 @@ export function MinderDataProvider({
       preloadedState: finalConfig.redux?.preloadedState,
     });
 
-    let ReactQueryDevtools;
-    if (config.dynamic) {
+    let ReactQueryDevtools: ComponentType<{ initialIsOpen?: boolean }> | undefined;
+    if (config.dynamic && process.env.NODE_ENV !== 'production') {
       ReactQueryDevtools = config.dynamic(
         () =>
           import("@tanstack/react-query-devtools").then(
@@ -171,22 +204,28 @@ export function MinderDataProvider({
       proxyManager,
       debugManager,
       store,
-      queryClient,
+      queryClient: queryClientRef,
       ReactQueryDevtools,
     };
-  }, [config]);
+  }, [config, queryClientRef]);
 
   return (
     <MinderContext.Provider value={contextValue}>
       <ReduxProvider store={contextValue.store}>
-        <QueryClientProvider client={contextValue.queryClient}>
-          {children}
+        <QueryClientProvider client={queryClientRef}>
+          {dehydratedState ? (
+            <HydrationBoundary state={dehydratedState}>
+              {children}
+            </HydrationBoundary>
+          ) : fallback ? (
+            <Suspense fallback={fallback}>
+              {children}
+            </Suspense>
+          ) : (
+            children
+          )}
 
-          {/* {typeof window !== "undefined" && (
-            <ReactQueryDevtools initialIsOpen={false} />
-          )} */}
-
-          {contextValue.ReactQueryDevtools && (
+          {process.env.NODE_ENV !== 'production' && contextValue.ReactQueryDevtools && (
             <contextValue.ReactQueryDevtools initialIsOpen={false} />
           )}
         </QueryClientProvider>

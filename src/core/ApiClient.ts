@@ -170,6 +170,7 @@ export class ApiClient {
     }
 
     let url = route.url;
+    // let url = `${this.config.apiBaseUrl}${route.url}`;
     
     // Replace URL parameters
     if (params) {

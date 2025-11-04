@@ -18,6 +18,8 @@ export interface MinderConfig {
   defaultEnvironment?: string;
   autoDetectEnvironment?: boolean;
   onError?: (error: ApiError) => void;
+  /** HTTP client instance (Axios or LightHttpClient) */
+  httpClient?: any;
 }
 
 export interface EnvironmentOverride {
@@ -41,15 +43,19 @@ export interface ApiRoute {
 export interface AuthConfig {
   tokenKey: string;
   storage: 'localStorage' | 'sessionStorage' | 'memory' | 'cookie';
+  tokenStorage?: 'localStorage' | 'sessionStorage' | 'memory'; // For light config
   refreshUrl?: string;
   onAuthError?: () => void;
 }
 
 export interface CacheConfig {
+  type?: 'memory' | 'persistent' | 'hybrid'; // For light config
   staleTime?: number;
   gcTime?: number;
+  ttl?: number; // For light config
   refetchOnWindowFocus?: boolean;
   refetchOnReconnect?: boolean;
+  maxSize?: number; // For light config
 }
 
 export interface CorsConfig {

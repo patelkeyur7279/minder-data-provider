@@ -1,19 +1,71 @@
-// Main entry point for Minder Data Provider
-export * from './core/MinderDataProvider.js';
+/**
+ * 🎯 MINDER DATA PROVIDER
+ * Production-ready hybrid data provider for React & Next.js
+ * 
+ * ONE function to rule them all!
+ * 
+ * @example Pure function (best performance)
+ * import { minder } from 'minder-data-provider';
+ * const { data } = await minder('users');
+ * 
+ * @example React hook (reactive state)
+ * import { useMinder } from 'minder-data-provider';
+ * const { data, loading } = useMinder('users');
+ */
+
+// ============================================================================
+// CORE EXPORTS - NEW ARCHITECTURE
+// ============================================================================
+
+// Core universal function
+export { minder, configureMinder } from './core/minder.js';
+export type {
+  MinderOptions,
+  MinderResult,
+  MinderError,
+  HttpMethod,
+  UploadProgress,
+} from './core/minder.js';
+
+// React hook
+export { useMinder } from './hooks/useMinder.js';
+export type {
+  UseMinderOptions,
+  UseMinderReturn,
+} from './hooks/useMinder.js';
+
+// ============================================================================
+// LEGACY EXPORTS - For backward compatibility
+// ============================================================================
+
+// Provider component (old architecture - TEMPORARILY DISABLED to fix bundling)
+// export { MinderDataProvider, useMinderContext } from './core/MinderDataProvider.js';
 export * from './core/types.js';
 export * from './core/EnvironmentManager.js';
 export * from './core/ProxyManager.js';
-export * from './hooks/index.js';
+export * from './core/LightConfig.js';
+
+// Base model
+export { BaseModel } from './models/BaseModel.js';
+
+// Old hooks (TEMPORARILY DISABLED - depend on MinderDataProvider)
+// export * from './hooks/index.js';
 export * from './hooks/useEnvironment.js';
-export * from './models/BaseModel.js';
 export * from './utils/index.js';
 
-// Modular exports for tree-shaking
-export * from './crud/index.js';
-export * from './auth/index.js';
-export * from './cache/index.js';
-export * from './websocket/index.js';
-export * from './upload/index.js';
-export * from './debug/index.js';
+// Modular exports for tree-shaking (legacy)
+// TEMPORARILY DISABLED - these also use MinderDataProvider
+// export * from './crud/index.js';
+// export * from './auth/index.js';
+// export * from './cache/index.js';
+// export * from './websocket/index.js';
+// export * from './upload/index.js';
+// export * from './debug/index.js';  // Also uses MinderDataProvider
 export * from './config/index.js';
 export * from './ssr/index.js';
+
+// ============================================================================
+// DEFAULT EXPORT
+// ============================================================================
+
+export { minder as default } from './core/minder.js';

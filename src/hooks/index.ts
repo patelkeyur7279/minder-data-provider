@@ -5,21 +5,53 @@ import type { CrudOperations, UploadProgress, MediaUploadResult } from '../core/
 import { useState, useCallback, useEffect } from 'react';
 
 // Main hook for CRUD operations
-export function useOneTouchCrud<T = any>(routeName: string): CrudOperations<T> {
+/**
+ * Hook for CRUD operations with automatic or manual data fetching
+ * @param routeName - The route name for API endpoint
+ * @param options - Configuration options for the hook
+ * @returns CrudOperations object with data, loading states, errors and operations
+ */
+export function useOneTouchCrud<T = any>(
+  routeName: string,
+  options: {
+    /**
+     * If true, data will be fetched automatically when component mounts
+     * If false, you need to call operations.fetch() manually
+     */
+    autoFetch?: boolean;
+    /**
+     * Enable/disable automatic background refetching
+     */
+    enableAutoRefetch?: boolean;
+    /**
+     * Cache time in milliseconds
+     */
+    cacheTime?: number;
+  } = {}
+): CrudOperations<T> {
   const { apiClient, cacheManager } = useMinderContext();
   const queryClient = useQueryClient();
 
-  // Fetch data
-  const { data = [], isLoading: fetchLoading, error: fetchError } = useQuery({
+  // Fetch data with configurable options
+  const { 
+    data = [], 
+    isLoading: fetchLoading, 
+    error: fetchError,
+    refetch
+  } = useQuery({
     queryKey: [routeName],
     queryFn: () => apiClient.request<T>(routeName),
+    enabled: options.autoFetch !== false, // Only fetch if autoFetch is not explicitly false
+    staleTime: options.cacheTime || 0,
+    refetchOnWindowFocus: options.enableAutoRefetch,
+    refetchOnReconnect: options.enableAutoRefetch,
   });
 
   // Create mutation
   const createMutation = useMutation({
     mutationFn: (item: Partial<T>) => apiClient.request<T>(routeName, item),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [routeName] });
+    queryClient.invalidateQueries({ queryKey: [routeName] });
     },
   });
 
@@ -41,14 +73,23 @@ export function useOneTouchCrud<T = any>(routeName: string): CrudOperations<T> {
   });
 
   const operations = {
-    fetch: useCallback(() => apiClient.request<T>(routeName), [apiClient, routeName]),
+    // Manual fetch function that uses refetch from useQuery
+    fetch: useCallback(async () => {
+      const result = await refetch();
+      return result.data as T;
+    }, [refetch]),
+    // Create new item
     create: useCallback((item: Partial<T>) => createMutation.mutateAsync(item), [createMutation]),
+    // Update existing item
     update: useCallback(
       (id: string | number, item: Partial<T>) => updateMutation.mutateAsync({ id, item }),
       [updateMutation]
     ),
+    // Delete item
     delete: useCallback((id: string | number) => deleteMutation.mutateAsync(id), [deleteMutation]),
+    // Force refresh data
     refresh: useCallback(() => queryClient.invalidateQueries({ queryKey: [routeName] }), [queryClient, routeName]),
+    // Clear cached data
     clear: useCallback(() => cacheManager.clearCache(routeName), [cacheManager, routeName]),
   };
 
@@ -252,3 +293,7 @@ export function useUIState() {
     setLoading,
   };
 }
+
+export { useConfiguration } from './useConfiguration.js';
+export { useMinder } from './useMinder.js';
+export type { UseMinderOptions, UseMinderReturn } from './useMinder.js';

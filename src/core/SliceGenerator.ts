@@ -31,28 +31,28 @@ export function createApiSlices(routes: Record<string, ApiRoute>, apiClient: Api
 
   Object.entries(routes).forEach(([routeName, route]) => {
     // Create async thunks for each route
-    const fetchThunk = createAsyncThunk(
+    const fetchThunk = createAsyncThunk<any, any>(
       `${routeName}/fetch`,
       async (params?: any) => {
         return await apiClient.request(routeName, undefined, params);
       }
     );
 
-    const createThunk = createAsyncThunk(
+    const createThunk = createAsyncThunk<any, any>(
       `${routeName}/create`,
       async (data: any) => {
         return await apiClient.request(routeName, data);
       }
     );
 
-    const updateThunk = createAsyncThunk(
+    const updateThunk = createAsyncThunk<any, { id: string | number; data: any }>(
       `${routeName}/update`,
       async ({ id, data }: { id: string | number; data: any }) => {
         return await apiClient.request(routeName, data, { id });
       }
     );
 
-    const deleteThunk = createAsyncThunk(
+    const deleteThunk = createAsyncThunk<any, string | number>(
       `${routeName}/delete`,
       async (id: string | number) => {
         await apiClient.request(routeName, undefined, { id });
