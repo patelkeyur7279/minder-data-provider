@@ -38,8 +38,8 @@ export type {
 // LEGACY EXPORTS - For backward compatibility
 // ============================================================================
 
-// Provider component (old architecture - TEMPORARILY DISABLED to fix bundling)
-// export { MinderDataProvider, useMinderContext } from './core/MinderDataProvider.js';
+// Provider component (old architecture - RE-ENABLED for backward compatibility)
+export { MinderDataProvider, useMinderContext } from './core/MinderDataProvider.js';
 export * from './core/types.js';
 export * from './core/EnvironmentManager.js';
 export * from './core/ProxyManager.js';
@@ -48,19 +48,18 @@ export * from './core/LightConfig.js';
 // Base model
 export { BaseModel } from './models/BaseModel.js';
 
-// Old hooks (TEMPORARILY DISABLED - depend on MinderDataProvider)
-// export * from './hooks/index.js';
+// Old hooks (RE-ENABLED for backward compatibility)
+export * from './hooks/index.js';
 export * from './hooks/useEnvironment.js';
 export * from './utils/index.js';
 
-// Modular exports for tree-shaking (legacy)
-// TEMPORARILY DISABLED - these also use MinderDataProvider
-// export * from './crud/index.js';
-// export * from './auth/index.js';
-// export * from './cache/index.js';
-// export * from './websocket/index.js';
-// export * from './upload/index.js';
-// export * from './debug/index.js';  // Also uses MinderDataProvider
+// Modular exports for tree-shaking (RE-ENABLED)
+export * from './crud/index.js';
+export * from './auth/index.js';
+export * from './cache/index.js';
+export * from './websocket/index.js';
+export * from './upload/index.js';
+export * from './debug/index.js';
 export * from './config/index.js';
 export * from './ssr/index.js';
 

@@ -172,7 +172,7 @@ export interface Notification {
 
 // Hook return types
 export interface CrudOperations<T = any> {
-  data: T;
+  data: T[];  // ✅ Changed from T to T[] - always returns array of items
   loading: {
     fetch: boolean;
     create: boolean;
@@ -185,7 +185,7 @@ export interface CrudOperations<T = any> {
     message: string;
   };
   operations: {
-    fetch: () => Promise<T>;
+    fetch: () => Promise<T[]>;  // ✅ Changed from Promise<T> to Promise<T[]>
     create: (item: Partial<T>) => Promise<T>;
     update: (id: string | number, item: Partial<T>) => Promise<T>;
     delete: (id: string | number) => Promise<void>;

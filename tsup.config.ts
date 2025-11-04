@@ -1,7 +1,3 @@
-import { defineConfig } from 'tsup'
-import { readFileSync } from 'fs'
-import { join } from 'path'
-
 import { defineConfig } from 'tsup';
 
 export default defineConfig({

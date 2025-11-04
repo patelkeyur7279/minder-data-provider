@@ -40,7 +40,7 @@ export function useOneTouchCrud<T = any>(
     refetch
   } = useQuery({
     queryKey: [routeName],
-    queryFn: () => apiClient.request<T>(routeName),
+    queryFn: () => apiClient.request<T[]>(routeName),  // ✅ Request T[] instead of T
     enabled: options.autoFetch !== false, // Only fetch if autoFetch is not explicitly false
     staleTime: options.cacheTime || 0,
     refetchOnWindowFocus: options.enableAutoRefetch,
@@ -76,7 +76,7 @@ export function useOneTouchCrud<T = any>(
     // Manual fetch function that uses refetch from useQuery
     fetch: useCallback(async () => {
       const result = await refetch();
-      return result.data as T;
+      return (result.data || []) as T[];  // ✅ Return T[] instead of T
     }, [refetch]),
     // Create new item
     create: useCallback((item: Partial<T>) => createMutation.mutateAsync(item), [createMutation]),
@@ -94,7 +94,7 @@ export function useOneTouchCrud<T = any>(
   };
 
   return {
-    data: data as T,
+    data: (data || []) as T[],  // ✅ Return T[] instead of T, with fallback to empty array
     loading: {
       fetch: fetchLoading,
       create: createMutation.isPending,
