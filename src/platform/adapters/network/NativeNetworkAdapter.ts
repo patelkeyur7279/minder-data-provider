@@ -153,11 +153,18 @@ export class NativeNetworkAdapter extends NetworkAdapter {
 
   /**
    * Get network state (requires @react-native-community/netinfo)
+   * This is an optional feature - returns null if NetInfo is not available
    */
   async getNetworkState(): Promise<{ isConnected: boolean; type: string } | null> {
+    // Only attempt to load NetInfo in React Native environment
+    if (typeof navigator === 'undefined' || navigator.product !== 'ReactNative') {
+      return null;
+    }
+
     try {
-      // Try to import NetInfo dynamically (optional peer dependency)
-      const NetInfo = await import('@react-native-community/netinfo' as any);
+      // Use Function constructor to avoid Next.js build-time resolution
+      const loadNetInfo = new Function('return import("@react-native-community/netinfo")');
+      const NetInfo = await loadNetInfo();
       const state = await NetInfo.default.fetch();
       
       return {
@@ -165,7 +172,7 @@ export class NativeNetworkAdapter extends NetworkAdapter {
         type: state.type,
       };
     } catch (error) {
-      // NetInfo not installed - this is optional
+      // NetInfo not installed or import failed - this is optional
       return null;
     }
   }

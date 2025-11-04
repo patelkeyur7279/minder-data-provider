@@ -29,14 +29,20 @@ export class DebugManager {
 
   startTimer(key: string) {
     if (!this.enabled) return;
-    this.performance.set(key, performance.now());
+    const now = typeof performance !== 'undefined' && performance.now 
+      ? performance.now() 
+      : Date.now();
+    this.performance.set(key, now);
   }
 
   endTimer(key: string) {
     if (!this.enabled) return;
     const start = this.performance.get(key);
     if (start) {
-      const duration = performance.now() - start;
+      const now = typeof performance !== 'undefined' && performance.now 
+        ? performance.now() 
+        : Date.now();
+      const duration = now - start;
       console.log(`⏱️ ${key}: ${duration.toFixed(2)}ms`);
       this.performance.delete(key);
     }

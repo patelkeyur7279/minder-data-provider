@@ -24,13 +24,13 @@ import {
 
 // Mock QueryClient
 const createMockQueryClient = () => ({
-  prefetchQuery: jest.fn().mockResolvedValue(undefined),
-  prefetchInfiniteQuery: jest.fn().mockResolvedValue(undefined),
+  prefetchQuery: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+  prefetchInfiniteQuery: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
   setQueryData: jest.fn(),
   getQueryData: jest.fn(),
   setQueryDefaults: jest.fn(),
-  invalidateQueries: jest.fn().mockResolvedValue(undefined),
-  refetchQueries: jest.fn().mockResolvedValue(undefined),
+  invalidateQueries: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+  refetchQueries: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
   clear: jest.fn(),
   getQueryCache: jest.fn(() => ({
     getAll: jest.fn(() => [

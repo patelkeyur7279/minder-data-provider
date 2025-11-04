@@ -247,7 +247,7 @@ export async function prefetchInfiniteQuery(
     await queryClient.prefetchInfiniteQuery({
       queryKey: restConfig.queryKey,
       queryFn: ({ pageParam = 0 }) => queryFn(pageParam as number),
-      getNextPageParam: (lastPage, allPages) => {
+      getNextPageParam: (lastPage: any, allPages: any[]) => {
         return allPages.length < pages ? allPages.length : undefined;
       },
       pages,

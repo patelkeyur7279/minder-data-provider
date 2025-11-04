@@ -55,18 +55,27 @@ export interface CacheHitEvent {
 export class PluginManager {
   private plugins: Map<string, MinderPlugin> = new Map();
   private initialized: boolean = false;
+  private debug: boolean = false;
+
+  constructor(options?: { debug?: boolean }) {
+    this.debug = options?.debug ?? false;
+  }
 
   /**
    * Register a plugin
    */
   register(plugin: MinderPlugin): void {
     if (this.plugins.has(plugin.name)) {
-      console.warn(`Plugin "${plugin.name}" is already registered`);
+      if (this.debug) {
+        console.warn(`Plugin "${plugin.name}" is already registered`);
+      }
       return;
     }
 
     this.plugins.set(plugin.name, plugin);
-    console.log(`✓ Plugin registered: ${plugin.name}${plugin.version ? ` v${plugin.version}` : ''}`);
+    if (this.debug) {
+      console.log(`✓ Plugin registered: ${plugin.name}${plugin.version ? ` v${plugin.version}` : ''}`);
+    }
   }
 
   /**
@@ -77,7 +86,9 @@ export class PluginManager {
     if (plugin) {
       plugin.onDestroy?.();
       this.plugins.delete(pluginName);
-      console.log(`✓ Plugin unregistered: ${pluginName}`);
+      if (this.debug) {
+        console.log(`✓ Plugin unregistered: ${pluginName}`);
+      }
     }
   }
 
@@ -86,18 +97,26 @@ export class PluginManager {
    */
   async init(config: any): Promise<void> {
     if (this.initialized) {
-      console.warn('Plugins already initialized');
+      if (this.debug) {
+        console.warn('Plugins already initialized');
+      }
       return;
     }
 
-    console.log(`Initializing ${this.plugins.size} plugin(s)...`);
+    if (this.debug) {
+      console.log(`Initializing ${this.plugins.size} plugin(s)...`);
+    }
 
     for (const [name, plugin] of this.plugins) {
       try {
         await plugin.onInit?.(config);
-        console.log(`✓ Plugin initialized: ${name}`);
+        if (this.debug) {
+          console.log(`✓ Plugin initialized: ${name}`);
+        }
       } catch (error) {
-        console.error(`✗ Plugin initialization failed: ${name}`, error);
+        if (this.debug) {
+          console.error(`✗ Plugin initialization failed: ${name}`, error);
+        }
       }
     }
 
@@ -112,7 +131,9 @@ export class PluginManager {
       try {
         await plugin.onRequest?.(request);
       } catch (error) {
-        console.error(`Plugin "${name}" request hook failed:`, error);
+        if (this.debug) {
+          console.error(`Plugin "${name}" request hook failed:`, error);
+        }
       }
     }
   }
@@ -125,7 +146,9 @@ export class PluginManager {
       try {
         await plugin.onResponse?.(response);
       } catch (error) {
-        console.error(`Plugin "${name}" response hook failed:`, error);
+        if (this.debug) {
+          console.error(`Plugin "${name}" response hook failed:`, error);
+        }
       }
     }
   }
@@ -138,7 +161,9 @@ export class PluginManager {
       try {
         await plugin.onError?.(error);
       } catch (err) {
-        console.error(`Plugin "${name}" error hook failed:`, err);
+        if (this.debug) {
+          console.error(`Plugin "${name}" error hook failed:`, err);
+        }
       }
     }
   }
@@ -151,7 +176,9 @@ export class PluginManager {
       try {
         await plugin.onCacheHit?.(event);
       } catch (error) {
-        console.error(`Plugin "${name}" cache hit hook failed:`, error);
+        if (this.debug) {
+          console.error(`Plugin "${name}" cache hit hook failed:`, error);
+        }
       }
     }
   }
@@ -164,7 +191,9 @@ export class PluginManager {
       try {
         await plugin.onCacheMiss?.(cacheKey);
       } catch (error) {
-        console.error(`Plugin "${name}" cache miss hook failed:`, error);
+        if (this.debug) {
+          console.error(`Plugin "${name}" cache miss hook failed:`, error);
+        }
       }
     }
   }
@@ -198,7 +227,9 @@ export class PluginManager {
       try {
         await plugin.onDestroy?.();
       } catch (error) {
-        console.error(`Plugin "${name}" destroy failed:`, error);
+        if (this.debug) {
+          console.error(`Plugin "${name}" destroy failed:`, error);
+        }
       }
     }
     this.plugins.clear();
@@ -214,29 +245,40 @@ export const pluginManager = new PluginManager();
  */
 
 /**
- * Logger Plugin - Logs all requests and responses
+ * Logger Plugin - Logs all requests and responses (only in debug mode)
  */
-export const LoggerPlugin: MinderPlugin = {
+export const createLoggerPlugin = (debug: boolean = false): MinderPlugin => ({
   name: 'logger',
   version: '1.0.0',
 
   onInit: (config) => {
-    console.log('🔍 Logger plugin initialized');
+    if (debug) {
+      console.log('🔍 Logger plugin initialized');
+    }
   },
 
   onRequest: (request) => {
-    console.log(`→ ${request.method} ${request.url}`);
+    if (debug) {
+      console.log(`→ ${request.method} ${request.url}`);
+    }
   },
 
   onResponse: (response) => {
-    const color = response.status >= 400 ? '🔴' : '🟢';
-    console.log(`← ${color} ${response.status} (${response.duration}ms)`);
+    if (debug) {
+      const color = response.status >= 400 ? '🔴' : '🟢';
+      console.log(`← ${color} ${response.status} (${response.duration}ms)`);
+    }
   },
 
   onError: (error) => {
-    console.error('❌ Request error:', error.message);
+    if (debug) {
+      console.error('❌ Request error:', error.message);
+    }
   }
-};
+});
+
+// For backward compatibility
+export const LoggerPlugin = createLoggerPlugin(false);
 
 /**
  * Analytics Plugin - Track API usage
@@ -276,19 +318,24 @@ export class RetryPlugin implements MinderPlugin {
   private maxRetries: number;
   private retryDelay: number;
   private retryableStatuses: number[];
+  private debug: boolean;
 
   constructor(options: {
     maxRetries?: number;
     retryDelay?: number;
     retryableStatuses?: number[];
+    debug?: boolean;
   } = {}) {
     this.maxRetries = options.maxRetries || 3;
     this.retryDelay = options.retryDelay || 1000;
     this.retryableStatuses = options.retryableStatuses || [408, 429, 500, 502, 503, 504];
+    this.debug = options.debug || false;
   }
 
   onError = async (error: PluginError) => {
-    console.log(`⚠️ Retry plugin: considering retry for error: ${error.message}`);
+    if (this.debug) {
+      console.log(`⚠️ Retry plugin: considering retry for error: ${error.message}`);
+    }
   };
 }
 
@@ -300,13 +347,17 @@ export class CacheWarmupPlugin implements MinderPlugin {
   version = '1.0.0';
   
   private routes: string[];
+  private debug: boolean;
 
-  constructor(routes: string[] = []) {
+  constructor(routes: string[] = [], debug: boolean = false) {
     this.routes = routes;
+    this.debug = debug;
   }
 
   onInit = async (config: any) => {
-    console.log(`🔥 Warming up cache for ${this.routes.length} route(s)...`);
+    if (this.debug) {
+      console.log(`🔥 Warming up cache for ${this.routes.length} route(s)...`);
+    }
     // Implementation would fetch and cache these routes
   };
 }
@@ -314,16 +365,19 @@ export class CacheWarmupPlugin implements MinderPlugin {
 /**
  * Performance Monitor Plugin - Track performance metrics
  */
-export const PerformanceMonitorPlugin: MinderPlugin = {
+export const createPerformanceMonitorPlugin = (debug: boolean = false): MinderPlugin => ({
   name: 'performance-monitor',
   version: '1.0.0',
 
   onResponse: (response) => {
-    if (response.duration > 1000) {
+    if (debug && response.duration > 1000) {
       console.warn(`⚠️ Slow request detected: ${response.duration}ms`);
     }
   }
-};
+});
+
+// For backward compatibility
+export const PerformanceMonitorPlugin = createPerformanceMonitorPlugin(false);
 
 /**
  * Helper function to create custom plugins

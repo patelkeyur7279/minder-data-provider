@@ -13,8 +13,8 @@ import {
   createNetworkError,
 } from '../src/platform/adapters/network';
 
-// Mock fetch globally
-const mockFetch = jest.fn();
+// Mock fetch globally with proper typing
+const mockFetch = jest.fn() as jest.MockedFunction<typeof fetch>;
 global.fetch = mockFetch as any;
 
 describe('NetworkAdapter', () => {
@@ -406,7 +406,7 @@ describe('NetworkAdapter', () => {
 
     it('should make GET request', async () => {
       const mockData = { id: 1, name: 'Test' };
-      (global.fetch as jest.Mock).mockResolvedValue({
+      mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
         statusText: 'OK',
@@ -430,7 +430,7 @@ describe('NetworkAdapter', () => {
       const requestData = { name: 'New User' };
       const mockResponse = { id: 2, ...requestData };
 
-      (global.fetch as jest.Mock).mockResolvedValue({
+      mockFetch.mockResolvedValue({
         ok: true,
         status: 201,
         statusText: 'Created',
@@ -451,7 +451,7 @@ describe('NetworkAdapter', () => {
     });
 
     it('should build URL with query params', async () => {
-      (global.fetch as jest.Mock).mockResolvedValue({
+      mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
         statusText: 'OK',
@@ -470,7 +470,7 @@ describe('NetworkAdapter', () => {
     });
 
     it('should merge headers correctly', async () => {
-      (global.fetch as jest.Mock).mockResolvedValue({
+      mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
         statusText: 'OK',
@@ -485,7 +485,7 @@ describe('NetworkAdapter', () => {
         },
       });
 
-      const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
+      const fetchCall = mockFetch.mock.calls[0];
       const headers = fetchCall[1].headers;
       
       expect(headers['Authorization']).toBe('Bearer token123');
@@ -494,7 +494,7 @@ describe('NetworkAdapter', () => {
     });
 
     it('should handle network errors', async () => {
-      (global.fetch as jest.Mock).mockRejectedValue(new TypeError('Failed to fetch'));
+      mockFetch.mockRejectedValue(new TypeError('Failed to fetch'));
 
       await expect(adapter.get('/users')).rejects.toMatchObject({
         message: expect.stringContaining('Network error'),
@@ -505,7 +505,7 @@ describe('NetworkAdapter', () => {
 
     it('should handle HTTP errors', async () => {
       const errorData = { error: 'Not found' };
-      (global.fetch as jest.Mock).mockResolvedValue({
+      mockFetch.mockResolvedValue({
         ok: false,
         status: 404,
         statusText: 'Not Found',
@@ -521,7 +521,7 @@ describe('NetworkAdapter', () => {
 
     it('should handle PUT request', async () => {
       const updateData = { name: 'Updated' };
-      (global.fetch as jest.Mock).mockResolvedValue({
+      mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
         statusText: 'OK',
@@ -542,7 +542,7 @@ describe('NetworkAdapter', () => {
     });
 
     it('should handle DELETE request', async () => {
-      (global.fetch as jest.Mock).mockResolvedValue({
+      mockFetch.mockResolvedValue({
         ok: true,
         status: 204,
         statusText: 'No Content',
@@ -563,7 +563,7 @@ describe('NetworkAdapter', () => {
 
     it('should handle PATCH request', async () => {
       const patchData = { name: 'Patched' };
-      (global.fetch as jest.Mock).mockResolvedValue({
+      mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
         statusText: 'OK',
@@ -593,7 +593,7 @@ describe('NetworkAdapter', () => {
 
     it('should make GET request', async () => {
       const mockData = { id: 1, name: 'Test' };
-      (global.fetch as jest.Mock).mockResolvedValue({
+      mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
         statusText: 'OK',
@@ -607,7 +607,7 @@ describe('NetworkAdapter', () => {
     });
 
     it('should handle network errors with mobile-specific message', async () => {
-      (global.fetch as jest.Mock).mockRejectedValue({
+      mockFetch.mockRejectedValue({
         message: 'Network request failed',
       });
 
@@ -690,7 +690,7 @@ describe('NetworkAdapter', () => {
         onRequest,
       });
 
-      (global.fetch as jest.Mock).mockResolvedValue({
+      mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
         statusText: 'OK',
@@ -710,7 +710,7 @@ describe('NetworkAdapter', () => {
         onResponse,
       });
 
-      (global.fetch as jest.Mock).mockResolvedValue({
+      mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
         statusText: 'OK',
@@ -732,7 +732,7 @@ describe('NetworkAdapter', () => {
         onError,
       });
 
-      (global.fetch as jest.Mock).mockRejectedValue(new Error('Test error'));
+      mockFetch.mockRejectedValue(new Error('Test error'));
 
       await expect(adapter.get('/test')).rejects.toThrow();
       expect(onError).toHaveBeenCalled();

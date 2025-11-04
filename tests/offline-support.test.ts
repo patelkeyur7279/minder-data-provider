@@ -14,17 +14,17 @@ import {
 
 // Mock StorageAdapter
 const createMockStorage = () => ({
-  getItem: jest.fn().mockResolvedValue(null) as any,
-  setItem: jest.fn().mockResolvedValue(undefined) as any,
-  removeItem: jest.fn().mockResolvedValue(undefined) as any,
-  clear: jest.fn().mockResolvedValue(undefined) as any,
-  getAllKeys: jest.fn().mockResolvedValue([]) as any,
-  hasItem: jest.fn().mockResolvedValue(false) as any,
-  getSize: jest.fn().mockResolvedValue(0) as any,
+  getItem: jest.fn<() => Promise<string | null>>().mockResolvedValue(null),
+  setItem: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+  removeItem: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+  clear: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+  getAllKeys: jest.fn<() => Promise<string[]>>().mockResolvedValue([]),
+  hasItem: jest.fn<() => Promise<boolean>>().mockResolvedValue(false),
+  getSize: jest.fn<() => Promise<number>>().mockResolvedValue(0),
 });
 
 // Mock fetch
-global.fetch = jest.fn() as any;
+global.fetch = jest.fn() as jest.MockedFunction<typeof fetch>;
 
 describe('OfflineManager', () => {
   let offlineManager: OfflineManager;

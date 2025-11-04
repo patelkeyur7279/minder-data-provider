@@ -209,7 +209,7 @@ export function getHydratedQueryCount(queryClient: QueryClient): number {
  * Get hydrated query keys
  */
 export function getHydratedQueryKeys(queryClient: QueryClient): unknown[][] {
-  return queryClient.getQueryCache().getAll().map((query) => query.queryKey);
+  return queryClient.getQueryCache().getAll().map((query) => query.queryKey as unknown[]);
 }
 
 /**

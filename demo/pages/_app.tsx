@@ -1,6 +1,7 @@
 import type { AppProps } from "next/app";
 import React from "react";
 import { configureMinder } from "minder-data-provider";
+import '../styles/globals.css';
 
 // Configure minder globally - no provider needed!
 configureMinder({

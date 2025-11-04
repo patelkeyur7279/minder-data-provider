@@ -6,7 +6,7 @@ import {
   LoggerPlugin, 
   RetryPlugin, 
   AnalyticsPlugin
-} from '../../dist';
+} from '../../src';
 import { MockDevTools, mockDevToolsEvents } from '../components/MockDevTools';
 
 // Sample data for testing

@@ -7,6 +7,6 @@
  * @module platform/ssr
  */
 
-export * from './SSRManager.js';
-export * from './prefetch.js';
-export * from './hydration.js';
+export * from './SSRManager';
+export * from './prefetch';
+export * from './hydration';

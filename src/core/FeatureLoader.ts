@@ -256,7 +256,7 @@ export class FeatureLoader {
         return import('../websocket/index.js').then(m => m.WebSocketManager || m);
       
       case 'upload':
-        return import('../upload/index.js').then(m => m.default || m);
+        return import('../upload/index.js').then(m => m.useMediaUpload || m);
       
       case 'plugins':
         return import('../plugins/index.js').then(m => m.PluginManager || m);
@@ -265,7 +265,7 @@ export class FeatureLoader {
         return import('../devtools/index.js').then(m => m.DevTools || m);
       
       case 'ssr':
-        return import('../ssr/index.js').then(m => m.default || m);
+        return import('../ssr/index.js').then(m => m.createSSRConfig || m);
       
       case 'offline':
         // Will be implemented in Phase 5

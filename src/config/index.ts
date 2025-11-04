@@ -1,10 +1,16 @@
 import type { MinderConfig, ApiRoute } from '../core/types.js';
+import { createConfigFromPreset, type ConfigPreset, getPresetInfo } from './presets.js';
 
 export interface SimpleConfig {
   apiUrl: string;
   routes?: Record<string, string | ApiRoute>;
   dynamic: any;
-  auth?: boolean | { storage?: 'localStorage' | 'sessionStorage' | 'memory' };
+  
+  // NEW: Preset support
+  preset?: ConfigPreset; // 'minimal' | 'standard' | 'advanced' | 'enterprise'
+  
+  // Existing options (simplified)
+  auth?: boolean | { storage?: 'localStorage' | 'sessionStorage' | 'memory' | 'cookie' };
   cache?: boolean | { staleTime?: number };
   cors?: boolean;
   websocket?: boolean | string;
@@ -12,6 +18,17 @@ export interface SimpleConfig {
 }
 
 export function createMinderConfig(simple: SimpleConfig): MinderConfig {
+  // Start with preset if provided
+  let baseConfig: Partial<MinderConfig> = {};
+  
+  if (simple.preset) {
+    baseConfig = createConfigFromPreset(simple.preset);
+    
+    if (simple.debug) {
+      console.log(`[Minder] Using '${simple.preset}' preset:`, getPresetInfo(simple.preset));
+    }
+  }
+  
   const routes: Record<string, ApiRoute> = {};
   
   // Auto-generate CRUD routes if simple strings provided
@@ -29,47 +46,55 @@ export function createMinderConfig(simple: SimpleConfig): MinderConfig {
     });
   }
 
+  // Merge preset with user config (user config takes priority)
   return {
+    ...baseConfig,
     apiBaseUrl: simple.apiUrl,
     routes,
     dynamic: simple.dynamic,
-    // Auto-configure auth
-    ...(simple.auth && {
+    
+    // Auto-configure auth (overrides preset if provided)
+    ...(simple.auth !== undefined && {
       auth: {
+        ...(baseConfig.auth || {}),
         tokenKey: 'accessToken',
-        storage: typeof simple.auth === 'object' ? simple.auth.storage || 'localStorage' : 'localStorage'
+        storage: typeof simple.auth === 'object' ? simple.auth.storage || 'cookie' : 'cookie'
       }
     }),
     
-    // Auto-configure cache
-    ...(simple.cache && {
+    // Auto-configure cache (overrides preset if provided)
+    ...(simple.cache !== undefined && {
       cache: {
+        ...(baseConfig.cache || {}),
         staleTime: typeof simple.cache === 'object' ? simple.cache.staleTime || 300000 : 300000,
         gcTime: 600000,
         refetchOnWindowFocus: false
       }
     }),
     
-    // Auto-configure CORS
-    ...(simple.cors && {
+    // Auto-configure CORS (overrides preset if provided)
+    ...(simple.cors !== undefined && {
       cors: {
+        ...(baseConfig.cors || {}),
         enabled: true,
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
       }
     }),
     
-    // Auto-configure WebSocket
-    ...(simple.websocket && {
+    // Auto-configure WebSocket (overrides preset if provided)
+    ...(simple.websocket !== undefined && {
       websocket: {
+        ...(baseConfig.websocket || {}),
         url: typeof simple.websocket === 'string' ? simple.websocket : simple.apiUrl.replace('http', 'ws') + '/ws',
         reconnect: true,
         heartbeat: 30000
       }
     }),
     
-    // Auto-configure performance
+    // Auto-configure performance (merge with preset)
     performance: {
+      ...(baseConfig.performance || {}),
       deduplication: true,
       retries: 3,
       retryDelay: 1000,
@@ -87,5 +112,8 @@ export function createMinderConfig(simple: SimpleConfig): MinderConfig {
         debug: false
       }
     }
-  };
+  } as MinderConfig;
 }
+
+// Re-export preset utilities
+export { createConfigFromPreset, getPresetInfo, type ConfigPreset } from './presets.js';

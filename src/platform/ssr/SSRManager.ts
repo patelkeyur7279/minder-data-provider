@@ -12,8 +12,13 @@
  * @module SSRManager
  */
 
-import type { GetServerSidePropsContext, GetStaticPropsContext } from 'next';
+// Type-only imports - won't be bundled, only used for type checking
+// Using conditional type imports to avoid runtime errors
 import type { QueryClient, DehydratedState } from '@tanstack/react-query';
+
+// Next.js types - optional peer dependency
+export type GetServerSidePropsContext = any;
+export type GetStaticPropsContext = any;
 
 /**
  * SSR Configuration Options

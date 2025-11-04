@@ -71,15 +71,42 @@ export * from './devtools/index.js';
 export * from './plugins/index.js';
 export * from './query/index.js';
 
+// Error Boundary Component
+export { MinderErrorBoundary, useErrorHandler } from './components/index.js';
+export type { ErrorBoundaryProps } from './components/index.js';
+
 // ============================================================================
 // PLATFORM SUPPORT (v2.1)
 // ============================================================================
 
-export * from './platform/index.js';
+// Platform detection and capabilities
+export { PlatformDetector, PlatformCapabilityDetector } from './platform/index.js';
+export type { Platform, PlatformCapabilities } from './platform/index.js';
+
+// Note: Platform adapters and factories are exported from './platform/index.js'
+// Import from 'minder-data-provider/platform' for platform-specific features
+// This avoids type name conflicts between legacy types and new platform types
 
 // FeatureLoader for dynamic bundle optimization
 export { FeatureLoader, createFeatureLoader } from './core/FeatureLoader.js';
 export type { FeatureFlags, FeatureModules, FeatureLoaderOptions } from './core/FeatureLoader.js';
+
+// ============================================================================
+// MIDDLEWARE EXPORTS
+// ============================================================================
+
+// Rate Limiter
+export {
+  RateLimiter,
+  MemoryRateLimitStore,
+  createRateLimiter,
+  createNextRateLimiter,
+  createExpressRateLimiter,
+  RateLimitPresets,
+} from './middleware/rate-limiter.js';
+export type {
+  RateLimitConfig,
+} from './middleware/rate-limiter.js';
 
 // ============================================================================
 // DEFAULT EXPORT

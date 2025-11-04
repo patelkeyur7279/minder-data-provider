@@ -23,6 +23,14 @@ const nextConfig = {
       ".mjs": [".mts", ".mjs"],
     };
 
+    // Exclude platform-specific optional dependencies
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      'electron-store': false,
+      'expo-secure-store': false,
+      '@react-native-async-storage/async-storage': false,
+    };
+
     return config;
   },
 };
