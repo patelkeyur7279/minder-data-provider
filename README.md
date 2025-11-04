@@ -393,6 +393,16 @@ npm run demo:build
 
 Visit `http://localhost:3000` to see the interactive demo with all v2.0 features.
 
+## 📚 Documentation
+
+Comprehensive guides to help you get the most out of Minder Data Provider:
+
+- **[API Reference](./docs/API_REFERENCE.md)** - Complete API documentation for all modules
+- **[Migration Guide](./docs/MIGRATION_GUIDE.md)** - Step-by-step guide for migrating from v1.x
+- **[Examples](./docs/EXAMPLES.md)** - Real-world code examples and patterns
+- **[Performance Guide](./docs/PERFORMANCE_GUIDE.md)** - Optimization techniques and best practices
+- **[Security Guide](./SECURITY.md)** - Security features and best practices
+
 ## 📚 Migration from v1.x
 
 ### Simple Migration
@@ -418,6 +428,8 @@ const config = createMinderConfig({
 });
 ```
 
+**[Full Migration Guide](./docs/MIGRATION_GUIDE.md)** →
+
 ### Bundle Optimization
 
 ```typescript
@@ -429,6 +441,8 @@ import { useOneTouchCrud } from 'minder-data-provider/crud';
 import { useAuth } from 'minder-data-provider/auth';
 ```
 
+**[Performance Guide](./docs/PERFORMANCE_GUIDE.md)** →
+
 ## 🤝 Contributing
 
 We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
@@ -439,7 +453,9 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 🆘 Support
 
-- 📖 [Documentation](https://minder-data-provider.docs.com)
+- 📖 **[Complete Documentation](./docs/API_REFERENCE.md)** - API Reference, Examples & Guides
+- 📘 **[Migration Guide](./docs/MIGRATION_GUIDE.md)** - Upgrade from v1.x to v2.0
+- ⚡ **[Performance Guide](./docs/PERFORMANCE_GUIDE.md)** - Optimization tips & best practices
 - 💬 [Discord Community](https://discord.gg/minder-data-provider)
 - 🐛 [Issue Tracker](https://github.com/minder-data-provider/issues)
 - 📧 [Email Support](mailto:support@minder-data-provider.com)

@@ -149,6 +149,33 @@ export default function HomePage() {
             boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
           }}>
           <h3 style={{ margin: "0 0 12px 0", color: "#1f2937" }}>
+            🛠️ Advanced Features
+          </h3>
+          <p style={{ color: "#6b7280", fontSize: "14px", lineHeight: "1.6" }}>
+            QueryBuilder, Plugin System, and DevTools for debugging and monitoring your API.
+          </p>
+          <Link
+            href='/advanced-features'
+            style={{
+              display: "inline-block",
+              marginTop: "12px",
+              color: "#667eea",
+              textDecoration: "none",
+              fontWeight: "bold",
+            }}>
+            Try Advanced Features →
+          </Link>
+        </div>
+
+        <div
+          style={{
+            background: "white",
+            border: "1px solid #e5e7eb",
+            borderRadius: "8px",
+            padding: "24px",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+          }}>
+          <h3 style={{ margin: "0 0 12px 0", color: "#1f2937" }}>
             ⚡ Zero Configuration
           </h3>
           <p style={{ color: "#6b7280", fontSize: "14px", lineHeight: "1.6" }}>
