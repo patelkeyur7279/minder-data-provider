@@ -1,3 +1,9 @@
+import { fileURLToPath } from 'url';
+import { dirname, resolve } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -21,6 +27,14 @@ const nextConfig = {
     config.resolve.extensionAlias = {
       ".js": [".ts", ".tsx", ".js", ".jsx"],
       ".mjs": [".mts", ".mjs"],
+    };
+
+    // Force React and React Query to resolve from demo's node_modules
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      'react': resolve(__dirname, 'node_modules/react'),
+      'react-dom': resolve(__dirname, 'node_modules/react-dom'),
+      '@tanstack/react-query': resolve(__dirname, 'node_modules/@tanstack/react-query'),
     };
 
     // Exclude platform-specific optional dependencies

@@ -53,6 +53,12 @@
       "static/chunks/node_modules_tanstack_react-query-devtools_build_modern_index_js.js"
     ]
   },
+  "../hooks/useStatisticsCollector.ts -> web-vitals": {
+    "id": "../hooks/useStatisticsCollector.ts -> web-vitals",
+    "files": [
+      "static/chunks/node_modules_web-vitals_dist_web-vitals_js.js"
+    ]
+  },
   "../node_modules/next/dist/client/index.js -> ../pages/_app": {
     "id": "../node_modules/next/dist/client/index.js -> ../pages/_app",
     "files": [
@@ -63,6 +69,18 @@
     "id": "../node_modules/next/dist/client/index.js -> ../pages/_error",
     "files": [
       "static/chunks/node_modules_next_dist_pages__error_js.js"
+    ]
+  },
+  "demo.tsx -> ../components/LiveStatsDashboard": {
+    "id": "demo.tsx -> ../components/LiveStatsDashboard",
+    "files": [
+      "static/chunks/components_LiveStatsDashboard_tsx-_5d371.js"
+    ]
+  },
+  "statistics.tsx -> ../components/LiveStatsDashboard": {
+    "id": "statistics.tsx -> ../components/LiveStatsDashboard",
+    "files": [
+      "static/chunks/components_LiveStatsDashboard_tsx-_5d370.js"
     ]
   }
 }
