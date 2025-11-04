@@ -24,9 +24,11 @@
  * ```
  */
 
+// Platform Detection
 export { PlatformDetector } from './PlatformDetector.js';
 export type { Platform } from './PlatformDetector.js';
 
+// Platform Capabilities
 export { PlatformCapabilityDetector } from './PlatformCapabilities.js';
 export type {
   PlatformCapabilities,
@@ -40,3 +42,6 @@ export type {
   SecurityCapabilities,
   DevToolsCapabilities
 } from './PlatformCapabilities.js';
+
+// Storage Adapters
+export * from './adapters/storage/index.js';

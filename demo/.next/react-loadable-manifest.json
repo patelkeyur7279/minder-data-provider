@@ -1,4 +1,10 @@
 {
+  "../../dist/index.js -> @tanstack/react-query-devtools": {
+    "id": "../../dist/index.js -> @tanstack/react-query-devtools",
+    "files": [
+      "static/chunks/node_modules_tanstack_react-query-devtools_build_modern_index_js.js"
+    ]
+  },
   "../../node_modules/@tanstack/query-devtools/build/dev.js -> ./DevtoolsComponent/6ELMOJL2.js": {
     "id": "../../node_modules/@tanstack/query-devtools/build/dev.js -> ./DevtoolsComponent/6ELMOJL2.js",
     "files": [
