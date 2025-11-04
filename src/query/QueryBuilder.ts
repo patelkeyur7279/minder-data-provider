@@ -1,7 +1,10 @@
 /**
  * Advanced Query Builder
  * Fluent API for building complex API queries
+ * Updated: Fixed React hooks import
  */
+
+import { useState, useCallback, useMemo } from 'react';
 
 export interface QueryParams {
   [key: string]: any;
@@ -328,8 +331,6 @@ export class PaginationHelper {
 /**
  * React Hook for Query Builder
  */
-import { useState, useCallback, useMemo } from 'react';
-
 export function useQueryBuilder(baseUrl: string) {
   const [builder] = useState(() => new QueryBuilder(baseUrl));
   const [, forceUpdate] = useState({});
