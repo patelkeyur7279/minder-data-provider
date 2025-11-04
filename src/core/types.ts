@@ -82,6 +82,9 @@ export interface ReduxConfig {
 
 export interface PerformanceConfig {
   deduplication?: boolean;
+  batching?: boolean;
+  batchDelay?: number;
+  monitoring?: boolean;
   retries?: number;
   retryDelay?: number;
   timeout?: number;

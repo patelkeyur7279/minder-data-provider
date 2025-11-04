@@ -9,6 +9,11 @@ import {
   RateLimiter, 
   getSecurityHeaders 
 } from '../utils/security.js';
+import {
+  RequestBatcher,
+  RequestDeduplicator,
+  PerformanceMonitor,
+} from '../utils/performance.js';
 
 export class ApiClient {
   private axiosInstance: AxiosInstance;
@@ -19,6 +24,9 @@ export class ApiClient {
   private csrfManager?: CSRFTokenManager;
   private rateLimiter?: RateLimiter;
   private sanitizer?: XSSSanitizer;
+  private requestBatcher?: RequestBatcher;
+  private deduplicator?: RequestDeduplicator;
+  private performanceMonitor?: PerformanceMonitor;
 
   constructor(config: MinderConfig, authManager: AuthManager, proxyManager?: ProxyManager) {
     this.config = config;
@@ -39,6 +47,19 @@ export class ApiClient {
 
     if (config.security?.sanitization) {
       this.sanitizer = new XSSSanitizer(config.security.sanitization);
+    }
+
+    // Initialize performance utilities
+    if (config.performance?.deduplication) {
+      this.deduplicator = new RequestDeduplicator();
+    }
+
+    if (config.performance?.batching) {
+      this.requestBatcher = new RequestBatcher(config.performance.batchDelay || 10);
+    }
+
+    if (config.performance?.monitoring) {
+      this.performanceMonitor = new PerformanceMonitor();
     }
 
     // Use proxy baseURL if enabled, otherwise use original
@@ -209,9 +230,16 @@ export class ApiClient {
     }
 
     // Execute request with caching for GET
-    const requestPromise = this.axiosInstance.request(requestConfig);
+    const startTime = performance.now();
     
-    if (route.method === 'GET' && this.config.performance?.deduplication) {
+    let requestPromise = this.axiosInstance.request(requestConfig);
+    
+    // Use deduplication if enabled
+    if (this.deduplicator && route.method === 'GET') {
+      requestPromise = this.deduplicator.deduplicate(cacheKey, () => 
+        this.axiosInstance.request(requestConfig)
+      );
+    } else if (route.method === 'GET' && this.config.performance?.deduplication) {
       this.requestCache.set(cacheKey, requestPromise);
       
       // Clean up cache after request completes
@@ -221,6 +249,12 @@ export class ApiClient {
     }
     
     const response: AxiosResponse<T> = await requestPromise;
+    
+    // Record performance metrics
+    if (this.performanceMonitor) {
+      const duration = performance.now() - startTime;
+      this.performanceMonitor.recordLatency(routeName, duration);
+    }
     
     // Transform response using model if specified
     if (route.model && response.data) {
@@ -262,5 +296,15 @@ export class ApiClient {
     const token = this.authManager.getToken();
     const wsUrl = token ? `${url}?token=${token}` : url;
     return new WebSocket(wsUrl, protocols);
+  }
+
+  // Get performance metrics
+  getPerformanceMetrics() {
+    return this.performanceMonitor?.getMetrics();
+  }
+
+  // Reset performance metrics
+  resetPerformanceMetrics() {
+    this.performanceMonitor?.reset();
   }
 }
