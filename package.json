@@ -16,6 +16,36 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
+    "./web": {
+      "types": "./dist/platforms/web.d.ts",
+      "import": "./dist/platforms/web.js",
+      "require": "./dist/platforms/web.cjs"
+    },
+    "./nextjs": {
+      "types": "./dist/platforms/nextjs.d.ts",
+      "import": "./dist/platforms/nextjs.js",
+      "require": "./dist/platforms/nextjs.cjs"
+    },
+    "./native": {
+      "types": "./dist/platforms/native.d.ts",
+      "import": "./dist/platforms/native.js",
+      "require": "./dist/platforms/native.cjs"
+    },
+    "./expo": {
+      "types": "./dist/platforms/expo.d.ts",
+      "import": "./dist/platforms/expo.js",
+      "require": "./dist/platforms/expo.cjs"
+    },
+    "./electron": {
+      "types": "./dist/platforms/electron.d.ts",
+      "import": "./dist/platforms/electron.js",
+      "require": "./dist/platforms/electron.cjs"
+    },
+    "./node": {
+      "types": "./dist/platforms/node.d.ts",
+      "import": "./dist/platforms/node.js",
+      "require": "./dist/platforms/node.cjs"
+    },
     "./core/*": {
       "types": "./dist/core/*.d.ts",
       "import": "./dist/core/*.js",
