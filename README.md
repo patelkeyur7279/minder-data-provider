@@ -198,6 +198,83 @@ const config = createMinderConfig({
 });
 ```
 
+### DevTools Panel (v2.0)
+
+```typescript
+import { DevTools } from 'minder-data-provider/devtools';
+
+function App() {
+  return (
+    <>
+      <YourApp />
+      {/* Add DevTools panel for debugging */}
+      <DevTools config={{ position: 'bottom-right', defaultOpen: true }} />
+    </>
+  );
+}
+
+// Features:
+// - Network monitoring with request/response tracking
+// - Cache inspection with TTL
+// - Performance metrics (latency, cache hit rate)
+// - State change tracking
+```
+
+### Plugin System (v2.0)
+
+```typescript
+import { PluginManager, LoggerPlugin, RetryPlugin } from 'minder-data-provider/plugins';
+
+// Create and configure plugins
+const pluginManager = new PluginManager();
+
+// Add built-in plugins
+pluginManager.register(LoggerPlugin);
+pluginManager.register(RetryPlugin);
+
+// Create custom plugin
+const customPlugin = {
+  name: 'custom-analytics',
+  version: '1.0.0',
+  onRequest: async (config) => {
+    console.log('Request:', config.url);
+    return config;
+  },
+  onResponse: async (response) => {
+    console.log('Response:', response.status);
+    return response;
+  }
+};
+
+pluginManager.register(customPlugin);
+await pluginManager.init({});
+
+// Lifecycle hooks: onInit, onRequest, onResponse, onError, 
+// onCacheHit, onCacheMiss, onDestroy
+```
+
+### Query Builder (v2.0)
+
+```typescript
+import { QueryBuilder } from 'minder-data-provider/query';
+
+// Build complex queries with fluent API
+const qb = new QueryBuilder('/api/users');
+
+const url = qb
+  .where('role', 'admin')
+  .whereGreaterThan('age', 21)
+  .search('john')
+  .sortBy('name')
+  .page(1)
+  .limit(10)
+  .build();
+
+// Result: /api/users?role=admin&age[gt]=21&search=john&sort=name&page=1&limit=10
+
+// Operators: eq, neq, gt, gte, lt, lte, contains, startsWith, endsWith, in
+```
+
 ## 📊 Bundle Size Comparison
 
 | Import Method | Bundle Size | Savings |

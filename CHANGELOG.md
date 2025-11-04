@@ -20,6 +20,22 @@ Complete rewrite with focus on performance, developer experience, and bundle siz
 - **Advanced Debug Tools**: Comprehensive debugging with performance monitoring
 - **Flexible SSR/CSR**: Choose rendering strategy per component
 
+#### Advanced Features (Task #6)
+- **DevTools Panel**: Real-time debugging interface with 4 tabs:
+  - Network monitoring with request/response tracking
+  - Cache inspection with TTL display
+  - Performance metrics (requests, latency, cache hit rate)
+  - State change tracking
+- **Plugin System**: Extensible architecture with lifecycle hooks:
+  - `onInit`, `onRequest`, `onResponse`, `onError`
+  - `onCacheHit`, `onCacheMiss`, `onDestroy`
+  - Built-in plugins: Logger, Retry, Analytics
+- **Query Builder**: Fluent API for complex queries:
+  - Filters with multiple operators (eq, gt, lt, contains, etc.)
+  - Sorting (asc/desc) and pagination
+  - Search functionality
+  - Type-safe query construction
+
 #### Performance Optimizations
 - Request deduplication to prevent duplicate API calls
 - Request batching to reduce network overhead by ~50%
@@ -36,11 +52,12 @@ Complete rewrite with focus on performance, developer experience, and bundle siz
 - Security headers configuration
 
 #### Testing Infrastructure
-- Comprehensive test suite with 69+ passing tests
+- Comprehensive test suite with 98+ passing tests
 - Infrastructure tests (5 tests)
 - Hook tests (8 tests)
 - Security tests (38 tests)
 - Performance tests (19 tests)
+- Advanced features tests (28 tests)
 - Jest + React Testing Library setup
 
 #### Documentation
@@ -49,6 +66,9 @@ Complete rewrite with focus on performance, developer experience, and bundle siz
 - Real-world Examples collection
 - Performance optimization guide
 - Security best practices
+- Advanced Features Testing Guide
+- Quick Test Guide
+- Contributing guidelines
 
 ### 🔄 Changed
 
