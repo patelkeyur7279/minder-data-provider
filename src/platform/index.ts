@@ -55,6 +55,9 @@ export * from './adapters/websocket/index.js';
 // File Upload Adapters
 export * from './adapters/upload/index.js';
 
+// Security
+export * from './security/index.js';
+
 // SSR/SSG Support
 export * from './ssr/index.js';
 
