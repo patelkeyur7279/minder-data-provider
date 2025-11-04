@@ -100,12 +100,29 @@ export interface DebugConfig {
 
 export interface SecurityConfig {
   encryption?: boolean;
-  sanitization?: boolean;
-  csrfProtection?: boolean;
+  sanitization?: boolean | {
+    enabled: boolean;
+    allowedTags?: string[];
+    allowedAttributes?: Record<string, string[]>;
+  };
+  csrfProtection?: boolean | {
+    enabled: boolean;
+    tokenLength?: number;
+    headerName?: string;
+    cookieName?: string;
+  };
   rateLimiting?: {
     requests: number;
-    window: number;
+    window: number; // in milliseconds
+    storage?: 'memory' | 'localStorage';
   };
+  headers?: {
+    contentSecurityPolicy?: string;
+    xFrameOptions?: string;
+    xContentTypeOptions?: boolean;
+    strictTransportSecurity?: string;
+  };
+  inputValidation?: boolean;
 }
 
 export interface SSRConfig {

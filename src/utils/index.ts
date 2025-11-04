@@ -1,5 +1,8 @@
 // Utility functions for the package
 
+// Export security utilities
+export * from './security.js';
+
 // Generate configuration from Next.js API routes
 export function generateConfigFromApiRoutes(apiDir: string): any {
   // This would scan the API directory and generate routes automatically

@@ -3,6 +3,12 @@ import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import type { MinderConfig, ApiRoute, ApiError } from './types.js';
 import { AuthManager } from './AuthManager.js';
 import { ProxyManager } from './ProxyManager.js';
+import { 
+  CSRFTokenManager, 
+  XSSSanitizer, 
+  RateLimiter, 
+  getSecurityHeaders 
+} from '../utils/security.js';
 
 export class ApiClient {
   private axiosInstance: AxiosInstance;
@@ -10,12 +16,30 @@ export class ApiClient {
   private authManager: AuthManager;
   private proxyManager?: ProxyManager;
   private requestCache: Map<string, Promise<any>> = new Map();
-  private rateLimiter: Map<string, number[]> = new Map();
+  private csrfManager?: CSRFTokenManager;
+  private rateLimiter?: RateLimiter;
+  private sanitizer?: XSSSanitizer;
 
   constructor(config: MinderConfig, authManager: AuthManager, proxyManager?: ProxyManager) {
     this.config = config;
     this.authManager = authManager;
     this.proxyManager = proxyManager;
+
+    // Initialize security utilities
+    if (config.security?.csrfProtection) {
+      const csrfConfig = typeof config.security.csrfProtection === 'object' 
+        ? config.security.csrfProtection 
+        : { enabled: true };
+      this.csrfManager = new CSRFTokenManager(csrfConfig.cookieName);
+    }
+
+    if (config.security?.rateLimiting) {
+      this.rateLimiter = new RateLimiter(config.security.rateLimiting.storage || 'memory');
+    }
+
+    if (config.security?.sanitization) {
+      this.sanitizer = new XSSSanitizer(config.security.sanitization);
+    }
 
     // Use proxy baseURL if enabled, otherwise use original
     const baseURL = proxyManager?.isEnabled() ? proxyManager.config.baseUrl : config.apiBaseUrl;
@@ -28,6 +52,7 @@ export class ApiClient {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        ...getSecurityHeaders(config.security?.headers),
       },
     });
 
@@ -43,16 +68,21 @@ export class ApiClient {
           config.headers.Authorization = `Bearer ${token}`;
         }
 
-        // Security headers
-        if (this.config.security?.csrfProtection) {
-          config.headers['X-CSRF-Token'] = this.generateCSRFToken();
+        // CSRF Protection
+        if (this.csrfManager) {
+          const csrfConfig = typeof this.config.security?.csrfProtection === 'object'
+            ? this.config.security.csrfProtection
+            : { enabled: true, headerName: 'X-CSRF-Token' };
+          const headerName = csrfConfig.headerName || 'X-CSRF-Token';
+          config.headers[headerName] = this.csrfManager.getToken();
         }
         
         // Rate limiting check
-        if (this.config.security?.rateLimiting) {
+        if (this.rateLimiter && this.config.security?.rateLimiting) {
           const key = `${config.method}:${config.url}`;
-          if (!this.checkRateLimit(key)) {
-            throw new Error('Rate limit exceeded');
+          const { requests, window } = this.config.security.rateLimiting;
+          if (!this.rateLimiter.check(key, requests, window)) {
+            throw new Error('Rate limit exceeded. Please try again later.');
           }
         }
 
@@ -111,51 +141,9 @@ export class ApiClient {
     }
   }
 
-  private generateCSRFToken(): string {
-    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-  }
-
-  private checkRateLimit(key: string): boolean {
-    if (!this.config.security?.rateLimiting) return true;
-    
-    const now = Date.now();
-    const window = this.config.security.rateLimiting.window;
-    const maxRequests = this.config.security.rateLimiting.requests;
-    
-    if (!this.rateLimiter.has(key)) {
-      this.rateLimiter.set(key, []);
-    }
-    
-    const requests = this.rateLimiter.get(key)!;
-    const validRequests = requests.filter(time => now - time < window);
-    
-    if (validRequests.length >= maxRequests) {
-      return false;
-    }
-    
-    validRequests.push(now);
-    this.rateLimiter.set(key, validRequests);
-    return true;
-  }
-
   private sanitizeData(data: any): any {
-    if (!this.config.security?.sanitization) return data;
-    
-    if (typeof data === 'string') {
-      return data.replace(/<script[^>]*>.*?<\/script>/gi, '')
-                .replace(/javascript:/gi, '')
-                .replace(/on\w+\s*=/gi, '');
-    }
-    
-    if (typeof data === 'object' && data !== null) {
-      const sanitized: any = Array.isArray(data) ? [] : {};
-      for (const key in data) {
-        sanitized[key] = this.sanitizeData(data[key]);
-      }
-      return sanitized;
-    }
-    
-    return data;
+    if (!this.sanitizer) return data;
+    return this.sanitizer.sanitize(data);
   }
 
   async request<T = any>(
