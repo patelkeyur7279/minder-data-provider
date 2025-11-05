@@ -28,7 +28,7 @@ const features = [
   {
     title: 'Real-time WebSocket',
     description: 'Live chat, presence, typing indicators, and data synchronization',
-    href: '/websocket',
+    href: '/chat',
     color: 'bg-green-500',
     gradient: 'from-green-500 to-emerald-500',
     useCase: 'Chat, Collaboration'
