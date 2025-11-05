@@ -1,22 +1,9 @@
 import Link from 'next/link';
-import { 
-  DatabaseIcon, 
-  LockKeyholeIcon, 
-  ZapIcon, 
-  WifiIcon, 
-  UploadIcon, 
-  WifiOffIcon,
-  GaugeIcon,
-  ShieldCheckIcon,
-  ServerIcon,
-  MonitorSmartphoneIcon
-} from 'lucide-react';
 
 const features = [
   {
     title: 'CRUD Operations',
     description: 'Complete data management with pagination, search, filters, and real-time updates',
-    icon: DatabaseIcon,
     href: '/crud',
     color: 'bg-blue-500',
     gradient: 'from-blue-500 to-cyan-500',
@@ -25,7 +12,6 @@ const features = [
   {
     title: 'Authentication',
     description: 'JWT-based auth with token refresh, session management, and role-based access',
-    icon: LockKeyholeIcon,
     href: '/auth',
     color: 'bg-purple-500',
     gradient: 'from-purple-500 to-pink-500',
@@ -34,7 +20,6 @@ const features = [
   {
     title: 'Smart Caching',
     description: 'Multi-strategy caching with TTL, invalidation, and performance metrics',
-    icon: ZapIcon,
     href: '/cache',
     color: 'bg-yellow-500',
     gradient: 'from-yellow-500 to-orange-500',
@@ -43,7 +28,6 @@ const features = [
   {
     title: 'Real-time WebSocket',
     description: 'Live chat, presence, typing indicators, and data synchronization',
-    icon: WifiIcon,
     href: '/websocket',
     color: 'bg-green-500',
     gradient: 'from-green-500 to-emerald-500',
@@ -52,7 +36,6 @@ const features = [
   {
     title: 'File Upload',
     description: 'Drag-drop, multi-file, progress tracking, image preview & cropping',
-    icon: UploadIcon,
     href: '/upload',
     color: 'bg-indigo-500',
     gradient: 'from-indigo-500 to-blue-500',
@@ -61,7 +44,6 @@ const features = [
   {
     title: 'Offline Support',
     description: 'Network detection, offline queue, auto-sync, and conflict resolution',
-    icon: WifiOffIcon,
     href: '/offline',
     color: 'bg-red-500',
     gradient: 'from-red-500 to-rose-500',
@@ -70,7 +52,6 @@ const features = [
   {
     title: 'Performance',
     description: 'Request monitoring, response time tracking, and optimization insights',
-    icon: GaugeIcon,
     href: '/performance',
     color: 'bg-teal-500',
     gradient: 'from-teal-500 to-cyan-500',
@@ -79,7 +60,6 @@ const features = [
   {
     title: 'Security',
     description: 'CSRF protection, XSS prevention, rate limiting, and secure headers',
-    icon: ShieldCheckIcon,
     href: '/security',
     color: 'bg-orange-500',
     gradient: 'from-orange-500 to-red-500',
@@ -88,7 +68,6 @@ const features = [
   {
     title: 'SSR/CSR/SSG',
     description: 'Server-side rendering, client-side rendering, and static generation',
-    icon: ServerIcon,
     href: '/ssr',
     color: 'bg-slate-500',
     gradient: 'from-slate-500 to-gray-500',
@@ -97,7 +76,6 @@ const features = [
   {
     title: 'Platform Detection',
     description: 'Automatic optimization for Web, React Native, Electron, and more',
-    icon: MonitorSmartphoneIcon,
     href: '/platform',
     color: 'bg-violet-500',
     gradient: 'from-violet-500 to-purple-500',
@@ -183,7 +161,6 @@ export default function HomePage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {features.map((feature, index) => {
-            const Icon = feature.icon;
             return (
               <Link
                 key={feature.href}
@@ -198,7 +175,7 @@ export default function HomePage() {
                 
                 <div className="relative">
                   <div className={`w-12 h-12 ${feature.color} rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
-                    <Icon className="w-6 h-6 text-white" />
+                    <div className="w-6 h-6 bg-white rounded-sm"></div>
                   </div>
                   
                   <h3 className="text-xl font-bold mb-2 text-slate-800 dark:text-white">

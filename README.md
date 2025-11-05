@@ -87,7 +87,7 @@ const config = createMinderConfig({
 
 ---
 
-## �📦 Installation
+##  Installation
 
 ```bash
 npm install minder-data-provider
@@ -96,6 +96,8 @@ yarn add minder-data-provider
 # or
 pnpm add minder-data-provider
 ```
+
+> **🛡️ Version Conflicts?** We automatically prevent React version conflicts! See [VERSION_MANAGEMENT.md](VERSION_MANAGEMENT.md) for details.
 
 ## 🚀 Quick Start (Simplified)
 

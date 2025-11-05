@@ -14,6 +14,16 @@
  */
 
 // ============================================================================
+// VERSION VALIDATION - Auto-check for conflicts
+// ============================================================================
+import { checkReactVersionAtRuntime } from './utils/version-validator.js';
+
+// Auto-check in development mode
+if (process.env.NODE_ENV === 'development') {
+  checkReactVersionAtRuntime();
+}
+
+// ============================================================================
 // CORE EXPORTS - NEW ARCHITECTURE
 // ============================================================================
 
