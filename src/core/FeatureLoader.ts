@@ -253,7 +253,7 @@ export class FeatureLoader {
         return import('../cache/index.js').then(m => m.CacheManager || m);
       
       case 'websocket':
-        return import('../websocket/index.js').then(m => m.WebSocketManager || m);
+        return import('../websocket/index.js').then(m => m.useWebSocket || m);
       
       case 'upload':
         return import('../upload/index.js').then(m => m.useMediaUpload || m);
