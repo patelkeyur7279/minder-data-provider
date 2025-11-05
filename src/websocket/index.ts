@@ -1,3 +1,6 @@
 // Modular WebSocket exports
-export { useWebSocket } from '../hooks/index.js';
-export type { WebSocketConfig } from '../core/types.js';
+// Export the useWebSocket hook
+export { useWebSocket } from '../hooks/index';
+
+// Export WebSocket configuration types
+export type { WebSocketConfig } from '../core/types';
