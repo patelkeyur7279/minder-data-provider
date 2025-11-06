@@ -11,6 +11,19 @@ const logger = new Logger('VersionValidator', {
   level: process.env.NODE_ENV === 'development' ? LogLevel.WARN : LogLevel.ERROR
 });
 
+// Type declarations for runtime React detection
+declare global {
+  interface Window {
+    React?: { version: string };
+    __REACT_DEVTOOLS_GLOBAL_HOOK__?: {
+      renderers?: Map<number, { version?: string }>;
+    };
+  }
+}
+
+// Type for dynamic require (Node.js environment)
+declare const require: ((id: string) => { version?: string }) | undefined;
+
 let hasChecked = false;
 
 export function checkReactVersionAtRuntime(): void {
@@ -19,18 +32,15 @@ export function checkReactVersionAtRuntime(): void {
   hasChecked = true;
 
   try {
-    // @ts-ignore - Check if React is available
+    // Check if React is available in browser environment
     if (typeof window !== 'undefined' && window.React) {
       const reactVersions: Set<string> = new Set();
       
-      // @ts-ignore
       const currentReactVersion = window.React.version;
       reactVersions.add(currentReactVersion);
 
-      // Check if there are multiple React instances
-      // @ts-ignore
+      // Check if there are multiple React instances via DevTools hook
       if (window.__REACT_DEVTOOLS_GLOBAL_HOOK__) {
-        // @ts-ignore
         const hook = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;
         if (hook.renderers) {
           hook.renderers.forEach((renderer: any) => {
@@ -52,12 +62,10 @@ export function checkReactVersionAtRuntime(): void {
       }
     }
 
-    // Check React vs ReactDOM version match
+    // Check React vs ReactDOM version match in Node.js environment
     if (typeof require !== 'undefined') {
       try {
-        // @ts-ignore
         const React = require('react');
-        // @ts-ignore
         const ReactDOM = require('react-dom');
         
         if (React.version && ReactDOM.version && React.version !== ReactDOM.version) {
