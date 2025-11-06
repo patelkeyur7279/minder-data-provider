@@ -58,7 +58,7 @@ export class LightHttpClient {
       if (timeoutId) clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new MinderNetworkError(response.statusText, 'HTTP_ERROR', response.status);
+        throw new MinderNetworkError(response.statusText, response.status, undefined, 'HTTP_ERROR');
       }
 
       const contentType = response.headers.get('content-type');
