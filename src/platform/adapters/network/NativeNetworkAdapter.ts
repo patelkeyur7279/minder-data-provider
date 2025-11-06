@@ -57,7 +57,7 @@ export class NativeNetworkAdapter extends NetworkAdapter {
           options.body = config.body;
         } else if (config.body instanceof FormData) {
           options.body = config.body;
-          delete (headers as any)['Content-Type'];
+          delete headers['Content-Type'];
         } else {
           options.body = JSON.stringify(config.body);
         }

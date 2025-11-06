@@ -338,14 +338,24 @@ function encodeWithModel<T>(
   if (!ModelClass || !data) return data;
   
   try {
+    // Type guard for static encode method
+    const hasStaticEncode = (cls: any): cls is { encode: (data: any) => any } => {
+      return 'encode' in cls && typeof cls.encode === 'function';
+    };
+    
     // If model has static encode method, use it
-    if ('encode' in ModelClass && typeof ModelClass.encode === 'function') {
-      return (ModelClass as any).encode(data);
+    if (hasStaticEncode(ModelClass)) {
+      return ModelClass.encode(data);
     }
     
+    // Type guard for instance encode method
+    const hasEncode = (obj: any): obj is { encode: () => any } => {
+      return obj && 'encode' in obj && typeof obj.encode === 'function';
+    };
+    
     // If model instance has encode method, use it
-    const instance = new ModelClass(data) as any;
-    if ('encode' in instance && typeof instance.encode === 'function') {
+    const instance = new ModelClass(data);
+    if (hasEncode(instance)) {
       return instance.encode();
     }
     
@@ -367,9 +377,14 @@ function decodeWithModel<T>(
   if (!ModelClass || !data) return data;
   
   try {
+    // Type guard for static decode method
+    const hasStaticDecode = (cls: any): cls is { decode: (data: any) => T } => {
+      return 'decode' in cls && typeof cls.decode === 'function';
+    };
+    
     // If model has static decode method, use it
-    if ('decode' in ModelClass && typeof ModelClass.decode === 'function') {
-      return (ModelClass as any).decode(data);
+    if (hasStaticDecode(ModelClass)) {
+      return ModelClass.decode(data);
     }
     
     // Create model instance (model handles decoding in constructor)

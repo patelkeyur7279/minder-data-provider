@@ -55,7 +55,7 @@ export class WebNetworkAdapter extends NetworkAdapter {
         } else if (config.body instanceof FormData) {
           options.body = config.body;
           // Remove Content-Type header for FormData (browser sets it with boundary)
-          delete (headers as any)['Content-Type'];
+          delete headers['Content-Type'];
         } else {
           options.body = JSON.stringify(config.body);
         }

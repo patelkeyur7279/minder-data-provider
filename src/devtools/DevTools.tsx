@@ -6,6 +6,15 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { PerformanceMonitor } from '../utils/performance';
 
+// Custom event type declarations for type-safe event listeners
+declare global {
+  interface WindowEventMap {
+    'minder:network': CustomEvent;
+    'minder:cache': CustomEvent;
+    'minder:state': CustomEvent;
+  }
+}
+
 export interface DevToolsConfig {
   enabled?: boolean;
   position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
@@ -86,14 +95,14 @@ export function DevTools({ config = {} }: { config?: DevToolsConfig }) {
       setStateSnapshots(prev => [event.detail, ...prev].slice(0, 50));
     };
 
-    window.addEventListener('minder:network' as any, handleNetworkRequest);
-    window.addEventListener('minder:cache' as any, handleCacheUpdate);
-    window.addEventListener('minder:state' as any, handleStateUpdate);
+    window.addEventListener('minder:network', handleNetworkRequest);
+    window.addEventListener('minder:cache', handleCacheUpdate);
+    window.addEventListener('minder:state', handleStateUpdate);
 
     return () => {
-      window.removeEventListener('minder:network' as any, handleNetworkRequest);
-      window.removeEventListener('minder:cache' as any, handleCacheUpdate);
-      window.removeEventListener('minder:state' as any, handleStateUpdate);
+      window.removeEventListener('minder:network', handleNetworkRequest);
+      window.removeEventListener('minder:cache', handleCacheUpdate);
+      window.removeEventListener('minder:state', handleStateUpdate);
     };
   }, [enabled]);
 
@@ -102,7 +111,7 @@ export function DevTools({ config = {} }: { config?: DevToolsConfig }) {
     if (!enabled || !isOpen || activeTab !== 'performance') return;
 
     const interval = setInterval(() => {
-      const metrics = (window as any).__MINDER_DEBUG__?.getPerformanceMetrics?.();
+      const metrics = window.__MINDER_DEBUG__?.getPerformanceMetrics?.();
       setPerformanceMetrics(metrics);
     }, 1000);
 

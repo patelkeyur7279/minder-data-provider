@@ -1,5 +1,12 @@
 import { Logger, LogLevel } from '../utils/Logger.js';
 
+// Extend Window interface for type-safe global access
+declare global {
+  interface Window {
+    __MINDER_DEBUG__?: DebugManager;
+  }
+}
+
 export class DebugManager {
   private enabled: boolean = false;
   private logs: any[] = [];
@@ -12,7 +19,7 @@ export class DebugManager {
       level: enabled ? LogLevel.DEBUG : LogLevel.WARN
     });
     if (enabled && typeof window !== 'undefined') {
-      (window as any).__MINDER_DEBUG__ = this;
+      window.__MINDER_DEBUG__ = this;
     }
   }
 
