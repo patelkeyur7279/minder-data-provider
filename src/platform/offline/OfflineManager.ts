@@ -15,224 +15,9 @@
 import { Logger, LogLevel } from '../../utils/Logger.js';
 import type { StorageAdapter } from '../adapters/storage/StorageAdapter.js';
 import { MinderOfflineError, MinderNetworkError, MinderValidationError } from '../../errors/index.js';
+import type { NetworkState, QueuedRequest, SyncStats, OfflineConfig } from './types.js';
 
 const logger = new Logger('OfflineManager', { level: LogLevel.WARN });
-
-/**
- * Network connection state
- */
-export interface NetworkState {
-  /**
-   * Is connected to internet
-   */
-  isConnected: boolean;
-
-  /**
-   * Connection type (wifi, cellular, ethernet, etc.)
-   */
-  type?: string;
-
-  /**
-   * Is connection expensive (cellular data)
-   */
-  isExpensive?: boolean;
-
-  /**
-   * Is connection metered
-   */
-  isMetered?: boolean;
-}
-
-/**
- * Queued request configuration
- */
-export interface QueuedRequest {
-  /**
-   * Unique request ID
-   */
-  id: string;
-
-  /**
-   * HTTP method
-   */
-  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-
-  /**
-   * Request URL
-   */
-  url: string;
-
-  /**
-   * Request headers
-   */
-  headers?: Record<string, string>;
-
-  /**
-   * Request body
-   */
-  body?: any;
-
-  /**
-   * Request priority (higher = processed first)
-   * @default 0
-   */
-  priority?: number;
-
-  /**
-   * Timestamp when request was queued
-   */
-  queuedAt: number;
-
-  /**
-   * Number of retry attempts
-   */
-  retries: number;
-
-  /**
-   * Max retry attempts
-   * @default 3
-   */
-  maxRetries?: number;
-
-  /**
-   * Last error message
-   */
-  lastError?: string;
-
-  /**
-   * Metadata for application use
-   */
-  metadata?: Record<string, unknown>;
-}
-
-/**
- * Offline configuration
- */
-export interface OfflineConfig {
-  /**
-   * Enable offline support
-   * @default true
-   */
-  enabled?: boolean;
-
-  /**
-   * Storage adapter for queue persistence
-   */
-  storage?: StorageAdapter;
-
-  /**
-   * Storage key for queue
-   * @default 'minder_offline_queue'
-   */
-  storageKey?: string;
-
-  /**
-   * Max queue size
-   * @default 100
-   */
-  maxQueueSize?: number;
-
-  /**
-   * Max retry attempts per request
-   * @default 3
-   */
-  maxRetries?: number;
-
-  /**
-   * Initial retry delay in ms
-   * @default 1000
-   */
-  retryDelay?: number;
-
-  /**
-   * Auto-sync when coming online
-   * @default true
-   */
-  autoSync?: boolean;
-
-  /**
-   * Sync only on WiFi (avoid cellular data)
-   * @default false
-   */
-  syncOnWifiOnly?: boolean;
-
-  /**
-   * Batch size for sync operations
-   * @default 5
-   */
-  syncBatchSize?: number;
-
-  /**
-   * Conflict resolution strategy
-   * @default 'server-wins'
-   */
-  conflictResolution?: 'server-wins' | 'client-wins' | 'manual';
-
-  /**
-   * Callback when request is queued
-   */
-  onRequestQueued?: (request: QueuedRequest) => void;
-
-  /**
-   * Callback when request succeeds
-   */
-  onRequestSuccess?: (request: QueuedRequest, response: any) => void;
-
-  /**
-   * Callback when request fails
-   */
-  onRequestError?: (request: QueuedRequest, error: Error) => void;
-
-  /**
-   * Callback when sync starts
-   */
-  onSyncStart?: () => void;
-
-  /**
-   * Callback when sync completes
-   */
-  onSyncComplete?: (stats: SyncStats) => void;
-
-  /**
-   * Callback on network state change
-   */
-  onNetworkChange?: (state: NetworkState) => void;
-
-  /**
-   * Manual conflict resolver
-   */
-  onConflict?: (request: QueuedRequest, serverData: any) => Promise<any>;
-}
-
-/**
- * Sync statistics
- */
-export interface SyncStats {
-  /**
-   * Total requests processed
-   */
-  total: number;
-
-  /**
-   * Successful requests
-   */
-  successful: number;
-
-  /**
-   * Failed requests
-   */
-  failed: number;
-
-  /**
-   * Duration in milliseconds
-   */
-  duration: number;
-
-  /**
-   * Failed request IDs
-   */
-  failedRequests: string[];
-}
 
 /**
  * OfflineManager - Manages offline request queue and sync
@@ -460,7 +245,7 @@ export class OfflineManager {
    */
   async sync(): Promise<SyncStats> {
     if (!this.config.enabled) {
-      return { total: 0, successful: 0, failed: 0, duration: 0, failedRequests: [] };
+      return { total: 0, successful: 0, failed: 0, pending: 0, duration: 0, errors: [] };
     }
 
     if (this.isSyncing && this.syncPromise) {
@@ -479,8 +264,9 @@ export class OfflineManager {
       total: 0,
       successful: 0,
       failed: 0,
+      pending: 0,
       duration: 0,
-      failedRequests: [],
+      errors: [],
     };
 
     this.syncPromise = this.performSync(stats, startTime);
@@ -511,7 +297,8 @@ export class OfflineManager {
             await this.removeFromQueue(request.id);
           } catch (error) {
             stats.failed++;
-            stats.failedRequests.push(request.id);
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            stats.errors.push({ requestId: request.id, error: errorMessage });
             await this.handleRequestError(request, error as Error);
           }
         })

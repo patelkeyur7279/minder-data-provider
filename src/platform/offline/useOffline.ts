@@ -7,7 +7,8 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import type { OfflineManager, NetworkState, QueuedRequest, SyncStats } from './OfflineManager.js';
+import type { OfflineManager } from './OfflineManager.js';
+import type { NetworkState, QueuedRequest, SyncStats } from './types.js';
 
 /**
  * Hook return type for useOffline

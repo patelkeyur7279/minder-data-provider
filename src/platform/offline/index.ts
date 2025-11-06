@@ -7,5 +7,6 @@
  * @module platform/offline
  */
 
+export * from './types.js';
 export * from './OfflineManager.js';
 export * from './useOffline.js';
