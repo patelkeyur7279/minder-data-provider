@@ -6,6 +6,9 @@ export * from './security.js';
 // Export performance utilities
 export * from './performance.js';
 
+// Export Logger
+export * from './Logger.js';
+
 // Generate configuration from Next.js API routes
 export function generateConfigFromApiRoutes(apiDir: string): any {
   // This would scan the API directory and generate routes automatically
