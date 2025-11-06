@@ -38,13 +38,24 @@ A **real, working, tested** e-commerce application showcasing best practices wit
 
 ## 🚀 Quick Start
 
-### 1. Install Dependencies
+### Option 1: Automatic Setup (Recommended)
 ```bash
-npm install
+chmod +x setup.sh
+./setup.sh
 ```
 
-### 2. Start Development Server
+### Option 2: Manual Setup
 ```bash
+# 1. Install dependencies
+npm install
+
+# 2. Link to parent package (from project root)
+cd ../../..
+npm link
+cd examples/web/e-commerce
+npm link minder-data-provider
+
+# 3. Start development server
 npm run dev
 ```
 
