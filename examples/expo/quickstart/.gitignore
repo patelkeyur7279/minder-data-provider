@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+.expo/
+.expo-shared/
+dist/
+
+# macOS
+.DS_Store
+
+# Environment
+.env
+.env.local
+
+# Logs
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
+
+# Temporary files
+*.tmp
+*.temp

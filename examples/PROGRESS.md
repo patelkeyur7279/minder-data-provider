@@ -76,11 +76,29 @@ npm run dev
    - Documentation: Complete setup guide
    - Patterns: Optimistic UI, network detection, retry logic
 
+5. **Expo Quick Start**
+   - Status: 100% Complete  
+   - Files: 6 files
+   - Features: SecureStore, FileSystem, ImagePicker, platform APIs
+   - Documentation: Complete integration guide
+   - Demonstrates: Expo-specific features with Minder
+
 ### 🚧 In Progress
 
 None currently.
 
-### ⏳ Planned Examples
+### ⏳ Remaining Examples
+
+6. **Cross-Platform Patterns**
+   - Platform detection examples
+   - Capability checking
+   - Progressive enhancement
+   - Write-once-run-anywhere
+
+7. **Electron Desktop App**
+   - Main/renderer process patterns
+   - IPC communication
+   - Native storage integration
 
 ---
 
