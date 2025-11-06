@@ -164,10 +164,12 @@ export abstract class NetworkAdapter {
   ): Promise<NetworkResponse<T>> {
     try {
       return await this.request<T>(config);
-    } catch (error: any) {
+    } catch (error: unknown) {
       const maxRetries = this.config.maxRetries || 3;
       
-      if (attempt < maxRetries && this.shouldRetry(error)) {
+      // Type narrowing: error must be NetworkError for shouldRetry
+      const networkError = error as NetworkError;
+      if (attempt < maxRetries && this.shouldRetry(networkError)) {
         const delay = this.config.retryDelay! * Math.pow(2, attempt);
         await new Promise(resolve => setTimeout(resolve, delay));
         return this.retryRequest<T>(config, attempt + 1);

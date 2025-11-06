@@ -8,6 +8,7 @@ import {
   NetworkRequest,
   NetworkResponse,
   NetworkAdapterConfig,
+  NetworkError,
 } from './NetworkAdapter.js';
 
 export class NativeNetworkAdapter extends NetworkAdapter {
@@ -113,9 +114,19 @@ export class NativeNetworkAdapter extends NetworkAdapter {
 
       return networkResponse;
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Handle network errors
-      if (error.message?.includes('Network request failed')) {
+      let errorMessage = '';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage = String((error as { message: unknown }).message);
+      } else {
+        errorMessage = String(error);
+      }
+      
+      if (errorMessage.includes('Network request failed')) {
         const networkError = this.createError(
           'Network error - please check your internet connection',
           config,
@@ -130,7 +141,7 @@ export class NativeNetworkAdapter extends NetworkAdapter {
       }
 
       // Re-throw other errors
-      const wrappedError = error;
+      const wrappedError = error as NetworkError;
       wrappedError.config = config;
       
       if (this.config.onError) {

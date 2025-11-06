@@ -114,11 +114,11 @@ export class WebNetworkAdapter extends NetworkAdapter {
 
       return networkResponse;
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       clearTimeout(timeoutId);
 
       // Handle abort/timeout
-      if (error.name === 'AbortError') {
+      if (error instanceof Error && error.name === 'AbortError') {
         const timeoutError = this.createError(
           'Request timeout',
           config,

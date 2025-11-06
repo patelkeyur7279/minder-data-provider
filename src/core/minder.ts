@@ -573,7 +573,7 @@ export async function minder<TData = any>(
       },
     };
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Handle error - NEVER throw
     const minderError = handleError(error);
     
