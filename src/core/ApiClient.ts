@@ -140,30 +140,48 @@ export class ApiClient {
     );
   }
 
-  private handleError(error: any): ApiError {
-    if (error.response) {
-      return {
-        message: error.response.data?.message || error.message,
-        status: error.response.status,
-        code: error.response.data?.code || 'API_ERROR',
-        details: error.response.data,
+  private handleError(error: unknown): ApiError {
+    // Type narrowing for axios-like errors with response
+    if (error && typeof error === 'object' && 'response' in error) {
+      const axiosError = error as {
+        response?: {
+          data?: { message?: string; code?: string };
+          status?: number;
+        };
+        message?: string;
       };
-    } else if (error.request) {
+      
+      return {
+        message: axiosError.response?.data?.message || axiosError.message || 'API error',
+        status: axiosError.response?.status,
+        code: axiosError.response?.data?.code || 'API_ERROR',
+        details: axiosError.response?.data,
+      };
+    }
+    
+    // Network error (has request but no response)
+    if (error && typeof error === 'object' && 'request' in error) {
+      const networkError = error as { request?: unknown };
       return {
         message: 'Network error - please check your connection',
         code: 'NETWORK_ERROR',
-        details: error.request,
-      };
-    } else {
-      return {
-        message: error.message || 'Unknown error occurred',
-        code: 'UNKNOWN_ERROR',
-        details: error,
+        details: networkError.request,
       };
     }
+    
+    // Other errors
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Unknown error occurred';
+      
+    return {
+      message: errorMessage,
+      code: 'UNKNOWN_ERROR',
+      details: error,
+    };
   }
 
-  private sanitizeData(data: any): any {
+  private sanitizeData(data: unknown): unknown {
     if (!this.sanitizer) return data;
     return this.sanitizer.sanitize(data);
   }

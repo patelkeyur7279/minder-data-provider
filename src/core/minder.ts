@@ -312,7 +312,7 @@ function detectMethod(
 /**
  * Detects if data is a file upload
  */
-function isFileUpload(data: any): boolean {
+function isFileUpload(data: unknown): boolean {
   if (!data) return false;
   
   return (
@@ -388,10 +388,14 @@ function decodeWithModel<T>(
  * Converts any error to user-friendly MinderError
  * NEVER throws - always returns structured error
  */
-function handleError(error: any): MinderError {
+function handleError(error: unknown): MinderError {
+  // Type narrowing for axios-like errors
+  const hasResponse = error && typeof error === 'object' && 'response' in error;
+  
   // Axios error
-  if (error.response) {
-    const status = error.response.status;
+  if (hasResponse) {
+    const axiosError = error as { response?: { status?: number; data?: unknown } };
+    const status = axiosError.response?.status;
     
     // Map common status codes to user-friendly messages
     const errorMap: Record<number, { message: string; solution: string }> = {
@@ -429,34 +433,45 @@ function handleError(error: any): MinderError {
       },
     };
     
-    const errorInfo = errorMap[status] || {
+    const errorInfo = status ? (errorMap[status] || {
+      message: 'Request failed',
+      solution: 'Please try again'
+    }) : {
       message: 'Request failed',
       solution: 'Please try again'
     };
     
     return {
       message: errorInfo.message,
-      code: `HTTP_${status}`,
-      status,
-      details: error.response.data,
+      code: status ? `HTTP_${status}` : 'HTTP_ERROR',
+      status: status || 0,
+      details: axiosError.response?.data,
       solution: errorInfo.solution,
     };
   }
   
-  // Network error
-  if (error.request) {
+  // Network error (has request but no response)
+  const hasRequest = error && typeof error === 'object' && 'request' in error;
+  if (hasRequest) {
+    const networkError = error as { message?: string };
     return {
       message: 'Network error',
       code: 'NETWORK_ERROR',
       status: 0,
-      details: error.message,
+      details: networkError.message,
       solution: 'Please check your internet connection',
     };
   }
   
-  // Other errors
+  // Other errors (Error instances or plain objects)
+  const errorMessage = error instanceof Error 
+    ? error.message 
+    : (error && typeof error === 'object' && 'message' in error)
+      ? String((error as { message: unknown }).message)
+      : 'Unknown error';
+      
   return {
-    message: error.message || 'Unknown error',
+    message: errorMessage,
     code: 'UNKNOWN_ERROR',
     status: 0,
     details: error,

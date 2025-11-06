@@ -9,7 +9,7 @@ export interface NetworkRequest {
   url: string;
   method: HttpMethod;
   headers?: Record<string, string>;
-  body?: any;
+  body?: unknown;
   params?: Record<string, unknown>;
   timeout?: number;
   signal?: AbortSignal;
@@ -28,7 +28,7 @@ export interface NetworkResponse<T = any> {
 export interface NetworkError extends Error {
   config?: NetworkRequest;
   code?: string;
-  request?: any;
+  request?: unknown;
   response?: NetworkResponse;
   isNetworkError?: boolean;
   isTimeout?: boolean;
@@ -80,21 +80,21 @@ export abstract class NetworkAdapter {
   /**
    * POST request
    */
-  async post<T = any>(url: string, data?: any, config?: Partial<NetworkRequest>): Promise<NetworkResponse<T>> {
+  async post<T = any>(url: string, data?: unknown, config?: Partial<NetworkRequest>): Promise<NetworkResponse<T>> {
     return this.request<T>({ ...config, url, method: 'POST', body: data });
   }
 
   /**
    * PUT request
    */
-  async put<T = any>(url: string, data?: any, config?: Partial<NetworkRequest>): Promise<NetworkResponse<T>> {
+  async put<T = any>(url: string, data?: unknown, config?: Partial<NetworkRequest>): Promise<NetworkResponse<T>> {
     return this.request<T>({ ...config, url, method: 'PUT', body: data });
   }
 
   /**
    * PATCH request
    */
-  async patch<T = any>(url: string, data?: any, config?: Partial<NetworkRequest>): Promise<NetworkResponse<T>> {
+  async patch<T = any>(url: string, data?: unknown, config?: Partial<NetworkRequest>): Promise<NetworkResponse<T>> {
     return this.request<T>({ ...config, url, method: 'PATCH', body: data });
   }
 
