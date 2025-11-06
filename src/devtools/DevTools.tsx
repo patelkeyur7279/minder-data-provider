@@ -5,6 +5,10 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { PerformanceMonitor } from '../utils/performance';
+import type { DevToolsConfig, NetworkRequest, CacheEntry, StateSnapshot } from './types.js';
+
+// Re-export types for backward compatibility
+export type { DevToolsConfig, NetworkRequest, CacheEntry, StateSnapshot } from './types.js';
 
 // Custom event type declarations for type-safe event listeners
 declare global {
@@ -13,40 +17,6 @@ declare global {
     'minder:cache': CustomEvent;
     'minder:state': CustomEvent;
   }
-}
-
-export interface DevToolsConfig {
-  enabled?: boolean;
-  position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
-  defaultOpen?: boolean;
-  showNetworkTab?: boolean;
-  showCacheTab?: boolean;
-  showPerformanceTab?: boolean;
-  showStateTab?: boolean;
-}
-
-interface NetworkRequest {
-  id: string;
-  method: string;
-  url: string;
-  status: number;
-  duration: number;
-  timestamp: number;
-  request?: any;
-  response?: any;
-}
-
-interface CacheEntry {
-  key: string;
-  value: any;
-  timestamp: number;
-  ttl?: number;
-}
-
-interface StateSnapshot {
-  route: string;
-  data: any;
-  timestamp: number;
 }
 
 /**
