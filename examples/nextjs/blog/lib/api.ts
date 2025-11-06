@@ -1,28 +1,34 @@
 import { configureMinder } from 'minder-data-provider';
+import {
+  API_BASE_URLS,
+  JSONPLACEHOLDER_ENDPOINTS,
+  getJsonPlaceholderUrl,
+} from '../../shared/config/api';
 
 /**
- * API Configuration for Next.js Blog
+ * Global Minder Configuration
  * 
  * Why configure globally?
  * - Consistent settings across all API calls
- * - DRY (Don't Repeat Yourself)
- * - Easy to update baseURL
+ * - Single source of truth
+ * - Easy to modify base URL, headers, etc.
  */
 
-// Configure minder globally
+/**
+ * Configure Minder with default options
+ */
 configureMinder({
-  baseURL: 'https://jsonplaceholder.typicode.com',
+  baseURL: API_BASE_URLS.JSONPLACEHOLDER,
+  timeout: 10000, // 10 seconds
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000,
 });
 
-// API Endpoints
-export const API_ENDPOINTS = {
-  POSTS: '/posts',
-  POST_BY_ID: (id: number | string) => `/posts/${id}`,
-  USERS: '/users',
-  USER_BY_ID: (id: number | string) => `/users/${id}`,
-  COMMENTS: (postId: number | string) => `/posts/${postId}/comments`,
-} as const;
+/**
+ * Export shared endpoints and utilities
+ */
+export { 
+  JSONPLACEHOLDER_ENDPOINTS as API_ENDPOINTS,
+  getJsonPlaceholderUrl,
+};

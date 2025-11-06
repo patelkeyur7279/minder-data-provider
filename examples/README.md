@@ -1,12 +1,16 @@
-# 🚀 Minder Data Provider - Working Examples
+# 🚀 Minder Examples - Complete Guide
 
-This directory contains **real, working, tested** examples for every platform and use case.
+**Production-ready examples** demonstrating all features of Minder Data Provider across multiple platforms with **centralized configuration** and **Docker support**.
 
-Each example is a complete, runnable application that demonstrates best practices and real-world scenarios.
+## 📋 Table of Contents
 
----
-
-## 📁 Directory Structure
+- [Quick Start](#-quick-start)
+- [Examples Overview](#-examples-overview)
+- [Centralized Configuration](#-centralized-configuration)
+- [Docker Setup](#-docker-setup)
+- [Manual Setup](#-manual-setup)
+- [Available APIs](#-available-apis)
+- [Troubleshooting](#-troubleshooting)
 
 ```
 examples/

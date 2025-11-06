@@ -1,4 +1,9 @@
-import { minder } from 'minder-data-provider';
+import { configureMinder } from 'minder-data-provider';
+import {
+  API_BASE_URLS,
+  JSONPLACEHOLDER_ENDPOINTS,
+  getJsonPlaceholderUrl,
+} from '../../../shared/config/api';
 
 /**
  * Global Minder Configuration
@@ -9,13 +14,11 @@ import { minder } from 'minder-data-provider';
  * - Easy to modify base URL, headers, etc.
  */
 
-const baseURL = 'https://jsonplaceholder.typicode.com';
-
 /**
  * Configure Minder with default options
  */
-minder.config({
-  baseURL,
+configureMinder({
+  baseURL: API_BASE_URLS.JSONPLACEHOLDER,
   timeout: 10000, // 10 seconds
   headers: {
     'Content-Type': 'application/json',
@@ -23,22 +26,9 @@ minder.config({
 });
 
 /**
- * API Endpoints
- * 
- * Why constants?
- * - Type-safe endpoint URLs
- * - Easy to maintain
- * - Avoid typos
+ * Export shared endpoints and utilities
  */
-export const API_ENDPOINTS = {
-  // Users
-  USERS: '/users',
-  USER_BY_ID: (id: string | number) => `/users/${id}`,
-  
-  // Posts
-  POSTS: '/posts',
-  POST_BY_ID: (id: string | number) => `/posts/${id}`,
-  POSTS_BY_USER: (userId: string | number) => `/posts?userId=${userId}`,
-} as const;
-
-export { minder };
+export { 
+  JSONPLACEHOLDER_ENDPOINTS as API_ENDPOINTS,
+  getJsonPlaceholderUrl,
+};
