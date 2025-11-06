@@ -25,7 +25,8 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - VITE_API_URL=http://mock-api:3001
+      - VITE_USE_MOCK_API=true
+      - VITE_API_URL=http://localhost:3001
     volumes:
       - ./web/e-commerce:/app
       - /app/node_modules
@@ -44,7 +45,8 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=3002
-      - API_URL=http://mock-api:3001
+      - API_URL=http://localhost:3001
+      - NEXT_PUBLIC_API_URL=http://localhost:3001
     volumes:
       - ./nextjs/blog:/app
       - /app/node_modules
@@ -64,7 +66,7 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=3003
-      - API_URL=http://mock-api:3001
+      - API_URL=http://localhost:3001
     volumes:
       - ./nodejs/api:/app
       - /app/node_modules

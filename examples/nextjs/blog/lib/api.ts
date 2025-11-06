@@ -1,9 +1,23 @@
 import { configureMinder } from 'minder-data-provider';
-import {
-  API_BASE_URLS,
-  JSONPLACEHOLDER_ENDPOINTS,
-  getJsonPlaceholderUrl,
-} from '../../shared/config/api';
+
+/**
+ * API Configuration
+ * 
+ * Environment-aware API endpoints:
+ * - Production: Uses real JSONPlaceholder API
+ * - Docker: Uses local mock API at port 3001
+ * - Development: Configurable via API_URL env variable
+ */
+
+// Determine API base URL based on environment
+const getApiBaseUrl = () => {
+  // Check environment variable (Docker/Development)
+  if (process.env.API_URL) {
+    return process.env.API_URL;
+  }
+  // Default to JSONPlaceholder API
+  return 'https://jsonplaceholder.typicode.com';
+};
 
 /**
  * Global Minder Configuration
@@ -18,7 +32,7 @@ import {
  * Configure Minder with default options
  */
 configureMinder({
-  baseURL: API_BASE_URLS.JSONPLACEHOLDER,
+  baseURL: getApiBaseUrl(),
   timeout: 10000, // 10 seconds
   headers: {
     'Content-Type': 'application/json',
@@ -26,9 +40,14 @@ configureMinder({
 });
 
 /**
- * Export shared endpoints and utilities
+ * API Endpoints
+ * Compatible with both JSONPlaceholder API and Mock API
  */
-export { 
-  JSONPLACEHOLDER_ENDPOINTS as API_ENDPOINTS,
-  getJsonPlaceholderUrl,
-};
+export const API_ENDPOINTS = {
+  // Posts
+  POSTS: '/posts',
+  POST_BY_ID: (id: string | number) => `/posts/${id}`,
+} as const;
+
+// Export base URL
+export const API_BASE_URL = getApiBaseUrl();
