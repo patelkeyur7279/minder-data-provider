@@ -237,7 +237,7 @@ describe('Logger', () => {
     });
 
     it('should format messages without prefix when empty', () => {
-      const logger = new Logger('Test', { prefix: '', level: LogLevel.INFO });
+      const logger = new Logger('Test', { prefix: '', level: LogLevel.INFO, colors: false });
       logger.info('Message');
       
       const message = consoleLogSpy.mock.calls[0][0];
