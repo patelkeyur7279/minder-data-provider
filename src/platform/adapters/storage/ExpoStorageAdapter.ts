@@ -1,11 +1,14 @@
 /**
- * Expo Secure Storage Adapter
- * Uses SecureStore from expo-secure-store for encrypted storage
+ * Expo Storage Adapter
+ * Uses expo-secure-store for secure, encrypted storage
  * 
- * Note: This is a conditional import. The actual SecureStore is a peer dependency.
+ * Note: This is a conditional import. expo-secure-store is a peer dependency.
  */
 
+import { Logger, LogLevel } from '../../../utils/Logger.js';
 import { BaseStorageAdapter, StorageAdapterOptions } from './StorageAdapter.js';
+
+const logger = new Logger('ExpoStorageAdapter', { level: LogLevel.ERROR });
 
 export class ExpoStorageAdapter extends BaseStorageAdapter {
   private SecureStore: any;
@@ -19,7 +22,7 @@ export class ExpoStorageAdapter extends BaseStorageAdapter {
       // Dynamic import for Expo SecureStore
       this.SecureStore = require('expo-secure-store');
     } catch (error) {
-      console.warn('ExpoStorageAdapter: expo-secure-store not found. Please install it as a peer dependency.');
+      logger.warn('expo-secure-store not found. Please install it as a peer dependency.');
       this.SecureStore = null;
     }
   }
@@ -43,7 +46,7 @@ export class ExpoStorageAdapter extends BaseStorageAdapter {
       
       return value;
     } catch (error) {
-      console.error('ExpoStorageAdapter getItem error:', error);
+      logger.error('getItem error:', error);
       return null;
     }
   }
@@ -63,7 +66,7 @@ export class ExpoStorageAdapter extends BaseStorageAdapter {
       // Track keys for getAllKeys() since SecureStore doesn't have a list method
       await this.addKey(key);
     } catch (error) {
-      console.error('ExpoStorageAdapter setItem error:', error);
+      logger.error('setItem error:', error);
     }
   }
   
@@ -77,7 +80,7 @@ export class ExpoStorageAdapter extends BaseStorageAdapter {
       // Remove from keys list
       await this.removeKey(key);
     } catch (error) {
-      console.error('ExpoStorageAdapter removeItem error:', error);
+      logger.error('removeItem error:', error);
     }
   }
   
@@ -94,7 +97,7 @@ export class ExpoStorageAdapter extends BaseStorageAdapter {
       // Clear keys list
       await this.SecureStore.deleteItemAsync(this.keysKey);
     } catch (error) {
-      console.error('ExpoStorageAdapter clear error:', error);
+      logger.error('clear error:', error);
     }
   }
   
@@ -108,7 +111,7 @@ export class ExpoStorageAdapter extends BaseStorageAdapter {
       
       return JSON.parse(keysJson) as string[];
     } catch (error) {
-      console.error('ExpoStorageAdapter getAllKeys error:', error);
+      logger.error('getAllKeys error:', error);
       return [];
     }
   }
@@ -135,7 +138,7 @@ export class ExpoStorageAdapter extends BaseStorageAdapter {
       
       return totalSize;
     } catch (error) {
-      console.error('ExpoStorageAdapter getSize error:', error);
+      logger.error('getSize error:', error);
       return 0;
     }
   }
@@ -153,7 +156,7 @@ export class ExpoStorageAdapter extends BaseStorageAdapter {
         await this.SecureStore.setItemAsync(this.keysKey, JSON.stringify(keys));
       }
     } catch (error) {
-      console.error('ExpoStorageAdapter addKey error:', error);
+      logger.error('addKey error:', error);
     }
   }
   
@@ -167,7 +170,7 @@ export class ExpoStorageAdapter extends BaseStorageAdapter {
       
       await this.SecureStore.setItemAsync(this.keysKey, JSON.stringify(filtered));
     } catch (error) {
-      console.error('ExpoStorageAdapter removeKey error:', error);
+      logger.error('removeKey error:', error);
     }
   }
   
@@ -183,7 +186,7 @@ export class ExpoStorageAdapter extends BaseStorageAdapter {
       await this.SecureStore.deleteItemAsync('__test__');
       return true;
     } catch (error) {
-      console.error('ExpoStorageAdapter isAvailable check failed:', error);
+      logger.error('isAvailable check failed:', error);
       return false;
     }
   }

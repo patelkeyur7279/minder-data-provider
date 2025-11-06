@@ -1,11 +1,14 @@
 /**
  * Electron Storage Adapter
- * Uses electron-store for persistent desktop storage
+ * Uses electron-store for persistent storage in Electron apps
  * 
- * Note: This is a conditional import. The actual electron-store is a peer dependency.
+ * Note: This is a conditional import. electron-store is a peer dependency.
  */
 
+import { Logger, LogLevel } from '../../../utils/Logger.js';
 import { BaseStorageAdapter, StorageAdapterOptions } from './StorageAdapter.js';
+
+const logger = new Logger('ElectronStorageAdapter', { level: LogLevel.ERROR });
 
 export class ElectronStorageAdapter extends BaseStorageAdapter {
   private store: any;
@@ -21,7 +24,7 @@ export class ElectronStorageAdapter extends BaseStorageAdapter {
         encryptionKey: options.encrypt ? this.generateEncryptionKey() : undefined
       });
     } catch (error) {
-      console.warn('ElectronStorageAdapter: electron-store not found. Please install it as a peer dependency.');
+      logger.warn('electron-store not found. Please install it as a peer dependency.');
       this.store = null;
     }
   }
@@ -45,7 +48,7 @@ export class ElectronStorageAdapter extends BaseStorageAdapter {
       
       return value;
     } catch (error) {
-      console.error('ElectronStorageAdapter getItem error:', error);
+      logger.error('getItem error:', error);
       return null;
     }
   }
@@ -61,7 +64,7 @@ export class ElectronStorageAdapter extends BaseStorageAdapter {
       
       this.store.set(prefixedKey, wrapped);
     } catch (error) {
-      console.error('ElectronStorageAdapter setItem error:', error);
+      logger.error('setItem error:', error);
     }
   }
   
@@ -72,7 +75,7 @@ export class ElectronStorageAdapter extends BaseStorageAdapter {
       const prefixedKey = this.getPrefixedKey(key);
       this.store.delete(prefixedKey);
     } catch (error) {
-      console.error('ElectronStorageAdapter removeItem error:', error);
+      logger.error('removeItem error:', error);
     }
   }
   
@@ -91,7 +94,7 @@ export class ElectronStorageAdapter extends BaseStorageAdapter {
         this.store.clear();
       }
     } catch (error) {
-      console.error('ElectronStorageAdapter clear error:', error);
+      logger.error('clear error:', error);
     }
   }
   
@@ -109,7 +112,7 @@ export class ElectronStorageAdapter extends BaseStorageAdapter {
         .filter((key: string) => !prefix || key.startsWith(prefix))
         .map((key: string) => this.removePrefixedKey(key));
     } catch (error) {
-      console.error('ElectronStorageAdapter getAllKeys error:', error);
+      logger.error('getAllKeys error:', error);
       return [];
     }
   }
@@ -121,7 +124,7 @@ export class ElectronStorageAdapter extends BaseStorageAdapter {
       const prefixedKey = this.getPrefixedKey(key);
       return this.store.has(prefixedKey);
     } catch (error) {
-      console.error('ElectronStorageAdapter hasItem error:', error);
+      logger.error('hasItem error:', error);
       return false;
     }
   }
@@ -144,7 +147,7 @@ export class ElectronStorageAdapter extends BaseStorageAdapter {
       
       return totalSize;
     } catch (error) {
-      console.error('ElectronStorageAdapter getSize error:', error);
+      logger.error('getSize error:', error);
       return 0;
     }
   }
@@ -158,7 +161,7 @@ export class ElectronStorageAdapter extends BaseStorageAdapter {
     try {
       return this.store.path;
     } catch (error) {
-      console.error('ElectronStorageAdapter getStorePath error:', error);
+      logger.error('getStorePath error:', error);
       return null;
     }
   }
@@ -174,7 +177,7 @@ export class ElectronStorageAdapter extends BaseStorageAdapter {
       const unsubscribe = this.store.onDidChange(prefixedKey, callback);
       return unsubscribe;
     } catch (error) {
-      console.error('ElectronStorageAdapter watch error:', error);
+      logger.error('watch error:', error);
       return null;
     }
   }
@@ -200,7 +203,7 @@ export class ElectronStorageAdapter extends BaseStorageAdapter {
     try {
       this.store.openInEditor();
     } catch (error) {
-      console.error('ElectronStorageAdapter openInEditor error:', error);
+      logger.error('openInEditor error:', error);
     }
   }
 }
