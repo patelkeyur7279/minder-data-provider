@@ -323,40 +323,85 @@ export const EVENTS = {
 } as const;
 
 // ============================================
-// Type Guards
+// Type Guards (Generic Factory)
 // ============================================
 
-export function isHttpMethod(value: string): value is HttpMethod {
-  return Object.values(HttpMethod).includes(value as HttpMethod);
+/**
+ * Generic type guard factory function
+ * Creates type guard functions for any enum to avoid code duplication
+ * 
+ * @template T - The enum type
+ * @param enumObj - The enum object
+ * @returns Type guard function that checks if value is valid enum member
+ * 
+ * @example
+ * const isHttpMethod = createEnumTypeGuard(HttpMethod);
+ * isHttpMethod('GET') // true
+ * isHttpMethod('INVALID') // false
+ */
+function createEnumTypeGuard<T extends Record<string, string>>(
+  enumObj: T
+): (value: string) => value is T[keyof T] {
+  return (value: string): value is T[keyof T] => {
+    return Object.values(enumObj).includes(value as T[keyof T]);
+  };
 }
 
-export function isQueryStatus(value: string): value is QueryStatus {
-  return Object.values(QueryStatus).includes(value as QueryStatus);
-}
+/**
+ * Type guard for HttpMethod enum
+ * @param value - String value to check
+ * @returns True if value is a valid HttpMethod
+ */
+export const isHttpMethod = createEnumTypeGuard(HttpMethod);
 
-export function isLogLevel(value: string): value is LogLevel {
-  return Object.values(LogLevel).includes(value as LogLevel);
-}
+/**
+ * Type guard for QueryStatus enum
+ * @param value - String value to check
+ * @returns True if value is a valid QueryStatus
+ */
+export const isQueryStatus = createEnumTypeGuard(QueryStatus);
 
-export function isPlatform(value: string): value is Platform {
-  return Object.values(Platform).includes(value as Platform);
-}
+/**
+ * Type guard for LogLevel enum
+ * @param value - String value to check
+ * @returns True if value is a valid LogLevel
+ */
+export const isLogLevel = createEnumTypeGuard(LogLevel);
 
-export function isStorageType(value: string): value is StorageType {
-  return Object.values(StorageType).includes(value as StorageType);
-}
+/**
+ * Type guard for Platform enum
+ * @param value - String value to check
+ * @returns True if value is a valid Platform
+ */
+export const isPlatform = createEnumTypeGuard(Platform);
 
-export function isSecurityLevel(value: string): value is SecurityLevel {
-  return Object.values(SecurityLevel).includes(value as SecurityLevel);
-}
+/**
+ * Type guard for StorageType enum
+ * @param value - String value to check
+ * @returns True if value is a valid StorageType
+ */
+export const isStorageType = createEnumTypeGuard(StorageType);
 
-export function isDataSize(value: string): value is DataSize {
-  return Object.values(DataSize).includes(value as DataSize);
-}
+/**
+ * Type guard for SecurityLevel enum
+ * @param value - String value to check
+ * @returns True if value is a valid SecurityLevel
+ */
+export const isSecurityLevel = createEnumTypeGuard(SecurityLevel);
 
-export function isConfigPreset(value: string): value is ConfigPreset {
-  return Object.values(ConfigPreset).includes(value as ConfigPreset);
-}
+/**
+ * Type guard for DataSize enum
+ * @param value - String value to check
+ * @returns True if value is a valid DataSize
+ */
+export const isDataSize = createEnumTypeGuard(DataSize);
+
+/**
+ * Type guard for ConfigPreset enum
+ * @param value - String value to check
+ * @returns True if value is a valid ConfigPreset
+ */
+export const isConfigPreset = createEnumTypeGuard(ConfigPreset);
 
 // ============================================
 // Utility Types
