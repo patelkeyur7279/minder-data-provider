@@ -7,6 +7,12 @@
  * @module auth/TokenRefreshManager
  */
 
+import { Logger, LogLevel } from '../utils/Logger.js';
+
+const logger = new Logger('TokenRefreshManager', { 
+  level: LogLevel.WARN
+});
+
 /**
  * JWT Token Payload
  */
@@ -97,7 +103,7 @@ export class TokenRefreshManager {
       return JSON.parse(decoded);
     } catch (error) {
       if (this.config.debug) {
-        console.error('[TokenRefreshManager] Failed to parse JWT:', error);
+        logger.error('Failed to parse JWT:', error);
       }
       return null;
     }
@@ -158,7 +164,7 @@ export class TokenRefreshManager {
     const timeUntilExpiration = this.getTimeUntilExpiration(token);
     if (timeUntilExpiration === null) {
       if (this.config.debug) {
-        console.warn('[TokenRefreshManager] Cannot schedule refresh: invalid token expiration');
+        logger.warn('Cannot schedule refresh: invalid token expiration');
       }
       return;
     }
@@ -167,8 +173,8 @@ export class TokenRefreshManager {
     const refreshIn = Math.max(0, timeUntilExpiration - this.config.refreshThreshold);
 
     if (this.config.debug) {
-      console.log(
-        `[TokenRefreshManager] Scheduling refresh in ${(refreshIn / 1000).toFixed(0)}s ` +
+      logger.debug(
+        `Scheduling refresh in ${(refreshIn / 1000).toFixed(0)}s ` +
         `(${(timeUntilExpiration / 1000).toFixed(0)}s until expiration)`
       );
     }
@@ -184,7 +190,7 @@ export class TokenRefreshManager {
   private async performRefresh(): Promise<void> {
     if (this.isRefreshing) {
       if (this.config.debug) {
-        console.log('[TokenRefreshManager] Refresh already in progress, skipping');
+        logger.debug('Refresh already in progress, skipping');
       }
       return;
     }
@@ -193,7 +199,7 @@ export class TokenRefreshManager {
 
     try {
       if (this.config.debug) {
-        console.log('[TokenRefreshManager] Refreshing token...');
+        logger.debug('Refreshing token...');
       }
       const newToken = await this.config.refreshToken();
 
@@ -210,7 +216,7 @@ export class TokenRefreshManager {
       this.config.onTokenRefreshed(newToken);
 
       if (this.config.debug) {
-        console.log('[TokenRefreshManager] Token refreshed successfully');
+        logger.debug('Token refreshed successfully');
       }
 
       // Schedule next refresh
@@ -218,7 +224,7 @@ export class TokenRefreshManager {
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       if (this.config.debug) {
-        console.error('[TokenRefreshManager] Token refresh failed:', err);
+        logger.error('Token refresh failed:', err);
       }
       this.config.onRefreshError(err);
     } finally {
@@ -232,7 +238,7 @@ export class TokenRefreshManager {
   public startAutoRefresh(token: string): void {
     if (!token) {
       if (this.config.debug) {
-        console.warn('[TokenRefreshManager] Cannot start auto-refresh: no token provided');
+        logger.warn('Cannot start auto-refresh: no token provided');
       }
       return;
     }
@@ -240,7 +246,7 @@ export class TokenRefreshManager {
     // Validate token
     if (this.isTokenExpired(token)) {
       if (this.config.debug) {
-        console.error('[TokenRefreshManager] Cannot start auto-refresh: token is already expired');
+        logger.error('Cannot start auto-refresh: token is already expired');
       }
       return;
     }
@@ -248,7 +254,7 @@ export class TokenRefreshManager {
     this.currentToken = token;
     this.scheduleRefresh(token);
     if (this.config.debug) {
-      console.log('[TokenRefreshManager] Auto-refresh started');
+      logger.debug('Auto-refresh started');
     }
   }
 
@@ -260,7 +266,7 @@ export class TokenRefreshManager {
       clearTimeout(this.refreshTimer);
       this.refreshTimer = null;
       if (this.config.debug) {
-        console.log('[TokenRefreshManager] Auto-refresh stopped');
+        logger.debug('Auto-refresh stopped');
       }
     }
   }
