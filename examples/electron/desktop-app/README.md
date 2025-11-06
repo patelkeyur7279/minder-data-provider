@@ -142,10 +142,10 @@ All communication between main and renderer processes goes through secure IPC ch
 
 ```javascript
 // Renderer Process
-const result = await window.electronAPI.api.get('/users');
+const result = await window.electronAPI.api.get("/users");
 
 // Main Process (via preload)
-ipcMain.handle('api:get', async (event, url) => {
+ipcMain.handle("api:get", async (event, url) => {
   return await minderClient.query.get(url);
 });
 ```
@@ -155,15 +155,15 @@ ipcMain.handle('api:get', async (event, url) => {
 ### Initialization (Main Process)
 
 ```javascript
-const { createMinderClient } = require('minder-data-provider');
+const { createMinderClient } = require("minder-data-provider");
 
 const minderClient = createMinderClient({
-  platform: 'electron',
-  baseURL: 'https://jsonplaceholder.typicode.com',
+  platform: "electron",
+  baseURL: "https://jsonplaceholder.typicode.com",
   cache: {
     enabled: true,
-    ttl: 300000 // 5 minutes
-  }
+    ttl: 300000, // 5 minutes
+  },
 });
 ```
 
@@ -171,21 +171,21 @@ const minderClient = createMinderClient({
 
 ```javascript
 // GET request
-const users = await window.electronAPI.api.get('/users');
+const users = await window.electronAPI.api.get("/users");
 
 // POST request
-const newUser = await window.electronAPI.api.post('/users', {
-  name: 'John Doe',
-  email: 'john@example.com'
+const newUser = await window.electronAPI.api.post("/users", {
+  name: "John Doe",
+  email: "john@example.com",
 });
 
 // PUT request
-const updated = await window.electronAPI.api.put('/users/1', {
-  name: 'Jane Doe'
+const updated = await window.electronAPI.api.put("/users/1", {
+  name: "Jane Doe",
 });
 
 // DELETE request
-const deleted = await window.electronAPI.api.delete('/users/1');
+const deleted = await window.electronAPI.api.delete("/users/1");
 ```
 
 ### File Operations
@@ -208,13 +208,13 @@ await window.electronAPI.file.write(filePath, content);
 
 ```javascript
 // Save data
-await window.electronAPI.storage.set('key', 'value');
+await window.electronAPI.storage.set("key", "value");
 
 // Retrieve data
-const value = await window.electronAPI.storage.get('key');
+const value = await window.electronAPI.storage.get("key");
 
 // Remove data
-await window.electronAPI.storage.remove('key');
+await window.electronAPI.storage.remove("key");
 
 // Clear all data
 await window.electronAPI.storage.clear();
@@ -223,10 +223,7 @@ await window.electronAPI.storage.clear();
 ### Notifications
 
 ```javascript
-await window.electronAPI.notification.show(
-  'Title',
-  'Notification message'
-);
+await window.electronAPI.notification.show("Title", "Notification message");
 ```
 
 ### Window Controls
@@ -245,27 +242,32 @@ window.electronAPI.window.close();
 ## 🎨 Available Views
 
 ### Dashboard
+
 - Real-time stats (users, products, posts count)
 - Platform information
 - Quick actions (refresh, test API)
 
 ### Users
+
 - User list from API
 - Detailed user information
 - Refresh functionality
 
 ### Products
+
 - Product grid with images
 - Price and category display
 - Auto-refresh on view switch
 
 ### Files
+
 - Open/save file dialogs
 - File content viewer/editor
 - File path display
 - Read/write operations
 
 ### Settings
+
 - API base URL configuration
 - Storage management
 - App version information
@@ -288,8 +290,8 @@ npm install --save-dev electron-reloader
 Add to `main.js`:
 
 ```javascript
-if (process.env.NODE_ENV === 'development') {
-  require('electron-reloader')(module);
+if (process.env.NODE_ENV === "development") {
+  require("electron-reloader")(module);
 }
 ```
 
@@ -330,10 +332,12 @@ Renderer process logs appear in DevTools Console.
 ## 📦 Dependencies
 
 ### Production
+
 - `electron`: ^28.0.0 - Desktop framework
 - `minder-data-provider`: ^2.0.0 - Data provider library
 
 ### Development
+
 - `electron-builder`: ^24.9.1 - Build tool for packaging
 
 ## 🔐 Security Considerations

@@ -3,17 +3,19 @@
 ## ✅ Successfully Running Platforms
 
 ### 1. **Mock API Server** ✅
+
 - **Location**: `examples/mock-api/`
 - **Port**: http://localhost:3001
 - **Status**: 🟢 Running
 - **Purpose**: Backend API providing sample data (users, products, posts)
-- **Endpoints**: 
+- **Endpoints**:
   - GET `/users` - User list
   - GET `/products` - Product list
   - GET `/posts` - Blog posts
   - Full CRUD operations supported
 
 ### 2. **Web Application (React + Vite)** ✅
+
 - **Location**: `examples/web/e-commerce/`
 - **Port**: http://localhost:5173
 - **Status**: 🟢 Running
@@ -26,6 +28,7 @@
   - Responsive design
 
 ### 3. **Next.js Application (SSR/SSG/ISR)** ✅
+
 - **Location**: `examples/nextjs/blog/`
 - **Port**: http://localhost:3002
 - **Status**: 🟢 Running
@@ -38,6 +41,7 @@
   - App Router architecture
 
 ### 4. **Node.js REST API** ✅
+
 - **Location**: `examples/nodejs/rest-api/`
 - **Port**: http://localhost:3003
 - **Status**: 🟢 Running
@@ -50,6 +54,7 @@
   - Server-side minder integration
 
 ### 5. **Electron Desktop App** ✅ **NEW!**
+
 - **Location**: `examples/electron/desktop-app/`
 - **Status**: 🟢 Running (Native Window)
 - **Features**:
@@ -67,6 +72,7 @@
 ## 📋 Documented but Not Running
 
 ### 6. **React Native - Offline Todo App** 📱
+
 - **Location**: `examples/react-native/offline-todo/`
 - **Status**: 🟡 Documented (Not running)
 - **Features**:
@@ -78,6 +84,7 @@
   - Biometric authentication
 
 ### 7. **Expo - Quick Start** 📱
+
 - **Location**: `examples/expo/quickstart/`
 - **Status**: 🟡 Documented (Not running)
 - **Features**:
@@ -89,15 +96,15 @@
 
 ## 📊 Platform Coverage Summary
 
-| Platform | Type | Status | Port/Access | Features |
-|----------|------|--------|-------------|----------|
-| Mock API | Backend | ✅ Running | :3001 | REST API, Sample Data |
-| Web (React) | Frontend | ✅ Running | :5173 | SPA, E-commerce |
-| Next.js | Full-stack | ✅ Running | :3002 | SSR/SSG/ISR, Blog |
-| Node.js | Backend | ✅ Running | :3003 | REST API Server |
-| **Electron** | **Desktop** | **✅ Running** | **Native** | **File I/O, Native APIs** |
-| React Native | Mobile | 📄 Documented | N/A | iOS/Android Native |
-| Expo | Mobile | 📄 Documented | N/A | Cross-platform |
+| Platform     | Type        | Status         | Port/Access | Features                  |
+| ------------ | ----------- | -------------- | ----------- | ------------------------- |
+| Mock API     | Backend     | ✅ Running     | :3001       | REST API, Sample Data     |
+| Web (React)  | Frontend    | ✅ Running     | :5173       | SPA, E-commerce           |
+| Next.js      | Full-stack  | ✅ Running     | :3002       | SSR/SSG/ISR, Blog         |
+| Node.js      | Backend     | ✅ Running     | :3003       | REST API Server           |
+| **Electron** | **Desktop** | **✅ Running** | **Native**  | **File I/O, Native APIs** |
+| React Native | Mobile      | 📄 Documented  | N/A         | iOS/Android Native        |
+| Expo         | Mobile      | 📄 Documented  | N/A         | Cross-platform            |
 
 ## 🎯 Platform Architecture Overview
 
@@ -120,7 +127,7 @@
     │ Web  │ │ Next.js│ │Node.js│    │     App     │
     │ SPA  │ │SSR/SSG │ │  API  │    └─────────────┘
     └──────┘ └────────┘ └───────┘
-                                    
+
         Mobile (Documented)
         ┌──────────────────┐
         │  React Native    │
@@ -131,6 +138,7 @@
 ## 🚀 Quick Start Commands
 
 ### Start All Web Platforms
+
 ```bash
 # Terminal 1 - Mock API
 cd examples/mock-api && npm start
@@ -149,6 +157,7 @@ cd examples/electron/desktop-app && npm start
 ```
 
 ### Access Applications
+
 - Mock API: http://localhost:3001
 - Web App: http://localhost:5173
 - Next.js: http://localhost:3002
@@ -158,22 +167,27 @@ cd examples/electron/desktop-app && npm start
 ## 🎨 Electron Desktop App Features
 
 ### Views
+
 1. **Dashboard**
+
    - Real-time stats (users, products, posts)
    - Platform information
    - Quick actions
 
 2. **Users**
+
    - User list with details
    - Refresh functionality
    - Data from Mock API
 
 3. **Products**
+
    - Product grid with images
    - Prices and categories
    - Auto-load on view
 
 4. **Files**
+
    - Open file dialog (native)
    - Save file dialog (native)
    - File content viewer/editor
@@ -186,6 +200,7 @@ cd examples/electron/desktop-app && npm start
    - Clear data option
 
 ### Technical Highlights
+
 - **Security**: Context isolation, sandbox mode
 - **IPC**: Secure main ↔ renderer communication
 - **Storage**: Electron Store integration
@@ -196,23 +211,27 @@ cd examples/electron/desktop-app && npm start
 ## 📦 Technology Stack
 
 ### Web Platforms
+
 - **React**: 18.x (UI library)
 - **Vite**: 5.x (Build tool)
 - **Redux Toolkit**: State management
 - **TanStack Query**: Server state
 
 ### Next.js
+
 - **Next.js**: 14.x (React framework)
 - **App Router**: Modern routing
 - **TypeScript**: Type safety
 
 ### Electron
+
 - **Electron**: 28.0.0 (Desktop framework)
 - **Node.js**: 18.x+ (Runtime)
 - **IPC**: Inter-process communication
 - **electron-builder**: Packaging tool
 
 ### Backend
+
 - **Express**: 4.x (Web framework)
 - **Node.js**: 18.x+ (Runtime)
 
@@ -223,7 +242,7 @@ Test Suites: 15 passed, 15 total
 Tests:       441 passed, 441 total
 Snapshots:   0 total
 Time:        35.243s
-Coverage:    
+Coverage:
   Statements   : 85.42% ( 1396/1634 )
   Branches     : 73.41% ( 577/786 )
   Functions    : 79.44% ( 342/430 )
@@ -233,24 +252,28 @@ Coverage:
 ## ✨ Unique Platform Features
 
 ### Web (React + Vite)
+
 - Hot module replacement
 - Optimized bundling
 - SPA navigation
 - Client-side routing
 
 ### Next.js
+
 - Server-side rendering
 - Static generation
 - Incremental regeneration
 - API routes
 
 ### Node.js
+
 - Server-side execution
 - Direct database access
 - File system operations
 - Background jobs
 
 ### **Electron (Desktop)** 🆕
+
 - **Native file dialogs** (open/save)
 - **File system access** (read/write)
 - **Window management** (min/max/close)
@@ -264,7 +287,9 @@ Coverage:
 ## 🎯 Next Steps
 
 ### For Mobile Platforms
+
 1. Start Expo example:
+
    ```bash
    cd examples/expo/quickstart
    npm install
@@ -279,13 +304,16 @@ Coverage:
    ```
 
 ### For Electron Distribution
+
 1. Build for macOS:
+
    ```bash
    cd examples/electron/desktop-app
    npm run build:mac
    ```
 
 2. Build for Windows:
+
    ```bash
    npm run build:win
    ```
@@ -321,6 +349,7 @@ Coverage:
 All primary platforms are now running and tested with **minder-data-provider v2.0.0**!
 
 The Electron desktop app completes the platform coverage, demonstrating that minder works seamlessly across:
+
 - ✅ Browsers (Web)
 - ✅ Servers (Node.js)
 - ✅ Full-stack (Next.js)
