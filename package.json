@@ -120,7 +120,11 @@
     "verify-lazy-loading": "node scripts/verify-lazy-loading.js",
     "security-audit": "npm audit --audit-level moderate",
     "check-versions": "node scripts/check-peer-deps.js",
-    "fix-versions": "node scripts/fix-peer-deps.js"
+    "fix-versions": "node scripts/fix-peer-deps.js",
+    "release:patch": "npm version patch && git push --follow-tags",
+    "release:minor": "npm version minor && git push --follow-tags",
+    "release:major": "npm version major && git push --follow-tags",
+    "release:check": "npm run clean && npm run build && npm run test && npm pack --dry-run"
   },
   "keywords": [
     "react",
