@@ -1,0 +1,69 @@
+# Source maps (for npm package only - exclude to reduce size)
+dist/**/*.map
+
+# Development files
+src/
+tests/
+examples/
+docs/
+scripts/
+coverage/
+
+# Config files
+.eslintrc.js
+.prettierrc
+tsconfig.json
+tsup.config.ts
+jest.config.js
+
+# Test files
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+test-*.txt
+
+# Documentation (except README)
+CHANGELOG.md
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md
+PLATFORMS_RUNNING.md
+TEST_RESULTS_SUMMARY.md
+BUNDLE_ANALYSIS.json
+*.md
+!README.md
+
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Dependencies (not needed in package)
+node_modules/
+
+# Other
+demo/
+.env
+.env.*
