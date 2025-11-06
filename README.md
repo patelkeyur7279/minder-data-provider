@@ -4,7 +4,7 @@
 
 Universal data management for React, Next.js, React Native, Expo, Node.js, and Electron.
 
-[![npm version](https://www.npmjs.com/package/minder-data-provider)
+[![npm version](https://badge.fury.io/js/minder-data-provider.svg)](https://www.npmjs.com/package/minder-data-provider)
 [![Bundle Size](<https://img.shields.io/badge/Bundle-47KB%20(min)-success>)](./BUNDLE_ANALYSIS.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-100%25-blue.svg)](http://www.typescriptlang.org/)
