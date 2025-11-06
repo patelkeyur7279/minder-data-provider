@@ -35,6 +35,16 @@ describe('Package Infrastructure', () => {
     const pkg = require('../package.json');
     expect(pkg.peerDependencies).toBeDefined();
     expect(pkg.peerDependencies['react']).toBeDefined();
-    expect(pkg.peerDependencies['@tanstack/react-query']).toBeDefined();
+    expect(pkg.peerDependencies['react-dom']).toBeDefined();
+  });
+
+  it('should have required dependencies bundled', () => {
+    const pkg = require('../package.json');
+    expect(pkg.dependencies).toBeDefined();
+    // These should be bundled so users don't manage versions
+    expect(pkg.dependencies['@tanstack/react-query']).toBeDefined();
+    expect(pkg.dependencies['@reduxjs/toolkit']).toBeDefined();
+    expect(pkg.dependencies['axios']).toBeDefined();
+    expect(pkg.dependencies['immer']).toBeDefined();
   });
 });

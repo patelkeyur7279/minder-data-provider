@@ -13,88 +13,88 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
     },
     "./web": {
       "types": "./dist/platforms/web.d.ts",
-      "import": "./dist/platforms/web.js",
-      "require": "./dist/platforms/web.cjs"
+      "import": "./dist/platforms/web.mjs",
+      "require": "./dist/platforms/web.js"
     },
     "./nextjs": {
       "types": "./dist/platforms/nextjs.d.ts",
-      "import": "./dist/platforms/nextjs.js",
-      "require": "./dist/platforms/nextjs.cjs"
+      "import": "./dist/platforms/nextjs.mjs",
+      "require": "./dist/platforms/nextjs.js"
     },
     "./native": {
       "types": "./dist/platforms/native.d.ts",
-      "import": "./dist/platforms/native.js",
-      "require": "./dist/platforms/native.cjs"
+      "import": "./dist/platforms/native.mjs",
+      "require": "./dist/platforms/native.js"
     },
     "./expo": {
       "types": "./dist/platforms/expo.d.ts",
-      "import": "./dist/platforms/expo.js",
-      "require": "./dist/platforms/expo.cjs"
+      "import": "./dist/platforms/expo.mjs",
+      "require": "./dist/platforms/expo.js"
     },
     "./electron": {
       "types": "./dist/platforms/electron.d.ts",
-      "import": "./dist/platforms/electron.js",
-      "require": "./dist/platforms/electron.cjs"
+      "import": "./dist/platforms/electron.mjs",
+      "require": "./dist/platforms/electron.js"
     },
     "./node": {
       "types": "./dist/platforms/node.d.ts",
-      "import": "./dist/platforms/node.js",
-      "require": "./dist/platforms/node.cjs"
+      "import": "./dist/platforms/node.mjs",
+      "require": "./dist/platforms/node.js"
     },
     "./core/*": {
       "types": "./dist/core/*.d.ts",
-      "import": "./dist/core/*.js",
-      "require": "./dist/core/*.cjs"
+      "import": "./dist/core/*.mjs",
+      "require": "./dist/core/*.js"
     },
     "./hooks/*": {
       "types": "./dist/hooks/*.d.ts",
-      "import": "./dist/hooks/*.js",
-      "require": "./dist/hooks/*.cjs"
+      "import": "./dist/hooks/*.mjs",
+      "require": "./dist/hooks/*.js"
     },
     "./crud": {
       "types": "./dist/crud/index.d.ts",
-      "import": "./dist/crud/index.js",
-      "require": "./dist/crud/index.cjs"
+      "import": "./dist/crud/index.mjs",
+      "require": "./dist/crud/index.js"
     },
     "./auth": {
       "types": "./dist/auth/index.d.ts",
-      "import": "./dist/auth/index.js",
-      "require": "./dist/auth/index.cjs"
+      "import": "./dist/auth/index.mjs",
+      "require": "./dist/auth/index.js"
     },
     "./cache": {
       "types": "./dist/cache/index.d.ts",
-      "import": "./dist/cache/index.js",
-      "require": "./dist/cache/index.cjs"
+      "import": "./dist/cache/index.mjs",
+      "require": "./dist/cache/index.js"
     },
     "./websocket": {
       "types": "./dist/websocket/index.d.ts",
-      "import": "./dist/websocket/index.js",
-      "require": "./dist/websocket/index.cjs"
+      "import": "./dist/websocket/index.mjs",
+      "require": "./dist/websocket/index.js"
     },
     "./upload": {
       "types": "./dist/upload/index.d.ts",
-      "import": "./dist/upload/index.js",
-      "require": "./dist/upload/index.cjs"
+      "import": "./dist/upload/index.mjs",
+      "require": "./dist/upload/index.js"
     },
     "./debug": {
       "types": "./dist/debug/index.d.ts",
-      "import": "./dist/debug/index.js",
-      "require": "./dist/debug/index.cjs"
+      "import": "./dist/debug/index.mjs",
+      "require": "./dist/debug/index.js"
     },
     "./config": {
       "types": "./dist/config/index.d.ts",
-      "import": "./dist/config/index.js",
-      "require": "./dist/config/index.cjs"
+      "import": "./dist/config/index.mjs",
+      "require": "./dist/config/index.js"
     },
     "./ssr": {
       "types": "./dist/ssr/index.d.ts",
-      "import": "./dist/ssr/index.js",
-      "require": "./dist/ssr/index.cjs"
+      "import": "./dist/ssr/index.mjs",
+      "require": "./dist/ssr/index.js"
     }
   },
   "scripts": {
@@ -134,14 +134,20 @@
   ],
   "author": "Minder Data Provider Team",
   "license": "MIT",
+  "dependencies": {
+    "@reduxjs/toolkit": "2.9.2",
+    "@tanstack/react-query": "5.90.6",
+    "@tanstack/react-query-devtools": "5.90.2",
+    "axios": "1.13.1",
+    "dompurify": "3.3.0",
+    "immer": "10.2.0",
+    "react-redux": "9.2.0"
+  },
   "devDependencies": {
     "@babel/core": "^7.28.5",
     "@babel/plugin-transform-class-static-block": "^7.28.3",
-    "@reduxjs/toolkit": "^2.3.0",
-    "@tanstack/react-query": "^5.59.20",
-    "@tanstack/react-query-devtools": "^5.59.20",
     "@testing-library/jest-dom": "^6.1.5",
-    "@testing-library/react": "^14.0.0",
+    "@testing-library/react": "^16.3.0",
     "@types/cors": "^2.8.17",
     "@types/dompurify": "^3.0.5",
     "@types/jest": "^29.5.12",
@@ -149,38 +155,20 @@
     "@types/react": "^18.2.73",
     "@typescript-eslint/eslint-plugin": "^7.3.1",
     "@typescript-eslint/parser": "^7.3.1",
-    "axios": "^1.7.7",
-    "dompurify": "^3.3.0",
     "eslint": "^8.57.0",
     "http-server": "^14.1.1",
-    "immer": "^10.1.1",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
-    "react-redux": "^9.1.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "ts-jest": "^29.1.2",
     "tsup": "^8.0.2",
     "typescript": "^5.4.3",
     "webpack-bundle-analyzer": "^4.10.2"
   },
   "peerDependencies": {
-    "@reduxjs/toolkit": "^2.0.0",
-    "@tanstack/react-query": "^5.0.0",
-    "axios": "^1.0.0",
-    "immer": "^10.0.0",
     "react": "^18.0.0 || ^19.0.0",
-    "react-dom": "^18.0.0 || ^19.0.0",
-    "react-redux": "^9.0.0"
-  },
-  "peerDependenciesMeta": {
-    "@reduxjs/toolkit": {
-      "optional": true
-    },
-    "react-redux": {
-      "optional": true
-    },
-    "immer": {
-      "optional": true
-    }
+    "react-dom": "^18.0.0 || ^19.0.0"
   },
   "engines": {
     "node": ">=18.0.0",
