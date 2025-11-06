@@ -241,6 +241,8 @@ describe('Logger', () => {
       logger.info('Message');
       
       const message = consoleLogSpy.mock.calls[0][0];
+      // When prefix is empty, it should still show timestamp
+      expect(message).toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
       expect(message).toContain('[INFO]');
       expect(message).toContain('[Test]');
       expect(message).toContain('Message');

@@ -182,7 +182,8 @@
     "testPathIgnorePatterns": [
       "/node_modules/",
       "/demo/",
-      "/dist/"
+      "/dist/",
+      "/examples/"
     ],
     "preset": "ts-jest",
     "moduleNameMapper": {
