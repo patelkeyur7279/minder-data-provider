@@ -3,6 +3,7 @@ import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import type { MinderConfig, ApiRoute, ApiError } from './types.js';
 import { AuthManager } from './AuthManager.js';
 import { ProxyManager } from './ProxyManager.js';
+import { MinderConfigError, MinderNetworkError } from '../errors/index.js';
 import { 
   CSRFTokenManager, 
   XSSSanitizer, 
@@ -103,7 +104,7 @@ export class ApiClient {
           const key = `${config.method}:${config.url}`;
           const { requests, window } = this.config.security.rateLimiting;
           if (!this.rateLimiter.check(key, requests, window)) {
-            throw new Error('Rate limit exceeded. Please try again later.');
+            throw new MinderNetworkError('Rate limit exceeded. Please try again later.', 429, undefined, 'RATE_LIMIT_EXCEEDED');
           }
         }
 
@@ -173,9 +174,9 @@ export class ApiClient {
     params?: Record<string, unknown>,
     options?: AxiosRequestConfig
   ): Promise<T> {
-    const route = this.config.routes[routeName];
+    const route = this.config.routes?.[routeName];
     if (!route) {
-      throw new Error(`Route '${routeName}' not found in configuration`);
+      throw new MinderConfigError(`Route '${routeName}' not found in configuration`, 'ROUTE_NOT_FOUND');
     }
 
     let url = route.url;

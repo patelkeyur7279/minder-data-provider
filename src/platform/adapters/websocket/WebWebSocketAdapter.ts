@@ -6,7 +6,11 @@
  * @module WebWebSocketAdapter
  */
 
-import { WebSocketAdapter, WebSocketConfig } from './WebSocketAdapter.js';
+import { Logger, LogLevel } from '../../../utils/Logger.js';
+import { WebSocketAdapter, type WebSocketConfig } from './WebSocketAdapter.js';
+import { MinderWebSocketError } from '../../../errors/index.js';
+
+const logger = new Logger('WebWebSocketAdapter', { level: LogLevel.WARN });
 
 /**
  * Web (Browser) WebSocket Adapter
@@ -21,7 +25,7 @@ export class WebWebSocketAdapter extends WebSocketAdapter {
    */
   protected createWebSocket(url: string, protocols?: string | string[]): WebSocket {
     if (typeof WebSocket === 'undefined') {
-      throw new Error('WebSocket is not supported in this environment');
+      throw new MinderWebSocketError('WebSocket is not supported in this environment');
     }
 
     return new WebSocket(url, protocols);

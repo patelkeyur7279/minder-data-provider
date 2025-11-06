@@ -6,7 +6,11 @@
  * @module NativeWebSocketAdapter
  */
 
-import { WebSocketAdapter, WebSocketConfig } from './WebSocketAdapter.js';
+import { Logger, LogLevel } from '../../../utils/Logger.js';
+import { WebSocketAdapter, type WebSocketConfig } from './WebSocketAdapter.js';
+import { MinderWebSocketError } from '../../../errors/index.js';
+
+const logger = new Logger('NativeWebSocketAdapter', { level: LogLevel.WARN });
 
 /**
  * React Native WebSocket Adapter
@@ -22,7 +26,7 @@ export class NativeWebSocketAdapter extends WebSocketAdapter {
   protected createWebSocket(url: string, protocols?: string | string[]): WebSocket {
     // React Native provides global WebSocket
     if (typeof WebSocket === 'undefined') {
-      throw new Error('WebSocket is not available in React Native environment');
+      throw new MinderWebSocketError('WebSocket is not available in React Native environment');
     }
 
     return new WebSocket(url, protocols);

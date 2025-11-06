@@ -1,4 +1,5 @@
 import type { MinderConfig, EnvironmentOverride } from './types.js';
+import { MinderConfigError } from '../errors/index.js';
 
 export class EnvironmentManager {
   private config: MinderConfig;
@@ -42,7 +43,7 @@ export class EnvironmentManager {
 
   public setEnvironment(env: string): void {
     if (this.config.environments && !this.config.environments[env]) {
-      throw new Error(`Environment '${env}' not found in configuration`);
+      throw new MinderConfigError(`Environment '${env}' not found in configuration`, 'ENV_NOT_FOUND');
     }
     this.currentEnv = env;
   }

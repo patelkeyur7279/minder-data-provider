@@ -12,6 +12,7 @@ import {
   FileMetadata,
   FilePickerOptions,
 } from './FileUploadAdapter.js';
+import { MinderUploadError } from '../../../errors/index.js';
 
 /**
  * Electron File Upload Adapter
@@ -35,7 +36,7 @@ export class ElectronFileUploadAdapter extends FileUploadAdapter {
         return this.pickFilesMain(options);
       }
     } catch (error) {
-      throw new Error(`Failed to pick files: ${(error as Error).message}`);
+      throw new MinderUploadError(`Failed to pick files: ${(error as Error).message}`);
     }
   }
 
@@ -73,7 +74,7 @@ export class ElectronFileUploadAdapter extends FileUploadAdapter {
         };
       });
     } catch (error) {
-      throw new Error(`Renderer process file picker failed: ${(error as Error).message}`);
+      throw new MinderUploadError(`Renderer process file picker failed: ${(error as Error).message}`);
     }
   }
 
@@ -108,7 +109,7 @@ export class ElectronFileUploadAdapter extends FileUploadAdapter {
         };
       });
     } catch (error) {
-      throw new Error(`Main process file picker failed: ${(error as Error).message}`);
+      throw new MinderUploadError(`Main process file picker failed: ${(error as Error).message}`);
     }
   }
 

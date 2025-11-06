@@ -12,6 +12,7 @@ import {
   FileMetadata,
   FilePickerOptions,
 } from './FileUploadAdapter.js';
+import { MinderUploadError, MinderAuthorizationError } from '../../../errors/index.js';
 
 /**
  * Expo File Upload Adapter
@@ -45,7 +46,7 @@ export class ExpoFileUploadAdapter extends FileUploadAdapter {
       // Request permissions
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        throw new Error('Permission to access media library denied');
+        throw new MinderAuthorizationError('Permission to access media library denied');
       }
 
       const result = options.multiple
@@ -70,7 +71,7 @@ export class ExpoFileUploadAdapter extends FileUploadAdapter {
         uri: asset.uri,
       }));
     } catch (error) {
-      throw new Error(`Failed to pick images: ${(error as Error).message}`);
+      throw new MinderUploadError(`Failed to pick images: ${(error as Error).message}`);
     }
   }
 
@@ -102,7 +103,7 @@ export class ExpoFileUploadAdapter extends FileUploadAdapter {
         uri: file.uri,
       }));
     } catch (error) {
-      throw new Error(`Failed to pick documents: ${(error as Error).message}`);
+      throw new MinderUploadError(`Failed to pick documents: ${(error as Error).message}`);
     }
   }
 
@@ -125,7 +126,7 @@ export class ExpoFileUploadAdapter extends FileUploadAdapter {
       // Request camera permissions
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        throw new Error('Permission to access camera denied');
+        throw new MinderAuthorizationError('Permission to access camera denied');
       }
 
       const result = await ImagePicker.launchCameraAsync({
@@ -144,7 +145,7 @@ export class ExpoFileUploadAdapter extends FileUploadAdapter {
         uri: asset.uri,
       };
     } catch (error) {
-      throw new Error(`Failed to capture image: ${(error as Error).message}`);
+      throw new MinderUploadError(`Failed to capture image: ${(error as Error).message}`);
     }
   }
 

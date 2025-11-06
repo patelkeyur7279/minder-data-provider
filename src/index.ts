@@ -32,7 +32,7 @@ export { minder, configureMinder } from './core/minder.js';
 export type {
   MinderOptions,
   MinderResult,
-  MinderError,
+  MinderError as MinderRequestError, // Renamed to avoid conflict with error class
   HttpMethod,
   UploadProgress,
 } from './core/minder.js';
@@ -100,6 +100,31 @@ export type { Platform, PlatformCapabilities } from './platform/index.js';
 // FeatureLoader for dynamic bundle optimization
 export { FeatureLoader, createFeatureLoader } from './core/FeatureLoader.js';
 export type { FeatureFlags, FeatureModules, FeatureLoaderOptions } from './core/FeatureLoader.js';
+
+// ============================================================================
+// ERROR CLASSES
+// ============================================================================
+
+// Custom error classes for type-safe error handling
+export {
+  MinderError,
+  MinderConfigError,
+  MinderNetworkError,
+  MinderValidationError,
+  MinderAuthError,
+  MinderAuthorizationError,
+  MinderStorageError,
+  MinderPlatformError,
+  MinderSecurityError,
+  MinderTimeoutError,
+  MinderOfflineError,
+  MinderPluginError,
+  MinderWebSocketError,
+  MinderUploadError,
+  isMinderError,
+  getErrorMessage,
+  getErrorCode,
+} from './errors/index.js';
 
 // ============================================================================
 // MIDDLEWARE EXPORTS

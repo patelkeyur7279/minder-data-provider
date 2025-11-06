@@ -12,6 +12,7 @@ import { WebFileUploadAdapter } from './WebFileUploadAdapter.js';
 import { NativeFileUploadAdapter } from './NativeFileUploadAdapter.js';
 import { ExpoFileUploadAdapter } from './ExpoFileUploadAdapter.js';
 import { ElectronFileUploadAdapter } from './ElectronFileUploadAdapter.js';
+import { MinderPlatformError } from '../../../errors/index.js';
 
 /**
  * File Upload Adapter Factory
@@ -64,7 +65,7 @@ export class FileUploadAdapterFactory {
         return new WebFileUploadAdapter(config);
       
       default:
-        throw new Error(`Unsupported platform: ${platformName}`);
+        throw new MinderPlatformError(`Unsupported platform: ${platformName}`, platformName);
     }
   }
 

@@ -7,6 +7,7 @@
 import type { MinderConfig } from './types';
 import { PlatformDetector } from '../platform/PlatformDetector';
 import { PlatformCapabilityDetector } from '../platform/PlatformCapabilities';
+import { MinderConfigError } from '../errors/index.js';
 
 /**
  * Feature flags derived from configuration
@@ -282,7 +283,7 @@ export class FeatureLoader {
         return import('../debug/index.js').then(m => m.DebugManager || m);
       
       default:
-        throw new Error(`Unknown feature: ${feature}`);
+        throw new MinderConfigError(`Unknown feature: ${feature}`, 'UNKNOWN_FEATURE');
     }
   }
 
@@ -314,10 +315,10 @@ export class FeatureLoader {
         case 'performance':
           return require('../debug');
         default:
-          throw new Error(`Unknown feature: ${feature}`);
+          throw new MinderConfigError(`Unknown feature: ${feature}`, 'UNKNOWN_FEATURE');
       }
     } catch (error) {
-      throw new Error(`Failed to load feature ${feature}: ${error}`);
+      throw new MinderConfigError(`Failed to load feature ${feature}: ${error}`, 'FEATURE_LOAD_FAILED');
     }
   }
 

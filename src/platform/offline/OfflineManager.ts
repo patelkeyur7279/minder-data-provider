@@ -14,6 +14,7 @@
 
 import { Logger, LogLevel } from '../../utils/Logger.js';
 import type { StorageAdapter } from '../adapters/storage/StorageAdapter.js';
+import { MinderOfflineError, MinderNetworkError, MinderValidationError } from '../../errors/index.js';
 
 const logger = new Logger('OfflineManager', { level: LogLevel.WARN });
 
@@ -368,11 +369,11 @@ export class OfflineManager {
     } = {}
   ): Promise<string> {
     if (!this.config.enabled) {
-      throw new Error('Offline support is disabled');
+      throw new MinderOfflineError('Offline support is disabled');
     }
 
     if (this.queue.length >= this.config.maxQueueSize) {
-      throw new Error('Offline queue is full');
+      throw new MinderValidationError('Offline queue is full', { queue: ['Maximum queue size exceeded'] });
     }
 
     const request: QueuedRequest = {
@@ -467,7 +468,7 @@ export class OfflineManager {
     }
 
     if (!this.networkState.isConnected) {
-      throw new Error('Cannot sync while offline');
+      throw new MinderOfflineError('Cannot sync while offline');
     }
 
     this.isSyncing = true;
@@ -534,7 +535,7 @@ export class OfflineManager {
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      throw new MinderNetworkError(`HTTP ${response.status}: ${response.statusText}`, response.status);
     }
 
     const data = await response.json();

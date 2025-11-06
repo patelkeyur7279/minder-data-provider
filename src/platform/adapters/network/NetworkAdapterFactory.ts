@@ -8,6 +8,7 @@ import { PlatformDetector } from '../../PlatformDetector.js';
 import { NetworkAdapter, NetworkAdapterConfig } from './NetworkAdapter.js';
 import { WebNetworkAdapter } from './WebNetworkAdapter.js';
 import { NativeNetworkAdapter } from './NativeNetworkAdapter.js';
+import { MinderPlatformError } from '../../../errors/index.js';
 
 const logger = new Logger('NetworkAdapterFactory', { level: LogLevel.WARN });
 
@@ -72,7 +73,7 @@ export class NetworkAdapterFactory {
       case 'native':
         return new NativeNetworkAdapter(config);
       default:
-        throw new Error(`Unknown adapter: ${name}`);
+        throw new MinderPlatformError(`Unknown adapter: ${name}`, name);
     }
   }
 

@@ -9,8 +9,9 @@
 import { PlatformDetector } from '../PlatformDetector.js';
 import type { SecurityManager, SecurityConfig } from './SecurityManager.js';
 import { WebSecurityManager } from './WebSecurityManager.js';
-import { NativeSecurityManager } from './NativeSecurityManager.js';
 import { ElectronSecurityManager } from './ElectronSecurityManager.js';
+import { NativeSecurityManager } from './NativeSecurityManager.js';
+import { MinderPlatformError } from '../../errors/index.js';
 
 /**
  * Security Manager Factory
@@ -59,7 +60,7 @@ export class SecurityManagerFactory {
         return new WebSecurityManager(config);
       
       default:
-        throw new Error(`Unsupported platform: ${platformName}`);
+        throw new MinderPlatformError(`Unsupported platform: ${platformName}`, platformName);
     }
   }
 

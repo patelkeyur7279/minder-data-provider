@@ -11,6 +11,11 @@
  * @module WebSocketAdapter
  */
 
+import { Logger, LogLevel } from '../../../utils/Logger.js';
+import { MinderWebSocketError } from '../../../errors/index.js';
+
+const logger = new Logger('WebSocketAdapter', { level: LogLevel.WARN });
+
 /**
  * WebSocket connection state
  */
@@ -274,7 +279,7 @@ export abstract class WebSocketAdapter {
     } else if (this.config.queueMessages) {
       this.queueMessage(data);
     } else {
-      throw new Error('WebSocket is not connected');
+      throw new MinderWebSocketError('WebSocket is not connected');
     }
   }
 

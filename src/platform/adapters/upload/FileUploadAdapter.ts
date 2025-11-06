@@ -11,6 +11,11 @@
  * @module FileUploadAdapter
  */
 
+import { Logger, LogLevel } from '../../../utils/Logger.js';
+import { MinderValidationError, MinderNetworkError } from '../../../errors/index.js';
+
+const logger = new Logger('FileUploadAdapter', { level: LogLevel.WARN });
+
 /**
  * File metadata
  */
@@ -309,7 +314,7 @@ export abstract class FileUploadAdapter {
    */
   async uploadFiles(files: (File | FileMetadata)[]): Promise<UploadResult[]> {
     if (files.length > this.config.maxFiles) {
-      throw new Error(`Maximum ${this.config.maxFiles} files allowed`);
+      throw new MinderValidationError(`Maximum ${this.config.maxFiles} files allowed`, { files: ['Too many files'] });
     }
 
     const results = await Promise.all(
@@ -390,7 +395,7 @@ export abstract class FileUploadAdapter {
       });
 
       if (!response.ok) {
-        throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+        throw new MinderNetworkError(`Upload failed: ${response.status} ${response.statusText}`, response.status);
       }
 
       const data = await response.json();

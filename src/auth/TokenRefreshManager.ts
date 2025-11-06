@@ -8,6 +8,7 @@
  */
 
 import { Logger, LogLevel } from '../utils/Logger.js';
+import { MinderAuthError } from '../errors/index.js';
 
 const logger = new Logger('TokenRefreshManager', { 
   level: LogLevel.WARN
@@ -205,11 +206,11 @@ export class TokenRefreshManager {
 
       // Validate new token
       if (!newToken || typeof newToken !== 'string') {
-        throw new Error('Invalid token received from refresh function');
+        throw new MinderAuthError('Invalid token received from refresh function', 'INVALID_TOKEN');
       }
 
       if (this.isTokenExpired(newToken)) {
-        throw new Error('Received token is already expired');
+        throw new MinderAuthError('Received token is already expired', 'TOKEN_EXPIRED');
       }
 
       this.currentToken = newToken;

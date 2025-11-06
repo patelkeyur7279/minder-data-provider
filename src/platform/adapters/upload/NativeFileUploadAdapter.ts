@@ -13,6 +13,7 @@ import {
   FilePickerOptions,
   UploadResult,
 } from './FileUploadAdapter.js';
+import { MinderPlatformError, MinderUploadError, MinderNetworkError } from '../../../errors/index.js';
 
 /**
  * React Native File Upload Adapter
@@ -42,7 +43,7 @@ export class NativeFileUploadAdapter extends FileUploadAdapter {
       // react-native-document-picker not available
     }
 
-    throw new Error('No file picker library available. Install expo-document-picker or react-native-document-picker');
+    throw new MinderPlatformError('No file picker library available. Install expo-document-picker or react-native-document-picker', 'react-native');
   }
 
   /**
@@ -176,7 +177,7 @@ export class NativeFileUploadAdapter extends FileUploadAdapter {
     });
 
     if (!response.ok) {
-      throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+      throw new MinderNetworkError(`Upload failed: ${response.status} ${response.statusText}`, response.status);
     }
 
     const data = await response.json();

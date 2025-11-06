@@ -11,6 +11,7 @@ import { PlatformDetector } from '../../PlatformDetector.js';
 import type { WebSocketAdapter, WebSocketConfig } from './WebSocketAdapter.js';
 import { WebWebSocketAdapter } from './WebWebSocketAdapter.js';
 import { NativeWebSocketAdapter } from './NativeWebSocketAdapter.js';
+import { MinderPlatformError, MinderWebSocketError } from '../../../errors/index.js';
 
 const logger = new Logger('WebSocketAdapterFactory', { level: LogLevel.WARN });
 
@@ -31,7 +32,7 @@ export function createWebSocketAdapter(config: WebSocketConfig): WebSocketAdapte
       return new NativeWebSocketAdapter(config);
 
     case 'node':
-      throw new Error('WebSocket adapter not available for Node.js server environment');
+      throw new MinderPlatformError('WebSocket adapter not available for Node.js server environment', 'node');
 
     default:
       // Fallback to web adapter
@@ -66,7 +67,7 @@ export function createWebSocketAdapterByName(
     case 'native':
       return new NativeWebSocketAdapter(config);
     default:
-      throw new Error(`Unknown WebSocket adapter: ${name}`);
+      throw new MinderPlatformError(`Unknown WebSocket adapter: ${name}`, name);
   }
 }
 

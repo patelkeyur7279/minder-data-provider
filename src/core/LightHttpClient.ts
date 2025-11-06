@@ -3,6 +3,8 @@
  * This replaces Axios for basic HTTP operations
  */
 
+import { MinderNetworkError } from '../errors/index.js';
+
 type RequestMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
 
 interface RequestConfig {
@@ -56,7 +58,7 @@ export class LightHttpClient {
       if (timeoutId) clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new Error(response.statusText);
+        throw new MinderNetworkError(response.statusText, 'HTTP_ERROR', response.status);
       }
 
       const contentType = response.headers.get('content-type');
