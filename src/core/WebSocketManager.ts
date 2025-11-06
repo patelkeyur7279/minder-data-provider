@@ -1,5 +1,8 @@
+import { Logger, LogLevel } from '../utils/Logger.js';
 import type { WebSocketConfig } from './types.js';
 import { AuthManager } from './AuthManager.js';
+
+const logger = new Logger('WebSocketManager', { level: LogLevel.WARN });
 
 export class WebSocketManager {
   private config: WebSocketConfig;
@@ -24,7 +27,7 @@ export class WebSocketManager {
         this.ws = new WebSocket(url, this.config.protocols);
 
         this.ws.onopen = () => {
-          console.log('WebSocket connected');
+          logger.debug('connected');
           this.reconnectAttempts = 0;
           this.startHeartbeat();
           resolve();
@@ -35,12 +38,12 @@ export class WebSocketManager {
             const data = JSON.parse(event.data);
             this.handleMessage(data);
           } catch (error) {
-            console.error('Failed to parse WebSocket message:', error);
+            logger.error('Failed to parse message:', error);
           }
         };
 
         this.ws.onclose = (event) => {
-          console.log('WebSocket disconnected:', event.code, event.reason);
+          logger.debug('disconnected:', event.code, event.reason);
           this.stopHeartbeat();
           
           if (this.config.reconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
@@ -50,7 +53,7 @@ export class WebSocketManager {
         };
 
         this.ws.onerror = (error) => {
-          console.error('WebSocket error:', error);
+          logger.error('error:', error);
           reject(error);
         };
       } catch (error) {
@@ -71,7 +74,7 @@ export class WebSocketManager {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type, data }));
     } else {
-      console.warn('WebSocket is not connected');
+      logger.warn('not connected');
     }
   }
 
