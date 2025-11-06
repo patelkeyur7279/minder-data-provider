@@ -12,6 +12,10 @@
  * @module SSRManager
  */
 
+import { Logger, LogLevel } from '../../utils/Logger.js';
+
+const logger = new Logger('SSRManager', { level: LogLevel.WARN });
+
 // Type-only imports - won't be bundled, only used for type checking
 // Using conditional type imports to avoid runtime errors
 import type { QueryClient, DehydratedState } from '@tanstack/react-query';
@@ -256,7 +260,7 @@ export class SSRManager {
         if (!this.config.gracefulErrors) {
           throw error;
         }
-        console.error('Error prefetching query:', error);
+        logger.error('Error prefetching query:', error);
       }
     });
 
@@ -276,7 +280,7 @@ export class SSRManager {
       const { dehydrate } = require('@tanstack/react-query');
       return dehydrate(this.queryClient);
     } catch (error) {
-      console.error('Error dehydrating query client:', error);
+      logger.error('Error dehydrating query client:', error);
       return undefined;
     }
   }
@@ -411,7 +415,7 @@ export class SSRManager {
         fallback: options.fallback ?? false,
       };
     } catch (error) {
-      console.error('Error generating static paths:', error);
+      logger.error('Error generating static paths:', error);
 
       return {
         paths: [],

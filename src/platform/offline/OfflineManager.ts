@@ -12,7 +12,10 @@
  * @module OfflineManager
  */
 
+import { Logger, LogLevel } from '../../utils/Logger.js';
 import type { StorageAdapter } from '../adapters/storage/StorageAdapter.js';
+
+const logger = new Logger('OfflineManager', { level: LogLevel.WARN });
 
 /**
  * Network connection state
@@ -307,7 +310,7 @@ export class OfflineManager {
       });
     } catch (error) {
       // NetInfo not available, manual network checks required
-      console.warn('NetInfo not available. Manual network checks required.');
+      logger.warn('NetInfo not available. Manual network checks required.');
     }
   }
 
@@ -345,7 +348,7 @@ export class OfflineManager {
     if (wasOffline && state.isConnected && this.config.autoSync) {
       const canSync = !this.config.syncOnWifiOnly || state.type === 'wifi';
       if (canSync) {
-        this.sync().catch(console.error);
+        this.sync().catch((err) => logger.error(err));
       }
     }
   }
@@ -592,7 +595,7 @@ export class OfflineManager {
         JSON.stringify(this.queue)
       );
     } catch (error) {
-      console.error('Failed to save offline queue:', error);
+      logger.error('Failed to save offline queue:', error);
     }
   }
 
@@ -611,7 +614,7 @@ export class OfflineManager {
         this.sortQueueByPriority();
       }
     } catch (error) {
-      console.error('Failed to load offline queue:', error);
+      logger.error('Failed to load offline queue:', error);
       this.queue = [];
     }
   }

@@ -42,6 +42,9 @@
 
 import axios from 'axios';
 import type { AxiosRequestConfig, AxiosProgressEvent } from 'axios';
+import { Logger, LogLevel } from '../utils/Logger.js';
+
+const logger = new Logger('Minder', { level: LogLevel.WARN });
 
 // ============================================================================
 // TYPES
@@ -348,7 +351,7 @@ function encodeWithModel<T>(
     
     return data;
   } catch (error) {
-    console.warn('[Minder] Model encode failed, using raw data:', error);
+    logger.warn('Model encode failed, using raw data:', error);
     return data;
   }
 }
@@ -372,7 +375,7 @@ function decodeWithModel<T>(
     // Create model instance (model handles decoding in constructor)
     return new ModelClass(data);
   } catch (error) {
-    console.warn('[Minder] Model decode failed, using raw data:', error);
+    logger.warn('Model decode failed, using raw data:', error);
     return data;
   }
 }
