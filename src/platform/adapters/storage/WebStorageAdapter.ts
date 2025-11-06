@@ -1,9 +1,12 @@
 /**
  * Web Storage Adapter
- * Uses localStorage or sessionStorage for web browsers
+ * Uses browser's localStorage or sessionStorage
  */
 
+import { Logger, LogLevel } from '../../../utils/Logger.js';
 import { BaseStorageAdapter, StorageAdapterOptions } from './StorageAdapter.js';
+
+const logger = new Logger('WebStorageAdapter', { level: LogLevel.ERROR });
 
 export class WebStorageAdapter extends BaseStorageAdapter {
   private storage: Storage;
@@ -16,7 +19,7 @@ export class WebStorageAdapter extends BaseStorageAdapter {
     this.storage = storage;
     
     if (!this.storage) {
-      console.warn('WebStorageAdapter: localStorage not available, using memory fallback');
+      logger.warn('localStorage not available, using memory fallback');
     }
   }
   
@@ -39,7 +42,7 @@ export class WebStorageAdapter extends BaseStorageAdapter {
       
       return value;
     } catch (error) {
-      console.error('WebStorageAdapter getItem error:', error);
+      logger.error('getItem error:', error);
       return null;
     }
   }
@@ -58,7 +61,7 @@ export class WebStorageAdapter extends BaseStorageAdapter {
       // Handle quota exceeded error
       if (error instanceof DOMException && 
           (error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
-        console.warn('WebStorageAdapter: Storage quota exceeded, clearing old items');
+        logger.warn('Storage quota exceeded, clearing old items');
         await this.clearExpired();
         
         // Try again
@@ -67,10 +70,10 @@ export class WebStorageAdapter extends BaseStorageAdapter {
           const wrapped = this.wrapValue(value, ttl);
           this.storage.setItem(prefixedKey, wrapped);
         } catch (retryError) {
-          console.error('WebStorageAdapter setItem retry error:', retryError);
+          logger.error('setItem retry error:', retryError);
         }
       } else {
-        console.error('WebStorageAdapter setItem error:', error);
+        logger.error('setItem error:', error);
       }
     }
   }
@@ -82,7 +85,7 @@ export class WebStorageAdapter extends BaseStorageAdapter {
       const prefixedKey = this.getPrefixedKey(key);
       this.storage.removeItem(prefixedKey);
     } catch (error) {
-      console.error('WebStorageAdapter removeItem error:', error);
+      logger.error('removeItem error:', error);
     }
   }
   
@@ -101,7 +104,7 @@ export class WebStorageAdapter extends BaseStorageAdapter {
         this.storage.clear();
       }
     } catch (error) {
-      console.error('WebStorageAdapter clear error:', error);
+      logger.error('clear error:', error);
     }
   }
   
@@ -121,7 +124,7 @@ export class WebStorageAdapter extends BaseStorageAdapter {
       
       return keys;
     } catch (error) {
-      console.error('WebStorageAdapter getAllKeys error:', error);
+      logger.error('getAllKeys error:', error);
       return [];
     }
   }
@@ -149,7 +152,7 @@ export class WebStorageAdapter extends BaseStorageAdapter {
       
       return totalSize;
     } catch (error) {
-      console.error('WebStorageAdapter getSize error:', error);
+      logger.error('getSize error:', error);
       return 0;
     }
   }
@@ -186,7 +189,7 @@ export class WebStorageAdapter extends BaseStorageAdapter {
         quota: estimate.quota || 0
       };
     } catch (error) {
-      console.error('WebStorageAdapter getQuota error:', error);
+      logger.error('getQuota error:', error);
       return null;
     }
   }

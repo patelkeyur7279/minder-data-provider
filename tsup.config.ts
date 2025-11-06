@@ -2,7 +2,18 @@ import { defineConfig } from 'tsup';
 
 export default defineConfig({
   entry: {
+    // Main entry (universal)
     index: 'src/index.ts',
+    
+    // Platform-specific entry points
+    'platforms/web': 'src/platforms/web.ts',
+    'platforms/nextjs': 'src/platforms/nextjs.ts',
+    'platforms/native': 'src/platforms/native.ts',
+    'platforms/expo': 'src/platforms/expo.ts',
+    'platforms/electron': 'src/platforms/electron.ts',
+    'platforms/node': 'src/platforms/node.ts',
+    
+    // Feature modules (for tree-shaking)
     'crud/index': 'src/crud/index.ts',
     'auth/index': 'src/auth/index.ts',
     'cache/index': 'src/cache/index.ts',

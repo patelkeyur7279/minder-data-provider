@@ -15,9 +15,9 @@ export abstract class BaseModel {
       if (data[key] !== undefined) {
         // Handle date fields
         if ((key === 'createdAt' || key === 'updatedAt') && typeof data[key] === 'string') {
-          (this as any)[key] = new Date(data[key]);
+          (this as Record<string, any>)[key] = new Date(data[key]);
         } else {
-          (this as any)[key] = data[key];
+          (this as Record<string, any>)[key] = data[key];
         }
       }
     });
@@ -28,7 +28,7 @@ export abstract class BaseModel {
   public toJSON(): any {
     const json: any = {};
     Object.keys(this).forEach(key => {
-      const value = (this as any)[key];
+      const value = (this as Record<string, any>)[key];
       if (value !== undefined) {
         // Handle date fields
         if (value instanceof Date) {
@@ -84,7 +84,7 @@ export abstract class BaseModel {
   public merge(data: Partial<this>): this {
     Object.keys(data).forEach(key => {
       if (data[key as keyof this] !== undefined) {
-        (this as any)[key] = data[key as keyof this];
+        (this as Record<string, any>)[key] = data[key as keyof this];
       }
     });
     return this;
@@ -94,7 +94,7 @@ export abstract class BaseModel {
   public reset(): this {
     Object.keys(this).forEach(key => {
       if (key !== 'id') {
-        delete (this as any)[key];
+        delete (this as Record<string, any>)[key];
       }
     });
     return this;

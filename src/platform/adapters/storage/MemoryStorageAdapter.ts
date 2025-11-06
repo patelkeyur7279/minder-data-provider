@@ -4,7 +4,10 @@
  * or when running in environments like Node.js
  */
 
+import { Logger, LogLevel } from '../../../utils/Logger.js';
 import { BaseStorageAdapter, StorageAdapterOptions } from './StorageAdapter.js';
+
+const logger = new Logger('MemoryStorageAdapter', { level: LogLevel.ERROR });
 
 export class MemoryStorageAdapter extends BaseStorageAdapter {
   private store: Map<string, string>;
@@ -31,7 +34,7 @@ export class MemoryStorageAdapter extends BaseStorageAdapter {
       
       return value;
     } catch (error) {
-      console.error('MemoryStorageAdapter getItem error:', error);
+      logger.error('getItem error:', error);
       return null;
     }
   }
@@ -45,7 +48,7 @@ export class MemoryStorageAdapter extends BaseStorageAdapter {
       
       this.store.set(prefixedKey, wrapped);
     } catch (error) {
-      console.error('MemoryStorageAdapter setItem error:', error);
+      logger.error('setItem error:', error);
     }
   }
   
@@ -54,7 +57,7 @@ export class MemoryStorageAdapter extends BaseStorageAdapter {
       const prefixedKey = this.getPrefixedKey(key);
       this.store.delete(prefixedKey);
     } catch (error) {
-      console.error('MemoryStorageAdapter removeItem error:', error);
+      logger.error('removeItem error:', error);
     }
   }
   
@@ -71,7 +74,7 @@ export class MemoryStorageAdapter extends BaseStorageAdapter {
         this.store.clear();
       }
     } catch (error) {
-      console.error('MemoryStorageAdapter clear error:', error);
+      logger.error('clear error:', error);
     }
   }
   
@@ -88,7 +91,7 @@ export class MemoryStorageAdapter extends BaseStorageAdapter {
       
       return keys;
     } catch (error) {
-      console.error('MemoryStorageAdapter getAllKeys error:', error);
+      logger.error('getAllKeys error:', error);
       return [];
     }
   }
@@ -109,7 +112,7 @@ export class MemoryStorageAdapter extends BaseStorageAdapter {
       
       return totalSize;
     } catch (error) {
-      console.error('MemoryStorageAdapter getSize error:', error);
+      logger.error('getSize error:', error);
       return 0;
     }
   }

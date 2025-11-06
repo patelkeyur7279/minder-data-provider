@@ -3,6 +3,7 @@
  * Automatically creates the appropriate storage adapter based on platform detection
  */
 
+import { Logger, LogLevel } from '../../../utils/Logger.js';
 import { PlatformDetector } from '../../PlatformDetector.js';
 import { PlatformCapabilityDetector } from '../../PlatformCapabilities.js';
 import type { Platform } from '../../PlatformDetector.js';
@@ -12,6 +13,8 @@ import { MemoryStorageAdapter } from './MemoryStorageAdapter.js';
 import { NativeStorageAdapter } from './NativeStorageAdapter.js';
 import { ExpoStorageAdapter } from './ExpoStorageAdapter.js';
 import { ElectronStorageAdapter } from './ElectronStorageAdapter.js';
+
+const logger = new Logger('StorageAdapterFactory', { level: LogLevel.WARN });
 
 export class StorageAdapterFactory {
   /**
@@ -46,7 +49,7 @@ export class StorageAdapterFactory {
       
       default:
         // Fallback to memory storage
-        console.warn(`StorageAdapterFactory: No suitable storage adapter found for platform ${detectedPlatform}, using memory storage`);
+        logger.warn(`No suitable storage adapter found for platform ${detectedPlatform}, using memory storage`);
         return new MemoryStorageAdapter(options);
     }
   }
@@ -60,7 +63,7 @@ export class StorageAdapterFactory {
         return new WebStorageAdapter(localStorage, options);
       }
     } catch (error) {
-      console.warn('StorageAdapterFactory: localStorage not available:', error);
+      logger.warn('localStorage not available:', error);
     }
     
     return new MemoryStorageAdapter(options);
@@ -77,7 +80,7 @@ export class StorageAdapterFactory {
         return adapter;
       }
     } catch (error) {
-      console.warn('StorageAdapterFactory: AsyncStorage not available:', error);
+      logger.warn('AsyncStorage not available:', error);
     }
     
     return new MemoryStorageAdapter(options);
@@ -94,7 +97,7 @@ export class StorageAdapterFactory {
         return adapter;
       }
     } catch (error) {
-      console.warn('StorageAdapterFactory: SecureStore not available:', error);
+      logger.warn('SecureStore not available:', error);
     }
     
     return new MemoryStorageAdapter(options);
@@ -111,7 +114,7 @@ export class StorageAdapterFactory {
         return adapter;
       }
     } catch (error) {
-      console.warn('StorageAdapterFactory: electron-store not available:', error);
+      logger.warn('electron-store not available:', error);
     }
     
     return new MemoryStorageAdapter(options);
@@ -128,7 +131,7 @@ export class StorageAdapterFactory {
     try {
       return this.create(preferredPlatform, options);
     } catch (error) {
-      console.error('StorageAdapterFactory: Failed to create storage adapter, falling back to memory storage:', error);
+      logger.error('Failed to create storage adapter, falling back to memory storage:', error);
       return new MemoryStorageAdapter(options);
     }
   }

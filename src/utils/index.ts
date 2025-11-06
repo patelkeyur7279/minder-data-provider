@@ -6,6 +6,9 @@ export * from './security.js';
 // Export performance utilities
 export * from './performance.js';
 
+// Export Logger
+export * from './Logger.js';
+
 // Generate configuration from Next.js API routes
 export function generateConfigFromApiRoutes(apiDir: string): any {
   // This would scan the API directory and generate routes automatically
@@ -28,12 +31,15 @@ export function createCorsConfig(options?: {
 }
 
 // Error formatter
-export function formatApiError(error: any): string {
-  if (error.response?.data?.message) {
-    return error.response.data.message;
-  }
-  if (error.message) {
-    return error.message;
+export function formatApiError(error: unknown): string {
+  if (error && typeof error === 'object') {
+    const err = error as { response?: { data?: { message?: string } }; message?: string };
+    if (err.response?.data?.message) {
+      return err.response.data.message;
+    }
+    if (err.message) {
+      return err.message;
+    }
   }
   return 'An unknown error occurred';
 }
@@ -43,7 +49,7 @@ export function debounce<T extends (...args: any[]) => any>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {
-  let timeout: any;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
   return (...args: Parameters<T>) => {
     clearTimeout(timeout);
     timeout = setTimeout(() => func(...args), wait);
@@ -66,26 +72,32 @@ export function throttle<T extends (...args: any[]) => any>(
 }
 
 // Deep merge objects
-export function deepMerge(target: any, source: any): any {
-  const output = { ...target };
+export function deepMerge<T extends Record<string, unknown> = Record<string, unknown>>(
+  target: T, 
+  source: Record<string, unknown>
+): T {
+  const output: Record<string, unknown> = { ...target };
   if (isObject(target) && isObject(source)) {
     Object.keys(source).forEach(key => {
       if (isObject(source[key])) {
         if (!(key in target)) {
-          Object.assign(output, { [key]: source[key] });
+          output[key] = source[key];
         } else {
-          output[key] = deepMerge(target[key], source[key]);
+          output[key] = deepMerge(
+            target[key] as Record<string, unknown>, 
+            source[key] as Record<string, unknown>
+          );
         }
       } else {
-        Object.assign(output, { [key]: source[key] });
+        output[key] = source[key];
       }
     });
   }
-  return output;
+  return output as T;
 }
 
-function isObject(item: any): boolean {
-  return item && typeof item === 'object' && !Array.isArray(item);
+function isObject(item: unknown): item is Record<string, unknown> {
+  return item !== null && typeof item === 'object' && !Array.isArray(item);
 }
 
 // Generate unique ID
@@ -136,7 +148,7 @@ export async function retry<T>(
   maxAttempts: number = 3,
   delay: number = 1000
 ): Promise<T> {
-  let lastError: any;
+  let lastError: unknown;
   
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {

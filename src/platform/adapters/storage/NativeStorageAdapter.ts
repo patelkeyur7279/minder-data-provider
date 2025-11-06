@@ -5,7 +5,10 @@
  * Note: This is a conditional import. The actual AsyncStorage is a peer dependency.
  */
 
+import { Logger, LogLevel } from '../../../utils/Logger.js';
 import { BaseStorageAdapter, StorageAdapterOptions } from './StorageAdapter.js';
+
+const logger = new Logger('NativeStorageAdapter', { level: LogLevel.ERROR });
 
 export class NativeStorageAdapter extends BaseStorageAdapter {
   private AsyncStorage: any;
@@ -17,7 +20,7 @@ export class NativeStorageAdapter extends BaseStorageAdapter {
       // Dynamic import for React Native AsyncStorage
       this.AsyncStorage = require('@react-native-async-storage/async-storage').default;
     } catch (error) {
-      console.warn('NativeStorageAdapter: @react-native-async-storage/async-storage not found. Please install it as a peer dependency.');
+      logger.warn('@react-native-async-storage/async-storage not found. Please install it as a peer dependency.');
       this.AsyncStorage = null;
     }
   }
@@ -41,7 +44,7 @@ export class NativeStorageAdapter extends BaseStorageAdapter {
       
       return value;
     } catch (error) {
-      console.error('NativeStorageAdapter getItem error:', error);
+      logger.error('getItem error:', error);
       return null;
     }
   }
@@ -57,7 +60,7 @@ export class NativeStorageAdapter extends BaseStorageAdapter {
       
       await this.AsyncStorage.setItem(prefixedKey, wrapped);
     } catch (error) {
-      console.error('NativeStorageAdapter setItem error:', error);
+      logger.error('setItem error:', error);
     }
   }
   
@@ -68,7 +71,7 @@ export class NativeStorageAdapter extends BaseStorageAdapter {
       const prefixedKey = this.getPrefixedKey(key);
       await this.AsyncStorage.removeItem(prefixedKey);
     } catch (error) {
-      console.error('NativeStorageAdapter removeItem error:', error);
+      logger.error('removeItem error:', error);
     }
   }
   
@@ -86,7 +89,7 @@ export class NativeStorageAdapter extends BaseStorageAdapter {
         await this.AsyncStorage.clear();
       }
     } catch (error) {
-      console.error('NativeStorageAdapter clear error:', error);
+      logger.error('clear error:', error);
     }
   }
   
@@ -101,7 +104,7 @@ export class NativeStorageAdapter extends BaseStorageAdapter {
         .filter((key: string) => !prefix || key.startsWith(prefix))
         .map((key: string) => this.removePrefixedKey(key));
     } catch (error) {
-      console.error('NativeStorageAdapter getAllKeys error:', error);
+      logger.error('getAllKeys error:', error);
       return [];
     }
   }
@@ -128,7 +131,7 @@ export class NativeStorageAdapter extends BaseStorageAdapter {
       
       return totalSize;
     } catch (error) {
-      console.error('NativeStorageAdapter getSize error:', error);
+      logger.error('getSize error:', error);
       return 0;
     }
   }
@@ -150,7 +153,7 @@ export class NativeStorageAdapter extends BaseStorageAdapter {
         return [unwrappedKey, unwrappedValue];
       });
     } catch (error) {
-      console.error('NativeStorageAdapter multiGet error:', error);
+      logger.error('multiGet error:', error);
       return [];
     }
   }
@@ -170,7 +173,7 @@ export class NativeStorageAdapter extends BaseStorageAdapter {
       
       await this.AsyncStorage.multiSet(wrappedPairs);
     } catch (error) {
-      console.error('NativeStorageAdapter multiSet error:', error);
+      logger.error('multiSet error:', error);
     }
   }
 }

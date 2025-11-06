@@ -3,8 +3,11 @@
  * Provides CSRF protection, XSS sanitization, input validation, and rate limiting
  */
 
+import { Logger, LogLevel } from './Logger.js';
 import DOMPurify from 'dompurify';
 import type { SecurityConfig } from '../core/types.js';
+
+const logger = new Logger('SecurityUtils', { level: LogLevel.WARN });
 
 /**
  * Generate cryptographically secure CSRF token
@@ -22,7 +25,7 @@ export function generateSecureCSRFToken(length: number = 32): string {
     return randomBytes(length).toString('hex');
   } else {
     // Fallback (less secure, but better than Math.random())
-    console.warn('Crypto API not available, using fallback CSRF token generation');
+    logger.warn('Crypto API not available, using fallback CSRF token generation');
     return Array.from({ length }, () => 
       Math.floor(Math.random() * 16).toString(16)
     ).join('');

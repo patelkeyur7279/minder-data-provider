@@ -3,6 +3,8 @@
  * Extensible plugin architecture for Minder Data Provider
  */
 
+import { Logger, LogLevel } from '../utils/Logger.js';
+
 export interface MinderPlugin {
   name: string;
   version?: string;
@@ -55,18 +57,25 @@ export interface CacheHitEvent {
 export class PluginManager {
   private plugins: Map<string, MinderPlugin> = new Map();
   private initialized: boolean = false;
+  private logger: Logger;
+
+  constructor(options?: { debug?: boolean }) {
+    this.logger = new Logger('PluginManager', {
+      level: options?.debug ? LogLevel.DEBUG : LogLevel.WARN
+    });
+  }
 
   /**
    * Register a plugin
    */
   register(plugin: MinderPlugin): void {
     if (this.plugins.has(plugin.name)) {
-      console.warn(`Plugin "${plugin.name}" is already registered`);
+      this.logger.warn(`Plugin "${plugin.name}" is already registered`);
       return;
     }
 
     this.plugins.set(plugin.name, plugin);
-    console.log(`✓ Plugin registered: ${plugin.name}${plugin.version ? ` v${plugin.version}` : ''}`);
+    this.logger.info(`✓ Plugin registered: ${plugin.name}${plugin.version ? ` v${plugin.version}` : ''}`);
   }
 
   /**
@@ -77,7 +86,7 @@ export class PluginManager {
     if (plugin) {
       plugin.onDestroy?.();
       this.plugins.delete(pluginName);
-      console.log(`✓ Plugin unregistered: ${pluginName}`);
+      this.logger.info(`✓ Plugin unregistered: ${pluginName}`);
     }
   }
 
@@ -86,18 +95,18 @@ export class PluginManager {
    */
   async init(config: any): Promise<void> {
     if (this.initialized) {
-      console.warn('Plugins already initialized');
+      this.logger.warn('Plugins already initialized');
       return;
     }
 
-    console.log(`Initializing ${this.plugins.size} plugin(s)...`);
+    this.logger.info(`Initializing ${this.plugins.size} plugin(s)...`);
 
     for (const [name, plugin] of this.plugins) {
       try {
         await plugin.onInit?.(config);
-        console.log(`✓ Plugin initialized: ${name}`);
+        this.logger.debug(`✓ Plugin initialized: ${name}`);
       } catch (error) {
-        console.error(`✗ Plugin initialization failed: ${name}`, error);
+        this.logger.error(`✗ Plugin initialization failed: ${name}`, error);
       }
     }
 
@@ -112,7 +121,7 @@ export class PluginManager {
       try {
         await plugin.onRequest?.(request);
       } catch (error) {
-        console.error(`Plugin "${name}" request hook failed:`, error);
+        this.logger.error(`Plugin "${name}" request hook failed:`, error);
       }
     }
   }
@@ -125,7 +134,7 @@ export class PluginManager {
       try {
         await plugin.onResponse?.(response);
       } catch (error) {
-        console.error(`Plugin "${name}" response hook failed:`, error);
+        this.logger.error(`Plugin "${name}" response hook failed:`, error);
       }
     }
   }
@@ -138,7 +147,7 @@ export class PluginManager {
       try {
         await plugin.onError?.(error);
       } catch (err) {
-        console.error(`Plugin "${name}" error hook failed:`, err);
+        this.logger.error(`Plugin "${name}" error hook failed:`, err);
       }
     }
   }
@@ -151,7 +160,7 @@ export class PluginManager {
       try {
         await plugin.onCacheHit?.(event);
       } catch (error) {
-        console.error(`Plugin "${name}" cache hit hook failed:`, error);
+        this.logger.error(`Plugin "${name}" cache hit hook failed:`, error);
       }
     }
   }
@@ -164,7 +173,7 @@ export class PluginManager {
       try {
         await plugin.onCacheMiss?.(cacheKey);
       } catch (error) {
-        console.error(`Plugin "${name}" cache miss hook failed:`, error);
+        this.logger.error(`Plugin "${name}" cache miss hook failed:`, error);
       }
     }
   }
@@ -198,7 +207,7 @@ export class PluginManager {
       try {
         await plugin.onDestroy?.();
       } catch (error) {
-        console.error(`Plugin "${name}" destroy failed:`, error);
+        this.logger.error(`Plugin "${name}" destroy failed:`, error);
       }
     }
     this.plugins.clear();
@@ -214,29 +223,38 @@ export const pluginManager = new PluginManager();
  */
 
 /**
- * Logger Plugin - Logs all requests and responses
+ * Logger Plugin - Logs all requests and responses (only in debug mode)
  */
-export const LoggerPlugin: MinderPlugin = {
-  name: 'logger',
-  version: '1.0.0',
+export const createLoggerPlugin = (debug: boolean = false): MinderPlugin => {
+  const logger = new Logger('LoggerPlugin', {
+    level: debug ? LogLevel.DEBUG : LogLevel.WARN
+  });
+  
+  return {
+    name: 'logger',
+    version: '1.0.0',
 
-  onInit: (config) => {
-    console.log('🔍 Logger plugin initialized');
-  },
+    onInit: (config) => {
+      logger.info('🔍 Logger plugin initialized');
+    },
 
-  onRequest: (request) => {
-    console.log(`→ ${request.method} ${request.url}`);
-  },
+    onRequest: (request) => {
+      logger.debug(`→ ${request.method} ${request.url}`);
+    },
 
-  onResponse: (response) => {
-    const color = response.status >= 400 ? '🔴' : '🟢';
-    console.log(`← ${color} ${response.status} (${response.duration}ms)`);
-  },
+    onResponse: (response) => {
+      const color = response.status >= 400 ? '🔴' : '🟢';
+      logger.debug(`← ${color} ${response.status} (${response.duration}ms)`);
+    },
 
-  onError: (error) => {
-    console.error('❌ Request error:', error.message);
-  }
+    onError: (error) => {
+      logger.error('❌ Request error:', error.message);
+    }
+  };
 };
+
+// For backward compatibility
+export const LoggerPlugin = createLoggerPlugin(false);
 
 /**
  * Analytics Plugin - Track API usage
@@ -276,19 +294,24 @@ export class RetryPlugin implements MinderPlugin {
   private maxRetries: number;
   private retryDelay: number;
   private retryableStatuses: number[];
+  private logger: Logger;
 
   constructor(options: {
     maxRetries?: number;
     retryDelay?: number;
     retryableStatuses?: number[];
+    debug?: boolean;
   } = {}) {
     this.maxRetries = options.maxRetries || 3;
     this.retryDelay = options.retryDelay || 1000;
     this.retryableStatuses = options.retryableStatuses || [408, 429, 500, 502, 503, 504];
+    this.logger = new Logger('RetryPlugin', {
+      level: options.debug ? LogLevel.DEBUG : LogLevel.WARN
+    });
   }
 
   onError = async (error: PluginError) => {
-    console.log(`⚠️ Retry plugin: considering retry for error: ${error.message}`);
+    this.logger.warn(`⚠️ Retry plugin: considering retry for error: ${error.message}`);
   };
 }
 
@@ -300,13 +323,17 @@ export class CacheWarmupPlugin implements MinderPlugin {
   version = '1.0.0';
   
   private routes: string[];
+  private logger: Logger;
 
-  constructor(routes: string[] = []) {
+  constructor(routes: string[] = [], debug: boolean = false) {
     this.routes = routes;
+    this.logger = new Logger('CacheWarmupPlugin', {
+      level: debug ? LogLevel.DEBUG : LogLevel.WARN
+    });
   }
 
   onInit = async (config: any) => {
-    console.log(`🔥 Warming up cache for ${this.routes.length} route(s)...`);
+    this.logger.info(`🔥 Warming up cache for ${this.routes.length} route(s)...`);
     // Implementation would fetch and cache these routes
   };
 }
@@ -314,16 +341,25 @@ export class CacheWarmupPlugin implements MinderPlugin {
 /**
  * Performance Monitor Plugin - Track performance metrics
  */
-export const PerformanceMonitorPlugin: MinderPlugin = {
-  name: 'performance-monitor',
-  version: '1.0.0',
+export const createPerformanceMonitorPlugin = (debug: boolean = false): MinderPlugin => {
+  const logger = new Logger('PerformanceMonitorPlugin', {
+    level: debug ? LogLevel.DEBUG : LogLevel.WARN
+  });
+  
+  return {
+    name: 'performance-monitor',
+    version: '1.0.0',
 
-  onResponse: (response) => {
-    if (response.duration > 1000) {
-      console.warn(`⚠️ Slow request detected: ${response.duration}ms`);
+    onResponse: (response) => {
+      if (response.duration > 1000) {
+        logger.warn(`⚠️ Slow request detected: ${response.duration}ms`);
+      }
     }
-  }
+  };
 };
+
+// For backward compatibility
+export const PerformanceMonitorPlugin = createPerformanceMonitorPlugin(false);
 
 /**
  * Helper function to create custom plugins

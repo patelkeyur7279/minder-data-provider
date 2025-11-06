@@ -3,18 +3,19 @@
  * Provides memoization, request batching, bundle analysis, and monitoring
  */
 
+import { Logger, LogLevel } from './Logger.js';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { DependencyList } from 'react';
+import type { BatchedRequest, PendingRequest, PerformanceMetrics } from './performance/types.js';
+
+// Re-export types for backward compatibility
+export type { BatchedRequest, PendingRequest, PerformanceMetrics } from './performance/types.js';
+
+const logger = new Logger('Performance', { level: LogLevel.WARN });
 
 // ============================================================================
 // REQUEST BATCHING
 // ============================================================================
-
-interface BatchedRequest {
-  route: string;
-  resolve: (data: any) => void;
-  reject: (error: any) => void;
-}
 
 /**
  * Request Batcher - Batches multiple API requests into a single call
@@ -89,11 +90,6 @@ export class RequestBatcher {
 // REQUEST DEDUPLICATION
 // ============================================================================
 
-interface PendingRequest {
-  promise: Promise<any>;
-  timestamp: number;
-}
-
 /**
  * Request Deduplicator - Prevents duplicate simultaneous requests
  * Returns cached promise for identical concurrent requests
@@ -147,15 +143,6 @@ export class RequestDeduplicator {
 // ============================================================================
 // PERFORMANCE MONITORING
 // ============================================================================
-
-export interface PerformanceMetrics {
-  requestCount: number;
-  averageLatency: number;
-  cacheHitRate: number;
-  errorRate: number;
-  slowestRequests: Array<{ route: string; duration: number }>;
-  memoryUsage?: number;
-}
 
 /**
  * Performance Monitor - Tracks and analyzes performance metrics
@@ -354,7 +341,7 @@ export function usePerformanceMonitor(componentName: string) {
       const avgRenderTime = renderTimes.current.reduce((sum, time) => sum + time, 0) / renderTimes.current.length;
       
       if (avgRenderTime > 16) { // More than one frame (60fps)
-        console.warn(
+        logger.warn(
           `[Performance] ${componentName} is rendering slowly (${avgRenderTime.toFixed(2)}ms avg). ` +
           `Renders: ${renderCount.current}`
         );

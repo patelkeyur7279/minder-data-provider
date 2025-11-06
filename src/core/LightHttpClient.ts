@@ -3,12 +3,14 @@
  * This replaces Axios for basic HTTP operations
  */
 
+import { MinderNetworkError } from '../errors/index.js';
+
 type RequestMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
 
 interface RequestConfig {
   method?: RequestMethod;
   headers?: Record<string, string>;
-  body?: any;
+  body?: unknown;
   signal?: AbortSignal;
   credentials?: RequestCredentials;
 }
@@ -56,7 +58,7 @@ export class LightHttpClient {
       if (timeoutId) clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new Error(response.statusText);
+        throw new MinderNetworkError(response.statusText, response.status, undefined, 'HTTP_ERROR');
       }
 
       const contentType = response.headers.get('content-type');
@@ -75,11 +77,11 @@ export class LightHttpClient {
     return this.request<T>(url, { ...config, method: 'GET' });
   }
 
-  async post<T>(url: string, data?: any, config: Omit<RequestConfig, 'method'> = {}) {
+  async post<T>(url: string, data?: unknown, config: Omit<RequestConfig, 'method'> = {}) {
     return this.request<T>(url, { ...config, method: 'POST', body: data });
   }
 
-  async put<T>(url: string, data?: any, config: Omit<RequestConfig, 'method'> = {}) {
+  async put<T>(url: string, data?: unknown, config: Omit<RequestConfig, 'method'> = {}) {
     return this.request<T>(url, { ...config, method: 'PUT', body: data });
   }
 
@@ -87,7 +89,7 @@ export class LightHttpClient {
     return this.request<T>(url, { ...config, method: 'DELETE' });
   }
 
-  async patch<T>(url: string, data?: any, config: Omit<RequestConfig, 'method'> = {}) {
+  async patch<T>(url: string, data?: unknown, config: Omit<RequestConfig, 'method'> = {}) {
     return this.request<T>(url, { ...config, method: 'PATCH', body: data });
   }
 

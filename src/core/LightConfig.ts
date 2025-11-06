@@ -3,7 +3,7 @@
  * Uses minimal dependencies and features
  */
 import { LightHttpClient } from './LightHttpClient.js';
-import type { MinderConfig } from './types.js';
+import type { MinderConfig, ApiRoute } from './types.js';
 
 interface LightConfig {
   apiBaseUrl: string;
@@ -37,7 +37,7 @@ export function createLightConfig(config: LightConfig): MinderConfig & { validat
       cache: config.features?.cache !== false,
     };
     return acc;
-  }, {} as Record<string, any>);
+  }, {} as Record<string, ApiRoute>);
 
   // Helper function to safely check if we're in development mode
   const isDevelopment = () => {

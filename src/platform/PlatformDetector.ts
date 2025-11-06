@@ -5,6 +5,25 @@
 
 export type Platform = 'web' | 'nextjs' | 'react-native' | 'expo' | 'electron' | 'node';
 
+// Type declarations for platform-specific globals
+declare global {
+  const expo: unknown | undefined;
+  
+  interface Window {
+    __NEXT_DATA__?: unknown;
+    __BUILD_MANIFEST__?: unknown;
+    next?: unknown;
+    expo?: unknown;
+    ExpoModules?: unknown;
+    Expo?: unknown;
+    ReactNativeWebView?: unknown;
+    electron?: unknown;
+    process?: NodeJS.Process & { type?: string };
+  }
+  
+  var __NEXT_DATA__: unknown | undefined;
+}
+
 export class PlatformDetector {
   private static cache: Platform | null = null;
 
@@ -21,8 +40,7 @@ export class PlatformDetector {
       if (
         process.env.NEXT_RUNTIME ||
         process.env.__NEXT_PROCESSED_ENV ||
-        // @ts-ignore - Next.js specific
-        typeof global.__NEXT_DATA__ !== 'undefined'
+        typeof __NEXT_DATA__ !== 'undefined'
       ) {
         this.cache = 'nextjs';
         return 'nextjs';
@@ -51,7 +69,6 @@ export class PlatformDetector {
       win.expo ||
       win.ExpoModules ||
       win.Expo ||
-      // @ts-ignore - Expo specific
       typeof expo !== 'undefined'
     ) {
       this.cache = 'expo';
@@ -61,9 +78,7 @@ export class PlatformDetector {
     // React Native detection
     if (
       win.ReactNativeWebView ||
-      navigator.product === 'ReactNative' ||
-      // @ts-ignore - React Native specific
-      typeof navigator !== 'undefined' && navigator.product === 'ReactNative'
+      navigator.product === 'ReactNative'
     ) {
       this.cache = 'react-native';
       return 'react-native';

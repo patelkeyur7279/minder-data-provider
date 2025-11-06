@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  # Mock API Server
+  mock-api:
+    build:
+      context: ./mock-api
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+    volumes:
+      - ./mock-api:/app
+      - /app/node_modules
+    networks:
+      - minder-network
+
+  # Web E-commerce (React + Vite)
+  web:
+    build:
+      context: ./web/e-commerce
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_USE_MOCK_API=true
+      - VITE_API_URL=http://localhost:3001
+    volumes:
+      - ./web/e-commerce:/app
+      - /app/node_modules
+    depends_on:
+      - mock-api
+    networks:
+      - minder-network
+
+  # Next.js Blog
+  nextjs:
+    build:
+      context: ./nextjs/blog
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      - NODE_ENV=development
+      - PORT=3002
+      - API_URL=http://localhost:3001
+      - NEXT_PUBLIC_API_URL=http://localhost:3001
+    volumes:
+      - ./nextjs/blog:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - mock-api
+    networks:
+      - minder-network
+
+  # Node.js Express API
+  api:
+    build:
+      context: ./nodejs/api
+      dockerfile: Dockerfile
+    ports:
+      - "3003:3003"
+    environment:
+      - NODE_ENV=development
+      - PORT=3003
+      - API_URL=http://localhost:3001
+    volumes:
+      - ./nodejs/api:/app
+      - /app/node_modules
+    depends_on:
+      - mock-api
+    networks:
+      - minder-network
+
+networks:
+  minder-network:
+    driver: bridge
+
+volumes:
+  node_modules:

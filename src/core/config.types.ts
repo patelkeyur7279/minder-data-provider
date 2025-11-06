@@ -1,9 +1,11 @@
 /**
  * Common configuration types shared between light and full configurations
  */
+import type { ApiRoute } from './types.js';
+
 export interface BaseConfig {
   apiBaseUrl: string;
-  routes: Record<string, any>;
+  routes: Record<string, string | ApiRoute>;
 }
 
 /**
