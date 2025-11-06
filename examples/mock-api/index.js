@@ -61,6 +61,15 @@ const todos = [
 // Routes
 
 // Health check
+app.get('/', (req, res) => {
+  res.json({ 
+    status: 'healthy',
+    message: 'Minder Mock API Server',
+    timestamp: new Date().toISOString(),
+    endpoints: ['/health', '/users', '/posts', '/products', '/todos']
+  });
+});
+
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });

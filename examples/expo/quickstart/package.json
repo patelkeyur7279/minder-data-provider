@@ -20,7 +20,7 @@
     "expo-camera": "~14.0.5",
     "expo-image-picker": "~14.7.1",
     "@tanstack/react-query": "^5.8.4",
-    "minder-data-provider": "latest"
+    "minder-data-provider": "file:../../../"
   },
   "devDependencies": {
     "@babel/core": "^7.23.5",
