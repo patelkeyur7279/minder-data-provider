@@ -10,7 +10,7 @@ export interface NetworkRequest {
   method: HttpMethod;
   headers?: Record<string, string>;
   body?: any;
-  params?: Record<string, any>;
+  params?: Record<string, unknown>;
   timeout?: number;
   signal?: AbortSignal;
   withCredentials?: boolean;
@@ -108,7 +108,7 @@ export abstract class NetworkAdapter {
   /**
    * Build full URL with base URL and params
    */
-  protected buildURL(url: string, params?: Record<string, any>): string {
+  protected buildURL(url: string, params?: Record<string, unknown>): string {
     let fullURL = this.config.baseURL ? `${this.config.baseURL}${url}` : url;
 
     if (params && Object.keys(params).length > 0) {

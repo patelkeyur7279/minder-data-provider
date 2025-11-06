@@ -170,7 +170,7 @@ export class ApiClient {
   async request<T = any>(
     routeName: string,
     data?: any,
-    params?: Record<string, any>,
+    params?: Record<string, unknown>,
     options?: AxiosRequestConfig
   ): Promise<T> {
     const route = this.config.routes[routeName];

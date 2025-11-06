@@ -195,7 +195,7 @@ export class ElectronSecurityManager extends SecurityManager {
   /**
    * Get recommended Electron BrowserWindow options
    */
-  getRecommendedBrowserWindowOptions(): Record<string, any> {
+  getRecommendedBrowserWindowOptions(): Record<string, unknown> {
     return {
       webPreferences: {
         nodeIntegration: false,

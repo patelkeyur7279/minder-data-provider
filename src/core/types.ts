@@ -144,14 +144,14 @@ export interface UIState {
 }
 
 export interface ServerState {
-  data: Record<string, any>;
+  data: Record<string, unknown>;
   cache: Record<string, CacheEntry>;
   queries: Record<string, QueryState>;
 }
 
 export interface UserState {
   profile: any;
-  preferences: Record<string, any>;
+  preferences: Record<string, unknown>;
   permissions: string[];
   session: SessionData;
 }

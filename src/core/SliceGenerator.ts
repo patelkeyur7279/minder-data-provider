@@ -26,8 +26,8 @@ interface SliceState<T = any> {
 }
 
 export function createApiSlices(routes: Record<string, ApiRoute>, apiClient: ApiClient) {
-  const slices: Record<string, any> = {};
-  const reducers: Record<string, any> = {};
+  const slices: Record<string, unknown> = {};
+  const reducers: Record<string, unknown> = {};
 
   Object.entries(routes).forEach(([routeName, route]) => {
     // Create async thunks for each route

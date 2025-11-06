@@ -22,7 +22,7 @@ export function createSSRConfig(config: MinderConfig, options: SSROptions = {}) 
 }
 
 export async function prefetchData(config: MinderConfig, routes: string[]) {
-  const data: Record<string, any> = {};
+  const data: Record<string, unknown> = {};
   
   for (const routeName of routes) {
     const route = config.routes[routeName];

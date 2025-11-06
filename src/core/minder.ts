@@ -96,7 +96,7 @@ export interface MinderOptions<TModel = any> {
   /**
    * Query parameters
    */
-  params?: Record<string, any>;
+  params?: Record<string, unknown>;
   
   /**
    * Request timeout in milliseconds
