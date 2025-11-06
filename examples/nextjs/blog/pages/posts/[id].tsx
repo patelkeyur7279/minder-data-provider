@@ -1,19 +1,19 @@
-import type { GetServerSideProps } from 'next';
-import Head from 'next/head';
-import Link from 'next/link';
-import { minder } from 'minder-data-provider';
-import { API_ENDPOINTS } from '../../lib/api';
-import type { Post } from '../../lib/types';
+import type { GetServerSideProps } from "next";
+import Head from "next/head";
+import Link from "next/link";
+import { minder } from "minder-data-provider";
+import { API_ENDPOINTS } from "../../lib/api";
+import type { Post } from "../../lib/types";
 
 /**
  * Post Detail Page - Using SSR (Server-Side Rendering)
- * 
+ *
  * Why SSR?
  * - Need fresh data on every request
  * - User-specific content possible
  * - SEO-friendly (rendered HTML)
  * - Can access cookies/headers
- * 
+ *
  * How it works:
  * - Runs on EVERY request
  * - Server renders HTML
@@ -28,11 +28,11 @@ interface PostPageProps {
 export default function PostPage({ post, error }: PostPageProps) {
   if (error || !post) {
     return (
-      <div className="container">
-        <div className="error">
+      <div className='container'>
+        <div className='error'>
           <h1>❌ Error</h1>
-          <p>{error || 'Post not found'}</p>
-          <Link href="/">← Back to home</Link>
+          <p>{error || "Post not found"}</p>
+          <Link href='/'>← Back to home</Link>
         </div>
       </div>
     );
@@ -42,27 +42,29 @@ export default function PostPage({ post, error }: PostPageProps) {
     <>
       <Head>
         <title>{post.title} - Minder Blog</title>
-        <meta name="description" content={post.body.substring(0, 160)} />
+        <meta name='description' content={post.body.substring(0, 160)} />
       </Head>
 
-      <div className="container">
-        <nav className="breadcrumb">
-          <Link href="/">← Back to posts</Link>
-          <span className="badge">SSR</span>
+      <div className='container'>
+        <nav className='breadcrumb'>
+          <Link href='/'>← Back to posts</Link>
+          <span className='badge'>SSR</span>
         </nav>
 
-        <article className="post">
+        <article className='post'>
           <header>
             <h1>{post.title}</h1>
-            <p className="meta">Post ID: {post.id} • User ID: {post.userId}</p>
+            <p className='meta'>
+              Post ID: {post.id} • User ID: {post.userId}
+            </p>
           </header>
 
-          <div className="content">
+          <div className='content'>
             <p>{post.body}</p>
           </div>
 
-          <footer className="post-footer">
-            <p className="note">
+          <footer className='post-footer'>
+            <p className='note'>
               💡 This page uses <strong>SSR</strong> (Server-Side Rendering)
               <br />
               Data fetched on every request for fresh content
@@ -158,18 +160,20 @@ export default function PostPage({ post, error }: PostPageProps) {
 
 /**
  * getServerSideProps - SSR (Server-Side Rendering)
- * 
+ *
  * When does this run?
  * - On EVERY request
  * - Server-side only
  * - Has access to request/response
- * 
+ *
  * Why use minder() here?
  * - Access to cookies/headers via context
  * - Can forward auth tokens
  * - Consistent with client-side API
  */
-export const getServerSideProps: GetServerSideProps<PostPageProps> = async (context) => {
+export const getServerSideProps: GetServerSideProps<PostPageProps> = async (
+  context
+) => {
   const { id } = context.params!;
 
   /**
@@ -190,7 +194,7 @@ export const getServerSideProps: GetServerSideProps<PostPageProps> = async (cont
     return {
       props: {
         post: null,
-        error: error?.message || 'Post not found',
+        error: error?.message || "Post not found",
       },
     };
   }

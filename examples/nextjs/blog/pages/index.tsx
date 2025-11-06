@@ -1,19 +1,19 @@
-import type { GetStaticProps } from 'next';
-import Head from 'next/head';
-import Link from 'next/link';
-import { minder } from 'minder-data-provider';
-import { API_ENDPOINTS } from '../lib/api';
-import type { Post } from '../lib/types';
+import type { GetStaticProps } from "next";
+import Head from "next/head";
+import Link from "next/link";
+import { minder } from "minder-data-provider";
+import { API_ENDPOINTS } from "../lib/api";
+import type { Post } from "../lib/types";
 
 /**
  * Home Page - Using SSG (Static Site Generation)
- * 
+ *
  * Why SSG?
  * - Blog post list rarely changes
  * - Ultra-fast page loads (pre-rendered HTML)
  * - Perfect for public content
  * - SEO-friendly
- * 
+ *
  * How it works:
  * - Runs at BUILD time
  * - Generates static HTML
@@ -29,29 +29,25 @@ export default function Home({ posts }: HomeProps) {
     <>
       <Head>
         <title>Blog - Minder Data Provider</title>
-        <meta name="description" content="Blog built with Next.js and Minder" />
+        <meta name='description' content='Blog built with Next.js and Minder' />
       </Head>
 
-      <div className="container">
-        <header className="header">
+      <div className='container'>
+        <header className='header'>
           <h1>📝 Minder Blog</h1>
           <p>Demonstrating SSG, SSR, and ISR with minder-data-provider</p>
         </header>
 
         <main>
-          <div className="posts-grid">
+          <div className='posts-grid'>
             {posts.map((post) => (
-              <article key={post.id} className="post-card">
+              <article key={post.id} className='post-card'>
                 <h2>{post.title}</h2>
                 <p>{post.body.substring(0, 100)}...</p>
-                
-                <div className="post-links">
-                  <Link href={`/posts/${post.id}`}>
-                    View (SSR) →
-                  </Link>
-                  <Link href={`/blog/${post.id}`}>
-                    View (ISR) →
-                  </Link>
+
+                <div className='post-links'>
+                  <Link href={`/posts/${post.id}`}>View (SSR) →</Link>
+                  <Link href={`/blog/${post.id}`}>View (ISR) →</Link>
                 </div>
               </article>
             ))}
@@ -131,12 +127,12 @@ export default function Home({ posts }: HomeProps) {
 
 /**
  * getStaticProps - SSG (Static Site Generation)
- * 
+ *
  * When does this run?
  * - At BUILD time only
  * - NOT on every request
  * - Generates static HTML
- * 
+ *
  * Why use minder() here?
  * - Same API as client-side
  * - Consistent error handling
@@ -150,7 +146,7 @@ export const getStaticProps: GetStaticProps<HomeProps> = async () => {
   const { data, error, success } = await minder<Post[]>(API_ENDPOINTS.POSTS);
 
   if (!success || error) {
-    console.error('Failed to fetch posts:', error);
+    console.error("Failed to fetch posts:", error);
     return {
       props: {
         posts: [],

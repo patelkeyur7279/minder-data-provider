@@ -11,32 +11,34 @@ This document provides a comprehensive overview of ALL current features in the c
 ## 📦 Core Architecture
 
 ### 1. **Main Function: `minder()`**
+
 **Location**: `src/core/minder.ts`
 
 The ONE universal function that handles everything:
 
 ```typescript
-import { minder } from 'minder-data-provider';
+import { minder } from "minder-data-provider";
 
 // GET request
-const { data, error, success } = await minder('users');
+const { data, error, success } = await minder("users");
 
 // POST request (auto-detected)
-const result = await minder('users', { name: 'John' });
+const result = await minder("users", { name: "John" });
 
 // PUT request (auto-detected by ID)
-const result = await minder('users/1', { name: 'Jane' });
+const result = await minder("users/1", { name: "Jane" });
 
 // DELETE request
-const result = await minder('users/1', { method: 'DELETE' });
+const result = await minder("users/1", { method: "DELETE" });
 
 // File upload with progress
-const result = await minder('upload', file, {
-  onProgress: (p) => console.log(`${p.percentage}%`)
+const result = await minder("upload", file, {
+  onProgress: (p) => console.log(`${p.percentage}%`),
 });
 ```
 
 **Features**:
+
 - ✅ Smart HTTP method detection (GET/POST/PUT/PATCH/DELETE)
 - ✅ File upload support (File, Blob, FileList, FormData)
 - ✅ Model class integration (encode/decode)
@@ -47,25 +49,27 @@ const result = await minder('upload', file, {
 ---
 
 ### 2. **React Hook: `useMinder()`**
+
 **Location**: `src/hooks/useMinder.ts`
 
 Reactive wrapper around `minder()` with TanStack Query integration:
 
 ```typescript
-import { useMinder } from 'minder-data-provider';
+import { useMinder } from "minder-data-provider";
 
 // Auto-fetch on mount
-const { data, loading, error } = useMinder('users');
+const { data, loading, error } = useMinder("users");
 
 // Manual fetch control
-const { data, refetch } = useMinder('users', { autoFetch: false });
+const { data, refetch } = useMinder("users", { autoFetch: false });
 
 // Mutations
-const { mutate, loading } = useMinder('users');
-await mutate({ name: 'John' }); // Create
+const { mutate, loading } = useMinder("users");
+await mutate({ name: "John" }); // Create
 ```
 
 **Features**:
+
 - ✅ Automatic data fetching
 - ✅ Caching and deduplication (TanStack Query)
 - ✅ Loading and error states
@@ -77,18 +81,19 @@ await mutate({ name: 'John' }); // Create
 ---
 
 ### 3. **CRUD Hook: `useOneTouchCrud()`**
+
 **Location**: `src/hooks/index.ts`
 
 Complete CRUD operations in one hook:
 
 ```typescript
-import { useOneTouchCrud } from 'minder-data-provider/crud';
+import { useOneTouchCrud } from "minder-data-provider/crud";
 
-const { data, loading, operations } = useOneTouchCrud<User>('users');
+const { data, loading, operations } = useOneTouchCrud<User>("users");
 
 // Operations available
-await operations.create({ name: 'John' });
-await operations.update(id, { name: 'Jane' });
+await operations.create({ name: "John" });
+await operations.update(id, { name: "Jane" });
 await operations.delete(id);
 await operations.fetch(); // Manual refetch
 operations.refresh(); // Invalidate cache
@@ -96,6 +101,7 @@ operations.clear(); // Clear cache
 ```
 
 **Features**:
+
 - ✅ Auto-fetch or manual control
 - ✅ Separate loading states (fetch/create/update/delete)
 - ✅ Error handling per operation
@@ -107,40 +113,43 @@ operations.clear(); // Clear cache
 ## 🔐 Authentication & Authorization
 
 ### `useAuth()`
+
 **Location**: `src/hooks/index.ts`, `src/auth/index.ts`
 
 ```typescript
-import { useAuth } from 'minder-data-provider/auth';
+import { useAuth } from "minder-data-provider/auth";
 
 const auth = useAuth();
 
 // Token management
-auth.setToken('jwt-token');
+auth.setToken("jwt-token");
 auth.getToken();
 auth.clearAuth();
 auth.isAuthenticated();
 
 // Refresh tokens
-auth.setRefreshToken('refresh-token');
+auth.setRefreshToken("refresh-token");
 auth.getRefreshToken();
 ```
 
 ### `useCurrentUser()`
+
 **Location**: `src/hooks/index.ts`
 
 ```typescript
 const { user, isLoggedIn, hasRole, hasPermission } = useCurrentUser();
 
-if (hasRole('admin')) {
+if (hasRole("admin")) {
   // Admin-only content
 }
 
-if (hasPermission('users:write')) {
+if (hasPermission("users:write")) {
   // Permission-based access
 }
 ```
 
 **Features**:
+
 - ✅ JWT token management
 - ✅ Automatic token refresh
 - ✅ Role-based access control (RBAC)
@@ -152,26 +161,28 @@ if (hasPermission('users:write')) {
 ## 💾 Caching System
 
 ### `useCache()`
+
 **Location**: `src/hooks/index.ts`, `src/cache/index.ts`
 
 ```typescript
-import { useCache } from 'minder-data-provider/cache';
+import { useCache } from "minder-data-provider/cache";
 
 const cache = useCache();
 
 // Cache operations
-cache.getCachedData('users');
-cache.setCachedData('users', data);
-cache.invalidateQueries('users');
-cache.clearCache('users');
+cache.getCachedData("users");
+cache.setCachedData("users", data);
+cache.invalidateQueries("users");
+cache.clearCache("users");
 cache.getAllCachedQueries();
-cache.isQueryFresh('users');
+cache.isQueryFresh("users");
 
 // Prefetch
-await cache.prefetchQuery('users', fetchUsers);
+await cache.prefetchQuery("users", fetchUsers);
 ```
 
 **Features**:
+
 - ✅ Memory caching (TanStack Query)
 - ✅ Persistent caching (localStorage/AsyncStorage)
 - ✅ Cache invalidation
@@ -184,10 +195,11 @@ await cache.prefetchQuery('users', fetchUsers);
 ## 🌐 WebSocket & Real-time
 
 ### `useWebSocket()`
+
 **Location**: `src/hooks/index.ts`, `src/websocket/index.ts`
 
 ```typescript
-import { useWebSocket } from 'minder-data-provider/websocket';
+import { useWebSocket } from "minder-data-provider/websocket";
 
 const ws = useWebSocket();
 
@@ -197,15 +209,16 @@ ws.disconnect();
 ws.isConnected();
 
 // Send messages
-ws.send('message', { text: 'Hello' });
+ws.send("message", { text: "Hello" });
 
 // Subscribe to events
-ws.subscribe('newMessage', (data) => {
-  console.log('New message:', data);
+ws.subscribe("newMessage", (data) => {
+  console.log("New message:", data);
 });
 ```
 
 **Features**:
+
 - ✅ Auto-reconnection
 - ✅ Event subscription system
 - ✅ Heartbeat/ping-pong
@@ -218,12 +231,14 @@ ws.subscribe('newMessage', (data) => {
 ## 📤 File Upload
 
 ### `useMediaUpload()`
+
 **Location**: `src/hooks/index.ts`, `src/upload/index.ts`
 
 ```typescript
-import { useMediaUpload } from 'minder-data-provider/upload';
+import { useMediaUpload } from "minder-data-provider/upload";
 
-const { uploadFile, uploadMultiple, progress, isUploading } = useMediaUpload('upload');
+const { uploadFile, uploadMultiple, progress, isUploading } =
+  useMediaUpload("upload");
 
 // Single file
 const result = await uploadFile(file);
@@ -237,6 +252,7 @@ console.log(progress.percentage); // 0-100
 ```
 
 **Features**:
+
 - ✅ Single file upload
 - ✅ Multiple file upload
 - ✅ Progress tracking
@@ -249,10 +265,11 @@ console.log(progress.percentage); // 0-100
 ## 🔄 State Management
 
 ### Redux Integration
+
 **Location**: `src/hooks/index.ts`
 
 ```typescript
-import { useStore, useReduxSlice } from 'minder-data-provider';
+import { useStore, useReduxSlice } from "minder-data-provider";
 
 // Access Redux store
 const store = useStore();
@@ -261,12 +278,13 @@ store.dispatch(action);
 store.subscribe(listener);
 
 // Use generated slice
-const { state, actions, selectors, dispatch } = useReduxSlice('users');
+const { state, actions, selectors, dispatch } = useReduxSlice("users");
 ```
 
 ### UI State Management
+
 ```typescript
-import { useUIState } from 'minder-data-provider';
+import { useUIState } from "minder-data-provider";
 
 const {
   modals,
@@ -276,17 +294,17 @@ const {
   hideModal,
   addNotification,
   removeNotification,
-  setLoading
+  setLoading,
 } = useUIState();
 
 // Show modal
-showModal('confirmDelete');
+showModal("confirmDelete");
 
 // Add notification
-addNotification({ type: 'success', message: 'Saved!' });
+addNotification({ type: "success", message: "Saved!" });
 
 // Set loading
-setLoading('users', true);
+setLoading("users", true);
 ```
 
 ---
@@ -294,10 +312,11 @@ setLoading('users', true);
 ## 🌍 Platform Support
 
 ### Platform Detection
+
 **Location**: `src/platform/PlatformDetector.ts`
 
 ```typescript
-import { PlatformDetector } from 'minder-data-provider';
+import { PlatformDetector } from "minder-data-provider";
 
 const platform = PlatformDetector.detect();
 // Returns: 'web' | 'nextjs' | 'react-native' | 'expo' | 'electron' | 'node'
@@ -308,10 +327,11 @@ const isNative = PlatformDetector.isNative();
 ```
 
 ### Platform Capabilities
+
 **Location**: `src/platform/PlatformCapabilities.ts`
 
 ```typescript
-import { PlatformCapabilityDetector } from 'minder-data-provider';
+import { PlatformCapabilityDetector } from "minder-data-provider";
 
 const capabilities = PlatformCapabilityDetector.getCapabilities();
 
@@ -330,6 +350,7 @@ if (capabilities.websockets.native) {
 ```
 
 **Detected Capabilities**:
+
 - ✅ Authentication (JWT, OAuth, Biometric, Keychain)
 - ✅ Caching (Memory, LocalStorage, AsyncStorage, SecureStore)
 - ✅ WebSocket (Native vs Polyfill)
@@ -345,15 +366,16 @@ if (capabilities.websockets.native) {
 ## 📴 Offline Support
 
 ### `OfflineManager`
+
 **Location**: `src/platform/offline/OfflineManager.ts`
 
 ```typescript
-import { OfflineManager } from 'minder-data-provider';
+import { OfflineManager } from "minder-data-provider";
 
 const offlineManager = new OfflineManager({
-  storage: 'localStorage',
+  storage: "localStorage",
   maxQueueSize: 100,
-  syncInterval: 30000
+  syncInterval: 30000,
 });
 
 // Initialize
@@ -361,9 +383,9 @@ await offlineManager.initialize();
 
 // Queue offline requests
 offlineManager.queueRequest({
-  url: '/api/users',
-  method: 'POST',
-  data: userData
+  url: "/api/users",
+  method: "POST",
+  data: userData,
 });
 
 // Sync when online
@@ -374,6 +396,7 @@ const stats = offlineManager.getSyncStats();
 ```
 
 **Features**:
+
 - ✅ Request queuing when offline
 - ✅ Auto-sync when connection restored
 - ✅ Conflict resolution
@@ -385,21 +408,22 @@ const stats = offlineManager.getSyncStats();
 ## 🖥️ SSR/SSG Support
 
 ### `SSRManager`
+
 **Location**: `src/platform/ssr/SSRManager.ts`
 
 ```typescript
-import { SSRManager } from 'minder-data-provider/ssr';
+import { SSRManager } from "minder-data-provider/ssr";
 
 // Next.js getServerSideProps
 export async function getServerSideProps(context) {
   const ssrManager = new SSRManager();
-  
-  await ssrManager.prefetch('users', fetchUsers);
-  
+
+  await ssrManager.prefetch("users", fetchUsers);
+
   return {
     props: {
-      dehydratedState: ssrManager.dehydrate()
-    }
+      dehydratedState: ssrManager.dehydrate(),
+    },
   };
 }
 
@@ -407,21 +431,22 @@ export async function getServerSideProps(context) {
 export async function getStaticProps() {
   const ssrManager = new SSRManager({
     enableISR: true,
-    revalidate: 60
+    revalidate: 60,
   });
-  
-  await ssrManager.prefetch('posts', fetchPosts);
-  
+
+  await ssrManager.prefetch("posts", fetchPosts);
+
   return {
     props: {
-      dehydratedState: ssrManager.dehydrate()
+      dehydratedState: ssrManager.dehydrate(),
     },
-    revalidate: 60
+    revalidate: 60,
   };
 }
 ```
 
 **Features**:
+
 - ✅ Server-side rendering (SSR)
 - ✅ Static site generation (SSG)
 - ✅ Incremental static regeneration (ISR)
@@ -434,28 +459,29 @@ export async function getStaticProps() {
 ## 🔧 Configuration & Environment
 
 ### `useConfiguration()`
+
 **Location**: `src/hooks/useConfiguration.ts`
 
 ```typescript
-import { useConfiguration } from 'minder-data-provider/config';
+import { useConfiguration } from "minder-data-provider/config";
 
 const {
   config,
   upgradeToFull,
   updateFeature,
   optimizeForCurrentUsage,
-  metrics
+  metrics,
 } = useConfiguration({
   monitorPerformance: true,
   monitorSecurity: true,
-  autoOptimize: true
+  autoOptimize: true,
 });
 
 // Upgrade to full features
 upgradeToFull();
 
 // Update specific feature
-updateFeature('cache', { ttl: 60000 });
+updateFeature("cache", { ttl: 60000 });
 
 // Get metrics
 console.log(metrics.performance); // latency, cache hit rate, etc.
@@ -463,22 +489,19 @@ console.log(metrics.security); // auth attempts, rate limits, etc.
 ```
 
 ### Environment Management
+
 **Location**: `src/hooks/useEnvironment.ts`
 
 ```typescript
-import { useEnvironment, useProxy } from 'minder-data-provider';
+import { useEnvironment, useProxy } from "minder-data-provider";
 
-const {
-  currentEnvironment,
-  switchEnvironment,
-  config,
-  apiUrl
-} = useEnvironment();
+const { currentEnvironment, switchEnvironment, config, apiUrl } =
+  useEnvironment();
 
 // Switch environments
-switchEnvironment('production');
-switchEnvironment('staging');
-switchEnvironment('development');
+switchEnvironment("production");
+switchEnvironment("staging");
+switchEnvironment("development");
 
 // CORS proxy
 const { proxyUrl, enableProxy, disableProxy } = useProxy();
@@ -489,36 +512,39 @@ const { proxyUrl, enableProxy, disableProxy } = useProxy();
 ## 🚀 Performance Optimization
 
 ### Request Batching
+
 **Location**: `src/utils/performance.ts`
 
 ```typescript
-import { RequestBatcher } from 'minder-data-provider';
+import { RequestBatcher } from "minder-data-provider";
 
 const batcher = new RequestBatcher(10); // 10ms delay
 
 // Multiple requests batched into one
-await batcher.add('users', () => fetchUsers());
-await batcher.add('users', () => fetchUsers()); // Deduped!
+await batcher.add("users", () => fetchUsers());
+await batcher.add("users", () => fetchUsers()); // Deduped!
 ```
 
 ### Request Deduplication
+
 ```typescript
-import { RequestDeduplicator } from 'minder-data-provider';
+import { RequestDeduplicator } from "minder-data-provider";
 
 const deduplicator = new RequestDeduplicator();
 
 // Only one request sent
-await deduplicator.deduplicate('users', fetchUsers);
-await deduplicator.deduplicate('users', fetchUsers); // Uses cached promise
+await deduplicator.deduplicate("users", fetchUsers);
+await deduplicator.deduplicate("users", fetchUsers); // Uses cached promise
 ```
 
 ### Performance Monitoring
+
 ```typescript
-import { PerformanceMonitor } from 'minder-data-provider';
+import { PerformanceMonitor } from "minder-data-provider";
 
 const monitor = new PerformanceMonitor();
 
-monitor.recordRequest('users', 150); // 150ms latency
+monitor.recordRequest("users", 150); // 150ms latency
 monitor.recordCacheHit();
 monitor.recordError();
 
@@ -527,6 +553,7 @@ const metrics = monitor.getMetrics();
 ```
 
 ### React Performance Hooks
+
 ```typescript
 import {
   useMemoizedCallback,
@@ -534,8 +561,8 @@ import {
   useThrottle,
   usePerformanceMonitor,
   useLazyLoad,
-  useAbortController
-} from 'minder-data-provider';
+  useAbortController,
+} from "minder-data-provider";
 
 // Debounce value
 const debouncedSearch = useDebounce(searchTerm, 500);
@@ -544,10 +571,10 @@ const debouncedSearch = useDebounce(searchTerm, 500);
 const throttledScroll = useThrottle(scrollPosition, 100);
 
 // Monitor component performance
-usePerformanceMonitor('UserList');
+usePerformanceMonitor("UserList");
 
 // Lazy load feature
-const { Component, loading } = useLazyLoad(() => import('./HeavyComponent'));
+const { Component, loading } = useLazyLoad(() => import("./HeavyComponent"));
 
 // Abort controller for cleanup
 const controller = useAbortController();
@@ -558,33 +585,36 @@ const controller = useAbortController();
 ## 🛡️ Security Features
 
 ### Rate Limiting
+
 **Location**: `src/middleware/rate-limiter.ts`
 
 ```typescript
-import { RateLimiter, RateLimitPresets } from 'minder-data-provider';
+import { RateLimiter, RateLimitPresets } from "minder-data-provider";
 
 // Create rate limiter
 const limiter = new RateLimiter(RateLimitPresets.STRICT);
 
 // Check if allowed
-const allowed = limiter.checkLimit('user-123', 'api-call');
+const allowed = limiter.checkLimit("user-123", "api-call");
 
 // Next.js middleware
-import { createNextRateLimiter } from 'minder-data-provider';
+import { createNextRateLimiter } from "minder-data-provider";
 export const rateLimiter = createNextRateLimiter({
   windowMs: 60000,
-  max: 100
+  max: 100,
 });
 
 // Express middleware
-import { createExpressRateLimiter } from 'minder-data-provider';
+import { createExpressRateLimiter } from "minder-data-provider";
 app.use(createExpressRateLimiter({ max: 100 }));
 ```
 
 ### Security Manager
+
 **Location**: `src/platform/security/SecurityManager.ts`
 
 Features:
+
 - ✅ XSS protection
 - ✅ CSRF protection
 - ✅ Secure storage (encrypted)
@@ -599,29 +629,29 @@ Features:
 **Location**: `src/plugins/PluginSystem.ts`
 
 ```typescript
-import { PluginManager } from 'minder-data-provider';
+import { PluginManager } from "minder-data-provider";
 
 const pluginManager = new PluginManager();
 
 // Register plugin
 pluginManager.register({
-  name: 'analytics',
-  version: '1.0.0',
+  name: "analytics",
+  version: "1.0.0",
   onRequest: (config) => {
-    console.log('Request:', config);
+    console.log("Request:", config);
     return config;
   },
   onResponse: (response) => {
-    console.log('Response:', response);
+    console.log("Response:", response);
     return response;
   },
   onError: (error) => {
-    console.error('Error:', error);
-  }
+    console.error("Error:", error);
+  },
 });
 
 // Execute hooks
-await pluginManager.executeHook('onRequest', config);
+await pluginManager.executeHook("onRequest", config);
 ```
 
 ---
@@ -629,10 +659,11 @@ await pluginManager.executeHook('onRequest', config);
 ## 🐛 Debugging & DevTools
 
 ### Debug Manager
+
 **Location**: `src/debug/DebugManager.ts`
 
 ```typescript
-import { DebugManager, useDebug } from 'minder-data-provider/debug';
+import { DebugManager, useDebug } from "minder-data-provider/debug";
 
 // Enable debug mode
 DebugManager.enable();
@@ -640,25 +671,26 @@ DebugManager.enable();
 // Use in component
 const { debug, debugInfo } = useDebug();
 
-debug('User created', userData);
+debug("User created", userData);
 ```
 
 ### DevTools Component
+
 **Location**: `src/devtools/DevTools.tsx`
 
 ```typescript
-import { DevTools } from 'minder-data-provider';
+import { DevTools } from "minder-data-provider";
 
 function App() {
   return (
     <>
       <YourApp />
-      <DevTools 
+      <DevTools
         config={{
-          position: 'bottom-right',
+          position: "bottom-right",
           showNetworkTab: true,
           showCacheTab: true,
-          showPerformanceTab: true
+          showPerformanceTab: true,
         }}
       />
     </>
@@ -667,6 +699,7 @@ function App() {
 ```
 
 **Features**:
+
 - ✅ Network request monitoring
 - ✅ Cache inspection
 - ✅ Performance metrics
@@ -678,6 +711,7 @@ function App() {
 ## 🎨 Error Handling
 
 ### Custom Error Classes
+
 **Location**: `src/errors/MinderError.ts`
 
 ```typescript
@@ -688,8 +722,8 @@ import {
   MinderAuthError,
   MinderTimeoutError,
   isMinderError,
-  getErrorMessage
-} from 'minder-data-provider';
+  getErrorMessage,
+} from "minder-data-provider";
 
 try {
   // Your code
@@ -703,19 +737,19 @@ try {
 ```
 
 ### Error Boundary
+
 **Location**: `src/components/MinderErrorBoundary.tsx`
 
 ```typescript
-import { MinderErrorBoundary } from 'minder-data-provider';
+import { MinderErrorBoundary } from "minder-data-provider";
 
 <MinderErrorBoundary
   fallback={<ErrorPage />}
   onError={(error, errorInfo) => {
     logError(error);
-  }}
->
+  }}>
   <YourApp />
-</MinderErrorBoundary>
+</MinderErrorBoundary>;
 ```
 
 ---
@@ -725,40 +759,40 @@ import { MinderErrorBoundary } from 'minder-data-provider';
 **Location**: `src/core/FeatureLoader.ts`
 
 ```typescript
-import { FeatureLoader, createFeatureLoader } from 'minder-data-provider';
+import { FeatureLoader, createFeatureLoader } from "minder-data-provider";
 
 const loader = createFeatureLoader({
   features: {
     crud: true,
     auth: true,
     websocket: false, // Lazy load
-    upload: false     // Lazy load
-  }
+    upload: false, // Lazy load
+  },
 });
 
 // Load feature on demand
-const websocketModule = await loader.load('websocket');
+const websocketModule = await loader.load("websocket");
 ```
 
 ---
 
 ## 📊 Summary Table
 
-| Feature Category | Hooks/Components | Bundle Impact | Platform Support |
-|-----------------|------------------|---------------|------------------|
-| **Core Data Fetching** | `minder()`, `useMinder()` | 5KB | All |
-| **CRUD Operations** | `useOneTouchCrud()` | 8KB | All |
-| **Authentication** | `useAuth()`, `useCurrentUser()` | 3KB | All |
-| **Caching** | `useCache()` | 2KB | All |
-| **WebSocket** | `useWebSocket()` | 6KB | Web, Next.js, Electron |
-| **File Upload** | `useMediaUpload()` | 4KB | All |
-| **Offline Support** | `OfflineManager` | 5KB | Web, Native, Expo |
-| **SSR/SSG** | `SSRManager` | 3KB | Next.js, Node |
-| **State Management** | `useStore()`, `useUIState()` | 2KB | All |
-| **Platform Detection** | `PlatformDetector` | 1KB | All |
-| **Security** | `RateLimiter`, `SecurityManager` | 4KB | All |
-| **Performance** | Performance hooks | 3KB | All |
-| **Debugging** | `DevTools`, `DebugManager` | 8KB | Dev only |
+| Feature Category       | Hooks/Components                 | Bundle Impact | Platform Support       |
+| ---------------------- | -------------------------------- | ------------- | ---------------------- |
+| **Core Data Fetching** | `minder()`, `useMinder()`        | 5KB           | All                    |
+| **CRUD Operations**    | `useOneTouchCrud()`              | 8KB           | All                    |
+| **Authentication**     | `useAuth()`, `useCurrentUser()`  | 3KB           | All                    |
+| **Caching**            | `useCache()`                     | 2KB           | All                    |
+| **WebSocket**          | `useWebSocket()`                 | 6KB           | Web, Next.js, Electron |
+| **File Upload**        | `useMediaUpload()`               | 4KB           | All                    |
+| **Offline Support**    | `OfflineManager`                 | 5KB           | Web, Native, Expo      |
+| **SSR/SSG**            | `SSRManager`                     | 3KB           | Next.js, Node          |
+| **State Management**   | `useStore()`, `useUIState()`     | 2KB           | All                    |
+| **Platform Detection** | `PlatformDetector`               | 1KB           | All                    |
+| **Security**           | `RateLimiter`, `SecurityManager` | 4KB           | All                    |
+| **Performance**        | Performance hooks                | 3KB           | All                    |
+| **Debugging**          | `DevTools`, `DebugManager`       | 8KB           | Dev only               |
 
 **Total Full Bundle**: ~240KB (minified)  
 **Minimal Bundle**: ~7KB (minder() + useMinder() only)
@@ -768,6 +802,7 @@ const websocketModule = await loader.load('websocket');
 ## 🎯 Next: Create Practical Examples
 
 Now we'll create comprehensive examples showing:
+
 1. **Different approaches** for the same task
 2. **When to use each** approach
 3. **Performance comparisons**

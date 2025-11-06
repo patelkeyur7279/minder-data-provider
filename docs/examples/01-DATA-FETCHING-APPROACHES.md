@@ -7,23 +7,24 @@
 
 ## 📊 Quick Comparison Table
 
-| Feature | `minder()` | `useMinder()` | `useOneTouchCrud()` |
-|---------|-----------|---------------|---------------------|
-| **Bundle Size** | ~2KB | ~5KB | ~8KB |
-| **React Required** | ❌ No | ✅ Yes | ✅ Yes |
-| **Auto-fetch** | ❌ Manual | ✅ Yes | ✅ Yes |
-| **Loading States** | Manual | ✅ Auto | ✅ Auto |
-| **Caching** | Manual | ✅ Auto | ✅ Auto |
-| **CRUD Operations** | Manual | Manual | ✅ Auto |
-| **Mutations** | ✅ Yes | ✅ Yes | ✅ Auto |
-| **SSR Support** | ✅ Yes | ✅ Yes | ⚠️ CSR only |
-| **Use Case** | APIs, SSR, Node | Components | Admin panels |
+| Feature             | `minder()`      | `useMinder()` | `useOneTouchCrud()` |
+| ------------------- | --------------- | ------------- | ------------------- |
+| **Bundle Size**     | ~2KB            | ~5KB          | ~8KB                |
+| **React Required**  | ❌ No           | ✅ Yes        | ✅ Yes              |
+| **Auto-fetch**      | ❌ Manual       | ✅ Yes        | ✅ Yes              |
+| **Loading States**  | Manual          | ✅ Auto       | ✅ Auto             |
+| **Caching**         | Manual          | ✅ Auto       | ✅ Auto             |
+| **CRUD Operations** | Manual          | Manual        | ✅ Auto             |
+| **Mutations**       | ✅ Yes          | ✅ Yes        | ✅ Auto             |
+| **SSR Support**     | ✅ Yes          | ✅ Yes        | ⚠️ CSR only         |
+| **Use Case**        | APIs, SSR, Node | Components    | Admin panels        |
 
 ---
 
 ## 🎯 Approach 1: Pure `minder()` Function
 
 ### ✅ When to Use
+
 - Building REST APIs (Next.js API routes, Express)
 - Server-side rendering (SSR)
 - Node.js scripts
@@ -32,11 +33,13 @@
 - Full control over data flow
 
 ### ❌ When NOT to Use
+
 - React components with reactive state (use `useMinder()`)
 - Need automatic loading states
 - Want built-in caching
 
 ### 📦 Bundle Impact
+
 **Added**: ~2KB  
 **Total**: ~2KB
 
@@ -46,21 +49,24 @@
 
 ```typescript
 // pages/api/users.ts
-import { minder } from 'minder-data-provider';
+import { minder } from "minder-data-provider";
 
 export default async function handler(req, res) {
   // Fetch from external API
-  const { data, error, success } = await minder('https://api.example.com/users');
-  
+  const { data, error, success } = await minder(
+    "https://api.example.com/users"
+  );
+
   if (!success) {
     return res.status(500).json({ error: error.message });
   }
-  
+
   return res.status(200).json(data);
 }
 ```
 
 **Why this approach?**
+
 - ✅ Runs on server (no client bundle impact)
 - ✅ No React overhead
 - ✅ Direct error handling
@@ -72,30 +78,30 @@ export default async function handler(req, res) {
 
 ```typescript
 // pages/users.tsx
-import { minder } from 'minder-data-provider';
+import { minder } from "minder-data-provider";
 
 export async function getServerSideProps(context) {
-  const { data, error } = await minder('https://api.example.com/users', {
+  const { data, error } = await minder("https://api.example.com/users", {
     headers: {
-      Cookie: context.req.headers.cookie
-    }
+      Cookie: context.req.headers.cookie,
+    },
   });
-  
+
   if (error) {
     return {
-      props: { users: [] }
+      props: { users: [] },
     };
   }
-  
+
   return {
-    props: { users: data }
+    props: { users: data },
   };
 }
 
 export default function UsersPage({ users }) {
   return (
     <ul>
-      {users.map(user => (
+      {users.map((user) => (
         <li key={user.id}>{user.name}</li>
       ))}
     </ul>
@@ -104,6 +110,7 @@ export default function UsersPage({ users }) {
 ```
 
 **Why this approach?**
+
 - ✅ SEO-friendly (rendered on server)
 - ✅ Fast initial load
 - ✅ Auth cookies available
@@ -115,24 +122,24 @@ export default function UsersPage({ users }) {
 
 ```typescript
 // scripts/fetch-users.ts
-import { minder, configureMinder } from 'minder-data-provider';
+import { minder, configureMinder } from "minder-data-provider";
 
 // Configure base URL
 configureMinder({
-  baseURL: 'https://api.example.com',
+  baseURL: "https://api.example.com",
   headers: {
-    'Authorization': `Bearer ${process.env.API_KEY}`
-  }
+    Authorization: `Bearer ${process.env.API_KEY}`,
+  },
 });
 
 async function fetchAllUsers() {
-  const { data, error, success } = await minder('users');
-  
+  const { data, error, success } = await minder("users");
+
   if (!success) {
-    console.error('Failed:', error.message);
+    console.error("Failed:", error.message);
     process.exit(1);
   }
-  
+
   console.log(`Fetched ${data.length} users`);
   return data;
 }
@@ -141,6 +148,7 @@ fetchAllUsers();
 ```
 
 **Why this approach?**
+
 - ✅ No browser environment needed
 - ✅ Can use environment variables
 - ✅ Perfect for scripts, cron jobs
@@ -152,29 +160,30 @@ fetchAllUsers();
 
 ```typescript
 // ❌ DON'T DO THIS - Use useMinder() instead
-import { useState, useEffect } from 'react';
-import { minder } from 'minder-data-provider';
+import { useState, useEffect } from "react";
+import { minder } from "minder-data-provider";
 
 function UserList() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  
+
   useEffect(() => {
     async function fetchUsers() {
       setLoading(true);
-      const { data } = await minder('users');
+      const { data } = await minder("users");
       setUsers(data || []);
       setLoading(false);
     }
     fetchUsers();
   }, []);
-  
+
   if (loading) return <div>Loading...</div>;
   return <ul>{/* render users */}</ul>;
 }
 ```
 
 **Why NOT to do this?**
+
 - ❌ Manual loading state management
 - ❌ No caching (refetches on every mount)
 - ❌ No error handling
@@ -189,6 +198,7 @@ function UserList() {
 ## 🎯 Approach 2: `useMinder()` Hook
 
 ### ✅ When to Use
+
 - React components
 - Need reactive loading/error states
 - Want automatic caching
@@ -197,11 +207,13 @@ function UserList() {
 - Good balance of features and bundle size
 
 ### ❌ When NOT to Use
+
 - Server-side code (use `minder()`)
 - Need full CRUD operations (use `useOneTouchCrud()`)
 - Minimal bundle critical (use `minder()`)
 
 ### 📦 Bundle Impact
+
 **Added**: ~5KB  
 **Total**: ~5KB
 
@@ -210,17 +222,17 @@ function UserList() {
 ### Example 2.1: Simple Auto-fetch
 
 ```typescript
-import { useMinder } from 'minder-data-provider';
+import { useMinder } from "minder-data-provider";
 
 function UserList() {
-  const { data, loading, error } = useMinder<User[]>('users');
-  
+  const { data, loading, error } = useMinder<User[]>("users");
+
   if (loading) return <div>Loading users...</div>;
   if (error) return <div>Error: {error.message}</div>;
-  
+
   return (
     <ul>
-      {data.map(user => (
+      {data.map((user) => (
         <li key={user.id}>{user.name}</li>
       ))}
     </ul>
@@ -229,6 +241,7 @@ function UserList() {
 ```
 
 **Why this approach?**
+
 - ✅ Auto-fetches on mount
 - ✅ Loading state handled
 - ✅ Error handling included
@@ -241,29 +254,31 @@ function UserList() {
 ### Example 2.2: Manual Fetch Control
 
 ```typescript
-import { useMinder } from 'minder-data-provider';
+import { useMinder } from "minder-data-provider";
 
 function SearchUsers() {
-  const [query, setQuery] = useState('');
-  
-  const { data, loading, refetch } = useMinder<User[]>('users', {
-    autoFetch: false // Don't fetch on mount
+  const [query, setQuery] = useState("");
+
+  const { data, loading, refetch } = useMinder<User[]>("users", {
+    autoFetch: false, // Don't fetch on mount
   });
-  
+
   const handleSearch = async () => {
     await refetch({ params: { q: query } });
   };
-  
+
   return (
     <>
-      <input value={query} onChange={e => setQuery(e.target.value)} />
+      <input value={query} onChange={(e) => setQuery(e.target.value)} />
       <button onClick={handleSearch} disabled={loading}>
         Search
       </button>
-      
+
       {data && (
         <ul>
-          {data.map(user => <li key={user.id}>{user.name}</li>)}
+          {data.map((user) => (
+            <li key={user.id}>{user.name}</li>
+          ))}
         </ul>
       )}
     </>
@@ -272,6 +287,7 @@ function SearchUsers() {
 ```
 
 **Why this approach?**
+
 - ✅ Controlled fetching (on button click)
 - ✅ Can pass dynamic params
 - ✅ Loading state during search
@@ -282,39 +298,40 @@ function SearchUsers() {
 ### Example 2.3: Mutations (Create/Update/Delete)
 
 ```typescript
-import { useMinder } from 'minder-data-provider';
+import { useMinder } from "minder-data-provider";
 
 function CreateUser() {
-  const { mutate, loading, error, success } = useMinder<User>('users');
-  
+  const { mutate, loading, error, success } = useMinder<User>("users");
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    
+
     const result = await mutate({
-      name: formData.get('name'),
-      email: formData.get('email')
+      name: formData.get("name"),
+      email: formData.get("email"),
     });
-    
+
     if (result.success) {
-      alert('User created!');
+      alert("User created!");
     }
   };
-  
+
   return (
     <form onSubmit={handleSubmit}>
-      <input name="name" required />
-      <input name="email" type="email" required />
-      <button type="submit" disabled={loading}>
-        {loading ? 'Creating...' : 'Create User'}
+      <input name='name' required />
+      <input name='email' type='email' required />
+      <button type='submit' disabled={loading}>
+        {loading ? "Creating..." : "Create User"}
       </button>
-      {error && <div className="error">{error.message}</div>}
+      {error && <div className='error'>{error.message}</div>}
     </form>
   );
 }
 ```
 
 **Why this approach?**
+
 - ✅ Loading state during submission
 - ✅ Error handling
 - ✅ Success detection
@@ -326,18 +343,18 @@ function CreateUser() {
 ### Example 2.4: Polling / Auto-refresh
 
 ```typescript
-import { useMinder } from 'minder-data-provider';
+import { useMinder } from "minder-data-provider";
 
 function LiveDashboard() {
-  const { data, loading } = useMinder<Stats>('dashboard/stats', {
+  const { data, loading } = useMinder<Stats>("dashboard/stats", {
     refetchInterval: 5000, // Poll every 5 seconds
     refetchOnWindowFocus: true,
-    refetchOnReconnect: true
+    refetchOnReconnect: true,
   });
-  
+
   return (
     <div>
-      <h1>Live Stats {loading && '🔄'}</h1>
+      <h1>Live Stats {loading && "🔄"}</h1>
       <div>Active Users: {data?.activeUsers}</div>
       <div>Revenue: ${data?.revenue}</div>
     </div>
@@ -346,6 +363,7 @@ function LiveDashboard() {
 ```
 
 **Why this approach?**
+
 - ✅ Real-time updates without WebSocket
 - ✅ Auto-refresh on tab focus
 - ✅ Reconnection handling
@@ -356,25 +374,25 @@ function LiveDashboard() {
 ### Example 2.5: Dependent Queries
 
 ```typescript
-import { useMinder } from 'minder-data-provider';
+import { useMinder } from "minder-data-provider";
 
 function UserProfile({ userId }) {
   // Fetch user first
   const { data: user, loading: userLoading } = useMinder<User>(
     `users/${userId}`
   );
-  
+
   // Then fetch user's posts (only when user is loaded)
   const { data: posts, loading: postsLoading } = useMinder<Post[]>(
     `users/${userId}/posts`,
     {
-      enabled: !!user // Only fetch if user exists
+      enabled: !!user, // Only fetch if user exists
     }
   );
-  
+
   if (userLoading) return <div>Loading user...</div>;
   if (!user) return <div>User not found</div>;
-  
+
   return (
     <div>
       <h1>{user.name}</h1>
@@ -383,7 +401,9 @@ function UserProfile({ userId }) {
         <div>Loading posts...</div>
       ) : (
         <ul>
-          {posts.map(post => <li key={post.id}>{post.title}</li>)}
+          {posts.map((post) => (
+            <li key={post.id}>{post.title}</li>
+          ))}
         </ul>
       )}
     </div>
@@ -392,6 +412,7 @@ function UserProfile({ userId }) {
 ```
 
 **Why this approach?**
+
 - ✅ Sequential fetching (posts only after user)
 - ✅ Prevents unnecessary requests
 - ✅ Clean loading states
@@ -402,27 +423,27 @@ function UserProfile({ userId }) {
 ### Example 2.6: Optimistic Updates
 
 ```typescript
-import { useMinder } from 'minder-data-provider';
+import { useMinder } from "minder-data-provider";
 
 function TodoItem({ todo }) {
   const { mutate } = useMinder<Todo>(`todos/${todo.id}`);
-  
+
   const toggleComplete = async () => {
     // Optimistic update
     await mutate(
       { completed: !todo.completed },
       {
         optimisticData: { ...todo, completed: !todo.completed },
-        rollbackOnError: true // Auto-rollback if fails
+        rollbackOnError: true, // Auto-rollback if fails
       }
     );
   };
-  
+
   return (
     <div>
-      <input 
-        type="checkbox" 
-        checked={todo.completed} 
+      <input
+        type='checkbox'
+        checked={todo.completed}
         onChange={toggleComplete}
       />
       <span>{todo.title}</span>
@@ -432,6 +453,7 @@ function TodoItem({ todo }) {
 ```
 
 **Why this approach?**
+
 - ✅ Instant UI feedback
 - ✅ No loading spinner
 - ✅ Auto-rollback on error
@@ -442,6 +464,7 @@ function TodoItem({ todo }) {
 ## 🎯 Approach 3: `useOneTouchCrud()` Hook
 
 ### ✅ When to Use
+
 - Admin panels / dashboards
 - Full CRUD operations needed
 - Want zero-config CRUD
@@ -449,12 +472,14 @@ function TodoItem({ todo }) {
 - Don't want to manage separate mutations
 
 ### ❌ When NOT to Use
+
 - Simple data fetching (use `useMinder()`)
 - Minimal bundle critical (use `minder()`)
 - Custom mutation logic needed
 - Server-side code
 
 ### 📦 Bundle Impact
+
 **Added**: ~8KB  
 **Total**: ~8KB
 
@@ -463,42 +488,38 @@ function TodoItem({ todo }) {
 ### Example 3.1: Complete Admin Panel
 
 ```typescript
-import { useOneTouchCrud } from 'minder-data-provider/crud';
+import { useOneTouchCrud } from "minder-data-provider/crud";
 
 function UsersAdmin() {
-  const {
-    data: users,
-    loading,
-    operations
-  } = useOneTouchCrud<User>('users');
-  
+  const { data: users, loading, operations } = useOneTouchCrud<User>("users");
+
   const handleCreate = async () => {
-    const newUser = { name: 'John', email: 'john@example.com' };
+    const newUser = { name: "John", email: "john@example.com" };
     await operations.create(newUser);
     // ✅ Auto-refetches list
     // ✅ Auto-invalidates cache
   };
-  
+
   const handleUpdate = async (id, changes) => {
     await operations.update(id, changes);
     // ✅ Auto-refetches list
   };
-  
+
   const handleDelete = async (id) => {
-    if (confirm('Delete user?')) {
+    if (confirm("Delete user?")) {
       await operations.delete(id);
       // ✅ Auto-refetches list
     }
   };
-  
+
   if (loading.fetch) return <div>Loading...</div>;
-  
+
   return (
     <div>
       <button onClick={handleCreate} disabled={loading.create}>
-        {loading.create ? 'Creating...' : 'Add User'}
+        {loading.create ? "Creating..." : "Add User"}
       </button>
-      
+
       <table>
         <thead>
           <tr>
@@ -508,21 +529,19 @@ function UsersAdmin() {
           </tr>
         </thead>
         <tbody>
-          {users.map(user => (
+          {users.map((user) => (
             <tr key={user.id}>
               <td>{user.name}</td>
               <td>{user.email}</td>
               <td>
-                <button 
-                  onClick={() => handleUpdate(user.id, { name: 'Updated' })}
-                  disabled={loading.update}
-                >
+                <button
+                  onClick={() => handleUpdate(user.id, { name: "Updated" })}
+                  disabled={loading.update}>
                   Edit
                 </button>
-                <button 
+                <button
                   onClick={() => handleDelete(user.id)}
-                  disabled={loading.delete}
-                >
+                  disabled={loading.delete}>
                   Delete
                 </button>
               </td>
@@ -536,6 +555,7 @@ function UsersAdmin() {
 ```
 
 **Why this approach?**
+
 - ✅ Zero-config CRUD (no manual cache updates)
 - ✅ Separate loading states per operation
 - ✅ Auto-refetch after mutations
@@ -547,66 +567,70 @@ function UsersAdmin() {
 ### Example 3.2: With Form Validation
 
 ```typescript
-import { useOneTouchCrud } from 'minder-data-provider/crud';
-import { useState } from 'react';
+import { useOneTouchCrud } from "minder-data-provider/crud";
+import { useState } from "react";
 
 function ProductsAdmin() {
-  const [form, setForm] = useState({ name: '', price: 0 });
+  const [form, setForm] = useState({ name: "", price: 0 });
   const [errors, setErrors] = useState({});
-  
-  const { data: products, loading, operations } = useOneTouchCrud<Product>('products');
-  
+
+  const {
+    data: products,
+    loading,
+    operations,
+  } = useOneTouchCrud<Product>("products");
+
   const validate = () => {
     const errs = {};
-    if (!form.name) errs.name = 'Name required';
-    if (form.price <= 0) errs.price = 'Price must be positive';
+    if (!form.name) errs.name = "Name required";
+    if (form.price <= 0) errs.price = "Price must be positive";
     return errs;
   };
-  
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     const errs = validate();
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       return;
     }
-    
+
     const result = await operations.create(form);
-    
+
     if (result.success) {
-      setForm({ name: '', price: 0 }); // Reset form
+      setForm({ name: "", price: 0 }); // Reset form
       setErrors({});
     } else {
       alert(`Error: ${result.error.message}`);
     }
   };
-  
+
   return (
     <div>
       <form onSubmit={handleSubmit}>
         <input
           value={form.name}
-          onChange={e => setForm({ ...form, name: e.target.value })}
-          placeholder="Product name"
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
+          placeholder='Product name'
         />
-        {errors.name && <span className="error">{errors.name}</span>}
-        
+        {errors.name && <span className='error'>{errors.name}</span>}
+
         <input
-          type="number"
+          type='number'
           value={form.price}
-          onChange={e => setForm({ ...form, price: Number(e.target.value) })}
-          placeholder="Price"
+          onChange={(e) => setForm({ ...form, price: Number(e.target.value) })}
+          placeholder='Price'
         />
-        {errors.price && <span className="error">{errors.price}</span>}
-        
-        <button type="submit" disabled={loading.create}>
-          {loading.create ? 'Adding...' : 'Add Product'}
+        {errors.price && <span className='error'>{errors.price}</span>}
+
+        <button type='submit' disabled={loading.create}>
+          {loading.create ? "Adding..." : "Add Product"}
         </button>
       </form>
-      
+
       <ul>
-        {products?.map(product => (
+        {products?.map((product) => (
           <li key={product.id}>
             {product.name} - ${product.price}
             <button onClick={() => operations.delete(product.id)}>
@@ -621,6 +645,7 @@ function ProductsAdmin() {
 ```
 
 **Why this approach?**
+
 - ✅ Validation before submission
 - ✅ Error handling
 - ✅ Form reset on success
@@ -631,34 +656,36 @@ function ProductsAdmin() {
 ### Example 3.3: Manual Fetch Control
 
 ```typescript
-import { useOneTouchCrud } from 'minder-data-provider/crud';
+import { useOneTouchCrud } from "minder-data-provider/crud";
 
 function FilteredProducts() {
-  const [category, setCategory] = useState('');
-  
-  const { data, loading, operations } = useOneTouchCrud<Product>('products', {
-    autoFetch: false // Manual control
+  const [category, setCategory] = useState("");
+
+  const { data, loading, operations } = useOneTouchCrud<Product>("products", {
+    autoFetch: false, // Manual control
   });
-  
+
   const handleFilter = () => {
     operations.fetch({ params: { category } });
   };
-  
+
   return (
     <>
-      <select value={category} onChange={e => setCategory(e.target.value)}>
-        <option value="">All</option>
-        <option value="electronics">Electronics</option>
-        <option value="clothing">Clothing</option>
+      <select value={category} onChange={(e) => setCategory(e.target.value)}>
+        <option value=''>All</option>
+        <option value='electronics'>Electronics</option>
+        <option value='clothing'>Clothing</option>
       </select>
-      
+
       <button onClick={handleFilter} disabled={loading.fetch}>
         Filter
       </button>
-      
+
       {data && (
         <ul>
-          {data.map(product => <li key={product.id}>{product.name}</li>)}
+          {data.map((product) => (
+            <li key={product.id}>{product.name}</li>
+          ))}
         </ul>
       )}
     </>
@@ -667,6 +694,7 @@ function FilteredProducts() {
 ```
 
 **Why this approach?**
+
 - ✅ No initial fetch
 - ✅ Fetch with dynamic params
 - ✅ Full CRUD still available
@@ -712,11 +740,11 @@ Need to fetch data?
 
 ### Scenario: Fetch 100 users in a list
 
-| Approach | Bundle Size | Initial Load | Cache Hit | Memory | Network |
-|----------|-------------|--------------|-----------|---------|---------|
-| `minder()` (manual) | 2KB | Manual | Manual | Low | Multiple |
-| `useMinder()` | 5KB | Auto | Auto | Medium | Deduped |
-| `useOneTouchCrud()` | 8KB | Auto | Auto | Medium | Deduped |
+| Approach            | Bundle Size | Initial Load | Cache Hit | Memory | Network  |
+| ------------------- | ----------- | ------------ | --------- | ------ | -------- |
+| `minder()` (manual) | 2KB         | Manual       | Manual    | Low    | Multiple |
+| `useMinder()`       | 5KB         | Auto         | Auto      | Medium | Deduped  |
+| `useOneTouchCrud()` | 8KB         | Auto         | Auto      | Medium | Deduped  |
 
 **Winner for Performance**: `useMinder()` (best balance)
 
@@ -724,11 +752,11 @@ Need to fetch data?
 
 ### Scenario: Admin panel with CRUD
 
-| Approach | LOC | Complexity | Auto-refetch | Error Handling |
-|----------|-----|------------|--------------|----------------|
-| `minder()` | ~150 | High | Manual | Manual |
-| `useMinder()` | ~80 | Medium | Manual | Auto |
-| `useOneTouchCrud()` | ~40 | Low | ✅ Auto | Auto |
+| Approach            | LOC  | Complexity | Auto-refetch | Error Handling |
+| ------------------- | ---- | ---------- | ------------ | -------------- |
+| `minder()`          | ~150 | High       | Manual       | Manual         |
+| `useMinder()`       | ~80  | Medium     | Manual       | Auto           |
+| `useOneTouchCrud()` | ~40  | Low        | ✅ Auto      | Auto           |
 
 **Winner for Productivity**: `useOneTouchCrud()` (less code)
 
@@ -736,11 +764,11 @@ Need to fetch data?
 
 ### Scenario: SSR page
 
-| Approach | Supported | Hydration | SEO | Complexity |
-|----------|-----------|-----------|-----|------------|
-| `minder()` | ✅ | ✅ | ✅ | Low |
-| `useMinder()` | ✅ | ✅ | ✅ | Medium |
-| `useOneTouchCrud()` | ⚠️ CSR | ⚠️ | ❌ | High |
+| Approach            | Supported | Hydration | SEO | Complexity |
+| ------------------- | --------- | --------- | --- | ---------- |
+| `minder()`          | ✅        | ✅        | ✅  | Low        |
+| `useMinder()`       | ✅        | ✅        | ✅  | Medium     |
+| `useOneTouchCrud()` | ⚠️ CSR    | ⚠️        | ❌  | High       |
 
 **Winner for SSR**: `minder()` (designed for it)
 
@@ -749,46 +777,54 @@ Need to fetch data?
 ## 🎯 Common Scenarios & Recommendations
 
 ### 1. E-commerce Product List
+
 **Recommendation**: `useMinder()`
+
 - ✅ Auto-fetch on page load
 - ✅ Cache for instant back navigation
 - ✅ Refetch on focus for fresh data
 - ❌ Don't need full CRUD (read-only for users)
 
 ```typescript
-const { data: products } = useMinder<Product[]>('products');
+const { data: products } = useMinder<Product[]>("products");
 ```
 
 ---
 
 ### 2. Admin Dashboard
+
 **Recommendation**: `useOneTouchCrud()`
+
 - ✅ Full CRUD operations
 - ✅ Auto-refetch after mutations
 - ✅ Less boilerplate
 - ✅ Separate loading states
 
 ```typescript
-const { data, operations } = useOneTouchCrud<User>('users');
+const { data, operations } = useOneTouchCrud<User>("users");
 ```
 
 ---
 
 ### 3. Next.js API Route
+
 **Recommendation**: `minder()`
+
 - ✅ Server-side only
 - ✅ No client bundle
 - ✅ Full control
 - ❌ React not needed
 
 ```typescript
-const { data } = await minder('https://external-api.com/data');
+const { data } = await minder("https://external-api.com/data");
 ```
 
 ---
 
 ### 4. SSR Blog Page
+
 **Recommendation**: `minder()` in getServerSideProps
+
 - ✅ SEO optimized
 - ✅ Fast initial render
 - ✅ Auth cookies available
@@ -796,7 +832,7 @@ const { data } = await minder('https://external-api.com/data');
 
 ```typescript
 export async function getServerSideProps() {
-  const { data } = await minder('posts');
+  const { data } = await minder("posts");
   return { props: { posts: data } };
 }
 ```
@@ -804,42 +840,48 @@ export async function getServerSideProps() {
 ---
 
 ### 5. Real-time Chat Messages
+
 **Recommendation**: `useMinder()` + polling OR `useWebSocket()`
+
 - For polling: `useMinder()` with `refetchInterval`
 - For real-time: `useWebSocket()` (see WebSocket examples)
 
 ```typescript
 // Polling approach
-const { data } = useMinder('messages', { refetchInterval: 2000 });
+const { data } = useMinder("messages", { refetchInterval: 2000 });
 
 // WebSocket approach
 const ws = useWebSocket();
-ws.subscribe('newMessage', handleNewMessage);
+ws.subscribe("newMessage", handleNewMessage);
 ```
 
 ---
 
 ### 6. Mobile App (React Native)
+
 **Recommendation**: `useMinder()` OR `useOneTouchCrud()`
+
 - Same as web (platform-agnostic)
 - Auto-detects platform capabilities
 - Uses AsyncStorage for caching
 
 ```typescript
-const { data } = useMinder('users'); // Works on iOS, Android
+const { data } = useMinder("users"); // Works on iOS, Android
 ```
 
 ---
 
 ### 7. Background Script / Cron Job
+
 **Recommendation**: `minder()`
+
 - ✅ No React needed
 - ✅ Simple async function
 - ✅ Environment variables
 - ❌ No caching needed
 
 ```typescript
-const { data } = await minder('api/sync-data');
+const { data } = await minder("api/sync-data");
 ```
 
 ---
@@ -847,12 +889,14 @@ const { data } = await minder('api/sync-data');
 ## 🎓 Key Takeaways
 
 ### Use `minder()` when:
+
 1. Server-side code (API routes, SSR, Node.js)
 2. Minimal bundle size critical
 3. Full manual control needed
 4. Non-React environment
 
 ### Use `useMinder()` when:
+
 1. React components
 2. Simple data fetching
 3. Want auto-caching
@@ -860,6 +904,7 @@ const { data } = await minder('api/sync-data');
 5. Good balance of features/size
 
 ### Use `useOneTouchCrud()` when:
+
 1. Admin panels
 2. Full CRUD operations
 3. Want zero-config
@@ -868,6 +913,7 @@ const { data } = await minder('api/sync-data');
 ---
 
 ## 📚 Related Examples
+
 - [02. Mutations & Updates](./02-MUTATIONS-APPROACHES.md)
 - [03. Authentication](./03-AUTHENTICATION-APPROACHES.md)
 - [04. Caching Strategies](./04-CACHING-APPROACHES.md)

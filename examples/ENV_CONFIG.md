@@ -7,6 +7,7 @@ Each example supports environment-based configuration for API endpoints.
 ### Web E-commerce (React + Vite)
 
 Create `.env` file:
+
 ```bash
 # Use mock API (for Docker/local testing)
 VITE_USE_MOCK_API=true
@@ -16,6 +17,7 @@ VITE_USE_MOCK_API=true
 ```
 
 **Default behavior:**
+
 - `VITE_USE_MOCK_API=true` → Uses http://localhost:3001 (mock API)
 - `VITE_API_URL` set → Uses specified URL
 - No env vars → Uses https://fakestoreapi.com (production)
@@ -23,24 +25,28 @@ VITE_USE_MOCK_API=true
 ### Next.js Blog
 
 Create `.env.local` file:
+
 ```bash
 API_URL=http://localhost:3001
 PORT=3002
 ```
 
 **Default behavior:**
+
 - `API_URL` set → Uses specified URL
 - No env var → Uses https://jsonplaceholder.typicode.com (production)
 
 ### Node.js Express API
 
 Create `.env` file:
+
 ```bash
 API_URL=http://localhost:3001
 PORT=3003
 ```
 
 **Default behavior:**
+
 - `API_URL` set → Uses specified URL
 - No env var → Uses https://jsonplaceholder.typicode.com (production)
 
@@ -54,11 +60,11 @@ services:
     environment:
       - VITE_USE_MOCK_API=true
       - VITE_API_URL=http://localhost:3001
-  
+
   nextjs:
     environment:
       - API_URL=http://localhost:3001
-  
+
   api:
     environment:
       - API_URL=http://localhost:3001
@@ -101,6 +107,7 @@ npm run dev
 ## 🎯 Quick Start
 
 1. **Copy example env files:**
+
    ```bash
    cp examples/web/e-commerce/.env.example .env
    cp examples/nextjs/blog/.env.example .env.local
@@ -110,10 +117,11 @@ npm run dev
 2. **Edit as needed** (or leave defaults)
 
 3. **Start services:**
+
    ```bash
    # With Docker
    ./docker-start.sh
-   
+
    # Or manually
    cd mock-api && npm start
    cd web/e-commerce && npm run dev

@@ -1,14 +1,14 @@
-import { useState } from 'react';
-import { useProducts } from '../hooks/useProducts';
-import { useCart } from '../hooks/useCart';
-import { ProductCard } from './ProductCard';
-import { FilterOptions } from '../types';
-import { filterProducts } from '../utils/helpers';
-import { useDebounce } from '../hooks/useDebounce';
+import { useState } from "react";
+import { useProducts } from "../hooks/useProducts";
+import { useCart } from "../hooks/useCart";
+import { ProductCard } from "./ProductCard";
+import { FilterOptions } from "../types";
+import { filterProducts } from "../utils/helpers";
+import { useDebounce } from "../hooks/useDebounce";
 
 /**
  * ProductList Component
- * 
+ *
  * Main product listing with:
  * - Auto-fetch products using useMinder()
  * - Search with debouncing (reduces API calls)
@@ -16,7 +16,7 @@ import { useDebounce } from '../hooks/useDebounce';
  * - Price range filtering
  * - Sort options
  * - Loading and error states
- * 
+ *
  * Why this design?
  * - useMinder() handles caching, loading states automatically
  * - Debounced search prevents excessive API calls
@@ -27,9 +27,9 @@ import { useDebounce } from '../hooks/useDebounce';
 export function ProductList() {
   // State for filters
   const [filters, setFilters] = useState<FilterOptions>({
-    category: 'all',
-    search: '',
-    sortBy: 'name',
+    category: "all",
+    search: "",
+    sortBy: "name",
   });
 
   // Debounce search input to reduce API calls
@@ -55,21 +55,21 @@ export function ProductList() {
    * Updates filter state, debounce hook delays the actual search
    */
   const handleSearch = (value: string) => {
-    setFilters(prev => ({ ...prev, search: value }));
+    setFilters((prev) => ({ ...prev, search: value }));
   };
 
   /**
    * Handle category change
    */
   const handleCategoryChange = (category: string) => {
-    setFilters(prev => ({ ...prev, category }));
+    setFilters((prev) => ({ ...prev, category }));
   };
 
   /**
    * Handle sort change
    */
-  const handleSortChange = (sortBy: FilterOptions['sortBy']) => {
-    setFilters(prev => ({ ...prev, sortBy }));
+  const handleSortChange = (sortBy: FilterOptions["sortBy"]) => {
+    setFilters((prev) => ({ ...prev, sortBy }));
   };
 
   /**
@@ -78,8 +78,8 @@ export function ProductList() {
    */
   if (loading) {
     return (
-      <div className="loading-container">
-        <div className="spinner" />
+      <div className='loading-container'>
+        <div className='spinner' />
         <p>Loading amazing products...</p>
       </div>
     );
@@ -91,42 +91,39 @@ export function ProductList() {
    */
   if (error) {
     return (
-      <div className="error-container">
-        <p className="error-message">😕 {error.message}</p>
-        <button onClick={() => window.location.reload()}>
-          Try Again
-        </button>
+      <div className='error-container'>
+        <p className='error-message'>😕 {error.message}</p>
+        <button onClick={() => window.location.reload()}>Try Again</button>
       </div>
     );
   }
 
   return (
-    <div className="product-list-container">
+    <div className='product-list-container'>
       {/* 
         Filters Section 
         Clean, simple controls for better UX
       */}
-      <div className="filters">
+      <div className='filters'>
         {/* Search input */}
         <input
-          type="text"
-          placeholder="Search products..."
+          type='text'
+          placeholder='Search products...'
           value={filters.search}
           onChange={(e) => handleSearch(e.target.value)}
-          className="search-input"
-          aria-label="Search products"
+          className='search-input'
+          aria-label='Search products'
         />
 
         {/* Category filter */}
         <select
           value={filters.category}
           onChange={(e) => handleCategoryChange(e.target.value)}
-          className="filter-select"
-          aria-label="Filter by category"
-        >
-          <option value="all">All Categories</option>
-          <option value="electronics">Electronics</option>
-          <option value="jewelery">Jewelery</option>
+          className='filter-select'
+          aria-label='Filter by category'>
+          <option value='all'>All Categories</option>
+          <option value='electronics'>Electronics</option>
+          <option value='jewelery'>Jewelery</option>
           <option value="men's clothing">Men's Clothing</option>
           <option value="women's clothing">Women's Clothing</option>
         </select>
@@ -134,31 +131,36 @@ export function ProductList() {
         {/* Sort options */}
         <select
           value={filters.sortBy}
-          onChange={(e) => handleSortChange(e.target.value as FilterOptions['sortBy'])}
-          className="filter-select"
-          aria-label="Sort by"
-        >
-          <option value="name">Name</option>
-          <option value="price-asc">Price: Low to High</option>
-          <option value="price-desc">Price: High to Low</option>
-          <option value="rating">Rating</option>
+          onChange={(e) =>
+            handleSortChange(e.target.value as FilterOptions["sortBy"])
+          }
+          className='filter-select'
+          aria-label='Sort by'>
+          <option value='name'>Name</option>
+          <option value='price-asc'>Price: Low to High</option>
+          <option value='price-desc'>Price: High to Low</option>
+          <option value='rating'>Rating</option>
         </select>
       </div>
 
       {/* Results count */}
-      <p className="results-count">
-        {filteredProducts.length} {filteredProducts.length === 1 ? 'product' : 'products'} found
+      <p className='results-count'>
+        {filteredProducts.length}{" "}
+        {filteredProducts.length === 1 ? "product" : "products"} found
       </p>
 
       {/* 
         Product Grid 
         Why grid? Responsive layout, good for product display
       */}
-      <div className="product-grid">
+      <div className='product-grid'>
         {filteredProducts.length === 0 ? (
-          <div className="no-results">
+          <div className='no-results'>
             <p>No products match your filters</p>
-            <button onClick={() => setFilters({ category: 'all', search: '', sortBy: 'name' })}>
+            <button
+              onClick={() =>
+                setFilters({ category: "all", search: "", sortBy: "name" })
+              }>
               Clear Filters
             </button>
           </div>

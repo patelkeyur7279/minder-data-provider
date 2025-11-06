@@ -14,11 +14,13 @@ Server runs on **http://localhost:3001**
 ## 📚 Endpoints
 
 ### Health Check
+
 ```bash
 GET /health
 ```
 
 ### Users
+
 ```bash
 GET    /users       # Get all users
 GET    /users/:id   # Get user by ID
@@ -28,6 +30,7 @@ DELETE /users/:id   # Delete user
 ```
 
 ### Posts
+
 ```bash
 GET    /posts              # Get all posts
 GET    /posts/:id          # Get post by ID
@@ -38,6 +41,7 @@ DELETE /posts/:id          # Delete post
 ```
 
 ### Products
+
 ```bash
 GET    /products                      # Get all products
 GET    /products/:id                  # Get product by ID
@@ -47,6 +51,7 @@ GET    /products/categories           # Get all categories
 ```
 
 ### Todos
+
 ```bash
 GET    /todos              # Get all todos
 GET    /todos/:id          # Get todo by ID
@@ -68,11 +73,13 @@ DELETE /todos/:id          # Delete todo
 ## 📝 Example Requests
 
 ### Get all products
+
 ```bash
 curl http://localhost:3001/products
 ```
 
 ### Create a post
+
 ```bash
 curl -X POST http://localhost:3001/posts \
   -H "Content-Type: application/json" \
@@ -80,6 +87,7 @@ curl -X POST http://localhost:3001/posts \
 ```
 
 ### Update a user
+
 ```bash
 curl -X PUT http://localhost:3001/users/1 \
   -H "Content-Type: application/json" \

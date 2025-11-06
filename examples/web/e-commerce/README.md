@@ -5,30 +5,35 @@ A **real, working, tested** e-commerce application showcasing best practices wit
 ## 🎯 Features Demonstrated
 
 ### Data Fetching
+
 - ✅ Product listing with `useMinder()`
 - ✅ Auto-caching and deduplication
 - ✅ Loading states and error handling
 - ✅ Refetch on window focus
 
 ### Shopping Cart
+
 - ✅ Optimistic updates
 - ✅ Local state management
 - ✅ Cart persistence
 - ✅ Real-time price calculations
 
 ### Product Details
+
 - ✅ Dynamic routes
 - ✅ Related products
 - ✅ Image lazy loading
 - ✅ SEO optimization
 
 ### Search & Filters
+
 - ✅ Debounced search
 - ✅ Category filters
 - ✅ Price range filters
 - ✅ Sort options
 
 ### Checkout
+
 - ✅ Form validation
 - ✅ Payment processing
 - ✅ Error recovery
@@ -39,12 +44,14 @@ A **real, working, tested** e-commerce application showcasing best practices wit
 ## 🚀 Quick Start
 
 ### Option 1: Automatic Setup (Recommended)
+
 ```bash
 chmod +x setup.sh
 ./setup.sh
 ```
 
 ### Option 2: Manual Setup
+
 ```bash
 # 1. Install dependencies
 npm install
@@ -62,11 +69,13 @@ npm run dev
 Open [http://localhost:5173](http://localhost:5173)
 
 ### 3. Run Tests
+
 ```bash
 npm test
 ```
 
 ### 4. Build for Production
+
 ```bash
 npm run build
 npm run preview
@@ -120,13 +129,15 @@ e-commerce/
 ## 🎓 Learning Outcomes
 
 ### 1. Data Fetching with `useMinder()`
+
 **File**: `src/components/ProductList.tsx`
 
 ```typescript
-const { data: products, loading, error } = useMinder<Product[]>('products');
+const { data: products, loading, error } = useMinder<Product[]>("products");
 ```
 
 **Learn**:
+
 - Auto-fetch on mount
 - Loading and error states
 - Automatic caching
@@ -135,19 +146,21 @@ const { data: products, loading, error } = useMinder<Product[]>('products');
 ---
 
 ### 2. Optimistic Updates
+
 **File**: `src/components/ShoppingCart.tsx`
 
 ```typescript
 await mutate(
   { productId, quantity },
-  { 
+  {
     optimisticData: updatedCart,
-    rollbackOnError: true 
+    rollbackOnError: true,
   }
 );
 ```
 
 **Learn**:
+
 - Instant UI updates
 - Error rollback
 - Better UX
@@ -155,17 +168,19 @@ await mutate(
 ---
 
 ### 3. Debounced Search
+
 **File**: `src/components/SearchBar.tsx`
 
 ```typescript
 const debouncedSearch = useDebounce(searchTerm, 500);
 
 const { data } = useMinder(`products/search`, {
-  params: { q: debouncedSearch }
+  params: { q: debouncedSearch },
 });
 ```
 
 **Learn**:
+
 - Reduce API calls
 - Improve performance
 - User experience
@@ -173,17 +188,19 @@ const { data } = useMinder(`products/search`, {
 ---
 
 ### 4. Error Handling
+
 **File**: `src/components/Checkout.tsx`
 
 ```typescript
-const { mutate, error } = useMinder('orders');
+const { mutate, error } = useMinder("orders");
 
-if (error?.code === 'PAYMENT_FAILED') {
+if (error?.code === "PAYMENT_FAILED") {
   // Show retry option
 }
 ```
 
 **Learn**:
+
 - Error types
 - Recovery strategies
 - User feedback
@@ -193,18 +210,23 @@ if (error?.code === 'PAYMENT_FAILED') {
 ## 🧪 Testing
 
 ### Unit Tests
+
 Test individual components:
+
 ```bash
 npm test ProductList
 ```
 
 ### Integration Tests
+
 Test full user flows:
+
 ```bash
 npm test integration
 ```
 
 ### Coverage
+
 ```bash
 npm run test:coverage
 ```
@@ -216,18 +238,21 @@ npm run test:coverage
 ## 🎨 UI Components
 
 ### Product List
+
 - Grid layout
 - Lazy loading images
 - Skeleton loading states
 - Responsive design
 
 ### Shopping Cart
+
 - Slide-out panel
 - Quantity controls
 - Remove items
 - Total calculation
 
 ### Checkout
+
 - Multi-step form
 - Validation
 - Payment integration
@@ -238,15 +263,19 @@ npm run test:coverage
 ## 🔧 Configuration
 
 ### API Endpoint
+
 Edit `src/utils/api.ts`:
+
 ```typescript
-export const API_BASE_URL = 'https://api.example.com';
+export const API_BASE_URL = "https://api.example.com";
 ```
 
 ### Fake API (for demo)
+
 Uses [JSONPlaceholder](https://jsonplaceholder.typicode.com/) or local mock server.
 
 To use local mock:
+
 ```bash
 npm run mock-server
 ```
@@ -256,11 +285,13 @@ npm run mock-server
 ## 📊 Performance
 
 ### Bundle Size
+
 - Initial: ~45KB (gzip)
 - With minder: ~50KB (gzip)
 - Lazy loaded routes: ~15KB each
 
 ### Lighthouse Score
+
 - Performance: 98
 - Accessibility: 100
 - Best Practices: 100
@@ -273,17 +304,19 @@ npm run mock-server
 ### Issue: Products not loading
 
 **Check**:
+
 1. API endpoint configured correctly
 2. CORS enabled on backend
 3. Network tab in DevTools
 
 **Solution**:
+
 ```typescript
 configureMinder({
-  baseURL: 'https://your-api.com',
+  baseURL: "https://your-api.com",
   headers: {
-    'Content-Type': 'application/json'
-  }
+    "Content-Type": "application/json",
+  },
 });
 ```
 
@@ -294,9 +327,10 @@ configureMinder({
 **Check**: LocalStorage enabled
 
 **Solution**:
+
 ```typescript
 // Already handled in useCart hook
-localStorage.setItem('cart', JSON.stringify(cart));
+localStorage.setItem("cart", JSON.stringify(cart));
 ```
 
 ---

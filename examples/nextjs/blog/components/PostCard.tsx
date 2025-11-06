@@ -1,9 +1,9 @@
-import Link from 'next/link';
-import type { Post } from '../lib/types';
+import Link from "next/link";
+import type { Post } from "../lib/types";
 
 /**
  * PostCard Component - Reusable post preview card
- * 
+ *
  * Why separate component?
  * - Used in multiple pages
  * - Easy to maintain styling
@@ -13,7 +13,7 @@ import type { Post } from '../lib/types';
 
 interface PostCardProps {
   post: Post;
-  variant: 'ssr' | 'isr';
+  variant: "ssr" | "isr";
 }
 
 export default function PostCard({ post, variant }: PostCardProps) {
@@ -22,19 +22,19 @@ export default function PostCard({ post, variant }: PostCardProps) {
    * - SSR: /posts/[id] - Server-rendered on every request
    * - ISR: /blog/[slug] - Static with revalidation
    */
-  const href = variant === 'ssr' ? `/posts/${post.id}` : `/blog/${post.id}`;
-  
-  const badgeColor = variant === 'ssr' ? '#10b981' : '#8b5cf6';
-  const badgeLabel = variant === 'ssr' ? 'SSR' : 'ISR';
+  const href = variant === "ssr" ? `/posts/${post.id}` : `/blog/${post.id}`;
+
+  const badgeColor = variant === "ssr" ? "#10b981" : "#8b5cf6";
+  const badgeLabel = variant === "ssr" ? "SSR" : "ISR";
 
   return (
-    <Link href={href} className="card">
-      <div className="badge" style={{ background: badgeColor }}>
+    <Link href={href} className='card'>
+      <div className='badge' style={{ background: badgeColor }}>
         {badgeLabel}
       </div>
-      <h3 className="title">{post.title}</h3>
-      <p className="excerpt">{post.body}</p>
-      <div className="meta">
+      <h3 className='title'>{post.title}</h3>
+      <p className='excerpt'>{post.body}</p>
+      <div className='meta'>
         <span>Post #{post.id}</span>
         <span>User {post.userId}</span>
       </div>

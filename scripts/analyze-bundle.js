@@ -2,49 +2,55 @@
 
 /**
  * Bundle Size Analysis Script
- * 
+ *
  * Generates real bundle size reports for each configuration preset
  * and verifies the claimed 87% reduction from modular imports.
  */
 
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
 
 // ============================================================================
 // Analyze Built Bundles
 // ============================================================================
 
-const distDir = path.join(__dirname, '..', 'dist');
+const distDir = path.join(__dirname, "..", "dist");
 
 const bundleAnalysis = {
   timestamp: new Date().toISOString(),
   presets: {
     minimal: {
-      name: 'Minimal (CRUD Only)',
-      description: 'Basic CRUD operations with TanStack Query',
-      modules: ['crud/index'],
-      claimed: '45KB',
+      name: "Minimal (CRUD Only)",
+      description: "Basic CRUD operations with TanStack Query",
+      modules: ["crud/index"],
+      claimed: "45KB",
       actual: 0,
     },
     standard: {
-      name: 'Standard (Production SaaS)',
-      description: 'CRUD + Auth + Cache + Security',
-      modules: ['crud/index', 'auth/index', 'cache/index'],
-      claimed: '90KB',
+      name: "Standard (Production SaaS)",
+      description: "CRUD + Auth + Cache + Security",
+      modules: ["crud/index", "auth/index", "cache/index"],
+      claimed: "90KB",
       actual: 0,
     },
     advanced: {
-      name: 'Advanced (Enterprise)',
-      description: 'Standard + Offline + SSR + WebSocket',
-      modules: ['crud/index', 'auth/index', 'cache/index', 'websocket/index', 'ssr/index'],
-      claimed: '120KB',
+      name: "Advanced (Enterprise)",
+      description: "Standard + Offline + SSR + WebSocket",
+      modules: [
+        "crud/index",
+        "auth/index",
+        "cache/index",
+        "websocket/index",
+        "ssr/index",
+      ],
+      claimed: "120KB",
       actual: 0,
     },
     enterprise: {
-      name: 'Enterprise (All Features)',
-      description: 'All features including DevTools',
-      modules: ['index'],
-      claimed: '150KB',
+      name: "Enterprise (All Features)",
+      description: "All features including DevTools",
+      modules: ["index"],
+      claimed: "150KB",
       actual: 0,
     },
   },
@@ -90,8 +96,8 @@ function calculatePresetSize(preset) {
  * Generate analysis report
  */
 function generateReport() {
-  console.log('\n📦 Bundle Size Analysis\n');
-  console.log('=' .repeat(80));
+  console.log("\n📦 Bundle Size Analysis\n");
+  console.log("=".repeat(80));
 
   // Analyze each preset
   for (const [key, preset] of Object.entries(bundleAnalysis.presets)) {
@@ -101,14 +107,14 @@ function generateReport() {
     preset.files = analysis.files;
 
     console.log(`\n${preset.name}`);
-    console.log('-'.repeat(80));
+    console.log("-".repeat(80));
     console.log(`Description: ${preset.description}`);
     console.log(`Claimed:     ${preset.claimed}`);
     console.log(`Actual:      ${preset.actual}`);
     console.log(`Modules:     ${preset.modules.length}`);
 
     if (preset.files.length > 0) {
-      console.log('\nIncluded Files:');
+      console.log("\nIncluded Files:");
       preset.files.forEach((file) => {
         console.log(`  - ${file.module.padEnd(20)} ${file.size}`);
       });
@@ -118,15 +124,26 @@ function generateReport() {
   // Calculate reduction
   const fullBundle = bundleAnalysis.presets.enterprise.actualBytes;
   const minimalBundle = bundleAnalysis.presets.minimal.actualBytes;
-  const reduction = ((fullBundle - minimalBundle) / fullBundle * 100).toFixed(1);
+  const reduction = (((fullBundle - minimalBundle) / fullBundle) * 100).toFixed(
+    1
+  );
 
-  console.log('\n' + '='.repeat(80));
-  console.log('\n📊 Bundle Reduction Analysis');
-  console.log('-'.repeat(80));
-  console.log(`Full Bundle (index.mjs):    ${bundleAnalysis.presets.enterprise.actual}`);
-  console.log(`Minimal Bundle (CRUD only): ${bundleAnalysis.presets.minimal.actual}`);
+  console.log("\n" + "=".repeat(80));
+  console.log("\n📊 Bundle Reduction Analysis");
+  console.log("-".repeat(80));
+  console.log(
+    `Full Bundle (index.mjs):    ${bundleAnalysis.presets.enterprise.actual}`
+  );
+  console.log(
+    `Minimal Bundle (CRUD only): ${bundleAnalysis.presets.minimal.actual}`
+  );
   console.log(`Reduction:                  ${reduction}% smaller`);
-  console.log(`Savings:                    ${((fullBundle - minimalBundle) / 1024).toFixed(2)}KB\n`);
+  console.log(
+    `Savings:                    ${(
+      (fullBundle - minimalBundle) /
+      1024
+    ).toFixed(2)}KB\n`
+  );
 
   // Verification status
   const claimedReduction = 87;
@@ -134,13 +151,17 @@ function generateReport() {
   const verified = Math.abs(actualReduction - claimedReduction) < 10; // Within 10% tolerance
 
   if (verified) {
-    console.log(`✅ VERIFIED: Actual reduction (${reduction}%) matches claimed (${claimedReduction}%)`);
+    console.log(
+      `✅ VERIFIED: Actual reduction (${reduction}%) matches claimed (${claimedReduction}%)`
+    );
   } else {
-    console.log(`⚠️  NEEDS UPDATE: Actual reduction (${reduction}%) differs from claimed (${claimedReduction}%)`);
+    console.log(
+      `⚠️  NEEDS UPDATE: Actual reduction (${reduction}%) differs from claimed (${claimedReduction}%)`
+    );
   }
 
   // Save report to file
-  const reportPath = path.join(__dirname, '..', 'BUNDLE_ANALYSIS.json');
+  const reportPath = path.join(__dirname, "..", "BUNDLE_ANALYSIS.json");
   fs.writeFileSync(reportPath, JSON.stringify(bundleAnalysis, null, 2));
   console.log(`\n💾 Full report saved to: BUNDLE_ANALYSIS.json\n`);
 
@@ -151,7 +172,7 @@ function generateReport() {
 if (require.main === module) {
   // Check if dist exists
   if (!fs.existsSync(distDir)) {
-    console.error('❌ Error: dist/ folder not found. Run `yarn build` first.');
+    console.error("❌ Error: dist/ folder not found. Run `yarn build` first.");
     process.exit(1);
   }
 

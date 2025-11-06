@@ -11,23 +11,25 @@
 
 All examples demonstrate **real-world usage** of Minder Data Provider across different platforms. Each example showcases specific features:
 
-| Example | Platform | Key Features | Status |
-|---------|----------|--------------|--------|
-| Web E-commerce | React + Vite | Client-side data fetching, cart management, filters | ✅ Complete |
-| Next.js Blog | Next.js 13+ | SSG, SSR, ISR, API routes | ✅ Complete |
-| Node.js API | Express | Server-side CRUD, rate limiting, error handling | ✅ Complete |
-| React Native | Mobile | Offline-first, background sync, AsyncStorage | ✅ Complete |
-| Expo | Cross-platform | SecureStore, FileSystem, ImagePicker | ✅ Complete |
-| Mock API | Express | Local testing server with all endpoints | ✅ Complete |
+| Example        | Platform       | Key Features                                        | Status      |
+| -------------- | -------------- | --------------------------------------------------- | ----------- |
+| Web E-commerce | React + Vite   | Client-side data fetching, cart management, filters | ✅ Complete |
+| Next.js Blog   | Next.js 13+    | SSG, SSR, ISR, API routes                           | ✅ Complete |
+| Node.js API    | Express        | Server-side CRUD, rate limiting, error handling     | ✅ Complete |
+| React Native   | Mobile         | Offline-first, background sync, AsyncStorage        | ✅ Complete |
+| Expo           | Cross-platform | SecureStore, FileSystem, ImagePicker                | ✅ Complete |
+| Mock API       | Express        | Local testing server with all endpoints             | ✅ Complete |
 
 ---
 
 ## 📁 Example 1: Web E-commerce (React + Vite)
 
 ### Purpose
+
 Demonstrates **client-side data fetching** and **state management** for a production e-commerce application.
 
 ### Architecture
+
 ```
 web/e-commerce/
 ├── src/
@@ -51,55 +53,63 @@ web/e-commerce/
 ### Key Patterns
 
 **1. Data Fetching with useMinder()**
+
 ```typescript
 // hooks/useProducts.ts
-const { data: products, loading, error } = useMinder<Product[]>(
-  API_ENDPOINTS.PRODUCTS,
-  {
-    autoFetch: true,                    // ← Auto-fetch on mount
-    refetchOnWindowFocus: true,         // ← Refresh when tab focused
-  }
-);
+const {
+  data: products,
+  loading,
+  error,
+} = useMinder<Product[]>(API_ENDPOINTS.PRODUCTS, {
+  autoFetch: true, // ← Auto-fetch on mount
+  refetchOnWindowFocus: true, // ← Refresh when tab focused
+});
 ```
 
 **Why?**
+
 - Automatic caching - no manual cache management
 - Built-in loading/error states
 - Refetch on focus for fresh data
 - TypeScript type safety
 
 **2. Cart Management with localStorage**
+
 ```typescript
 // hooks/useCart.ts
 const [cart, setCart] = useState<Cart>(() => {
   // Load from localStorage on mount
-  const saved = localStorage.getItem('minder-cart');
+  const saved = localStorage.getItem("minder-cart");
   return saved ? JSON.parse(saved) : { items: [], total: 0 };
 });
 
 // Persist on every change
 useEffect(() => {
-  localStorage.setItem('minder-cart', JSON.stringify(cart));
+  localStorage.setItem("minder-cart", JSON.stringify(cart));
 }, [cart]);
 ```
 
 **Why?**
+
 - Cart survives page refresh
 - Optimistic updates (instant UI)
 - Simple, reliable state management
 
 **3. Debounced Search**
+
 ```typescript
 // hooks/useDebounce.ts
 const debouncedSearch = useDebounce(filters.search, 500);
 ```
 
 **Why?**
+
 - Reduces API calls while typing
 - Better performance
 - Better UX (no flickering)
 
 ### What's Demonstrated
+
 ✅ Client-side data fetching  
 ✅ Automatic caching  
 ✅ Loading states and skeletons  
@@ -112,6 +122,7 @@ const debouncedSearch = useDebounce(filters.search, 500);
 ✅ **11 comprehensive tests**
 
 ### Tests Coverage
+
 - `useCart.test.ts` - Cart operations (add, remove, update quantity)
 - Full test suite validates all business logic
 
@@ -120,9 +131,11 @@ const debouncedSearch = useDebounce(filters.search, 500);
 ## 📁 Example 2: Next.js Blog
 
 ### Purpose
+
 Demonstrates **server-side rendering patterns** (SSG, SSR, ISR) with Next.js.
 
 ### Architecture
+
 ```
 nextjs/blog/
 ├── pages/
@@ -144,12 +157,13 @@ nextjs/blog/
 ### Key Patterns
 
 **1. SSG (Static Site Generation)**
+
 ```typescript
 // pages/index.tsx
 export const getStaticProps: GetStaticProps = async () => {
   // Runs at BUILD time only
   const { data } = await minder<Post[]>(API_ENDPOINTS.POSTS);
-  
+
   return {
     props: { posts: data?.slice(0, 10) || [] },
     // Optional: revalidate: 60 for ISR
@@ -158,86 +172,96 @@ export const getStaticProps: GetStaticProps = async () => {
 ```
 
 **When to use SSG?**
+
 - Content rarely changes
 - Can be pre-rendered
 - SEO important
 - Ultra-fast performance needed
 
 **2. SSR (Server-Side Rendering)**
+
 ```typescript
 // pages/posts/[id].tsx
 export const getServerSideProps: GetServerSideProps = async (context) => {
   // Runs on EVERY request
   const { id } = context.params!;
   const { data } = await minder<Post>(API_ENDPOINTS.POST_BY_ID(id));
-  
+
   return { props: { post: data } };
 };
 ```
 
 **When to use SSR?**
+
 - Need fresh data on every request
 - User-specific content
 - Can access cookies/headers
 - SEO + dynamic content
 
 **3. ISR (Incremental Static Regeneration)**
+
 ```typescript
 // pages/blog/[slug].tsx
 export const getStaticProps: GetStaticProps = async (context) => {
   const { slug } = context.params!;
   const { data } = await minder<Post>(API_ENDPOINTS.POST_BY_ID(slug));
-  
+
   return {
     props: { post: data },
-    revalidate: 60,  // ← Regenerate every 60 seconds
+    revalidate: 60, // ← Regenerate every 60 seconds
   };
 };
 ```
 
 **When to use ISR?**
+
 - Best of SSG + SSR
 - Static speed + fresh data
 - Content updates occasionally
 - No full rebuild needed
 
 **4. API Routes**
+
 ```typescript
 // pages/api/posts/index.ts
 export default async function handler(req, res) {
   const { data, error, success } = await minder<Post[]>(API_ENDPOINTS.POSTS);
-  
+
   if (!success) {
     return res.status(500).json({ success: false, error });
   }
-  
+
   res.status(200).json({ success: true, data });
 }
 ```
 
 **Why minder() in API routes?**
+
 - Structured error handling
 - Never throws exceptions
 - Consistent with client-side
 - No try-catch needed
 
 ### What's Demonstrated
+
 ✅ SSG for static pages  
 ✅ SSR for dynamic content  
 ✅ ISR for hybrid approach  
 ✅ API routes with minder()  
 ✅ SEO optimization  
 ✅ Component composition  
-✅ TypeScript throughout  
+✅ TypeScript throughout
 
 ---
 
 ## 📁 Example 3: Node.js Express API
 
 ### Purpose
+
 Demonstrates **server-side CRUD operations** and **API best practices**.
 
 ### Architecture
+
 ```
 nodejs/api/
 ├── src/
@@ -255,65 +279,82 @@ nodejs/api/
 ### Key Patterns
 
 **1. Using minder() in Express Routes**
+
 ```typescript
 // routes/users.ts
-router.get('/', asyncHandler(async (req, res) => {
-  const { data, error, success } = await minder<User[]>(API_ENDPOINTS.USERS);
-  
-  if (!success || error) {
-    throw new AppError(error?.message || 'Failed to fetch users', 500);
-  }
-  
-  res.json({ success: true, data });
-}));
+router.get(
+  "/",
+  asyncHandler(async (req, res) => {
+    const { data, error, success } = await minder<User[]>(API_ENDPOINTS.USERS);
+
+    if (!success || error) {
+      throw new AppError(error?.message || "Failed to fetch users", 500);
+    }
+
+    res.json({ success: true, data });
+  })
+);
 ```
 
 **Why minder() on backend?**
+
 - Same API as client-side
 - Structured error handling
 - No try-catch needed
 - Type-safe responses
 
 **2. CRUD Operations**
+
 ```typescript
 // GET
-router.get('/:id', asyncHandler(async (req, res) => {
-  const { data } = await minder<User>(API_ENDPOINTS.USER_BY_ID(req.params.id));
-  res.json({ success: true, data });
-}));
+router.get(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const { data } = await minder<User>(
+      API_ENDPOINTS.USER_BY_ID(req.params.id)
+    );
+    res.json({ success: true, data });
+  })
+);
 
 // POST
-router.post('/', asyncHandler(async (req, res) => {
-  const { data } = await minder<User>(
-    API_ENDPOINTS.USERS,
-    req.body,
-    { method: 'POST' }
-  );
-  res.status(201).json({ success: true, data });
-}));
+router.post(
+  "/",
+  asyncHandler(async (req, res) => {
+    const { data } = await minder<User>(API_ENDPOINTS.USERS, req.body, {
+      method: "POST",
+    });
+    res.status(201).json({ success: true, data });
+  })
+);
 
 // PUT
-router.put('/:id', asyncHandler(async (req, res) => {
-  const { data } = await minder<User>(
-    API_ENDPOINTS.USER_BY_ID(req.params.id),
-    req.body,
-    { method: 'PUT' }
-  );
-  res.json({ success: true, data });
-}));
+router.put(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const { data } = await minder<User>(
+      API_ENDPOINTS.USER_BY_ID(req.params.id),
+      req.body,
+      { method: "PUT" }
+    );
+    res.json({ success: true, data });
+  })
+);
 
 // DELETE
-router.delete('/:id', asyncHandler(async (req, res) => {
-  await minder(
-    API_ENDPOINTS.USER_BY_ID(req.params.id),
-    undefined,
-    { method: 'DELETE' }
-  );
-  res.json({ success: true });
-}));
+router.delete(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    await minder(API_ENDPOINTS.USER_BY_ID(req.params.id), undefined, {
+      method: "DELETE",
+    });
+    res.json({ success: true });
+  })
+);
 ```
 
 **3. Error Handling**
+
 ```typescript
 // middleware/errorHandler.ts
 export class AppError extends Error {
@@ -328,27 +369,31 @@ export class AppError extends Error {
 
 export function errorHandler(err, req, res, next) {
   const statusCode = err instanceof AppError ? err.statusCode : 500;
-  
+
   res.status(statusCode).json({
     success: false,
     error: {
       message: err.message,
-      code: err.code || 'INTERNAL_SERVER_ERROR',
+      code: err.code || "INTERNAL_SERVER_ERROR",
     },
   });
 }
 ```
 
 **4. Rate Limiting**
+
 ```typescript
 // middleware/rateLimiter.ts
-app.use(rateLimiter({
-  windowMs: 15 * 60 * 1000,  // 15 minutes
-  maxRequests: 100,          // 100 requests max
-}));
+app.use(
+  rateLimiter({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    maxRequests: 100, // 100 requests max
+  })
+);
 ```
 
 ### What's Demonstrated
+
 ✅ RESTful API design  
 ✅ CRUD operations with minder()  
 ✅ Centralized error handling  
@@ -356,16 +401,18 @@ app.use(rateLimiter({
 ✅ Input validation  
 ✅ Security middleware (helmet, cors)  
 ✅ Async error handling  
-✅ TypeScript types  
+✅ TypeScript types
 
 ---
 
 ## 📁 Example 4: React Native Offline Todo
 
 ### Purpose
+
 Demonstrates **offline-first architecture** for mobile apps.
 
 ### Architecture
+
 ```
 react-native/offline-todo/
 ├── src/
@@ -382,74 +429,78 @@ react-native/offline-todo/
 ### Key Patterns
 
 **1. Offline-First Pattern**
+
 ```typescript
 // services/sync.ts
 export async function createTodoOffline(input, isOnline) {
   const newTodo = {
     id: uuid(),
     ...input,
-    syncStatus: isOnline ? 'syncing' : 'pending',
+    syncStatus: isOnline ? "syncing" : "pending",
     localOnly: !isOnline,
   };
-  
+
   // 1. Save locally FIRST
   await addTodoToStorage(newTodo);
-  
+
   // 2. Queue for sync
   await addToSyncQueue({
     id: uuid(),
-    operation: 'create',
+    operation: "create",
     data: newTodo,
   });
-  
+
   // 3. If online, sync immediately
   if (isOnline) {
     await processSyncQueue();
   }
-  
+
   return newTodo;
 }
 ```
 
 **Why offline-first?**
+
 - Works without internet
 - Instant UI updates
 - Automatic sync when online
 - Better UX in poor network
 
 **2. Optimistic Updates**
+
 ```typescript
 // hooks/useTodos.ts
 const createTodo = async (input) => {
   // Update UI immediately (optimistic)
   const newTodo = await createTodoOffline(input, network.isConnected);
   setTodos((prev) => [newTodo, ...prev]);
-  
+
   // Actual sync happens in background
   setPendingCount((prev) => prev + 1);
 };
 ```
 
 **3. Background Sync Queue**
+
 ```typescript
 // services/sync.ts
 export async function processSyncQueue() {
   const queue = await getSyncQueue();
-  
+
   for (const item of queue) {
     try {
-      if (item.operation === 'create') {
-        await minder('/todos', item.data, { method: 'POST' });
-      } else if (item.operation === 'update') {
-        await minder(`/todos/${item.data.id}`, item.data, { method: 'PUT' });
-      } else if (item.operation === 'delete') {
-        await minder(`/todos/${item.data.id}`, undefined, { method: 'DELETE' });
+      if (item.operation === "create") {
+        await minder("/todos", item.data, { method: "POST" });
+      } else if (item.operation === "update") {
+        await minder(`/todos/${item.data.id}`, item.data, { method: "PUT" });
+      } else if (item.operation === "delete") {
+        await minder(`/todos/${item.data.id}`, undefined, { method: "DELETE" });
       }
-      
+
       // Remove from queue after success
       await removeFromSyncQueue(item.id);
     } catch (error) {
-      console.error('Sync failed for item:', item.id);
+      console.error("Sync failed for item:", item.id);
       // Keep in queue for retry
     }
   }
@@ -457,24 +508,26 @@ export async function processSyncQueue() {
 ```
 
 **4. Network Detection**
+
 ```typescript
 // hooks/useNetwork.ts
 const useNetwork = () => {
   const [isConnected, setIsConnected] = useState(true);
-  
+
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state) => {
       setIsConnected(state.isConnected);
     });
-    
+
     return unsubscribe;
   }, []);
-  
+
   return { isConnected };
 };
 ```
 
 ### What's Demonstrated
+
 ✅ Offline-first architecture  
 ✅ AsyncStorage persistence  
 ✅ Optimistic UI updates  
@@ -482,50 +535,56 @@ const useNetwork = () => {
 ✅ Network status detection  
 ✅ Conflict resolution  
 ✅ Pull to refresh  
-✅ Sync status indicators  
+✅ Sync status indicators
 
 ---
 
 ## 📁 Example 5: Expo Quick Start
 
 ### Purpose
+
 Demonstrates **platform-specific features** in Expo/React Native.
 
 ### Key Features
 
 **1. SecureStore (Encrypted Storage)**
+
 ```typescript
 // Save token securely
-await SecureStore.setItemAsync('userToken', token);
+await SecureStore.setItemAsync("userToken", token);
 
 // Load token
-const token = await SecureStore.getItemAsync('userToken');
+const token = await SecureStore.getItemAsync("userToken");
 ```
 
 **Why SecureStore?**
+
 - Encrypted storage
 - API tokens, passwords
 - Native keychain (iOS) / KeyStore (Android)
 - More secure than AsyncStorage
 
 **2. FileSystem (File Operations)**
+
 ```typescript
 // Download file
 const downloadResumable = FileSystem.createDownloadResumable(
-  'https://example.com/image.jpg',
-  FileSystem.documentDirectory + 'image.jpg'
+  "https://example.com/image.jpg",
+  FileSystem.documentDirectory + "image.jpg"
 );
 
 const result = await downloadResumable.downloadAsync();
 ```
 
 **Why FileSystem?**
+
 - Download/upload files
 - Cache images/videos
 - Offline storage
 - File manipulation
 
 **3. ImagePicker (Camera/Gallery)**
+
 ```typescript
 // Pick image from gallery
 const result = await ImagePicker.launchImageLibraryAsync({
@@ -541,34 +600,43 @@ if (!result.canceled) {
 ```
 
 **Why ImagePicker?**
+
 - Camera/gallery access
 - Image selection
 - Upload preparation
 - Crop/resize
 
 **4. Data Fetching with useMinder()**
+
 ```typescript
-const { data: user, isLoading, error } = useMinder<User>({
+const {
+  data: user,
+  isLoading,
+  error,
+} = useMinder<User>({
   route: `https://jsonplaceholder.typicode.com/users/${userId}`,
 });
 ```
 
 ### What's Demonstrated
+
 ✅ SecureStore for sensitive data  
 ✅ FileSystem for file operations  
 ✅ ImagePicker for media  
 ✅ useMinder() for data fetching  
 ✅ Platform-specific APIs  
-✅ Permissions handling  
+✅ Permissions handling
 
 ---
 
 ## 📁 Example 6: Mock API Server
 
 ### Purpose
+
 Provides **local testing server** with all endpoints needed by examples.
 
 ### Architecture
+
 ```javascript
 // mock-api/index.js
 const express = require('express');
@@ -590,6 +658,7 @@ app.delete('/users/:id', ...)
 ### Endpoints Provided
 
 **Users**
+
 - `GET /users` - All users
 - `GET /users/:id` - Single user
 - `POST /users` - Create user
@@ -597,6 +666,7 @@ app.delete('/users/:id', ...)
 - `DELETE /users/:id` - Delete user
 
 **Posts**
+
 - `GET /posts` - All posts
 - `GET /posts/:id` - Single post
 - `GET /posts?userId=1` - Filter by user
@@ -605,12 +675,14 @@ app.delete('/users/:id', ...)
 - `DELETE /posts/:id` - Delete post
 
 **Products**
+
 - `GET /products` - All products
 - `GET /products/:id` - Single product
 - `GET /products?category=electronics` - Filter by category
 - `GET /products?limit=5` - Limit results
 
 **Todos**
+
 - `GET /todos` - All todos
 - `GET /todos/:id` - Single todo
 - `GET /todos?userId=1` - Filter by user
@@ -619,34 +691,41 @@ app.delete('/users/:id', ...)
 - `DELETE /todos/:id` - Delete todo
 
 ### Why Mock API?
+
 ✅ No external dependencies  
 ✅ Fast responses  
 ✅ Full control over data  
 ✅ Works offline  
 ✅ Easy to modify  
-✅ Production-like behavior  
+✅ Production-like behavior
 
 ---
 
 ## 🎯 Common Patterns Across All Examples
 
 ### 1. **Environment-Aware Configuration**
+
 Every example adapts to environment:
+
 ```typescript
 const getApiBaseUrl = () => {
   if (process.env.API_URL) return process.env.API_URL;
-  return 'https://production-api.com';
+  return "https://production-api.com";
 };
 ```
 
 ### 2. **TypeScript Throughout**
+
 All examples use TypeScript for type safety:
+
 - Type definitions for all data structures
 - Generic types for reusable components
 - Type-safe API calls
 
 ### 3. **Error Handling**
+
 Consistent error handling pattern:
+
 ```typescript
 const { data, error, success } = await minder<T>(url);
 
@@ -656,13 +735,17 @@ if (!success || error) {
 ```
 
 ### 4. **Loading States**
+
 Every example shows loading states:
+
 - Spinners during fetch
 - Skeleton screens
 - Progress indicators
 
 ### 5. **Documentation**
+
 Every file has:
+
 - Purpose explanation
 - Why comments
 - Usage examples
@@ -672,14 +755,14 @@ Every file has:
 
 ## 📊 Code Quality Metrics
 
-| Metric | Value | Status |
-|--------|-------|--------|
-| **Total Files** | ~90 | ✅ |
-| **Lines of Code** | ~8,000 | ✅ |
-| **TypeScript Coverage** | 100% | ✅ |
-| **Documentation** | Extensive | ✅ |
-| **Tests** | 11+ | ⚠️ Need more |
-| **Examples** | 6 platforms | ✅ |
+| Metric                  | Value       | Status       |
+| ----------------------- | ----------- | ------------ |
+| **Total Files**         | ~90         | ✅           |
+| **Lines of Code**       | ~8,000      | ✅           |
+| **TypeScript Coverage** | 100%        | ✅           |
+| **Documentation**       | Extensive   | ✅           |
+| **Tests**               | 11+         | ⚠️ Need more |
+| **Examples**            | 6 platforms | ✅           |
 
 ---
 
@@ -699,21 +782,25 @@ Every file has:
 ## ⚠️ Potential Issues Found
 
 ### 1. **Import Errors in users.ts**
+
 ```typescript
 // nodejs/api/src/routes/users.ts
-import { minder, API_ENDPOINTS } from '../config/api';
+import { minder, API_ENDPOINTS } from "../config/api";
 //         ^^^^^^ - Not exported from api.ts
 ```
 
 **Fix Needed:**
+
 ```typescript
 // config/api.ts
-import { minder } from 'minder-data-provider';
+import { minder } from "minder-data-provider";
 export { minder }; // ← Add this export
 ```
 
 ### 2. **Missing Dependencies**
+
 All examples need `npm install` run before they work:
+
 - Web: React, Vite, Vitest
 - Next.js: Next, React
 - Node.js: Express, helmet, compression
@@ -722,7 +809,9 @@ All examples need `npm install` run before they work:
 **This is expected** - dependencies installed during setup.
 
 ### 3. **Test Coverage**
+
 Only web e-commerce has comprehensive tests. Other examples need:
+
 - Next.js: API route tests
 - Node.js: Endpoint tests with supertest
 - React Native: Component tests
@@ -732,16 +821,19 @@ Only web e-commerce has comprehensive tests. Other examples need:
 ## 💡 Recommendations
 
 ### High Priority
+
 1. **Fix minder export** in nodejs/api/src/config/api.ts
 2. **Add tests** for Next.js and Node.js examples
 3. **Create integration tests** for mock API
 
 ### Medium Priority
+
 4. **Add E2E tests** with Playwright/Cypress
 5. **Performance benchmarks** for each example
 6. **Add monitoring** examples (Sentry, LogRocket)
 
 ### Low Priority
+
 7. **Add PWA example** (service workers, offline)
 8. **Add GraphQL example**
 9. **Add WebSocket real-time example**
@@ -760,6 +852,7 @@ Only web e-commerce has comprehensive tests. Other examples need:
 ✅ Local testing infrastructure (Mock API)
 
 **Total value delivered:**
+
 - ~8,000 lines of production-quality code
 - 6 complete, working examples
 - Comprehensive documentation

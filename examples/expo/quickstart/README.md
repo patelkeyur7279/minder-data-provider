@@ -35,11 +35,12 @@ Scan QR code with Expo Go app (iOS/Android) or run in simulator.
 
 ```typescript
 const { data, isLoading, error } = useMinder<User>({
-  route: 'https://api.example.com/users/1',
+  route: "https://api.example.com/users/1",
 });
 ```
 
 **Why useMinder()?**
+
 - Works same as web
 - Automatic caching
 - Loading states
@@ -49,19 +50,21 @@ const { data, isLoading, error } = useMinder<User>({
 
 ```typescript
 // Save encrypted data
-await SecureStore.setItemAsync('token', 'abc123');
+await SecureStore.setItemAsync("token", "abc123");
 
 // Load encrypted data
-const token = await SecureStore.getItemAsync('token');
+const token = await SecureStore.getItemAsync("token");
 ```
 
 **When to use?**
+
 - API tokens
 - User credentials
 - Sensitive settings
 - Encryption keys
 
 **Platform:**
+
 - iOS: Keychain
 - Android: KeyStore
 - Web: Not available
@@ -71,14 +74,15 @@ const token = await SecureStore.getItemAsync('token');
 ```typescript
 // Download file
 const downloadResumable = FileSystem.createDownloadResumable(
-  'https://example.com/image.jpg',
-  FileSystem.documentDirectory + 'image.jpg'
+  "https://example.com/image.jpg",
+  FileSystem.documentDirectory + "image.jpg"
 );
 
 const result = await downloadResumable.downloadAsync();
 ```
 
 **Use cases:**
+
 - Download/upload files
 - Cache images
 - Offline storage
@@ -99,6 +103,7 @@ if (!result.canceled) {
 ```
 
 **Features:**
+
 - Camera access
 - Gallery selection
 - Crop/edit
@@ -117,16 +122,19 @@ if (!result.canceled) {
 ## 🎨 Try These Features
 
 1. **Data Fetching**
+
    - Click "Next User" to fetch different users
    - See automatic caching in action
    - Loading states handled automatically
 
 2. **Secure Storage**
+
    - Click "Save Token" to store encrypted
    - Click "Load Token" to retrieve
    - Token persists across app restarts
 
 3. **File Downloads**
+
    - Click "Download Image"
    - File saved to device
    - Check FileSystem paths
@@ -156,9 +164,12 @@ Edit `app.json` to add required permissions:
 {
   "expo": {
     "plugins": [
-      ["expo-camera", {
-        "cameraPermission": "Allow app to access camera"
-      }]
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow app to access camera"
+        }
+      ]
     ]
   }
 }
@@ -207,19 +218,23 @@ eas build --platform all
 
 ```typescript
 const uploadImage = async (uri: string) => {
-  const { data } = await minder('/upload', {
-    file: {
-      uri,
-      name: 'photo.jpg',
-      type: 'image/jpeg',
+  const { data } = await minder(
+    "/upload",
+    {
+      file: {
+        uri,
+        name: "photo.jpg",
+        type: "image/jpeg",
+      },
     },
-  }, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  });
-  
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    }
+  );
+
   return data;
 };
 ```
@@ -228,10 +243,10 @@ const uploadImage = async (uri: string) => {
 
 ```typescript
 // Load token from SecureStore
-const token = await SecureStore.getItemAsync('authToken');
+const token = await SecureStore.getItemAsync("authToken");
 
 // Use with minder
-const { data } = await minder('/protected', undefined, {
+const { data } = await minder("/protected", undefined, {
   headers: {
     Authorization: `Bearer ${token}`,
   },

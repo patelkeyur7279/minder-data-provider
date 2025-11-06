@@ -1,10 +1,10 @@
-import React from 'react';
-import Head from 'next/head';
-import Link from 'next/link';
+import React from "react";
+import Head from "next/head";
+import Link from "next/link";
 
 /**
  * Layout Component - Shared wrapper for all pages
- * 
+ *
  * Why use a layout?
  * - Consistent header/footer
  * - Shared navigation
@@ -20,42 +20,43 @@ interface LayoutProps {
 
 export default function Layout({
   children,
-  title = 'Minder Blog',
-  description = 'Blog example demonstrating SSR, SSG, and ISR with Minder',
+  title = "Minder Blog",
+  description = "Blog example demonstrating SSR, SSG, and ISR with Minder",
 }: LayoutProps) {
   return (
     <>
       <Head>
         <title>{title}</title>
-        <meta name="description" content={description} />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name='description' content={description} />
+        <meta name='viewport' content='width=device-width, initial-scale=1' />
       </Head>
 
-      <div className="layout">
-        <header className="header">
-          <div className="container">
-            <Link href="/" className="logo">
+      <div className='layout'>
+        <header className='header'>
+          <div className='container'>
+            <Link href='/' className='logo'>
               📝 Minder Blog
             </Link>
-            <nav className="nav">
-              <Link href="/">Home</Link>
-              <a href="https://github.com/yourusername/minder" target="_blank" rel="noopener">
+            <nav className='nav'>
+              <Link href='/'>Home</Link>
+              <a
+                href='https://github.com/yourusername/minder'
+                target='_blank'
+                rel='noopener'>
                 GitHub
               </a>
             </nav>
           </div>
         </header>
 
-        <main className="main">{children}</main>
+        <main className='main'>{children}</main>
 
-        <footer className="footer">
-          <div className="container">
+        <footer className='footer'>
+          <div className='container'>
             <p>
               Built with <strong>Minder Data Provider</strong> and Next.js
             </p>
-            <p className="features">
-              Demonstrating SSG • SSR • ISR
-            </p>
+            <p className='features'>Demonstrating SSG • SSR • ISR</p>
           </div>
         </footer>
       </div>
@@ -141,7 +142,7 @@ export default function Layout({
         }
 
         body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
             Oxygen, Ubuntu, Cantarell, sans-serif;
           color: #111827;
           background: #f9fafb;

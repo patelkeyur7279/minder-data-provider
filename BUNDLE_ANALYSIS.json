@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-11-04T20:00:01.239Z",
+  "timestamp": "2025-11-06T20:32:40.524Z",
   "presets": {
     "minimal": {
       "name": "Minimal (CRUD Only)",
@@ -8,12 +8,12 @@
         "crud/index"
       ],
       "claimed": "45KB",
-      "actual": "47.82KB",
-      "actualBytes": 48968,
+      "actual": "9.08KB",
+      "actualBytes": 9298,
       "files": [
         {
           "module": "crud/index",
-          "size": "47.82KB",
+          "size": "9.08KB",
           "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/crud/index.mjs"
         }
       ]
@@ -27,22 +27,22 @@
         "cache/index"
       ],
       "claimed": "90KB",
-      "actual": "144.96KB",
-      "actualBytes": 148439,
+      "actual": "35.25KB",
+      "actualBytes": 36096,
       "files": [
         {
           "module": "crud/index",
-          "size": "47.82KB",
+          "size": "9.08KB",
           "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/crud/index.mjs"
         },
         {
           "module": "auth/index",
-          "size": "48.97KB",
+          "size": "16.74KB",
           "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/auth/index.mjs"
         },
         {
           "module": "cache/index",
-          "size": "48.17KB",
+          "size": "9.43KB",
           "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/cache/index.mjs"
         }
       ]
@@ -58,32 +58,32 @@
         "ssr/index"
       ],
       "claimed": "120KB",
-      "actual": "194.45KB",
-      "actualBytes": 199117,
+      "actual": "48.56KB",
+      "actualBytes": 49725,
       "files": [
         {
           "module": "crud/index",
-          "size": "47.82KB",
+          "size": "9.08KB",
           "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/crud/index.mjs"
         },
         {
           "module": "auth/index",
-          "size": "48.97KB",
+          "size": "16.74KB",
           "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/auth/index.mjs"
         },
         {
           "module": "cache/index",
-          "size": "48.17KB",
+          "size": "9.43KB",
           "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/cache/index.mjs"
         },
         {
           "module": "websocket/index",
-          "size": "48.48KB",
+          "size": "6.77KB",
           "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/websocket/index.mjs"
         },
         {
           "module": "ssr/index",
-          "size": "1.01KB",
+          "size": "6.54KB",
           "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/ssr/index.mjs"
         }
       ]
@@ -95,12 +95,12 @@
         "index"
       ],
       "claimed": "150KB",
-      "actual": "249.58KB",
-      "actualBytes": 255570,
+      "actual": "239.62KB",
+      "actualBytes": 245371,
       "files": [
         {
           "module": "index",
-          "size": "249.58KB",
+          "size": "239.62KB",
           "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/index.mjs"
         }
       ]

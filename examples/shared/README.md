@@ -17,11 +17,13 @@ shared/
 ### Why Shared Code?
 
 1. **Single Source of Truth**
+
    - One place to update API URLs
    - Consistent types across examples
    - Easy to maintain
 
 2. **Avoid Duplication**
+
    - Don't repeat type definitions
    - Reuse endpoint configurations
    - DRY principle
@@ -37,10 +39,10 @@ shared/
 
 ```typescript
 // Import in any example
-import { 
-  getJsonPlaceholderUrl, 
-  JSONPLACEHOLDER_ENDPOINTS 
-} from '../shared/config/api';
+import {
+  getJsonPlaceholderUrl,
+  JSONPLACEHOLDER_ENDPOINTS,
+} from "../shared/config/api";
 
 // Use endpoints
 const url = getJsonPlaceholderUrl(JSONPLACEHOLDER_ENDPOINTS.POSTS);
@@ -54,7 +56,7 @@ const userUrl = getJsonPlaceholderUrl(JSONPLACEHOLDER_ENDPOINTS.USER_BY_ID(1));
 
 ```typescript
 // Import types
-import { User, Post, Product } from '../shared/types';
+import { User, Post, Product } from "../shared/types";
 
 // Use in components
 interface Props {
@@ -69,6 +71,7 @@ interface Props {
 ### JSONPlaceholder
 
 Free fake API for testing:
+
 - Posts
 - Users
 - Comments
@@ -77,6 +80,7 @@ Free fake API for testing:
 ### FakeStore API
 
 E-commerce testing:
+
 - Products
 - Categories
 - Carts

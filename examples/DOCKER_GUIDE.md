@@ -22,21 +22,25 @@ docker-compose up --build
 ## 📦 Services
 
 ### 1. Mock API Server (Port 3001)
+
 - JSONPlaceholder mock
 - FakeStore API mock
 - Local testing endpoints
 
 ### 2. Web E-commerce (Port 3000)
+
 - React + Vite
 - Product catalog
 - Shopping cart
 
 ### 3. Next.js Blog (Port 3002)
+
 - SSG/SSR/ISR demos
 - API routes
 - Blog posts
 
 ### 4. Node.js API (Port 3003)
+
 - Express server
 - REST endpoints
 - Rate limiting
@@ -56,12 +60,12 @@ API_URL=http://localhost:3001
 
 ## 📊 Service URLs
 
-| Service | URL | Description |
-|---------|-----|-------------|
-| Mock API | http://localhost:3001 | Test endpoints |
-| Web App | http://localhost:3000 | E-commerce demo |
-| Next.js | http://localhost:3002 | Blog with SSR/SSG |
-| API Server | http://localhost:3003 | REST API |
+| Service    | URL                   | Description       |
+| ---------- | --------------------- | ----------------- |
+| Mock API   | http://localhost:3001 | Test endpoints    |
+| Web App    | http://localhost:3000 | E-commerce demo   |
+| Next.js    | http://localhost:3002 | Blog with SSR/SSG |
+| API Server | http://localhost:3003 | REST API          |
 
 ## 🧪 Testing
 
@@ -85,6 +89,7 @@ docker-compose exec web sh
 ## 📝 Troubleshooting
 
 ### Port conflicts
+
 ```bash
 # Check what's using a port
 lsof -i :3000
@@ -93,6 +98,7 @@ lsof -i :3000
 ```
 
 ### Container won't start
+
 ```bash
 # View logs
 docker-compose logs [service]
@@ -102,6 +108,7 @@ docker-compose up --build [service]
 ```
 
 ### Permission issues
+
 ```bash
 # Fix node_modules permissions
 docker-compose exec web chown -R node:node node_modules

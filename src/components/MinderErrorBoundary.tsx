@@ -1,4 +1,4 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import React, { Component, ErrorInfo, ReactNode } from "react";
 
 export interface ErrorBoundaryProps {
   children: ReactNode;
@@ -16,7 +16,7 @@ interface ErrorBoundaryState {
 
 /**
  * Error Boundary component for graceful error handling in React apps
- * 
+ *
  * @example
  * ```tsx
  * <MinderErrorBoundary
@@ -29,7 +29,10 @@ interface ErrorBoundaryState {
  * </MinderErrorBoundary>
  * ```
  */
-export class MinderErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+export class MinderErrorBoundary extends Component<
+  ErrorBoundaryProps,
+  ErrorBoundaryState
+> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = {
@@ -90,12 +93,12 @@ export class MinderErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoun
 
     if (hasError && error) {
       // If custom fallback is a function, call it with error details
-      if (typeof fallback === 'function' && errorInfo) {
+      if (typeof fallback === "function" && errorInfo) {
         return fallback(error, errorInfo);
       }
 
       // If custom fallback is provided and not a function, render it
-      if (fallback && typeof fallback !== 'function') {
+      if (fallback && typeof fallback !== "function") {
         return fallback;
       }
 
@@ -103,29 +106,31 @@ export class MinderErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoun
       return (
         <div
           style={{
-            padding: '20px',
-            margin: '20px',
-            border: '1px solid #f5222d',
-            borderRadius: '4px',
-            backgroundColor: '#fff2e8',
-          }}
-        >
-          <h2 style={{ color: '#f5222d', marginTop: 0 }}>⚠️ Something went wrong</h2>
-          <details style={{ whiteSpace: 'pre-wrap', marginBottom: '10px' }}>
-            <summary style={{ cursor: 'pointer', marginBottom: '10px' }}>
+            padding: "20px",
+            margin: "20px",
+            border: "1px solid #f5222d",
+            borderRadius: "4px",
+            backgroundColor: "#fff2e8",
+          }}>
+          <h2 style={{ color: "#f5222d", marginTop: 0 }}>
+            ⚠️ Something went wrong
+          </h2>
+          <details style={{ whiteSpace: "pre-wrap", marginBottom: "10px" }}>
+            <summary style={{ cursor: "pointer", marginBottom: "10px" }}>
               Error Details
             </summary>
-            <p style={{ margin: '10px 0' }}>
+            <p style={{ margin: "10px 0" }}>
               <strong>Error:</strong> {error.toString()}
             </p>
             {errorInfo && (
-              <pre style={{ 
-                backgroundColor: '#fff', 
-                padding: '10px', 
-                borderRadius: '4px',
-                overflow: 'auto',
-                fontSize: '12px'
-              }}>
+              <pre
+                style={{
+                  backgroundColor: "#fff",
+                  padding: "10px",
+                  borderRadius: "4px",
+                  overflow: "auto",
+                  fontSize: "12px",
+                }}>
                 {errorInfo.componentStack}
               </pre>
             )}
@@ -133,14 +138,13 @@ export class MinderErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoun
           <button
             onClick={this.reset}
             style={{
-              padding: '8px 16px',
-              backgroundColor: '#1890ff',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-            }}
-          >
+              padding: "8px 16px",
+              backgroundColor: "#1890ff",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+            }}>
             Try Again
           </button>
         </div>

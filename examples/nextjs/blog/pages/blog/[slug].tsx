@@ -1,19 +1,19 @@
-import type { GetStaticPaths, GetStaticProps } from 'next';
-import Head from 'next/head';
-import Link from 'next/link';
-import { minder } from 'minder-data-provider';
-import { API_ENDPOINTS } from '../../lib/api';
-import type { Post } from '../../lib/types';
+import type { GetStaticPaths, GetStaticProps } from "next";
+import Head from "next/head";
+import Link from "next/link";
+import { minder } from "minder-data-provider";
+import { API_ENDPOINTS } from "../../lib/api";
+import type { Post } from "../../lib/types";
 
 /**
  * Blog Post Page - Using ISR (Incremental Static Regeneration)
- * 
+ *
  * Why ISR?
  * - Static speed + fresh data
  * - Best of SSG and SSR
  * - Pages regenerate in background
  * - No full rebuild needed
- * 
+ *
  * How it works:
  * - Builds static HTML initially
  * - Revalidates after X seconds
@@ -28,10 +28,10 @@ interface BlogPostProps {
 export default function BlogPost({ post }: BlogPostProps) {
   if (!post) {
     return (
-      <div className="container">
-        <div className="error">
+      <div className='container'>
+        <div className='error'>
           <h1>❌ Post Not Found</h1>
-          <Link href="/">← Back to home</Link>
+          <Link href='/'>← Back to home</Link>
         </div>
       </div>
     );
@@ -41,28 +41,31 @@ export default function BlogPost({ post }: BlogPostProps) {
     <>
       <Head>
         <title>{post.title} - Minder Blog</title>
-        <meta name="description" content={post.body.substring(0, 160)} />
+        <meta name='description' content={post.body.substring(0, 160)} />
       </Head>
 
-      <div className="container">
-        <nav className="breadcrumb">
-          <Link href="/">← Back to posts</Link>
-          <span className="badge">ISR</span>
+      <div className='container'>
+        <nav className='breadcrumb'>
+          <Link href='/'>← Back to posts</Link>
+          <span className='badge'>ISR</span>
         </nav>
 
-        <article className="post">
+        <article className='post'>
           <header>
             <h1>{post.title}</h1>
-            <p className="meta">Post ID: {post.id} • User ID: {post.userId}</p>
+            <p className='meta'>
+              Post ID: {post.id} • User ID: {post.userId}
+            </p>
           </header>
 
-          <div className="content">
+          <div className='content'>
             <p>{post.body}</p>
           </div>
 
-          <footer className="post-footer">
-            <p className="note">
-              ⚡ This page uses <strong>ISR</strong> (Incremental Static Regeneration)
+          <footer className='post-footer'>
+            <p className='note'>
+              ⚡ This page uses <strong>ISR</strong> (Incremental Static
+              Regeneration)
               <br />
               Static page that regenerates every 60 seconds
               <br />
@@ -159,7 +162,7 @@ export default function BlogPost({ post }: BlogPostProps) {
 
 /**
  * getStaticPaths - Tell Next.js which pages to pre-render
- * 
+ *
  * Why needed?
  * - Dynamic routes need to know which IDs to build
  * - Can build some/all pages at build time
@@ -171,7 +174,7 @@ export const getStaticPaths: GetStaticPaths = async () => {
    * Build pages for first 10 posts
    */
   const { data } = await minder<Post[]>(API_ENDPOINTS.POSTS);
-  
+
   const paths = (data?.slice(0, 10) || []).map((post) => ({
     params: { slug: post.id.toString() },
   }));
@@ -184,20 +187,22 @@ export const getStaticPaths: GetStaticPaths = async () => {
      * - User waits for generation
      * - Then cached for future requests
      */
-    fallback: 'blocking',
+    fallback: "blocking",
   };
 };
 
 /**
  * getStaticProps - ISR (Incremental Static Regeneration)
- * 
+ *
  * The magic: revalidate
  * - Page rebuilds after 60 seconds
  * - Happens in background
  * - Users see old version while new one builds
  * - "Stale while revalidate" pattern
  */
-export const getStaticProps: GetStaticProps<BlogPostProps> = async (context) => {
+export const getStaticProps: GetStaticProps<BlogPostProps> = async (
+  context
+) => {
   const { slug } = context.params!;
 
   const { data, error, success } = await minder<Post>(
@@ -220,7 +225,7 @@ export const getStaticProps: GetStaticProps<BlogPostProps> = async (context) => 
     },
     /**
      * revalidate: 60
-     * 
+     *
      * This is what makes it ISR!
      * - Page static at build
      * - After 60s, next request triggers rebuild

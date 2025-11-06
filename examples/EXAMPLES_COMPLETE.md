@@ -4,7 +4,7 @@
 
 **Total Files Created**: 75 files  
 **Total Lines of Code**: ~6,500 lines  
-**Platforms Covered**: Web, Next.js, Node.js, React Native, Expo  
+**Platforms Covered**: Web, Next.js, Node.js, React Native, Expo
 
 ---
 
@@ -15,6 +15,7 @@
 **Files**: 29 files | **Status**: 100% Complete | **Tests**: 11 comprehensive tests
 
 **Features**:
+
 - Product list with search, filters, sort
 - Shopping cart with localStorage
 - Checkout form with validation
@@ -23,6 +24,7 @@
 - Responsive design
 
 **Key Hooks**:
+
 - `useProducts()` - Data fetching with useMinder()
 - `useCart()` - State management + persistence
 - `useDebounce()` - Performance optimization
@@ -36,6 +38,7 @@
 **Files**: 14 files | **Status**: 100% Complete
 
 **Features**:
+
 - **SSG** (Static Site Generation) - Home page
 - **SSR** (Server-Side Rendering) - Post detail
 - **ISR** (Incremental Static Regeneration) - Blog posts with revalidate: 60
@@ -43,10 +46,11 @@
 - Shared Layout and PostCard components
 
 **Key Patterns**:
+
 ```typescript
 // SSG - Build time
 export const getStaticProps = async () => {
-  const { data } = await minder('/posts');
+  const { data } = await minder("/posts");
   return { props: { posts: data } };
 };
 
@@ -75,6 +79,7 @@ export const getStaticProps = async () => {
 **Files**: 11 files | **Status**: 100% Complete
 
 **Features**:
+
 - Express server with minder() in routes
 - CRUD endpoints (GET, POST, PUT, DELETE)
 - Rate limiting (100 req/15min)
@@ -83,6 +88,7 @@ export const getStaticProps = async () => {
 - Security headers (Helmet, CORS)
 
 **Architecture**:
+
 - `/api/users` - User CRUD
 - `/health` - Health check
 - Centralized error handling
@@ -90,17 +96,21 @@ export const getStaticProps = async () => {
 - In-memory rate limiter
 
 **Key Code**:
+
 ```typescript
 // Using minder() in Express routes
-router.get('/', asyncHandler(async (req, res) => {
-  const { data, error, success } = await minder<User[]>(API_ENDPOINTS.USERS);
-  
-  if (!success || error) {
-    throw new AppError(error?.message || 'Failed', 500);
-  }
-  
-  res.json({ success: true, data });
-}));
+router.get(
+  "/",
+  asyncHandler(async (req, res) => {
+    const { data, error, success } = await minder<User[]>(API_ENDPOINTS.USERS);
+
+    if (!success || error) {
+      throw new AppError(error?.message || "Failed", 500);
+    }
+
+    res.json({ success: true, data });
+  })
+);
 ```
 
 **Setup**: `./setup.sh && npm run dev`
@@ -112,6 +122,7 @@ router.get('/', asyncHandler(async (req, res) => {
 **Files**: 15 files | **Status**: 100% Complete
 
 **Features**:
+
 - **Offline-first architecture**
 - AsyncStorage for persistence
 - Background sync queue
@@ -121,12 +132,14 @@ router.get('/', asyncHandler(async (req, res) => {
 - Visual sync status indicators
 
 **Key Services**:
+
 - `storage.ts` - AsyncStorage operations
 - `sync.ts` - Background sync + queue
 - `useNetwork()` - Connectivity status
 - `useTodos()` - Complete CRUD with offline support
 
 **Sync Flow**:
+
 ```typescript
 1. User action → Update local storage immediately (Optimistic)
 2. Add operation to sync queue
@@ -137,6 +150,7 @@ router.get('/', asyncHandler(async (req, res) => {
 ```
 
 **Try This**:
+
 1. Enable airplane mode
 2. Add 5 todos
 3. See "pending" badges
@@ -152,6 +166,7 @@ router.get('/', asyncHandler(async (req, res) => {
 **Files**: 6 files | **Status**: 100% Complete
 
 **Features**:
+
 - `useMinder()` for data fetching
 - **SecureStore** - Encrypted storage (Keychain/KeyStore)
 - **FileSystem** - Download/upload files
@@ -163,13 +178,13 @@ router.get('/', asyncHandler(async (req, res) => {
 
 ```typescript
 // Secure Storage
-await SecureStore.setItemAsync('token', 'abc123');
-const token = await SecureStore.getItemAsync('token');
+await SecureStore.setItemAsync("token", "abc123");
+const token = await SecureStore.getItemAsync("token");
 
 // File Download
 const downloadResumable = FileSystem.createDownloadResumable(
-  'https://example.com/image.jpg',
-  FileSystem.documentDirectory + 'image.jpg'
+  "https://example.com/image.jpg",
+  FileSystem.documentDirectory + "image.jpg"
 );
 
 // Image Picker
@@ -186,13 +201,16 @@ const result = await ImagePicker.launchImageLibraryAsync({
 ## 🎯 Key Achievements
 
 ### ✅ Complete Documentation
+
 Every file includes:
+
 - **WHY explanations** - Why this approach?
 - **Use case descriptions** - When to use?
 - **Code comments** - How it works
 - **Best practices** - Production patterns
 
 ### ✅ Production-Ready Code
+
 - Full TypeScript with strict mode
 - Error handling everywhere
 - Input validation
@@ -200,13 +218,16 @@ Every file includes:
 - Performance optimizations
 
 ### ✅ Easy Setup
+
 Every example has:
+
 - `setup.sh` - One-command installation
 - `README.md` - Complete guide
 - `package.json` - Correct versions
 - `.gitignore` - Clean repo
 
 ### ✅ Diverse Patterns
+
 - **Offline-first** (React Native)
 - **Server-side rendering** (Next.js)
 - **REST API** (Node.js/Express)
@@ -217,16 +238,16 @@ Every example has:
 
 ## 📈 Statistics
 
-| Platform | Files | Lines | Tests | Features |
-|----------|-------|-------|-------|----------|
-| Web (React + Vite) | 29 | ~2,000 | 11 | E-commerce |
-| Next.js | 14 | ~1,500 | 0* | SSG/SSR/ISR |
-| Node.js | 11 | ~1,200 | 0* | REST API |
-| React Native | 15 | ~1,600 | 0* | Offline-first |
-| Expo | 6 | ~200 | 0* | Quick start |
-| **TOTAL** | **75** | **~6,500** | **11** | **5 platforms** |
+| Platform           | Files  | Lines      | Tests  | Features        |
+| ------------------ | ------ | ---------- | ------ | --------------- |
+| Web (React + Vite) | 29     | ~2,000     | 11     | E-commerce      |
+| Next.js            | 14     | ~1,500     | 0\*    | SSG/SSR/ISR     |
+| Node.js            | 11     | ~1,200     | 0\*    | REST API        |
+| React Native       | 15     | ~1,600     | 0\*    | Offline-first   |
+| Expo               | 6      | ~200       | 0\*    | Quick start     |
+| **TOTAL**          | **75** | **~6,500** | **11** | **5 platforms** |
 
-*Tests for Next.js, Node.js, React Native, Expo are pending
+\*Tests for Next.js, Node.js, React Native, Expo are pending
 
 ---
 
@@ -235,18 +256,21 @@ Every example has:
 ### Every Example Has:
 
 1. **Complete Source Code**
+
    - TypeScript throughout
    - Proper types, no `any`
    - Clean, minimal code
    - No duplication
 
 2. **Full Documentation**
+
    - Setup instructions
    - Feature explanations
    - WHY each pattern used
    - Usage examples
 
 3. **Setup Scripts**
+
    - Automatic installation
    - Dependency linking
    - Environment setup
@@ -263,14 +287,17 @@ Every example has:
 ## 🎓 Learning Path
 
 ### Beginner → Start here:
+
 1. **Web E-commerce** - Learn useMinder() basics
 2. **Expo Quick Start** - Mobile intro
 
 ### Intermediate:
+
 3. **Next.js Blog** - SSR/SSG/ISR patterns
 4. **Node.js API** - Backend usage
 
 ### Advanced:
+
 5. **React Native Offline** - Complex offline-first
 
 ---
@@ -304,6 +331,7 @@ expo start
 ## 🎯 What You Can Do Now
 
 ### Test Features:
+
 - ✅ Data fetching with caching
 - ✅ Offline-first patterns
 - ✅ Server-side rendering
@@ -314,6 +342,7 @@ expo start
 - ✅ File operations
 
 ### Learn Patterns:
+
 - ✅ Optimistic UI
 - ✅ Background sync
 - ✅ Rate limiting
@@ -323,6 +352,7 @@ expo start
 - ✅ Progressive enhancement
 
 ### Build On:
+
 - 🔨 Add authentication
 - 🔨 Add real backend
 - 🔨 Deploy to production
@@ -336,16 +366,19 @@ expo start
 ### To Complete All Examples:
 
 1. **Cross-Platform Patterns** (~10 files)
+
    - Platform detection
    - Capability checking
    - Write-once-run-anywhere
 
 2. **Electron Desktop** (~12 files)
+
    - Main process
    - Renderer process
    - IPC communication
 
 3. **Add Tests** (~15 files)
+
    - Next.js page tests
    - Node.js API tests with supertest
    - React Native component tests
@@ -362,6 +395,7 @@ expo start
 ## 🎉 Summary
 
 **You now have 5 complete, production-ready examples** demonstrating Minder Data Provider across:
+
 - ✅ Web (React)
 - ✅ Server-side (Next.js)
 - ✅ Backend (Node.js)
@@ -369,6 +403,7 @@ expo start
 - ✅ Cross-platform Mobile (Expo)
 
 **Every example**:
+
 - Works out of the box
 - Has complete documentation
 - Includes WHY explanations
@@ -382,6 +417,7 @@ expo start
 ## 🙏 Thank You!
 
 These examples demonstrate the full power and flexibility of Minder Data Provider across every major platform. Use them as:
+
 - Learning resources
 - Starting templates
 - Reference implementations

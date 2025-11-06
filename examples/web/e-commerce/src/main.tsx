@@ -1,18 +1,18 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import App from './App';
-import './utils/api'; // Initialize API configuration
-import './index.css';
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import App from "./App";
+import "./utils/api"; // Initialize API configuration
+import "./index.css";
 
 /**
  * Main Entry Point
- * 
+ *
  * Sets up:
  * - React Query (required by useMinder)
  * - API configuration (imported from utils/api)
  * - Root app component
- * 
+ *
  * Why this setup?
  * - QueryClientProvider enables useMinder() to work
  * - Single entry point, clean initialization
@@ -34,7 +34,7 @@ const queryClient = new QueryClient({
   },
 });
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     {/* 
       QueryClientProvider required for useMinder()

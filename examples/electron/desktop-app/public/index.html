@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:;">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minder Desktop App</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Custom Title Bar -->
+  <div class="title-bar">
+    <div class="title-bar-left">
+      <span class="app-icon">📦</span>
+      <span class="app-title">Minder Desktop App</span>
+    </div>
+    <div class="title-bar-right">
+      <button class="title-bar-button" id="minimize-btn" title="Minimize">−</button>
+      <button class="title-bar-button" id="maximize-btn" title="Maximize">□</button>
+      <button class="title-bar-button close" id="close-btn" title="Close">×</button>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <nav>
+        <button class="nav-item active" data-view="dashboard">
+          📊 Dashboard
+        </button>
+        <button class="nav-item" data-view="users">
+          👥 Users
+        </button>
+        <button class="nav-item" data-view="products">
+          🛍️ Products
+        </button>
+        <button class="nav-item" data-view="files">
+          📁 Files
+        </button>
+        <button class="nav-item" data-view="settings">
+          ⚙️ Settings
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div id="app-info" class="app-info"></div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Dashboard View -->
+      <div id="dashboard-view" class="view active">
+        <h1>Dashboard</h1>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-value" id="users-count">--</div>
+            <div class="stat-label">Total Users</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="products-count">--</div>
+            <div class="stat-label">Products</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="posts-count">--</div>
+            <div class="stat-label">Posts</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="storage-used">--</div>
+            <div class="stat-label">Storage Used</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>Platform Information</h2>
+          <div id="platform-info" class="info-grid"></div>
+        </div>
+
+        <div class="section">
+          <h2>Quick Actions</h2>
+          <div class="button-group">
+            <button class="btn btn-primary" onclick="testNotification()">
+              🔔 Test Notification
+            </button>
+            <button class="btn btn-secondary" onclick="refreshDashboard()">
+              🔄 Refresh Data
+            </button>
+            <button class="btn btn-secondary" onclick="exportData()">
+              💾 Export Data
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Users View -->
+      <div id="users-view" class="view">
+        <div class="view-header">
+          <h1>Users</h1>
+          <button class="btn btn-primary" onclick="loadUsers()">
+            🔄 Refresh Users
+          </button>
+        </div>
+        <div id="users-list" class="data-list"></div>
+      </div>
+
+      <!-- Products View -->
+      <div id="products-view" class="view">
+        <div class="view-header">
+          <h1>Products</h1>
+          <button class="btn btn-primary" onclick="loadProducts()">
+            🔄 Refresh Products
+          </button>
+        </div>
+        <div id="products-grid" class="products-grid"></div>
+      </div>
+
+      <!-- Files View -->
+      <div id="files-view" class="view">
+        <div class="view-header">
+          <h1>File Manager</h1>
+        </div>
+
+        <div class="file-actions">
+          <button class="btn btn-primary" onclick="selectFile()">
+            📂 Open File
+          </button>
+          <button class="btn btn-secondary" onclick="saveFile()">
+            💾 Save File
+          </button>
+        </div>
+
+        <div class="file-info" id="file-info">
+          <p class="text-muted">No file selected</p>
+        </div>
+
+        <div class="file-content" id="file-content"></div>
+      </div>
+
+      <!-- Settings View -->
+      <div id="settings-view" class="view">
+        <h1>Settings</h1>
+
+        <div class="settings-section">
+          <h2>Storage Management</h2>
+          <div class="button-group">
+            <button class="btn btn-secondary" onclick="viewStorage()">
+              👁️ View Storage
+            </button>
+            <button class="btn btn-danger" onclick="clearStorage()">
+              🗑️ Clear All Storage
+            </button>
+          </div>
+          <div id="storage-info" class="info-box"></div>
+        </div>
+
+        <div class="settings-section">
+          <h2>Application Info</h2>
+          <div id="detailed-app-info" class="info-grid"></div>
+        </div>
+
+        <div class="settings-section">
+          <h2>API Configuration</h2>
+          <div class="form-group">
+            <label>API Base URL:</label>
+            <input type="text" id="api-url" value="http://localhost:3001" class="input">
+          </div>
+          <button class="btn btn-primary" onclick="updateAPIUrl()">
+            💾 Save Configuration
+          </button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="loading-overlay" style="display: none;">
+    <div class="spinner"></div>
+    <p>Loading...</p>
+  </div>
+
+  <!-- Toast Notifications -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

@@ -47,12 +47,14 @@ src/
 ## 🛣️ API Endpoints
 
 ### Health Check
+
 ```bash
 GET /health
 # Returns server status
 ```
 
 ### Users
+
 ```bash
 GET    /api/users          # List all users (paginated)
 GET    /api/users/:id      # Get single user
@@ -67,18 +69,17 @@ DELETE /api/users/:id      # Delete user
 
 ```typescript
 // Same API as client-side!
-const { data, error, success } = await minder<User[]>(
-  API_ENDPOINTS.USERS
-);
+const { data, error, success } = await minder<User[]>(API_ENDPOINTS.USERS);
 
 if (!success || error) {
-  throw new AppError(error?.message || 'Failed to fetch', 500);
+  throw new AppError(error?.message || "Failed to fetch", 500);
 }
 
 res.json({ success: true, data });
 ```
 
 **Why this approach?**
+
 - Consistent interface (same as `useMinder()`)
 - Type-safe responses
 - Built-in error handling
@@ -87,13 +88,16 @@ res.json({ success: true, data });
 ### 2. Rate Limiting
 
 ```typescript
-app.use(rateLimiter({
-  windowMs: 15 * 60 * 1000,  // 15 minutes
-  maxRequests: 100,           // 100 requests max
-}));
+app.use(
+  rateLimiter({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    maxRequests: 100, // 100 requests max
+  })
+);
 ```
 
 **Why rate limiting?**
+
 - Prevents API abuse
 - Protects backend resources
 - Fair usage for all clients
@@ -105,10 +109,11 @@ app.use(rateLimiter({
 app.use(errorHandler);
 
 // Custom errors with status codes
-throw new AppError('User not found', 404, 'USER_NOT_FOUND');
+throw new AppError("User not found", 404, "USER_NOT_FOUND");
 ```
 
 **Why centralized?**
+
 - Consistent error responses
 - Single place to log errors
 - Cleaner route handlers
@@ -124,6 +129,7 @@ router.get('/', asyncHandler(async (req, res) => {
 ```
 
 **Why wrapper?**
+
 - Express doesn't catch async errors by default
 - Prevents unhandled promise rejections
 - Cleaner code
@@ -149,6 +155,7 @@ npm test:watch
 ## 📊 Example Requests
 
 ### Create User
+
 ```bash
 curl -X POST http://localhost:3001/api/users \
   -H "Content-Type: application/json" \
@@ -160,11 +167,13 @@ curl -X POST http://localhost:3001/api/users \
 ```
 
 ### Get Users with Pagination
+
 ```bash
 curl http://localhost:3001/api/users?page=1&limit=5
 ```
 
 ### Update User
+
 ```bash
 curl -X PUT http://localhost:3001/api/users/1 \
   -H "Content-Type: application/json" \
@@ -187,6 +196,7 @@ curl -X PUT http://localhost:3001/api/users/1 \
 3. Start production server: `npm start`
 
 For production, consider:
+
 - Use Redis for rate limiting
 - Implement proper logging (Winston, Pino)
 - Add authentication (JWT, OAuth)

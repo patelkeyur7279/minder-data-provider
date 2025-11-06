@@ -20,7 +20,7 @@ describe('Logger', () => {
     consoleLogSpy.mockRestore();
     consoleWarnSpy.mockRestore();
     consoleErrorSpy.mockRestore();
-    process.env.NODE_ENV = originalEnv;
+    (process.env as any).NODE_ENV = originalEnv;
   });
 
   describe('Constructor and Configuration', () => {
@@ -48,15 +48,15 @@ describe('Logger', () => {
     });
 
     it('should set default log level based on environment', () => {
-      process.env.NODE_ENV = 'development';
+      (process.env as any).NODE_ENV = 'development';
       const devLogger = new Logger('Dev');
       expect(devLogger.getConfig().level).toBe(LogLevel.DEBUG);
 
-      process.env.NODE_ENV = 'production';
+      (process.env as any).NODE_ENV = 'production';
       const prodLogger = new Logger('Prod');
       expect(prodLogger.getConfig().level).toBe(LogLevel.ERROR);
 
-      process.env.NODE_ENV = 'test';
+      (process.env as any).NODE_ENV = 'test';
       const testLogger = new Logger('Test');
       expect(testLogger.getConfig().level).toBe(LogLevel.WARN);
     });
@@ -168,7 +168,7 @@ describe('Logger', () => {
 
   describe('Environment Behavior', () => {
     it('should only log errors in production by default', () => {
-      process.env.NODE_ENV = 'production';
+      (process.env as any).NODE_ENV = 'production';
       const logger = new Logger('Test', { enableInProduction: true, level: LogLevel.ERROR });
       
       logger.debug('Debug');
@@ -183,7 +183,7 @@ describe('Logger', () => {
     });
 
     it('should log in production when enableInProduction is true', () => {
-      process.env.NODE_ENV = 'production';
+      (process.env as any).NODE_ENV = 'production';
       const logger = new Logger('Test', { 
         enableInProduction: true,
         level: LogLevel.DEBUG 
@@ -195,7 +195,7 @@ describe('Logger', () => {
     });
 
     it('should log in development by default', () => {
-      process.env.NODE_ENV = 'development';
+      (process.env as any).NODE_ENV = 'development';
       const logger = new Logger('Test');
       
       logger.debug('Debug message');

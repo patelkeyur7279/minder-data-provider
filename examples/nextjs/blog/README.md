@@ -1,6 +1,7 @@
 # 📝 Next.js Blog - Minder Data Provider Example
 
 A **production-ready** blog built with Next.js demonstrating:
+
 - ✅ SSR (Server-Side Rendering) with `getServerSideProps`
 - ✅ SSG (Static Site Generation) with `getStaticProps`
 - ✅ ISR (Incremental Static Regeneration)
@@ -14,6 +15,7 @@ A **production-ready** blog built with Next.js demonstrating:
 ## 🎯 What You'll Learn
 
 ### 1. Server-Side Rendering (SSR)
+
 **File**: `pages/posts/[id].tsx`
 
 ```typescript
@@ -25,6 +27,7 @@ export async function getServerSideProps(context) {
 ```
 
 **Why SSR?**
+
 - Fresh data on every request
 - SEO-friendly (rendered HTML)
 - Good for dynamic content
@@ -32,17 +35,19 @@ export async function getServerSideProps(context) {
 ---
 
 ### 2. Static Site Generation (SSG)
+
 **File**: `pages/index.tsx`
 
 ```typescript
 // Build-time data fetching
 export async function getStaticProps() {
-  const { data: posts } = await minder('posts');
+  const { data: posts } = await minder("posts");
   return { props: { posts } };
 }
 ```
 
 **Why SSG?**
+
 - Ultra-fast page loads
 - Perfect for blogs
 - Reduced server load
@@ -50,6 +55,7 @@ export async function getStaticProps() {
 ---
 
 ### 3. Incremental Static Regeneration (ISR)
+
 **File**: `pages/blog/[slug].tsx`
 
 ```typescript
@@ -63,6 +69,7 @@ export async function getStaticProps({ params }) {
 ```
 
 **Why ISR?**
+
 - Static performance + dynamic data
 - Best of both worlds
 - No full rebuild needed
@@ -70,21 +77,23 @@ export async function getStaticProps({ params }) {
 ---
 
 ### 4. API Routes
+
 **File**: `pages/api/posts/[id].ts`
 
 ```typescript
 export default async function handler(req, res) {
   const { data, error } = await minder(`posts/${req.query.id}`);
-  
+
   if (error) {
     return res.status(500).json({ error: error.message });
   }
-  
+
   res.status(200).json(data);
 }
 ```
 
 **Why API Routes?**
+
 - Backend API in same project
 - No CORS issues
 - Easy deployment
@@ -94,12 +103,14 @@ export default async function handler(req, res) {
 ## 🚀 Quick Start
 
 ### Automatic Setup
+
 ```bash
 chmod +x setup.sh
 ./setup.sh
 ```
 
 ### Manual Setup
+
 ```bash
 npm install
 cd ../../..
@@ -151,41 +162,51 @@ nextjs/blog/
 ## 🎓 Features Demonstrated
 
 ### 1. SSR with Authentication
+
 **File**: `pages/posts/[id].tsx`
 
 Shows how to:
+
 - Access cookies in `getServerSideProps`
 - Forward auth headers
 - Handle auth failures
 
 ### 2. SSG with Dynamic Routes
+
 **File**: `pages/index.tsx`
 
 Shows how to:
+
 - Fetch all posts at build time
 - Generate static HTML
 - Fast page loads
 
 ### 3. ISR with Revalidation
+
 **File**: `pages/blog/[slug].tsx`
 
 Shows how to:
+
 - Static generation with updates
 - Automatic revalidation
 - Fallback pages
 
 ### 4. API Routes with CRUD
+
 **File**: `pages/api/posts/*.ts`
 
 Shows how to:
+
 - Create REST API endpoints
 - Use `minder()` on server
 - Handle errors properly
 
 ### 5. Rate Limiting
+
 **File**: `pages/api/posts/index.ts`
 
 Shows how to:
+
 - Add rate limiting middleware
 - Prevent abuse
 - Return proper HTTP codes
@@ -199,6 +220,7 @@ npm test
 ```
 
 **Tests include**:
+
 - ✅ API route tests
 - ✅ Page rendering tests
 - ✅ SSR data fetching tests
@@ -208,30 +230,33 @@ npm test
 
 ## 📊 Performance
 
-| Metric | Value |
-|--------|-------|
+| Metric                 | Value   |
+| ---------------------- | ------- |
 | Lighthouse Performance | 100/100 |
-| First Contentful Paint | < 1s |
-| Time to Interactive | < 2s |
-| SEO Score | 100/100 |
+| First Contentful Paint | < 1s    |
+| Time to Interactive    | < 2s    |
+| SEO Score              | 100/100 |
 
 ---
 
 ## 🎯 When to Use What?
 
 ### Use SSR when:
+
 - ✅ Need fresh data on every request
 - ✅ User-specific content
 - ✅ Authentication required
 - ❌ Don't care about build time
 
 ### Use SSG when:
+
 - ✅ Content rarely changes
 - ✅ Want fastest possible loads
 - ✅ Don't need real-time data
 - ❌ OK with stale data
 
 ### Use ISR when:
+
 - ✅ Want static speed + fresh data
 - ✅ Content updates periodically
 - ✅ Large number of pages
@@ -242,12 +267,14 @@ npm test
 ## 🚀 Deployment
 
 ### Vercel (Recommended)
+
 ```bash
 npm run build
 # Deploy to Vercel
 ```
 
 ### Docker
+
 ```bash
 docker build -t nextjs-blog .
 docker run -p 3000:3000 nextjs-blog

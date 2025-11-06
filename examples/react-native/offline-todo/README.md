@@ -54,13 +54,14 @@ src/
 
 ```typescript
 // Works instantly, even offline
-await createTodo({ title: 'Buy milk' });
+await createTodo({ title: "Buy milk" });
 // ✓ Saved to AsyncStorage
 // ✓ Added to sync queue
 // ✓ Will sync when online
 ```
 
 **Why offline-first?**
+
 - Instant user feedback
 - Works anywhere (subway, airplane, poor signal)
 - Better UX than loading spinners
@@ -70,13 +71,14 @@ await createTodo({ title: 'Buy milk' });
 
 ```typescript
 // Update UI immediately
-setTodos(prev => [...prev, newTodo]);
+setTodos((prev) => [...prev, newTodo]);
 
 // Sync in background
 syncToServer(newTodo);
 ```
 
 **Why optimistic?**
+
 - App feels instant
 - No waiting for server
 - User keeps working
@@ -87,7 +89,7 @@ syncToServer(newTodo);
 ```typescript
 // Queue operations for later
 await addToSyncQueue({
-  operation: 'create',
+  operation: "create",
   data: newTodo,
 });
 
@@ -96,6 +98,7 @@ await processSyncQueue();
 ```
 
 **Why queue?**
+
 - Reliable sync
 - Retry failed operations
 - Works across app restarts
@@ -115,6 +118,7 @@ useEffect(() => {
 ```
 
 **Why detect network?**
+
 - Auto-sync on reconnect
 - Show offline indicator
 - Adjust behavior
@@ -133,6 +137,7 @@ const todos = await getTodosFromStorage();
 ```
 
 **Why AsyncStorage?**
+
 - Persistent across app restarts
 - Native performance
 - Simple key-value API
@@ -144,7 +149,7 @@ const todos = await getTodosFromStorage();
 // Add to queue
 await addToSyncQueue({
   id: generateId(),
-  operation: 'create',
+  operation: "create",
   todoId: todo.id,
   data: todo,
   timestamp: new Date().toISOString(),
@@ -158,6 +163,7 @@ for (const item of queue) {
 ```
 
 **Why queue?**
+
 - Reliable delivery
 - Order preservation
 - Retry logic
@@ -168,11 +174,12 @@ for (const item of queue) {
 ```typescript
 // Merge strategy
 const serverTodos = await fetchFromServer();
-const localOnlyTodos = localTodos.filter(t => t.localOnly);
+const localOnlyTodos = localTodos.filter((t) => t.localOnly);
 const merged = [...serverTodos, ...localOnlyTodos];
 ```
 
 **Why merge?**
+
 - Keep local changes
 - Get server updates
 - No data loss
@@ -181,6 +188,7 @@ const merged = [...serverTodos, ...localOnlyTodos];
 ## 🎮 Try These Scenarios
 
 ### Scenario 1: Create Offline
+
 1. Enable airplane mode
 2. Add a todo
 3. See "pending" status
@@ -188,6 +196,7 @@ const merged = [...serverTodos, ...localOnlyTodos];
 5. Watch auto-sync
 
 ### Scenario 2: Bulk Operations
+
 1. Add 5 todos offline
 2. Update 3 of them
 3. Delete 1
@@ -195,6 +204,7 @@ const merged = [...serverTodos, ...localOnlyTodos];
 5. Come online and sync all
 
 ### Scenario 3: Conflict Resolution
+
 1. Go offline
 2. Add local-only todos
 3. Come online
@@ -224,7 +234,7 @@ npm test:watch
 Edit `src/services/sync.ts`:
 
 ```typescript
-const API_BASE = 'https://your-api.com';
+const API_BASE = "https://your-api.com";
 ```
 
 ### Adjust Sync Behavior
@@ -234,7 +244,7 @@ Edit `src/hooks/useTodos.ts`:
 ```typescript
 // Sync immediately vs batch
 if (network.isConnected) {
-  syncTodo(item);  // Immediate
+  syncTodo(item); // Immediate
   // OR
   // Wait for manual sync
 }
@@ -243,11 +253,13 @@ if (network.isConnected) {
 ## 📱 Platform-Specific Features
 
 ### iOS
+
 - Native AsyncStorage
 - Network detection via Reachability
 - Background app refresh
 
 ### Android
+
 - Native SharedPreferences
 - Network detection via ConnectivityManager
 - Background services
