@@ -14,6 +14,7 @@
  */
 
 import type { MinderConfig } from './types.js';
+import { Logger, LogLevel } from '../utils/Logger.js';
 
 export interface DependencyModule {
   name: string;
@@ -44,9 +45,13 @@ export class LazyDependencyLoader {
   private loadedModules: Map<string, any> = new Map();
   private loadPromises: Map<string, Promise<any>> = new Map();
   private loadTimes: Map<string, number> = new Map(); // NEW: Track load times
+  private logger: Logger;
 
   constructor(config: MinderConfig) {
     this.config = config;
+    this.logger = new Logger('LazyDependencyLoader', {
+      level: config.debug?.enabled ? LogLevel.DEBUG : LogLevel.WARN
+    });
   }
 
   /**
@@ -177,18 +182,14 @@ export class LazyDependencyLoader {
         this.loadTimes.set(name, loadTime);
         this.loadPromises.delete(name);
         
-        // Log in debug mode with performance metrics
-        if (this.config.debug?.enabled) {
-          console.log(`[Minder] ✅ Loaded dependency: ${name} (${loadTime.toFixed(2)}ms)`);
-        }
+        // Log with performance metrics
+        this.logger.debug(`✅ Loaded dependency: ${name} (${loadTime.toFixed(2)}ms)`);
         
         return module;
       })
       .catch((error) => {
         this.loadPromises.delete(name);
-        if (this.config.debug?.enabled) {
-          console.error(`[Minder] ❌ Failed to load ${name}:`, error);
-        }
+        this.logger.error(`❌ Failed to load ${name}:`, error);
         return null;
       });
 
@@ -214,9 +215,7 @@ export class LazyDependencyLoader {
 
     // Load async (don't block)
     Promise.all(promises).catch((error) => {
-      if (this.config.debug?.enabled) {
-        console.error('[Minder] Failed to preload dependencies:', error);
-      }
+      this.logger.error('Failed to preload dependencies:', error);
     });
   }
 
@@ -285,44 +284,35 @@ export class LazyDependencyLoader {
    * Print performance report to console
    */
   printPerformanceReport(): void {
-    if (!this.config.debug?.enabled) {
-      return;
-    }
-    
     const metrics = this.getMetrics();
     const modules = this.getLoadedModules();
     
-    console.group('🚀 Minder Lazy Loading Performance Report');
-    console.log(`📦 Dependencies: ${metrics.loadedDependencies}/${metrics.totalDependencies} loaded`);
-    console.log(`⏱️  Total Load Time: ${metrics.totalLoadTime}ms`);
-    console.log(`📊 Average Load Time: ${metrics.averageLoadTime}ms per dependency`);
-    console.log(`💾 Total Size: ${metrics.totalSize}`);
-    console.log(`⚡ Startup Improvement: ${metrics.startupImprovement} reduction`);
+    this.logger.info('🚀 Minder Lazy Loading Performance Report');
+    this.logger.info(`📦 Dependencies: ${metrics.loadedDependencies}/${metrics.totalDependencies} loaded`);
+    this.logger.info(`⏱️  Total Load Time: ${metrics.totalLoadTime}ms`);
+    this.logger.info(`📊 Average Load Time: ${metrics.averageLoadTime}ms per dependency`);
+    this.logger.info(`💾 Total Size: ${metrics.totalSize}`);
+    this.logger.info(`⚡ Startup Improvement: ${metrics.startupImprovement} reduction`);
     
-    console.group('📋 Loaded Modules:');
+    this.logger.debug('📋 Loaded Modules:');
     modules
       .filter((m) => m.loaded)
       .forEach((m) => {
-        console.log(`  ✅ ${m.name} - ${m.size} (${m.loadTime?.toFixed(2)}ms)`);
+        this.logger.debug(`  ✅ ${m.name} - ${m.size} (${m.loadTime?.toFixed(2)}ms)`);
       });
-    console.groupEnd();
     
-    console.group('⏸️  Skipped Modules:');
+    this.logger.debug('⏸️  Skipped Modules:');
     modules
       .filter((m) => !m.loaded)
       .forEach((m) => {
-        console.log(`  ⏸️  ${m.name} - ${m.size} (not needed)`);
+        this.logger.debug(`  ⏸️  ${m.name} - ${m.size} (not needed)`);
       });
-    console.groupEnd();
     
     const recommendations = this.getRecommendations();
     if (recommendations.length > 0) {
-      console.group('💡 Recommendations:');
-      recommendations.forEach((rec) => console.log(`  • ${rec}`));
-      console.groupEnd();
+      this.logger.info('💡 Recommendations:');
+      recommendations.forEach((rec) => this.logger.info(`  • ${rec}`));
     }
-    
-    console.groupEnd();
   }
 
   /**

@@ -1,10 +1,16 @@
+import { Logger, LogLevel } from '../utils/Logger.js';
+
 export class DebugManager {
   private enabled: boolean = false;
   private logs: any[] = [];
   private performance: Map<string, number> = new Map();
+  private logger: Logger;
 
   constructor(enabled: boolean = false) {
     this.enabled = enabled;
+    this.logger = new Logger('DebugManager', {
+      level: enabled ? LogLevel.DEBUG : LogLevel.WARN
+    });
     if (enabled && typeof window !== 'undefined') {
       (window as any).__MINDER_DEBUG__ = this;
     }
@@ -22,9 +28,7 @@ export class DebugManager {
     };
     
     this.logs.push(logEntry);
-    console.group(`🔍 Minder Debug [${type.toUpperCase()}]`);
-    console.log(message, data);
-    console.groupEnd();
+    this.logger.debug(`🔍 [${type.toUpperCase()}] ${message}`, data || '');
   }
 
   startTimer(key: string) {
@@ -43,7 +47,7 @@ export class DebugManager {
         ? performance.now() 
         : Date.now();
       const duration = now - start;
-      console.log(`⏱️ ${key}: ${duration.toFixed(2)}ms`);
+      this.logger.debug(`⏱️ ${key}: ${duration.toFixed(2)}ms`);
       this.performance.delete(key);
     }
   }

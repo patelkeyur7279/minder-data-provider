@@ -5,6 +5,12 @@
  * at runtime when the package is imported.
  */
 
+import { Logger, LogLevel } from './Logger.js';
+
+const logger = new Logger('VersionValidator', {
+  level: process.env.NODE_ENV === 'development' ? LogLevel.WARN : LogLevel.ERROR
+});
+
 let hasChecked = false;
 
 export function checkReactVersionAtRuntime(): void {
@@ -36,16 +42,13 @@ export function checkReactVersionAtRuntime(): void {
       }
 
       if (reactVersions.size > 1) {
-        console.error(
-          '%c⚠️ Multiple React versions detected!',
-          'color: red; font-weight: bold; font-size: 14px;'
-        );
-        console.error('Detected versions:', Array.from(reactVersions));
-        console.error('\n🔧 To fix this issue:');
-        console.error('1. Check your package.json - React should be in peerDependencies only');
-        console.error('2. Remove React from node_modules: rm -rf node_modules/react*');
-        console.error('3. Run: npm run fix-versions (if using minder-data-provider)');
-        console.error('4. Reinstall: npm install\n');
+        logger.error('⚠️ Multiple React versions detected!');
+        logger.error('Detected versions:', Array.from(reactVersions));
+        logger.error('\n🔧 To fix this issue:');
+        logger.error('1. Check your package.json - React should be in peerDependencies only');
+        logger.error('2. Remove React from node_modules: rm -rf node_modules/react*');
+        logger.error('3. Run: npm run fix-versions (if using minder-data-provider)');
+        logger.error('4. Reinstall: npm install\n');
       }
     }
 
@@ -58,11 +61,8 @@ export function checkReactVersionAtRuntime(): void {
         const ReactDOM = require('react-dom');
         
         if (React.version && ReactDOM.version && React.version !== ReactDOM.version) {
-          console.warn(
-            `%c⚠️ React (${React.version}) and ReactDOM (${ReactDOM.version}) version mismatch!`,
-            'color: orange; font-weight: bold;'
-          );
-          console.warn('This may cause unexpected issues. Please ensure versions match.');
+          logger.warn(`⚠️ React (${React.version}) and ReactDOM (${ReactDOM.version}) version mismatch!`);
+          logger.warn('This may cause unexpected issues. Please ensure versions match.');
         }
       } catch (e) {
         // SSR or module not available, skip check
@@ -72,7 +72,7 @@ export function checkReactVersionAtRuntime(): void {
   } catch (error) {
     // Silently fail - don't break the app
     if (process.env.NODE_ENV === 'development') {
-      console.warn('Could not perform React version check:', error);
+      logger.warn('Could not perform React version check:', error);
     }
   }
 }
