@@ -53,14 +53,11 @@ app.use(
  * - Monitoring systems check health
  * - Quick way to verify server is up
  */
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   res.json({
-    success: true,
-    data: {
-      status: 'healthy',
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-    },
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
   });
 });
 

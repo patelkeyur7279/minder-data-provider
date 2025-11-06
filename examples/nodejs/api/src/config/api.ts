@@ -1,4 +1,4 @@
-import { configureMinder } from 'minder-data-provider';
+import { minder, configureMinder } from 'minder-data-provider';
 
 /**
  * API Configuration
@@ -56,3 +56,6 @@ export const API_ENDPOINTS = {
 
 // Export base URL
 export const API_BASE_URL = getApiBaseUrl();
+
+// Export minder for use in routes
+export { minder };
