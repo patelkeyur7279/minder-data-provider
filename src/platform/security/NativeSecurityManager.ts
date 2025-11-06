@@ -6,11 +6,14 @@
  * @module NativeSecurityManager
  */
 
+import { Logger, LogLevel } from '../../utils/Logger.js';
 import {
   SecurityManager,
   SecurityConfig,
   SecurityValidation,
 } from './SecurityManager.js';
+
+const logger = new Logger('NativeSecurityManager', { level: LogLevel.WARN });
 
 /**
  * Native Security Manager
@@ -117,7 +120,7 @@ export class NativeSecurityManager extends SecurityManager {
         const loadKeychain = new Function('return import("react-native-keychain")');
         this.secureStorage = await loadKeychain();
       } catch {
-        console.warn('No secure storage library available');
+        logger.warn('No secure storage library available');
       }
     }
   }
@@ -146,7 +149,7 @@ export class NativeSecurityManager extends SecurityManager {
 
       return false;
     } catch (error) {
-      console.error('Secure storage error:', error);
+      logger.error('Secure storage error:', error);
       return false;
     }
   }
@@ -173,7 +176,7 @@ export class NativeSecurityManager extends SecurityManager {
 
       return null;
     } catch (error) {
-      console.error('Secure retrieval error:', error);
+      logger.error('Secure retrieval error:', error);
       return null;
     }
   }
@@ -201,7 +204,7 @@ export class NativeSecurityManager extends SecurityManager {
 
       return false;
     } catch (error) {
-      console.error('Secure deletion error:', error);
+      logger.error('Secure deletion error:', error);
       return false;
     }
   }
@@ -213,7 +216,7 @@ export class NativeSecurityManager extends SecurityManager {
     // Certificate pinning is typically configured at the native level
     // This method can be extended to validate the configuration
     if (this.config.pinnedCertificates.length === 0) {
-      console.warn('Certificate pinning enabled but no certificates provided');
+      logger.warn('Certificate pinning enabled but no certificates provided');
     }
   }
 
@@ -267,7 +270,7 @@ export class NativeSecurityManager extends SecurityManager {
         // Convert to base64
         return btoa(String.fromCharCode(...combined));
       } catch (error) {
-        console.error('Encryption error:', error);
+        logger.error('Encryption error:', error);
       }
     }
 
@@ -302,7 +305,7 @@ export class NativeSecurityManager extends SecurityManager {
         const decoder = new TextDecoder();
         return decoder.decode(decrypted);
       } catch (error) {
-        console.error('Decryption error:', error);
+        logger.error('Decryption error:', error);
       }
     }
 
