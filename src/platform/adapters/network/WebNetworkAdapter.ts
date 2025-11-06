@@ -3,6 +3,7 @@
  * Uses native fetch API for browser environments
  */
 
+import { Logger, LogLevel } from '../../../utils/Logger.js';
 import {
   NetworkAdapter,
   NetworkRequest,
@@ -10,6 +11,8 @@ import {
   NetworkAdapterConfig,
   NetworkError,
 } from './NetworkAdapter.js';
+
+const logger = new Logger('WebNetworkAdapter', { level: LogLevel.WARN });
 
 export class WebNetworkAdapter extends NetworkAdapter {
   constructor(config: NetworkAdapterConfig = {}) {
@@ -167,7 +170,7 @@ export class WebNetworkAdapter extends NetworkAdapter {
    * Cancel all pending requests (not implemented in fetch - use AbortController per request)
    */
   cancelAll(): void {
-    console.warn('WebNetworkAdapter: cancelAll() is not supported. Use AbortSignal per request.');
+    logger.warn('WebNetworkAdapter: cancelAll() is not supported. Use AbortSignal per request.');
   }
 
   /**

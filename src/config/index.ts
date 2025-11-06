@@ -1,5 +1,8 @@
+import { Logger, LogLevel } from '../utils/Logger.js';
 import type { MinderConfig, ApiRoute } from '../core/types.js';
 import { createConfigFromPreset, type ConfigPreset, getPresetInfo } from './presets.js';
+
+const logger = new Logger('Config', { level: LogLevel.DEBUG });
 
 export interface SimpleConfig {
   apiUrl: string;
@@ -25,7 +28,7 @@ export function createMinderConfig(simple: SimpleConfig): MinderConfig {
     baseConfig = createConfigFromPreset(simple.preset);
     
     if (simple.debug) {
-      console.log(`[Minder] Using '${simple.preset}' preset:`, getPresetInfo(simple.preset));
+      logger.debug(`Using '${simple.preset}' preset:`, getPresetInfo(simple.preset));
     }
   }
   

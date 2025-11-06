@@ -7,6 +7,10 @@
  * @module middleware/rate-limiter
  */
 
+import { Logger, LogLevel } from '../utils/Logger.js';
+
+const logger = new Logger('RateLimiter', { level: LogLevel.DEBUG });
+
 /**
  * Rate limit configuration
  */
@@ -133,7 +137,7 @@ export class MemoryRateLimitStore {
 
     // Only log in development/debug mode
     if (cleanedCount > 0 && process.env.NODE_ENV === 'development') {
-      console.log(`[RateLimiter] Cleaned up ${cleanedCount} expired entries`);
+      logger.debug(`Cleaned up ${cleanedCount} expired entries`);
     }
   }
 

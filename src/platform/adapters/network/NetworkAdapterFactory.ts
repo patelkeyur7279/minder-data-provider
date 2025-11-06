@@ -3,10 +3,13 @@
  * Auto-selects the appropriate network adapter based on platform
  */
 
+import { Logger, LogLevel } from '../../../utils/Logger.js';
 import { PlatformDetector } from '../../PlatformDetector.js';
 import { NetworkAdapter, NetworkAdapterConfig } from './NetworkAdapter.js';
 import { WebNetworkAdapter } from './WebNetworkAdapter.js';
 import { NativeNetworkAdapter } from './NativeNetworkAdapter.js';
+
+const logger = new Logger('NetworkAdapterFactory', { level: LogLevel.WARN });
 
 export class NetworkAdapterFactory {
   /**
@@ -51,7 +54,7 @@ export class NetworkAdapterFactory {
       // Fallback to web adapter
       return new WebNetworkAdapter(config);
     } catch (error) {
-      console.warn('Failed to create network adapter:', error);
+      logger.warn('Failed to create network adapter:', error);
       return new WebNetworkAdapter(config);
     }
   }

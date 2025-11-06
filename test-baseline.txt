@@ -1,0 +1,193 @@
+
+> minder-data-provider@2.0.0 test
+> jest
+
+watchman warning:  opendir(/Users/patelkeyur7279/Library/Containers/com.apple.Maps/Data/Maps) -> Operation not permitted. Marking this portion of the tree deleted
+To clear this warning, run:
+`watchman watch-del '/Users/patelkeyur7279' ; watchman watch-project '/Users/patelkeyur7279'`
+
+PASS tests/token-refresh.test.ts
+PASS tests/rate-limiter.test.ts
+PASS tests/websocket-adapters.test.ts
+PASS tests/storage-adapters.test.ts
+PASS tests/performance.test.ts
+FAIL tests/useMinder.test.ts
+  ● Test suite failed to run
+
+    Incompatible React versions: The "react" and "react-dom" packages must have the exact same version. Instead got:
+      - react:      19.0.0
+      - react-dom:  19.2.0
+    Learn more: https://react.dev/warnings/version-mismatch
+
+       5 |
+       6 | import React from 'react';
+    >  7 | import { renderHook, waitFor } from '@testing-library/react';
+         | ^
+       8 | import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+       9 | import axios from 'axios';
+      10 | import { useMinder } from '../src/hooks/useMinder';
+
+      at ../../../node_modules/react-dom/cjs/react-dom-client.development.js:27935:15
+      at ../../../node_modules/react-dom/cjs/react-dom-client.development.js:27940:7
+      at Object.<anonymous> (../../../node_modules/react-dom/cjs/react-dom-client.development.js:28121:5)
+      at Object.<anonymous> (../../../node_modules/react-dom/client.js:37:20)
+      at Object.<anonymous> (node_modules/@testing-library/react/dist/pure.js:45:46)
+      at Object.<anonymous> (node_modules/@testing-library/react/dist/index.js:7:13)
+      at Object.<anonymous> (tests/useMinder.test.ts:7:1)
+
+PASS tests/ssr-support.test.ts
+PASS tests/platform-security.test.ts
+  ● Console
+
+    console.warn
+      No secure storage library available
+
+      118 |         this.secureStorage = await loadKeychain();
+      119 |       } catch {
+    > 120 |         console.warn('No secure storage library available');
+          |                 ^
+      121 |       }
+      122 |     }
+      123 |   }
+
+      at NativeSecurityManager.initializeSecureStorage (src/platform/security/NativeSecurityManager.ts:120:17)
+      at NativeSecurityManager.initialize (src/platform/security/NativeSecurityManager.ts:36:7)
+      at Object.<anonymous> (tests/platform-security.test.ts:189:5)
+
+    console.warn
+      No secure storage library available
+
+      118 |         this.secureStorage = await loadKeychain();
+      119 |       } catch {
+    > 120 |         console.warn('No secure storage library available');
+          |                 ^
+      121 |       }
+      122 |     }
+      123 |   }
+
+      at NativeSecurityManager.initializeSecureStorage (src/platform/security/NativeSecurityManager.ts:120:17)
+      at NativeSecurityManager.initialize (src/platform/security/NativeSecurityManager.ts:36:7)
+      at Object.<anonymous> (tests/platform-security.test.ts:189:5)
+
+    console.warn
+      No secure storage library available
+
+      118 |         this.secureStorage = await loadKeychain();
+      119 |       } catch {
+    > 120 |         console.warn('No secure storage library available');
+          |                 ^
+      121 |       }
+      122 |     }
+      123 |   }
+
+      at NativeSecurityManager.initializeSecureStorage (src/platform/security/NativeSecurityManager.ts:120:17)
+      at NativeSecurityManager.initialize (src/platform/security/NativeSecurityManager.ts:36:7)
+      at Object.<anonymous> (tests/platform-security.test.ts:189:5)
+
+    console.warn
+      No secure storage library available
+
+      118 |         this.secureStorage = await loadKeychain();
+      119 |       } catch {
+    > 120 |         console.warn('No secure storage library available');
+          |                 ^
+      121 |       }
+      122 |     }
+      123 |   }
+
+      at NativeSecurityManager.initializeSecureStorage (src/platform/security/NativeSecurityManager.ts:120:17)
+      at NativeSecurityManager.initialize (src/platform/security/NativeSecurityManager.ts:36:7)
+      at Object.<anonymous> (tests/platform-security.test.ts:189:5)
+
+    console.warn
+      No secure storage library available
+
+      118 |         this.secureStorage = await loadKeychain();
+      119 |       } catch {
+    > 120 |         console.warn('No secure storage library available');
+          |                 ^
+      121 |       }
+      122 |     }
+      123 |   }
+
+      at NativeSecurityManager.initializeSecureStorage (src/platform/security/NativeSecurityManager.ts:120:17)
+      at NativeSecurityManager.initialize (src/platform/security/NativeSecurityManager.ts:36:7)
+      at Object.<anonymous> (tests/platform-security.test.ts:189:5)
+
+PASS tests/upload-adapters.test.ts
+PASS tests/network-adapters.test.ts
+PASS tests/offline-support.test.ts
+  ● Console
+
+    console.warn
+      NetInfo not available. Manual network checks required.
+
+      308 |     } catch (error) {
+      309 |       // NetInfo not available, manual network checks required
+    > 310 |       console.warn('NetInfo not available. Manual network checks required.');
+          |               ^
+      311 |     }
+      312 |   }
+      313 |
+
+      at OfflineManager.setupNetworkListener (src/platform/offline/OfflineManager.ts:310:15)
+      at OfflineManager.initialize (src/platform/offline/OfflineManager.ts:281:5)
+      at Object.<anonymous> (tests/offline-support.test.ts:80:7)
+
+    console.warn
+      NetInfo not available. Manual network checks required.
+
+      308 |     } catch (error) {
+      309 |       // NetInfo not available, manual network checks required
+    > 310 |       console.warn('NetInfo not available. Manual network checks required.');
+          |               ^
+      311 |     }
+      312 |   }
+      313 |
+
+      at OfflineManager.setupNetworkListener (src/platform/offline/OfflineManager.ts:310:15)
+      at OfflineManager.initialize (src/platform/offline/OfflineManager.ts:281:5)
+      at Object.<anonymous> (tests/offline-support.test.ts:89:7)
+
+FAIL tests/advanced-features.test.ts
+  ● Advanced Features › Built-in Plugins › should execute LoggerPlugin hooks
+
+    expect(jest.fn()).toHaveBeenCalled()
+
+    Expected number of calls: >= 1
+    Received number of calls:    0
+
+      385 |       await LoggerPlugin.onInit?.({});
+      386 |
+    > 387 |       expect(consoleSpy).toHaveBeenCalled();
+          |                          ^
+      388 |       consoleSpy.mockRestore();
+      389 |     });
+      390 |   });
+
+      at Object.<anonymous> (tests/advanced-features.test.ts:387:26)
+
+PASS tests/feature-loader.test.ts
+PASS tests/platform.test.ts
+FAIL tests/infrastructure.test.ts
+  ● Package Infrastructure › should have peer dependencies defined
+
+    expect(received).toBeDefined()
+
+    Received: undefined
+
+      36 |     expect(pkg.peerDependencies).toBeDefined();
+      37 |     expect(pkg.peerDependencies['react']).toBeDefined();
+    > 38 |     expect(pkg.peerDependencies['@tanstack/react-query']).toBeDefined();
+         |                                                           ^
+      39 |   });
+      40 | });
+      41 |
+
+      at Object.<anonymous> (tests/infrastructure.test.ts:38:59)
+
+Test Suites: 3 failed, 2 skipped, 12 passed, 15 of 17 total
+Tests:       2 failed, 45 skipped, 397 passed, 444 total
+Snapshots:   0 total
+Time:        3.676 s
+Ran all test suites.

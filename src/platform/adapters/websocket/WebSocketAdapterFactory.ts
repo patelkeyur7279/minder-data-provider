@@ -6,10 +6,13 @@
  * @module WebSocketAdapterFactory
  */
 
+import { Logger, LogLevel } from '../../../utils/Logger.js';
 import { PlatformDetector } from '../../PlatformDetector.js';
 import type { WebSocketAdapter, WebSocketConfig } from './WebSocketAdapter.js';
 import { WebWebSocketAdapter } from './WebWebSocketAdapter.js';
 import { NativeWebSocketAdapter } from './NativeWebSocketAdapter.js';
+
+const logger = new Logger('WebSocketAdapterFactory', { level: LogLevel.WARN });
 
 /**
  * Create WebSocket adapter based on current platform
@@ -45,7 +48,7 @@ export function createWebSocketAdapterWithFallback(
   try {
     return createWebSocketAdapter(config);
   } catch (error) {
-    console.warn('Failed to create platform-specific WebSocket adapter, using fallback:', error);
+    logger.warn('Failed to create platform-specific WebSocket adapter, using fallback:', error);
     return new WebWebSocketAdapter(config);
   }
 }

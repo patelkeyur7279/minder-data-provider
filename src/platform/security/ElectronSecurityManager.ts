@@ -6,11 +6,14 @@
  * @module ElectronSecurityManager
  */
 
+import { Logger, LogLevel } from '../../utils/Logger.js';
 import {
   SecurityManager,
   SecurityConfig,
   SecurityValidation,
 } from './SecurityManager.js';
+
+const logger = new Logger('ElectronSecurityManager', { level: LogLevel.WARN });
 
 /**
  * Electron Security Manager
@@ -185,7 +188,7 @@ export class ElectronSecurityManager extends SecurityManager {
     }
 
     if (warnings.length > 0) {
-      console.warn('Electron Security Warnings:', warnings);
+      logger.warn('Electron Security Warnings:', warnings);
     }
   }
 

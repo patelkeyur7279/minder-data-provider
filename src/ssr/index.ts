@@ -1,4 +1,7 @@
+import { Logger, LogLevel } from '../utils/Logger.js';
 import type { MinderConfig } from '../core/types.js';
+
+const logger = new Logger('SSR', { level: LogLevel.WARN });
 
 export interface SSROptions {
   prefetch?: string[];
@@ -29,7 +32,7 @@ export async function prefetchData(config: MinderConfig, routes: string[]) {
         const response = await fetch(url);
         data[routeName] = await response.json();
       } catch (error) {
-        console.warn(`Failed to prefetch ${routeName}:`, error);
+        logger.warn(`Failed to prefetch ${routeName}:`, error);
       }
     }
   }

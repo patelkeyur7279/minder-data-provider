@@ -1,5 +1,8 @@
+import { Logger, LogLevel } from '../utils/Logger.js';
 import type { ApiRoute } from './types.js';
 import corsMiddleware from './corsMiddleware.js';
+
+const logger = new Logger('ProxyManager', { level: LogLevel.DEBUG });
 
 export interface ProxyConfig {
   enabled: boolean;
@@ -81,7 +84,7 @@ export class ProxyManager {
       try {
         const targetUrl = \`\${${this.config.baseUrl}}\${apiPath}\`;
         
-        console.log('Target URL:', targetUrl);
+        logger.debug('Target URL:', targetUrl);
         
         const response = await fetch(targetUrl, {
           method: req.method,
@@ -104,7 +107,7 @@ export class ProxyManager {
         const data = await response.json();
         res.status(response.status).json(data);
       } catch (error) {
-        console.error('Proxy error:', error);
+        logger.error('Proxy error:', error);
         res.status(500).json({ error: 'Proxy request failed', message: error.message });
       }
     }

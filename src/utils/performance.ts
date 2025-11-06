@@ -3,8 +3,11 @@
  * Provides memoization, request batching, bundle analysis, and monitoring
  */
 
+import { Logger, LogLevel } from './Logger.js';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { DependencyList } from 'react';
+
+const logger = new Logger('Performance', { level: LogLevel.WARN });
 
 // ============================================================================
 // REQUEST BATCHING
@@ -354,7 +357,7 @@ export function usePerformanceMonitor(componentName: string) {
       const avgRenderTime = renderTimes.current.reduce((sum, time) => sum + time, 0) / renderTimes.current.length;
       
       if (avgRenderTime > 16) { // More than one frame (60fps)
-        console.warn(
+        logger.warn(
           `[Performance] ${componentName} is rendering slowly (${avgRenderTime.toFixed(2)}ms avg). ` +
           `Renders: ${renderCount.current}`
         );

@@ -7,7 +7,10 @@
  * @module hydration
  */
 
+import { Logger, LogLevel } from '../../utils/Logger.js';
 import type { QueryClient, DehydratedState } from '@tanstack/react-query';
+
+const logger = new Logger('Hydration', { level: LogLevel.WARN });
 
 /**
  * Hydration configuration
@@ -71,7 +74,7 @@ export class HydrationManager {
     }
 
     if (this.hydrated && !this.config.clearStaleQueries) {
-      console.warn('QueryClient already hydrated');
+      logger.warn('QueryClient already hydrated');
       return;
     }
 
