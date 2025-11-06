@@ -70,42 +70,31 @@ export class WebSocketManager {
     }
   }
 
-  send(type: string, data: any): void {
+  send(type: string, data: unknown): void {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type, data }));
-    } else {
-      logger.warn('not connected');
     }
   }
 
-  subscribe(event: string, callback: (data: any) => void): () => void {
+  subscribe(event: string, callback: (data: unknown) => void): () => void {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());
     }
+    
     this.listeners.get(event)!.add(callback);
-
-    // Return unsubscribe function
+    
     return () => {
       const eventListeners = this.listeners.get(event);
       if (eventListeners) {
         eventListeners.delete(callback);
-        if (eventListeners.size === 0) {
-          this.listeners.delete(event);
-        }
       }
     };
   }
 
-  private handleMessage(message: { type: string; data: any }): void {
+  private handleMessage(message: { type: string; data: unknown }): void {
     const listeners = this.listeners.get(message.type);
     if (listeners) {
       listeners.forEach(callback => callback(message.data));
-    }
-
-    // Handle system messages
-    if (message.type === 'pong') {
-      // Heartbeat response received
-      return;
     }
   }
 

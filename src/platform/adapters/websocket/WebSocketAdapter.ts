@@ -270,9 +270,9 @@ export abstract class WebSocketAdapter {
   }
 
   /**
-   * Send message
+   * Send data to server
    */
-  send(data: any): void {
+  send(data: unknown): void {
     if (this.ws && this.ws.readyState === WebSocketState.OPEN) {
       const message = typeof data === 'string' ? data : JSON.stringify(data);
       this.ws.send(message);
