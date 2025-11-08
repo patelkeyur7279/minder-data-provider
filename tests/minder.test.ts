@@ -1,8 +1,7 @@
 /**
- * Comprehensive Test Suite for minder-data-provider
- * Tests cover: CRUD operations, error handling, callbacks, metadata, and edge cases
+ * @jest-environment jsdom
  */
-
+import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import axios from 'axios';
 import { minder, configureMinder } from '../src/core/minder';
 
@@ -10,30 +9,149 @@ import { minder, configureMinder } from '../src/core/minder';
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
-describe.skip('minder() - Universal Data Provider', () => {
+describe('minder() - Universal Data Provider', () => {
   beforeEach(() => {
     // Reset mocks before each test
     jest.clearAllMocks();
     
-    // Configure minder for tests
+    // Reset global config
     configureMinder({
-      baseURL: 'https://api.test.com',
-      timeout: 5000,
+      baseURL: '',
+      timeout: 30000,
+      headers: { 'Content-Type': 'application/json' },
     });
   });
 
-  afterEach(() => {
-    jest.resetAllMocks();
-  });
+  // ============================================================================
+  // CONFIGURATION
+  // ============================================================================
+  
+  describe('configureMinder', () => {
+    it('should configure global baseURL', async () => {
+      configureMinder({ baseURL: 'http://api.example.com' });
+      
+      mockedAxios.mockResolvedValueOnce({
+        data: { id: 1 },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+      
+      await minder('/users');
+      
+      expect(mockedAxios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          baseURL: 'http://api.example.com',
+        })
+      );
+    });
 
+    it('should configure global timeout', async () => {
+      configureMinder({ timeout: 60000 });
+      
+      mockedAxios.mockResolvedValueOnce({
+        data: {},
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+      
+      await minder('/test');
+      
+      expect(mockedAxios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          timeout: 60000,
+        })
+      );
+    });
+
+    it('should configure global headers', async () => {
+      configureMinder({
+        headers: {
+          'X-Custom-Header': 'value',
+        },
+      });
+      
+      mockedAxios.mockResolvedValueOnce({
+        data: {},
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+      
+      await minder('/test');
+      
+      expect(mockedAxios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'X-Custom-Header': 'value',
+          }),
+        })
+      );
+    });
+
+    it('should configure global token', async () => {
+      configureMinder({ token: 'global-token-123' });
+      
+      mockedAxios.mockResolvedValueOnce({
+        data: {},
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+      
+      await minder('/test');
+      
+      expect(mockedAxios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer global-token-123',
+          }),
+        })
+      );
+    });
+
+    it('should merge configurations', async () => {
+      configureMinder({
+        baseURL: 'http://api.example.com',
+        timeout: 45000,
+        token: 'token123',
+      });
+      
+      mockedAxios.mockResolvedValueOnce({
+        data: {},
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+      
+      await minder('/test');
+      
+      expect(mockedAxios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          baseURL: 'http://api.example.com',
+          timeout: 45000,
+          headers: expect.objectContaining({
+            Authorization: 'Bearer token123',
+          }),
+        })
+      );
+    });
+  });
+  
   // ============================================================================
   // GET REQUESTS
   // ============================================================================
   
   describe('GET Requests', () => {
-    it('should perform GET request successfully', async () => {
+    it('should perform GET request with null data', async () => {
       const mockData = { id: 1, name: 'Test User' };
-      mockedAxios.get.mockResolvedValue({ 
+      mockedAxios.mockResolvedValueOnce({ 
         data: mockData, 
         status: 200,
         statusText: 'OK',
@@ -41,20 +159,22 @@ describe.skip('minder() - Universal Data Provider', () => {
         config: {} as any
       });
 
-      const result = await minder('/users/1');
+      const result = await minder('/users/1', null);
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual(mockData);
       expect(result.error).toBeNull();
-      expect(mockedAxios.get).toHaveBeenCalledWith(
-        'https://api.test.com/users/1',
-        expect.any(Object)
+      expect(mockedAxios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: 'GET',
+          url: '/users/1',
+        })
       );
     });
 
-    it('should handle GET request with query params', async () => {
+    it('should perform GET request with undefined data', async () => {
       const mockData = [{ id: 1 }, { id: 2 }];
-      mockedAxios.get.mockResolvedValue({ 
+      mockedAxios.mockResolvedValueOnce({ 
         data: mockData,
         status: 200,
         statusText: 'OK',
@@ -62,14 +182,31 @@ describe.skip('minder() - Universal Data Provider', () => {
         config: {} as any
       });
 
-      const result = await minder('/users', null, {
-        params: { page: 1, limit: 10 }
-      });
+      const result = await minder('/users');
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual(mockData);
-      expect(mockedAxios.get).toHaveBeenCalledWith(
-        'https://api.test.com/users',
+      expect(mockedAxios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: 'GET',
+        })
+      );
+    });
+
+    it('should handle GET request with query params', async () => {
+      mockedAxios.mockResolvedValueOnce({ 
+        data: [],
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any
+      });
+
+      await minder('/users', null, {
+        params: { page: 1, limit: 10 }
+      });
+
+      expect(mockedAxios).toHaveBeenCalledWith(
         expect.objectContaining({
           params: { page: 1, limit: 10 }
         })
@@ -86,7 +223,7 @@ describe.skip('minder() - Universal Data Provider', () => {
       const postData = { name: 'New User', email: 'test@example.com' };
       const mockResponse = { id: 1, ...postData };
       
-      mockedAxios.post.mockResolvedValue({ 
+      mockedAxios.mockResolvedValueOnce({ 
         data: mockResponse,
         status: 201,
         statusText: 'Created',
@@ -94,31 +231,41 @@ describe.skip('minder() - Universal Data Provider', () => {
         config: {} as any
       });
 
-      const result = await minder('/users', postData);
+      const result = await minder('/api/users/', postData);
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual(mockResponse);
       expect(result.status).toBe(201);
-      expect(mockedAxios.post).toHaveBeenCalledWith(
-        'https://api.test.com/users',
-        postData,
-        expect.any(Object)
+      expect(mockedAxios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: 'POST',
+          data: postData,
+        })
       );
     });
 
-    it('should auto-detect POST when data is provided', async () => {
-      mockedAxios.post.mockResolvedValue({ 
-        data: {},
+    it('should encode data with model class', async () => {
+      class UserModel {
+        static encode(data: any) {
+          return { user: data };
+        }
+      }
+      
+      mockedAxios.mockResolvedValueOnce({
+        data: { id: 1 },
         status: 201,
         statusText: 'Created',
         headers: {},
-        config: {} as any
+        config: {} as any,
       });
-
-      await minder('/users', { name: 'Test' });
-
-      expect(mockedAxios.post).toHaveBeenCalled();
-      expect(mockedAxios.get).not.toHaveBeenCalled();
+      
+      await minder('/api/users/', { name: 'John' }, { model: UserModel });
+      
+      expect(mockedAxios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { user: { name: 'John' } },
+        })
+      );
     });
   });
 
@@ -129,7 +276,7 @@ describe.skip('minder() - Universal Data Provider', () => {
   describe('PUT/PATCH Requests', () => {
     it('should perform PUT request', async () => {
       const updateData = { name: 'Updated User' };
-      mockedAxios.put.mockResolvedValue({ 
+      mockedAxios.mockResolvedValueOnce({ 
         data: { id: 1, ...updateData },
         status: 200,
         statusText: 'OK',
@@ -137,19 +284,38 @@ describe.skip('minder() - Universal Data Provider', () => {
         config: {} as any
       });
 
-      const result = await minder('/users/1', updateData, { method: 'PUT' });
+      const result = await minder('/users/1', updateData);
 
       expect(result.success).toBe(true);
-      expect(mockedAxios.put).toHaveBeenCalledWith(
-        'https://api.test.com/users/1',
-        updateData,
-        expect.any(Object)
+      expect(mockedAxios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: 'PUT',
+          data: updateData,
+        })
       );
     });
 
-    it('should perform PATCH request', async () => {
+    it('should perform PUT when data has id', async () => {
+      mockedAxios.mockResolvedValueOnce({ 
+        data: { id: 1 },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any
+      });
+
+      await minder('/api/users/', { id: 1, name: 'Updated' });
+
+      expect(mockedAxios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: 'PUT',
+        })
+      );
+    });
+
+    it('should perform PATCH request with explicit method', async () => {
       const patchData = { status: 'active' };
-      mockedAxios.patch.mockResolvedValue({ 
+      mockedAxios.mockResolvedValueOnce({ 
         data: patchData,
         status: 200,
         statusText: 'OK',
@@ -157,10 +323,13 @@ describe.skip('minder() - Universal Data Provider', () => {
         config: {} as any
       });
 
-      const result = await minder('/users/1', patchData, { method: 'PATCH' });
+      await minder('/users/1', patchData, { method: 'PATCH' });
 
-      expect(result.success).toBe(true);
-      expect(mockedAxios.patch).toHaveBeenCalled();
+      expect(mockedAxios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: 'PATCH',
+        })
+      );
     });
   });
 
@@ -170,10 +339,10 @@ describe.skip('minder() - Universal Data Provider', () => {
   
   describe('DELETE Requests', () => {
     it('should perform DELETE request', async () => {
-      mockedAxios.delete.mockResolvedValue({ 
+      mockedAxios.mockResolvedValueOnce({ 
         data: { message: 'Deleted successfully' },
-        status: 200,
-        statusText: 'OK',
+        status: 204,
+        statusText: 'No Content',
         headers: {},
         config: {} as any
       });
@@ -181,93 +350,288 @@ describe.skip('minder() - Universal Data Provider', () => {
       const result = await minder('/users/1', null, { method: 'DELETE' });
 
       expect(result.success).toBe(true);
-      expect(mockedAxios.delete).toHaveBeenCalledWith(
-        'https://api.test.com/users/1',
-        expect.any(Object)
+      expect(result.status).toBe(204);
+      expect(mockedAxios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: 'DELETE',
+        })
+      );
+    });
+
+    it('should perform DELETE when data has delete indicator', async () => {
+      mockedAxios.mockResolvedValueOnce({ 
+        data: {},
+        status: 204,
+        statusText: 'No Content',
+        headers: {},
+        config: {} as any
+      });
+
+      await minder('/users/1', { delete: true });
+
+      expect(mockedAxios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: 'DELETE',
+        })
       );
     });
   });
 
   // ============================================================================
-  // ERROR HANDLING
+  // FILE UPLOADS
   // ============================================================================
   
-  describe('Error Handling', () => {
-    it('should handle network errors gracefully', async () => {
-      const networkError = new Error('Network Error');
-      (networkError as any).request = {};
-      mockedAxios.get.mockRejectedValue(networkError);
-
-      const result = await minder('/users');
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBeDefined();
-      expect(result.error?.code).toBe('NETWORK_ERROR');
-      expect(result.error?.message).toBe('Network error');
-      expect(result.data).toBeNull();
-    });
-
-    it('should handle 404 errors with user-friendly message', async () => {
-      const error = {
-        response: {
-          status: 404,
-          data: { message: 'Not found' }
-        }
-      };
-      mockedAxios.get.mockRejectedValue(error);
-
-      const result = await minder('/users/999');
-
-      expect(result.success).toBe(false);
-      expect(result.error?.status).toBe(404);
-      expect(result.error?.code).toBe('HTTP_404');
-      expect(result.error?.message).toBe('Resource not found');
-      expect(result.error?.solution).toBeDefined();
-    });
-
-    it('should handle 401 authentication errors', async () => {
-      const error = {
-        response: {
-          status: 401,
-          data: { message: 'Unauthorized' }
-        }
-      };
-      mockedAxios.get.mockRejectedValue(error);
-
-      const result = await minder('/protected');
-
-      expect(result.success).toBe(false);
-      expect(result.error?.status).toBe(401);
-      expect(result.error?.code).toBe('HTTP_401');
-      expect(result.error?.message).toBe('Authentication required');
-    });
-
-    it('should handle 500 server errors', async () => {
-      const error = {
-        response: {
-          status: 500,
-          data: { message: 'Internal Server Error' }
-        }
-      };
-      mockedAxios.get.mockRejectedValue(error);
-
-      const result = await minder('/users');
-
-      expect(result.success).toBe(false);
-      expect(result.error?.status).toBe(500);
-      expect(result.error?.code).toBe('HTTP_500');
-      expect(result.error?.message).toBe('Server error');
-    });
-
-    it('should never throw errors (always returns structured result)', async () => {
-      mockedAxios.get.mockRejectedValue(new Error('Something went wrong'));
-
-      // Should NOT throw - should return error result
-      await expect(minder('/users')).resolves.toBeDefined();
+  describe('File Uploads', () => {
+    it('should handle File upload', async () => {
+      const file = new File(['content'], 'test.txt', { type: 'text/plain' });
       
-      const result = await minder('/users');
-      expect(result.success).toBe(false);
-      expect(result.error).toBeDefined();
+      mockedAxios.mockResolvedValueOnce({
+        data: { url: 'http://example.com/file.txt' },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+      
+      const result = await minder('/upload', file);
+      
+      expect(mockedAxios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Content-Type': 'multipart/form-data',
+          }),
+        })
+      );
+      expect(result.data).toEqual({ url: 'http://example.com/file.txt' });
+    });
+
+    it('should handle Blob upload', async () => {
+      const blob = new Blob(['content'], { type: 'text/plain' });
+      
+      mockedAxios.mockResolvedValueOnce({
+        data: { success: true },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+      
+      await minder('/upload', blob);
+      
+      expect(mockedAxios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Content-Type': 'multipart/form-data',
+          }),
+        })
+      );
+    });
+
+    it('should handle FormData upload', async () => {
+      const formData = new FormData();
+      formData.append('file', new Blob(['content']));
+      
+      mockedAxios.mockResolvedValueOnce({
+        data: { success: true },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+      
+      await minder('/upload', formData);
+      
+      expect(mockedAxios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: formData,
+          headers: expect.objectContaining({
+            'Content-Type': 'multipart/form-data',
+          }),
+        })
+      );
+    });
+
+    it('should handle FileList upload', async () => {
+      // Skip if DataTransfer not available
+      if (typeof DataTransfer === 'undefined') {
+        return;
+      }
+      
+      const file1 = new File(['content1'], 'test1.txt');
+      const file2 = new File(['content2'], 'test2.txt');
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(file1);
+      dataTransfer.items.add(file2);
+      const fileList = dataTransfer.files;
+      
+      mockedAxios.mockResolvedValueOnce({
+        data: { uploaded: 2 },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+      
+      await minder('/upload', fileList);
+      
+      expect(mockedAxios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Content-Type': 'multipart/form-data',
+          }),
+        })
+      );
+    });
+
+    it('should track upload progress', async () => {
+      const file = new File(['content'], 'test.txt');
+      const onProgress = jest.fn();
+      
+      (mockedAxios as any).mockImplementationOnce((config: any) => {
+        // Simulate progress
+        if (config.onUploadProgress) {
+          config.onUploadProgress({ loaded: 50, total: 100 });
+          config.onUploadProgress({ loaded: 100, total: 100 });
+        }
+        return Promise.resolve({
+          data: { success: true },
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          config: {} as any,
+        });
+      });
+      
+      await minder('/upload', file, { onProgress });
+      
+      expect(onProgress).toHaveBeenCalledWith(
+        expect.objectContaining({
+          loaded: 50,
+          total: 100,
+          percentage: 50,
+        })
+      );
+      expect(onProgress).toHaveBeenCalledWith(
+        expect.objectContaining({
+          loaded: 100,
+          total: 100,
+          percentage: 100,
+        })
+      );
+    });
+  });
+
+  // ============================================================================
+  // AUTHENTICATION
+  // ============================================================================
+  
+  describe('Authentication', () => {
+    it('should add global token to requests', async () => {
+      configureMinder({ token: 'global-token' });
+      
+      mockedAxios.mockResolvedValueOnce({
+        data: {},
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+      
+      await minder('/protected');
+      
+      expect(mockedAxios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer global-token',
+          }),
+        })
+      );
+    });
+
+    it('should override global token with request token', async () => {
+      configureMinder({ token: 'global-token' });
+      
+      mockedAxios.mockResolvedValueOnce({
+        data: {},
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+      
+      await minder('/protected', null, { token: 'request-token' });
+      
+      expect(mockedAxios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer request-token',
+          }),
+        })
+      );
+    });
+  });
+
+  // ============================================================================
+  // CUSTOM HEADERS
+  // ============================================================================
+  
+  describe('Custom Headers', () => {
+    it('should merge custom headers with defaults', async () => {
+      mockedAxios.mockResolvedValueOnce({
+        data: {},
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+      
+      await minder('/test', null, {
+        headers: {
+          'X-Custom': 'value',
+        },
+      });
+      
+      expect(mockedAxios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            'X-Custom': 'value',
+          }),
+        })
+      );
+    });
+  });
+
+  // ============================================================================
+  // MODEL INTEGRATION
+  // ============================================================================
+  
+  describe('Model Integration', () => {
+    it('should decode response with model class', async () => {
+      class UserModel {
+        name: string;
+        
+        static decode(data: any) {
+          return new UserModel(data);
+        }
+        
+        constructor(data: any) {
+          this.name = data.name.toUpperCase();
+        }
+      }
+      
+      mockedAxios.mockResolvedValueOnce({
+        data: { name: 'john' },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+      
+      const result = await minder('/users/1', null, { model: UserModel });
+      
+      expect(result.data).toBeInstanceOf(UserModel);
+      expect((result.data as UserModel).name).toBe('JOHN');
     });
   });
 
@@ -278,7 +642,7 @@ describe.skip('minder() - Universal Data Provider', () => {
   describe('Success and Error Callbacks', () => {
     it('should call onSuccess callback on successful request', async () => {
       const mockData = { id: 1 };
-      mockedAxios.get.mockResolvedValue({ 
+      mockedAxios.mockResolvedValueOnce({ 
         data: mockData,
         status: 200,
         statusText: 'OK',
@@ -293,10 +657,9 @@ describe.skip('minder() - Universal Data Provider', () => {
     });
 
     it('should call onError callback on failed request', async () => {
-      const error = {
+      mockedAxios.mockRejectedValueOnce({
         response: { status: 404, data: {} }
-      };
-      mockedAxios.get.mockRejectedValue(error);
+      });
 
       const onError = jest.fn();
       await minder('/users/999', null, { onError });
@@ -305,48 +668,126 @@ describe.skip('minder() - Universal Data Provider', () => {
       expect(onError.mock.calls[0][0]).toHaveProperty('code', 'HTTP_404');
     });
   });
-
+  
   // ============================================================================
-  // CONFIGURATION
+  // ERROR HANDLING
   // ============================================================================
   
-  describe('Configuration', () => {
-    it('should use configured baseURL', async () => {
-      mockedAxios.get.mockResolvedValue({ 
+  describe('Error Handling', () => {
+    it('should never throw errors', async () => {
+      mockedAxios.mockRejectedValueOnce(new Error('Network error'));
+      
+      const result = await minder('/test');
+      
+      expect(result.success).toBe(false);
+      expect(result.error).toBeTruthy();
+      expect(result.data).toBeNull();
+    });
+
+    it('should handle 404 errors', async () => {
+      mockedAxios.mockRejectedValueOnce({
+        response: {
+          status: 404,
+          data: { message: 'Not found' },
+        },
+      });
+      
+      const result = await minder('/users/999');
+      
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe('HTTP_404');
+      expect(result.error?.message).toBe('Resource not found');
+      expect(result.status).toBe(404);
+    });
+
+    it('should handle 401 authentication errors', async () => {
+      mockedAxios.mockRejectedValueOnce({
+        response: {
+          status: 401,
+          data: { message: 'Unauthorized' }
+        }
+      });
+
+      const result = await minder('/protected');
+
+      expect(result.success).toBe(false);
+      expect(result.error?.status).toBe(401);
+      expect(result.error?.code).toBe('HTTP_401');
+      expect(result.error?.message).toBe('Authentication required');
+    });
+
+    it('should handle 500 server errors', async () => {
+      mockedAxios.mockRejectedValueOnce({
+        response: {
+          status: 500,
+          data: { message: 'Internal Server Error' }
+        }
+      });
+
+      const result = await minder('/users');
+
+      expect(result.success).toBe(false);
+      expect(result.error?.status).toBe(500);
+      expect(result.error?.code).toBe('HTTP_500');
+      expect(result.error?.message).toBe('Server error');
+    });
+
+    it('should handle network errors', async () => {
+      const networkError = new Error('Network Error');
+      (networkError as any).request = {};
+      mockedAxios.mockRejectedValueOnce(networkError);
+
+      const result = await minder('/users');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
+      expect(result.error?.code).toBe('NETWORK_ERROR');
+      expect(result.error?.message).toBe('Network error');
+      expect(result.data).toBeNull();
+    });
+  });
+
+  // ============================================================================
+  // OPTIONS OVERRIDE
+  // ============================================================================
+  
+  describe('Options Override', () => {
+    it('should override baseURL per request', async () => {
+      configureMinder({ baseURL: 'http://api1.example.com' });
+      
+      mockedAxios.mockResolvedValueOnce({
         data: {},
         status: 200,
         statusText: 'OK',
         headers: {},
-        config: {} as any
+        config: {} as any,
       });
-
-      await minder('/users');
-
-      expect(mockedAxios.get).toHaveBeenCalledWith(
-        'https://api.test.com/users',
-        expect.any(Object)
+      
+      await minder('/test', null, { baseURL: 'http://api2.example.com' });
+      
+      expect(mockedAxios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          baseURL: 'http://api2.example.com',
+        })
       );
     });
 
-    it('should allow custom headers', async () => {
-      mockedAxios.get.mockResolvedValue({ 
+    it('should override timeout per request', async () => {
+      configureMinder({ timeout: 30000 });
+      
+      mockedAxios.mockResolvedValueOnce({
         data: {},
         status: 200,
         statusText: 'OK',
         headers: {},
-        config: {} as any
+        config: {} as any,
       });
-
-      await minder('/users', null, {
-        headers: { 'X-Custom-Header': 'test' }
-      });
-
-      expect(mockedAxios.get).toHaveBeenCalledWith(
-        expect.any(String),
+      
+      await minder('/test', null, { timeout: 60000 });
+      
+      expect(mockedAxios).toHaveBeenCalledWith(
         expect.objectContaining({
-          headers: expect.objectContaining({
-            'X-Custom-Header': 'test'
-          })
+          timeout: 60000,
         })
       );
     });
@@ -358,12 +799,12 @@ describe.skip('minder() - Universal Data Provider', () => {
   
   describe('Response Metadata', () => {
     it('should include metadata in successful response', async () => {
-      mockedAxios.get.mockResolvedValue({ 
+      mockedAxios.mockResolvedValueOnce({ 
         data: { id: 1 },
         status: 200,
         statusText: 'OK',
-        headers: {},
-        config: {} as any
+        headers: { 'x-custom': 'value' },
+        config: {} as any,
       });
 
       const result = await minder('/users/1');
@@ -372,16 +813,155 @@ describe.skip('minder() - Universal Data Provider', () => {
       expect(result.metadata?.method).toBe('GET');
       expect(result.metadata?.url).toBe('/users/1');
       expect(result.metadata?.duration).toBeGreaterThanOrEqual(0);
+      expect(result.metadata?.cached).toBe(false);
     });
 
     it('should include metadata in error response', async () => {
-      mockedAxios.get.mockRejectedValue(new Error('Failed'));
+      mockedAxios.mockRejectedValueOnce(new Error('Failed'));
 
-      const result = await minder('/users');
+      const result = await minder('/api/users/', { name: 'test' });
 
       expect(result.metadata).toBeDefined();
-      expect(result.metadata?.method).toBe('GET');
+      expect(result.metadata?.method).toBe('POST');
+      expect(result.metadata?.url).toBe('/api/users/');
       expect(result.metadata?.duration).toBeGreaterThanOrEqual(0);
+      expect(result.metadata?.cached).toBe(false);
+    });
+
+    it('should include response headers', async () => {
+      mockedAxios.mockResolvedValueOnce({
+        data: {},
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          'content-type': 'application/json',
+          'x-rate-limit': '100',
+        },
+        config: {} as any,
+      });
+      
+      const result = await minder('/test');
+      
+      expect(result.headers).toEqual({
+        'content-type': 'application/json',
+        'x-rate-limit': '100',
+      });
+    });
+  });
+
+  // ============================================================================
+  // INTEGRATION SCENARIOS
+  // ============================================================================
+  
+  describe('Integration Scenarios', () => {
+    it('should handle complete CRUD workflow', async () => {
+      configureMinder({ baseURL: 'http://api.example.com' });
+      
+      // CREATE
+      mockedAxios.mockResolvedValueOnce({
+        data: { id: 1, name: 'John' },
+        status: 201,
+        statusText: 'Created',
+        headers: {},
+        config: {} as any,
+      });
+      
+      const createResult = await minder('/api/users/', { name: 'John' });
+      expect(createResult.success).toBe(true);
+      expect(createResult.data?.id).toBe(1);
+      
+      // READ
+      mockedAxios.mockResolvedValueOnce({
+        data: { id: 1, name: 'John' },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+      
+      const readResult = await minder('/users/1');
+      expect(readResult.data).toEqual({ id: 1, name: 'John' });
+      
+      // UPDATE
+      mockedAxios.mockResolvedValueOnce({
+        data: { id: 1, name: 'Jane' },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+      
+      const updateResult = await minder('/users/1', { name: 'Jane' });
+      expect(updateResult.data?.name).toBe('Jane');
+      
+      // DELETE
+      mockedAxios.mockResolvedValueOnce({
+        data: {},
+        status: 204,
+        statusText: 'No Content',
+        headers: {},
+        config: {} as any,
+      });
+      
+      const deleteResult = await minder('/users/1', { delete: true });
+      expect(deleteResult.status).toBe(204);
+    });
+
+    it('should handle file upload with progress and callbacks', async () => {
+      const file = new File(['content'], 'document.pdf');
+      const onProgress = jest.fn();
+      const onSuccess = jest.fn();
+      
+      (mockedAxios as any).mockImplementationOnce((config: any) => {
+        if (config.onUploadProgress) {
+          config.onUploadProgress({ loaded: 100, total: 100 });
+        }
+        return Promise.resolve({
+          data: { url: 'http://example.com/document.pdf' },
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          config: {} as any,
+        });
+      });
+      
+      const result = await minder('/upload', file, { onProgress, onSuccess });
+      
+      expect(result.success).toBe(true);
+      expect(onProgress).toHaveBeenCalled();
+      expect(onSuccess).toHaveBeenCalled();
+    });
+
+    it('should handle authentication and error recovery', async () => {
+      const onError = jest.fn();
+      
+      // First request fails with 401
+      mockedAxios.mockRejectedValueOnce({
+        response: {
+          status: 401,
+          data: { message: 'Unauthorized' },
+        },
+      });
+      
+      const failedResult = await minder('/protected', null, { onError });
+      
+      expect(failedResult.success).toBe(false);
+      expect(failedResult.error?.code).toBe('HTTP_401');
+      expect(onError).toHaveBeenCalled();
+      
+      // Retry with token
+      mockedAxios.mockResolvedValueOnce({
+        data: { secret: 'data' },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+      
+      const successResult = await minder('/protected', null, { token: 'new-token' });
+      
+      expect(successResult.success).toBe(true);
+      expect(successResult.data).toEqual({ secret: 'data' });
     });
   });
 });
