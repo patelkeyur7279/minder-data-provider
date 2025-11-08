@@ -6,12 +6,18 @@ export interface ErrorBoundaryProps {
   onError?: (error: Error, errorInfo: ErrorInfo) => void;
   resetKeys?: Array<string | number>;
   onReset?: () => void;
+  /**
+   * ARIA label for the error boundary container
+   * @default "Error boundary"
+   */
+  ariaLabel?: string;
 }
 
 interface ErrorBoundaryState {
   hasError: boolean;
   error: Error | null;
   errorInfo: ErrorInfo | null;
+  errorId: string; // For ARIA describedby
 }
 
 /**
@@ -39,6 +45,7 @@ export class MinderErrorBoundary extends Component<
       hasError: false,
       error: null,
       errorInfo: null,
+      errorId: `error-${Math.random().toString(36).substr(2, 9)}`,
     };
   }
 
@@ -80,6 +87,7 @@ export class MinderErrorBoundary extends Component<
       hasError: false,
       error: null,
       errorInfo: null,
+      errorId: `error-${Math.random().toString(36).substr(2, 9)}`,
     });
 
     if (this.props.onReset) {
@@ -88,8 +96,8 @@ export class MinderErrorBoundary extends Component<
   };
 
   render(): ReactNode {
-    const { hasError, error, errorInfo } = this.state;
-    const { children, fallback } = this.props;
+    const { hasError, error, errorInfo, errorId } = this.state;
+    const { children, fallback, ariaLabel = "Error boundary" } = this.props;
 
     if (hasError && error) {
       // If custom fallback is a function, call it with error details
@@ -102,41 +110,72 @@ export class MinderErrorBoundary extends Component<
         return fallback;
       }
 
-      // Default fallback UI
+      // Default fallback UI with full accessibility support
       return (
         <div
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+          aria-label={ariaLabel}
+          aria-describedby={errorId}
+          tabIndex={-1}
+          ref={(el) => {
+            // Auto-focus on error for screen readers
+            if (el && hasError) {
+              el.focus();
+            }
+          }}
           style={{
             padding: "20px",
             margin: "20px",
             border: "1px solid #f5222d",
             borderRadius: "4px",
             backgroundColor: "#fff2e8",
+            outline: "none",
           }}>
           <h2 style={{ color: "#f5222d", marginTop: 0 }}>
             ⚠️ Something went wrong
           </h2>
           <details style={{ whiteSpace: "pre-wrap", marginBottom: "10px" }}>
-            <summary style={{ cursor: "pointer", marginBottom: "10px" }}>
+            <summary
+              style={{ cursor: "pointer", marginBottom: "10px" }}
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  (e.target as HTMLElement).click();
+                }
+              }}>
               Error Details
             </summary>
-            <p style={{ margin: "10px 0" }}>
-              <strong>Error:</strong> {error.toString()}
-            </p>
-            {errorInfo && (
-              <pre
-                style={{
-                  backgroundColor: "#fff",
-                  padding: "10px",
-                  borderRadius: "4px",
-                  overflow: "auto",
-                  fontSize: "12px",
-                }}>
-                {errorInfo.componentStack}
-              </pre>
-            )}
+            <div id={errorId}>
+              <p style={{ margin: "10px 0" }}>
+                <strong>Error:</strong> {error.toString()}
+              </p>
+              {errorInfo && (
+                <pre
+                  style={{
+                    backgroundColor: "#fff",
+                    padding: "10px",
+                    borderRadius: "4px",
+                    overflow: "auto",
+                    fontSize: "12px",
+                  }}
+                  aria-label="Error stack trace">
+                  {errorInfo.componentStack}
+                </pre>
+              )}
+            </div>
           </details>
           <button
             onClick={this.reset}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                this.reset();
+              }
+            }}
+            aria-label="Try again to recover from error"
             style={{
               padding: "8px 16px",
               backgroundColor: "#1890ff",
