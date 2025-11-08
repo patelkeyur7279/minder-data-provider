@@ -99,6 +99,9 @@ export interface DebugConfig {
   performance?: boolean;
   devTools?: boolean;
   networkLogs?: boolean;
+  cacheLogs?: boolean;
+  authLogs?: boolean;
+  websocketLogs?: boolean;
 }
 
 export interface SecurityConfig {

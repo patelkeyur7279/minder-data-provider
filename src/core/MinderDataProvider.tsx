@@ -160,7 +160,7 @@ export function MinderDataProvider({
     const apiClient = new ApiClient(finalConfig, authManager, proxyManager, debugManager);
 
     // Create Cache Manager
-    const cacheManager = new CacheManager(queryClientRef);
+    const cacheManager = new CacheManager(queryClientRef, debugManager, finalConfig.debug?.cacheLogs);
 
     // Create WebSocket Manager if configured
     const websocketManager = finalConfig.websocket
