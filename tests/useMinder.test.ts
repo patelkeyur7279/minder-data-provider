@@ -95,6 +95,95 @@ describe('useMinder Hook', () => {
       // Should not call minder automatically
       expect(mockedMinder).not.toHaveBeenCalled();
     });
+
+    it('should not refetch when params object reference changes but values are the same', async () => {
+      const mockData = [{ id: 1, name: 'User 1' }];
+      mockedMinder.mockResolvedValue({
+        success: true,
+        data: mockData,
+        error: null,
+        status: 200,
+        metadata: {
+          method: 'GET',
+          url: '/users',
+          duration: 100,
+          cached: false,
+        },
+      });
+
+      // First render with initial params
+      const { result, rerender } = renderHook(
+        ({ params }) => useMinder('/users', { params }),
+        {
+          wrapper: createWrapper(),
+          initialProps: { params: { search: 'test' } },
+        }
+      );
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      // Should have been called once
+      expect(mockedMinder).toHaveBeenCalledTimes(1);
+
+      // Clear mock to track new calls
+      mockedMinder.mockClear();
+
+      // Rerender with new object but SAME values
+      rerender({ params: { search: 'test' } });
+
+      // Wait a bit to ensure no additional calls
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Should NOT refetch because params values are the same
+      expect(mockedMinder).not.toHaveBeenCalled();
+    });
+
+    it('should refetch when params values actually change', async () => {
+      const mockData = [{ id: 1, name: 'User 1' }];
+      mockedMinder.mockResolvedValue({
+        success: true,
+        data: mockData,
+        error: null,
+        status: 200,
+        metadata: {
+          method: 'GET',
+          url: '/users',
+          duration: 100,
+          cached: false,
+        },
+      });
+
+      // First render with initial params
+      const { result, rerender } = renderHook(
+        ({ params }) => useMinder('/users', { params }),
+        {
+          wrapper: createWrapper(),
+          initialProps: { params: { search: 'test' } },
+        }
+      );
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      // Should have been called once
+      expect(mockedMinder).toHaveBeenCalledTimes(1);
+
+      // Clear mock to track new calls
+      mockedMinder.mockClear();
+
+      // Rerender with DIFFERENT values
+      rerender({ params: { search: 'changed' } });
+
+      await waitFor(() => {
+        expect(mockedMinder).toHaveBeenCalled();
+      });
+
+      // Should refetch because params values changed
+      expect(mockedMinder).toHaveBeenCalledTimes(1);
+    });
   });
 
   // ============================================================================
