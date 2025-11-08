@@ -179,6 +179,267 @@ describe('MemoryStorageAdapter', () => {
       const removed = await storage.gc();
       expect(removed).toBe(2);
     });
+
+    it('should not remove non-expired items during GC', async () => {
+      await storage.setItem('key1', 'value1', 50);
+      await storage.setItem('key2', 'value2'); // No TTL
+      
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const removed = await storage.gc();
+      expect(removed).toBe(1);
+      
+      const value2 = await storage.getItem('key2');
+      expect(value2).toBe('value2');
+    });
+
+    it('should return 0 if no items expired', async () => {
+      await storage.setItem('key1', 'value1');
+      await storage.setItem('key2', 'value2');
+      
+      const removed = await storage.gc();
+      expect(removed).toBe(0);
+    });
+  });
+
+  describe('Item Count', () => {
+    it('should track item count accurately', async () => {
+      expect(storage.getItemCount()).toBe(0);
+      
+      await storage.setItem('key1', 'value1');
+      expect(storage.getItemCount()).toBe(1);
+      
+      await storage.setItem('key2', 'value2');
+      expect(storage.getItemCount()).toBe(2);
+      
+      await storage.removeItem('key1');
+      expect(storage.getItemCount()).toBe(1);
+      
+      await storage.clear();
+      expect(storage.getItemCount()).toBe(0);
+    });
+
+    it('should update count after TTL expiration on access', async () => {
+      await storage.setItem('key1', 'value1', 50);
+      expect(storage.getItemCount()).toBe(1);
+      
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Accessing expired item should remove it and update count
+      await storage.getItem('key1');
+      const count = storage.getItemCount();
+      expect(count).toBe(0); // Removed after accessing expired item
+    });
+  });
+
+  describe('Edge Cases', () => {
+    it('should handle empty string values', async () => {
+      await storage.setItem('key1', '');
+      const value = await storage.getItem('key1');
+      expect(value).toBe('');
+    });
+
+    it('should handle special characters in keys', async () => {
+      await storage.setItem('key:with:colons', 'value1');
+      await storage.setItem('key-with-dashes', 'value2');
+      await storage.setItem('key.with.dots', 'value3');
+      
+      expect(await storage.getItem('key:with:colons')).toBe('value1');
+      expect(await storage.getItem('key-with-dashes')).toBe('value2');
+      expect(await storage.getItem('key.with.dots')).toBe('value3');
+    });
+
+    it('should handle very long values', async () => {
+      const longValue = 'a'.repeat(10000);
+      await storage.setItem('longkey', longValue);
+      const value = await storage.getItem('longkey');
+      expect(value).toBe(longValue);
+    });
+
+    it('should handle JSON-like strings', async () => {
+      const jsonString = JSON.stringify({ foo: 'bar', nested: { value: 123 } });
+      await storage.setItem('json', jsonString);
+      const value = await storage.getItem('json');
+      expect(value).toBe(jsonString);
+    });
+
+    it('should handle unicode characters', async () => {
+      await storage.setItem('emoji', '🚀🔥💯');
+      await storage.setItem('chinese', '你好世界');
+      await storage.setItem('arabic', 'مرحبا');
+      
+      expect(await storage.getItem('emoji')).toBe('🚀🔥💯');
+      expect(await storage.getItem('chinese')).toBe('你好世界');
+      expect(await storage.getItem('arabic')).toBe('مرحبا');
+    });
+
+    it('should overwrite existing keys', async () => {
+      await storage.setItem('key1', 'value1');
+      await storage.setItem('key1', 'value2');
+      
+      const value = await storage.getItem('key1');
+      expect(value).toBe('value2');
+    });
+
+    it('should handle remove on non-existent keys', async () => {
+      await expect(storage.removeItem('nonexistent')).resolves.not.toThrow();
+    });
+
+    it('should handle multiple clears', async () => {
+      await storage.setItem('key1', 'value1');
+      await storage.clear();
+      await storage.clear();
+      
+      const keys = await storage.getAllKeys();
+      expect(keys.length).toBe(0);
+    });
+
+    it('should handle hasItem after expiration', async () => {
+      await storage.setItem('key1', 'value1', 50);
+      
+      let exists = await storage.hasItem('key1');
+      expect(exists).toBe(true);
+      
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      exists = await storage.hasItem('key1');
+      expect(exists).toBe(false);
+    });
+
+    it('should handle getAllKeys with mixed TTL items', async () => {
+      await storage.setItem('key1', 'value1', 50);
+      await storage.setItem('key2', 'value2');
+      await storage.setItem('key3', 'value3', 50);
+      
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const keys = await storage.getAllKeys();
+      expect(keys).toContain('key2');
+      expect(keys.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe('Constructor Options', () => {
+    it('should work without options', async () => {
+      const defaultStorage = new MemoryStorageAdapter();
+      await defaultStorage.setItem('key1', 'value1');
+      const value = await defaultStorage.getItem('key1');
+      expect(value).toBe('value1');
+    });
+
+    it('should apply namespace option', async () => {
+      const s1 = new MemoryStorageAdapter({ namespace: 'ns1' });
+      const s2 = new MemoryStorageAdapter({ namespace: 'ns2' });
+      
+      await s1.setItem('shared', 'value1');
+      await s2.setItem('shared', 'value2');
+      
+      expect(await s1.getItem('shared')).toBe('value1');
+      expect(await s2.getItem('shared')).toBe('value2');
+    });
+
+    it('should apply maxSize option', async () => {
+      const limited = new MemoryStorageAdapter({ maxSize: 3 });
+      
+      await limited.setItem('k1', 'v1');
+      await limited.setItem('k2', 'v2');
+      await limited.setItem('k3', 'v3');
+      await limited.setItem('k4', 'v4');
+      
+      const count = limited.getItemCount();
+      expect(count).toBeLessThanOrEqual(3);
+    });
+
+    it('should combine namespace and TTL options', async () => {
+      const storage1 = new MemoryStorageAdapter({
+        namespace: 'app',
+        ttl: 100
+      });
+      
+      await storage1.setItem('key1', 'value1');
+      
+      let value = await storage1.getItem('key1');
+      expect(value).toBe('value1');
+      
+      await new Promise(resolve => setTimeout(resolve, 150));
+      
+      value = await storage1.getItem('key1');
+      expect(value).toBeNull();
+    });
+  });
+
+  describe('Size Calculations', () => {
+    it('should return 0 for empty storage', async () => {
+      const size = await storage.getSize();
+      expect(size).toBe(0);
+    });
+
+    it('should calculate size correctly', async () => {
+      const initialSize = await storage.getSize();
+      
+      await storage.setItem('key1', 'value1');
+      const afterFirstItem = await storage.getSize();
+      
+      await storage.setItem('key2', 'value2');
+      const afterSecondItem = await storage.getSize();
+      
+      expect(afterFirstItem).toBeGreaterThan(initialSize);
+      expect(afterSecondItem).toBeGreaterThan(afterFirstItem);
+    });
+
+    it('should decrease size after item removal', async () => {
+      await storage.setItem('key1', 'value1');
+      await storage.setItem('key2', 'value2');
+      
+      const beforeRemove = await storage.getSize();
+      await storage.removeItem('key1');
+      const afterRemove = await storage.getSize();
+      
+      expect(afterRemove).toBeLessThan(beforeRemove);
+    });
+
+    it('should reset size after clear', async () => {
+      await storage.setItem('key1', 'value1');
+      await storage.setItem('key2', 'value2');
+      
+      await storage.clear();
+      const size = await storage.getSize();
+      
+      expect(size).toBe(0);
+    });
+  });
+
+  describe('TTL Override', () => {
+    it('should override default TTL with item-specific TTL', async () => {
+      const storageWithDefaultTTL = new MemoryStorageAdapter({
+        namespace: 'test',
+        ttl: 200
+      });
+      
+      await storageWithDefaultTTL.setItem('key1', 'value1', 50); // Override with shorter TTL
+      
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const value = await storageWithDefaultTTL.getItem('key1');
+      expect(value).toBeNull(); // Should expire after 50ms, not 200ms
+    });
+
+    it('should use default TTL when not specified', async () => {
+      const storageWithDefaultTTL = new MemoryStorageAdapter({
+        namespace: 'test',
+        ttl: 100
+      });
+      
+      await storageWithDefaultTTL.setItem('key1', 'value1'); // No TTL specified
+      
+      let value = await storageWithDefaultTTL.getItem('key1');
+      expect(value).toBe('value1');
+      
+      await new Promise(resolve => setTimeout(resolve, 150));
+      
+      value = await storageWithDefaultTTL.getItem('key1');
+      expect(value).toBeNull();
+    });
   });
 });
 
