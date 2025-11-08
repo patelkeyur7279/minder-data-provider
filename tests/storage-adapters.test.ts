@@ -481,41 +481,282 @@ describe('WebStorageAdapter', () => {
     await storage.clear();
   });
 
-  it('should set and get items', async () => {
-    await storage.setItem('key1', 'value1');
-    const value = await storage.getItem('key1');
-    expect(value).toBe('value1');
+  describe('Basic Operations', () => {
+    it('should set and get items', async () => {
+      await storage.setItem('key1', 'value1');
+      const value = await storage.getItem('key1');
+      expect(value).toBe('value1');
+    });
+
+    it('should handle namespace correctly', async () => {
+      await storage.setItem('key1', 'value1');
+      
+      // Check if the key is prefixed in actual storage
+      const directValue = mockStorage.getItem('test:key1');
+      expect(directValue).toBeTruthy();
+    });
+
+    it('should return null for non-existent items', async () => {
+      const value = await storage.getItem('nonexistent');
+      expect(value).toBeNull();
+    });
+
+    it('should remove items', async () => {
+      await storage.setItem('key1', 'value1');
+      await storage.removeItem('key1');
+      const value = await storage.getItem('key1');
+      expect(value).toBeNull();
+    });
+
+    it('should clear all namespaced items', async () => {
+      await storage.setItem('key1', 'value1');
+      await storage.setItem('key2', 'value2');
+      
+      await storage.clear();
+      
+      const keys = await storage.getAllKeys();
+      expect(keys.length).toBe(0);
+    });
+
+    it('should clear all items when no namespace', async () => {
+      const noNsStorage = new WebStorageAdapter(mockStorage);
+      await noNsStorage.setItem('key1', 'value1');
+      await noNsStorage.setItem('key2', 'value2');
+      
+      await noNsStorage.clear();
+      
+      expect(mockStorage.length).toBe(0);
+    });
   });
 
-  it('should handle namespace correctly', async () => {
-    await storage.setItem('key1', 'value1');
-    
-    // Check if the key is prefixed in actual storage
-    const directValue = mockStorage.getItem('test:key1');
-    expect(directValue).toBeTruthy();
+  describe('Error Handling', () => {
+    it('should handle getItem errors gracefully', async () => {
+      mockStorage.getItem = () => { throw new Error('Storage error'); };
+      
+      const value = await storage.getItem('key1');
+      expect(value).toBeNull();
+    });
+
+    it('should handle setItem errors gracefully', async () => {
+      mockStorage.setItem = () => { throw new Error('Storage error'); };
+      
+      await expect(storage.setItem('key1', 'value1')).resolves.not.toThrow();
+    });
+
+    it('should handle removeItem errors gracefully', async () => {
+      mockStorage.removeItem = () => { throw new Error('Storage error'); };
+      
+      await expect(storage.removeItem('key1')).resolves.not.toThrow();
+    });
+
+    it('should handle clear errors gracefully', async () => {
+      mockStorage.clear = () => { throw new Error('Storage error'); };
+      
+      await expect(storage.clear()).resolves.not.toThrow();
+    });
+
+    it('should handle getAllKeys errors gracefully', async () => {
+      mockStorage.key = () => { throw new Error('Storage error'); };
+      
+      const keys = await storage.getAllKeys();
+      expect(keys).toEqual([]);
+    });
+
+    it('should handle getSize errors gracefully', async () => {
+      mockStorage.getItem = () => { throw new Error('Storage error'); };
+      
+      const size = await storage.getSize();
+      expect(size).toBe(0);
+    });
   });
 
-  it('should handle quota exceeded gracefully', async () => {
-    // Override setItem to throw QuotaExceededError
-    const originalSetItem = mockStorage.setItem;
-    let callCount = 0;
-    
-    mockStorage.setItem = function(key: string, value: string) {
-      callCount++;
-      if (callCount === 1) {
+  describe('Quota Management', () => {
+    it('should handle quota exceeded gracefully', async () => {
+      // Override setItem to throw QuotaExceededError
+      const originalSetItem = mockStorage.setItem;
+      let callCount = 0;
+      
+      mockStorage.setItem = function(key: string, value: string) {
+        callCount++;
+        if (callCount === 1) {
+          const error = new DOMException('QuotaExceededError') as any;
+          (error as any).name = 'QuotaExceededError';
+          throw error;
+        }
+        originalSetItem.call(this, key, value);
+      };
+
+      // Should handle error and retry
+      await expect(storage.setItem('key1', 'value1')).resolves.not.toThrow();
+    });
+
+    it('should handle NS_ERROR_DOM_QUOTA_REACHED error', async () => {
+      const originalSetItem = mockStorage.setItem;
+      let callCount = 0;
+      
+      mockStorage.setItem = function(key: string, value: string) {
+        callCount++;
+        if (callCount === 1) {
+          const error = new DOMException('NS_ERROR_DOM_QUOTA_REACHED') as any;
+          (error as any).name = 'NS_ERROR_DOM_QUOTA_REACHED';
+          throw error;
+        }
+        originalSetItem.call(this, key, value);
+      };
+
+      await expect(storage.setItem('key1', 'value1')).resolves.not.toThrow();
+    });
+
+    it('should handle quota exceeded retry failure', async () => {
+      mockStorage.setItem = function() {
         const error = new DOMException('QuotaExceededError') as any;
         (error as any).name = 'QuotaExceededError';
         throw error;
-      }
-      originalSetItem.call(this, key, value);
-    };
+      };
 
-    // Should handle error and retry
-    await expect(storage.setItem('key1', 'value1')).resolves.not.toThrow();
+      // Should not throw even if retry fails
+      await expect(storage.setItem('key1', 'value1')).resolves.not.toThrow();
+    });
+
+    it('should get quota information when available', async () => {
+      // Skip test in Node environment since navigator.storage is browser-only
+      if (typeof navigator === 'undefined' || !navigator.storage) {
+        expect(true).toBe(true); // Skip gracefully
+        return;
+      }
+
+      const quota = await storage.getQuota();
+      expect(quota).not.toBeNull();
+    });
+
+    it('should return null when quota API unavailable', async () => {
+      const quota = await storage.getQuota();
+      expect(quota).toBeNull();
+    });
+
+    it('should handle quota estimation errors', async () => {
+      (global as any).navigator = {
+        storage: {
+          estimate: jest.fn().mockRejectedValue(new Error('Quota error'))
+        }
+      };
+
+      const quota = await storage.getQuota();
+      expect(quota).toBeNull();
+
+      delete (global as any).navigator;
+    });
+  });
+
+  describe('Storage Availability', () => {
+    it('should handle missing storage gracefully', async () => {
+      const noStorage = new WebStorageAdapter(null as any);
+      
+      await noStorage.setItem('key1', 'value1');
+      const value = await noStorage.getItem('key1');
+      expect(value).toBeNull();
+    });
+
+    it('should return empty arrays when storage unavailable', async () => {
+      const noStorage = new WebStorageAdapter(null as any);
+      
+      const keys = await noStorage.getAllKeys();
+      expect(keys).toEqual([]);
+    });
+
+    it('should return 0 size when storage unavailable', async () => {
+      const noStorage = new WebStorageAdapter(null as any);
+      
+      const size = await noStorage.getSize();
+      expect(size).toBe(0);
+    });
+  });
+
+  describe('Key Management', () => {
+    it('should get all keys', async () => {
+      await storage.setItem('key1', 'value1');
+      await storage.setItem('key2', 'value2');
+      
+      const keys = await storage.getAllKeys();
+      
+      expect(keys).toHaveLength(2);
+      expect(keys).toContain('key1');
+      expect(keys).toContain('key2');
+    });
+
+    it('should filter keys by namespace', async () => {
+      await storage.setItem('key1', 'value1');
+      
+      // Add a key without namespace
+      mockStorage.setItem('other:key', 'value');
+      
+      const keys = await storage.getAllKeys();
+      expect(keys).toContain('key1');
+      expect(keys).not.toContain('other:key');
+    });
+
+    it('should check if item exists', async () => {
+      await storage.setItem('key1', 'value1');
+      
+      expect(await storage.hasItem('key1')).toBe(true);
+      expect(await storage.hasItem('key2')).toBe(false);
+    });
+  });
+
+  describe('Size Calculations', () => {
+    it('should calculate storage size', async () => {
+      await storage.setItem('key1', 'value1');
+      await storage.setItem('key2', 'value2');
+      
+      const size = await storage.getSize();
+      expect(size).toBeGreaterThan(0);
+    });
+
+    it('should return 0 for empty storage', async () => {
+      const size = await storage.getSize();
+      expect(size).toBe(0);
+    });
+  });
+
+  describe('TTL Support', () => {
+    it('should handle expired items', async () => {
+      await storage.setItem('key1', 'value1', 50); // 50ms TTL
+      
+      let value = await storage.getItem('key1');
+      expect(value).toBe('value1');
+      
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      value = await storage.getItem('key1');
+      expect(value).toBeNull();
+    });
+
+    it('should remove expired items on access', async () => {
+      await storage.setItem('key1', 'value1', 50);
+      
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Access should trigger removal
+      await storage.getItem('key1');
+      
+      const directValue = mockStorage.getItem('test:key1');
+      expect(directValue).toBeNull();
+    });
   });
 });
 
 describe('StorageAdapterFactory', () => {
+  beforeEach(() => {
+    // Mock navigator for platform detection
+    (global as any).navigator = {
+      userAgent: 'Mozilla/5.0 (Node.js Test Environment)'
+    };
+  });
+
+  afterEach(() => {
+    delete (global as any).navigator;
+  });
+
   it('should create storage adapter', () => {
     const adapter = StorageAdapterFactory.create();
     expect(adapter).toBeDefined();
