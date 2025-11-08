@@ -2,7 +2,25 @@
 
 This guide explains how to configure **minder-data-provider** with examples and all available options.
 
-## 📋 Table of Contents
+## � Important: Next.js Users
+
+**If you're using Next.js, you MUST provide the `dynamic` field in your configuration.** 
+
+See [DYNAMIC_IMPORTS.md](./DYNAMIC_IMPORTS.md) for detailed explanation.
+
+```typescript
+import dynamic from 'next/dynamic';  // Required for Next.js
+
+export const config = createMinderConfig({
+  apiUrl: 'https://api.example.com',
+  dynamic: dynamic,  // ⚠️ REQUIRED for Next.js
+  routes: { /* ... */ }
+});
+```
+
+---
+
+## �📋 Table of Contents
 
 1. [Quick Start](#quick-start)
 2. [Configuration Presets](#configuration-presets)
@@ -213,7 +231,8 @@ const config: MinderConfig = {
   auth: {
     enabled: true,
     tokenKey: 'accessToken',
-    storage: 'cookie', // 'cookie' | 'localStorage' | 'sessionStorage' | 'memory'
+    storage: 'cookie', // Web: 'cookie' | 'sessionStorage' | 'memory'
+                       // RN: 'AsyncStorage' | 'SecureStore' (Expo) | 'memory'
     refreshUrl: '/api/auth/refresh',
     tokenRefreshThreshold: 5 * 60 * 1000 // Refresh 5 min before expiry
   },

@@ -35,7 +35,7 @@ export class StorageAdapterFactory {
 
     // Select adapter based on storage type capability
     switch (capabilities.cache.storageType) {
-      case 'localStorage':
+      case 'sessionStorage':
         return this.createWebStorage(options);
       
       case 'AsyncStorage':

@@ -566,7 +566,7 @@ const config = createMinderConfig({
   },
   auth: {
     tokenKey: 'access_token',
-    storage: 'localStorage',
+    storage: 'cookie', // ✅ Secure storage (or 'sessionStorage', 'memory')
     autoRefresh: true
   },
   security: {

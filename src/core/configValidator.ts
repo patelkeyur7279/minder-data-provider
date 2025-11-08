@@ -42,12 +42,40 @@ export function validateConfig(
       warnings.push('CSRF protection is recommended when using authentication');
     }
 
-    if (config.auth && config.auth.storage === 'localStorage') {
-      warnings.push('Consider using more secure storage options for authentication tokens');
-    }
-
     if (!config.security?.sanitization) {
       warnings.push('Data sanitization is recommended for security');
+    }
+
+    // HTTPS enforcement (production only)
+    const isProduction = process.env.NODE_ENV === 'production';
+    const httpsOnly = config.security?.httpsOnly !== false; // Default to true
+
+    if (isProduction && httpsOnly && config.apiBaseUrl) {
+      if (!config.apiBaseUrl.startsWith('https://')) {
+        errors.push('HTTPS is required for production environments. Use https:// in apiBaseUrl');
+      }
+    }
+
+    // Development warnings
+    const showDevWarnings = config.security?.developmentWarnings !== false; // Default to true
+    if (!isProduction && showDevWarnings) {
+      if (config.apiBaseUrl && config.apiBaseUrl.startsWith('http://')) {
+        warnings.push(
+          '⚠️  SECURITY WARNING: Using HTTP in development. Switch to HTTPS before deploying to production.'
+        );
+      }
+      
+      if (config.auth && config.auth.storage === 'memory') {
+        warnings.push(
+          '⚠️  DEVELOPMENT MODE: Auth tokens stored in memory will be lost on refresh. Use sessionStorage or cookie for production.'
+        );
+      }
+
+      if (!config.security?.csrfProtection) {
+        warnings.push(
+          '⚠️  SECURITY WARNING: CSRF protection is disabled. Enable it before deploying to production.'
+        );
+      }
     }
   }
 

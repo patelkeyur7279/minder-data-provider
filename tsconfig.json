@@ -43,7 +43,10 @@
     "moduleResolution": "NodeNext",
     "esModuleInterop": true,
 
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
+    
+    // Enum Preservation - Required for enums to be available at runtime
+    "preserveConstEnums": true
   },
   "include": ["src/**/*"]
 }

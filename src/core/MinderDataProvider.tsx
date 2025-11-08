@@ -154,17 +154,17 @@ export function MinderDataProvider({
     });
 
     // Create Auth Manager
-    const authManager = new AuthManager(finalConfig.auth);
+    const authManager = new AuthManager(finalConfig.auth, debugManager, finalConfig.debug?.authLogs);
 
     // Create API Client with CORS support and proxy
-    const apiClient = new ApiClient(finalConfig, authManager, proxyManager);
+    const apiClient = new ApiClient(finalConfig, authManager, proxyManager, debugManager);
 
     // Create Cache Manager
-    const cacheManager = new CacheManager(queryClientRef);
+    const cacheManager = new CacheManager(queryClientRef, debugManager, finalConfig.debug?.cacheLogs);
 
     // Create WebSocket Manager if configured
     const websocketManager = finalConfig.websocket
-      ? new WebSocketManager(finalConfig.websocket, authManager)
+      ? new WebSocketManager(finalConfig.websocket, authManager, debugManager, finalConfig.debug?.websocketLogs)
       : undefined;
 
     // Generate Redux slices for all routes

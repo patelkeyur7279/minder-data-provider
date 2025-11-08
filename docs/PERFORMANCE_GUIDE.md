@@ -186,12 +186,11 @@ const cache = useCache();
 cache.set('users', userData, 60000);  // 1 minute TTL
 ```
 
-**2. Local Storage Cache (Persistent)**
+**2. Session Storage Cache (Persistent per tab)**
 ```typescript
 const config = createMinderConfig({
-  cache: {
-    storage: 'localStorage',  // Persists across sessions
-    ttl: 3600000             // 1 hour
+  auth: {
+    storage: 'sessionStorage',  // Persists across page refreshes (same tab)
   }
 });
 ```

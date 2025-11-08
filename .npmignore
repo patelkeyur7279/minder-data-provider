@@ -5,7 +5,8 @@ dist/**/*.map
 src/
 tests/
 examples/
-docs/
+docs/development/
+docs/examples/
 scripts/
 coverage/
 
@@ -24,14 +25,16 @@ jest.config.js
 test-*.txt
 
 # Documentation (except README)
+# Keep user-facing docs (API_REFERENCE, CONFIG_GUIDE, etc.)
+# Exclude development docs
 CHANGELOG.md
 CONTRIBUTING.md
 CODE_OF_CONDUCT.md
-PLATFORMS_RUNNING.md
-TEST_RESULTS_SUMMARY.md
-BUNDLE_ANALYSIS.json
 *.md
 !README.md
+!docs/*.md
+docs/development/
+docs/examples/
 
 # Git files
 .git
