@@ -54,7 +54,7 @@ export function createLightConfig(config: LightConfig): MinderConfig & { validat
     routes,
     dynamic: isDevelopment(),
     auth: config.features?.auth ? {
-      storage: 'localStorage', // Fixed from tokenStorage to storage
+      storage: 'memory', // Secure default (was localStorage)
       tokenKey: 'auth_token',
     } : undefined,
     cache: config.features?.cache ? {

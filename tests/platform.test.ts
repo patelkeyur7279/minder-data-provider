@@ -122,7 +122,7 @@ describe('PlatformCapabilityDetector', () => {
       expect(capabilities.crud).toBe(true);
       expect(capabilities.auth.supported).toBe(true);
       expect(capabilities.cache.persistent).toBe(true);
-      expect(capabilities.cache.storageType).toBe('localStorage');
+      expect(capabilities.cache.storageType).toBe('sessionStorage'); // Changed from localStorage for security
       expect(capabilities.ssr).toBe(false);
       expect(capabilities.ssg).toBe(false);
       expect(capabilities.cors.proxyNeeded).toBe(true);
@@ -269,7 +269,7 @@ describe('PlatformCapabilityDetector', () => {
 
     it('should show correct storage types for each platform', () => {
       const webCaps = PlatformCapabilityDetector.getCapabilities('web');
-      expect(webCaps.cache.storageType).toBe('localStorage');
+      expect(webCaps.cache.storageType).toBe('sessionStorage'); // Changed from localStorage for security
 
       const nativeCaps = PlatformCapabilityDetector.getCapabilities('react-native');
       expect(nativeCaps.cache.storageType).toBe('AsyncStorage');
