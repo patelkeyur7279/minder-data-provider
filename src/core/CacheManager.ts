@@ -1,4 +1,5 @@
 import { QueryClient } from '@tanstack/react-query';
+import type { Query, QueryState } from '@tanstack/react-query';
 import type { DebugManager } from '../debug/DebugManager.js';
 
 export class CacheManager {
@@ -80,12 +81,12 @@ export class CacheManager {
   }
 
   // Get all cached queries
-  getAllCachedQueries(): any[] {
+  getAllCachedQueries(): Query[] {
     return this.queryClient.getQueryCache().getAll();
   }
 
   // Prefetch data
-  async prefetchQuery<T = any>(
+  async prefetchQuery<T = unknown>(
     queryKey: string | string[],
     queryFn: () => Promise<T>,
     options?: { staleTime?: number; gcTime?: number }
@@ -116,13 +117,13 @@ export class CacheManager {
   }
 
   // Get query state
-  getQueryState(queryKey: string | string[]): any {
+  getQueryState(queryKey: string | string[]): QueryState | undefined {
     const key = Array.isArray(queryKey) ? queryKey : [queryKey];
     return this.queryClient.getQueryState(key);
   }
 
   // Optimistic update
-  async optimisticUpdate<T = any>(
+  async optimisticUpdate<T = unknown>(
     queryKey: string | string[],
     updater: (oldData: T | undefined) => T,
     rollbackFn?: () => void

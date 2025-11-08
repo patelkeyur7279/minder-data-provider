@@ -11,8 +11,8 @@ export class WebSocketManager {
   private ws: WebSocket | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
-  private heartbeatInterval: any = null;
-  private listeners: Map<string, Set<(data: any) => void>> = new Map();
+  private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+  private listeners: Map<string, Set<(data: unknown) => void>> = new Map();
   private debugManager?: DebugManager;
   private enableLogs: boolean;
 

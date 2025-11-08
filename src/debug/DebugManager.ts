@@ -7,9 +7,17 @@ declare global {
   }
 }
 
+export interface DebugLogEntry {
+  type: 'api' | 'cache' | 'auth' | 'websocket';
+  message: string;
+  data?: unknown;
+  timestamp: number;
+  stack?: string;
+}
+
 export class DebugManager {
   private enabled: boolean = false;
-  private logs: any[] = [];
+  private logs: DebugLogEntry[] = [];
   private performance: Map<string, number> = new Map();
   private logger: Logger;
 
@@ -23,10 +31,10 @@ export class DebugManager {
     }
   }
 
-  log(type: 'api' | 'cache' | 'auth' | 'websocket', message: string, data?: any) {
+  log(type: 'api' | 'cache' | 'auth' | 'websocket', message: string, data?: unknown): void {
     if (!this.enabled) return;
     
-    const logEntry = {
+    const logEntry: DebugLogEntry = {
       type,
       message,
       data,
@@ -59,15 +67,15 @@ export class DebugManager {
     }
   }
 
-  getLogs() {
+  getLogs(): DebugLogEntry[] {
     return this.logs;
   }
 
-  clearLogs() {
+  clearLogs(): void {
     this.logs = [];
   }
 
-  getPerformanceMetrics() {
+  getPerformanceMetrics(): [string, number][] {
     return Array.from(this.performance.entries());
   }
 }
