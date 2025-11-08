@@ -54,7 +54,7 @@ export class ApiClient {
     }
 
     if (config.security?.rateLimiting) {
-      this.rateLimiter = new RateLimiter(config.security.rateLimiting.storage || 'memory');
+      this.rateLimiter = new RateLimiter();
     }
 
     if (config.security?.sanitization) {

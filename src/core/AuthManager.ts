@@ -10,7 +10,7 @@ export class AuthManager {
   constructor(config?: AuthConfig, debugManager?: DebugManager, enableLogs: boolean = false) {
     this.config = config || {
       tokenKey: 'accessToken',
-      storage: 'localStorage',
+      storage: 'memory',
     };
     this.debugManager = debugManager;
     this.enableLogs = enableLogs;
@@ -119,11 +119,6 @@ export class AuthManager {
 
   private setItem(key: string, value: string): void {
     switch (this.config.storage) {
-      case 'localStorage':
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(key, value);
-        }
-        break;
       case 'sessionStorage':
         if (typeof window !== 'undefined') {
           sessionStorage.setItem(key, value);
@@ -143,11 +138,6 @@ export class AuthManager {
 
   private getItem(key: string): string | null {
     switch (this.config.storage) {
-      case 'localStorage':
-        if (typeof window !== 'undefined') {
-          return localStorage.getItem(key);
-        }
-        break;
       case 'sessionStorage':
         if (typeof window !== 'undefined') {
           return sessionStorage.getItem(key);
@@ -168,11 +158,6 @@ export class AuthManager {
 
   private removeItem(key: string): void {
     switch (this.config.storage) {
-      case 'localStorage':
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem(key);
-        }
-        break;
       case 'sessionStorage':
         if (typeof window !== 'undefined') {
           sessionStorage.removeItem(key);

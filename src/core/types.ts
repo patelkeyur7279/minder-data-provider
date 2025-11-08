@@ -42,8 +42,8 @@ export interface ApiRoute {
 
 export interface AuthConfig {
   tokenKey: string;
-  storage: 'localStorage' | 'sessionStorage' | 'memory' | 'cookie';
-  tokenStorage?: 'localStorage' | 'sessionStorage' | 'memory'; // For light config
+  storage: 'sessionStorage' | 'memory' | 'cookie';
+  tokenStorage?: 'sessionStorage' | 'memory' | 'cookie'; // For light config
   refreshUrl?: string;
   onAuthError?: () => void;
 }
@@ -120,7 +120,7 @@ export interface SecurityConfig {
   rateLimiting?: {
     requests: number;
     window: number; // in milliseconds
-    storage?: 'memory' | 'localStorage';
+    storage?: 'memory';
   };
   headers?: {
     contentSecurityPolicy?: string;
@@ -129,6 +129,8 @@ export interface SecurityConfig {
     strictTransportSecurity?: string;
   };
   inputValidation?: boolean;
+  httpsOnly?: boolean; // Enforce HTTPS in production
+  developmentWarnings?: boolean; // Show security warnings in dev mode
 }
 
 export interface SSRConfig {

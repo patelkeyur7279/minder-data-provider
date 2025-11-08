@@ -13,7 +13,7 @@ export interface SimpleConfig {
   preset?: ConfigPreset; // 'minimal' | 'standard' | 'advanced' | 'enterprise'
   
   // Existing options (simplified)
-  auth?: boolean | { storage?: 'localStorage' | 'sessionStorage' | 'memory' | 'cookie' };
+  auth?: boolean | { storage?: 'sessionStorage' | 'memory' | 'cookie' };
   cache?: boolean | { staleTime?: number };
   cors?: boolean;
   websocket?: boolean | string;

@@ -132,7 +132,7 @@ auth: {
   loginRoute: 'login',
   logoutRoute: 'logout',
   tokenKey: 'token',
-  storage: 'localStorage',
+  storage: 'cookie', // ✅ More secure (or 'sessionStorage', 'memory')
   autoRefresh: true,
   refreshRoute: 'refresh'
 }
@@ -145,7 +145,7 @@ auth: true  // Auto-configures with intelligent defaults
 // Or customize:
 auth: {
   tokenKey: 'access_token',
-  storage: 'localStorage',
+  storage: 'cookie', // ✅ Secure storage (or 'sessionStorage', 'memory')
   autoRefresh: true
 }
 ```
@@ -378,7 +378,7 @@ auth: {
   loginRoute: 'login',
   logoutRoute: 'logout',
   tokenKey: 'token',
-  storage: 'localStorage'
+  storage: 'cookie' // ✅ Secure storage
 }
 
 // v2.0 - Simple
@@ -387,7 +387,7 @@ auth: true
 // v2.0 - Custom
 auth: {
   tokenKey: 'access_token',
-  storage: 'localStorage',
+  storage: 'cookie', // ✅ Recommended for production
   autoRefresh: true
 }
 ```

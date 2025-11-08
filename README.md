@@ -431,7 +431,8 @@ const { data } = useOneTouchCrud("users");
 - **🌐 CORS Support**: Built-in CORS handling for cross-origin requests
 - **🔌 WebSocket Integration**: Real-time communication with auto-reconnection
 - **💾 Advanced Caching**: Multi-level caching with TTL and invalidation
-- **🔐 Authentication Management**: Token storage with multiple strategies
+- **🔐 Authentication Management**: Secure token storage (cookie, sessionStorage, memory)
+  - ⚠️ **Security Update v2.0.1**: `localStorage` removed for XSS protection
 - **📁 File Upload Support**: Progress tracking and multiple formats
 - **⚡ Optimistic Updates**: Instant UI updates with rollback
 - **🛡️ Type Safety**: Full TypeScript support with auto-generated types
@@ -444,7 +445,7 @@ const { data } = useOneTouchCrud("users");
 | Feature                   | Status    | Bundle Size | Description                                        |
 | ------------------------- | --------- | ----------- | -------------------------------------------------- |
 | **CRUD Operations**       | ✅ Stable | 47.82 KB    | Complete create, read, update, delete operations   |
-| **Authentication**        | ✅ Stable | 48.97 KB    | JWT tokens, auto-refresh, multiple storage options |
+| **Authentication**        | ✅ Stable | 48.97 KB    | JWT tokens, auto-refresh, secure storage (cookie/sessionStorage/memory) |
 | **Caching System**        | ✅ Stable | 48.17 KB    | Multi-level cache with TTL and invalidation        |
 | **Configuration Presets** | ✅ Stable | 8.64 KB     | 4 presets: minimal, standard, advanced, enterprise |
 | **Lazy Loading**          | ✅ Stable | -           | 68% faster startup, load deps on-demand            |
