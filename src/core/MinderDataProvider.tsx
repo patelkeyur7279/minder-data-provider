@@ -157,7 +157,7 @@ export function MinderDataProvider({
     const authManager = new AuthManager(finalConfig.auth);
 
     // Create API Client with CORS support and proxy
-    const apiClient = new ApiClient(finalConfig, authManager, proxyManager);
+    const apiClient = new ApiClient(finalConfig, authManager, proxyManager, debugManager);
 
     // Create Cache Manager
     const cacheManager = new CacheManager(queryClientRef);

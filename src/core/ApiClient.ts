@@ -15,12 +15,14 @@ import {
   RequestDeduplicator,
   PerformanceMonitor,
 } from '../utils/performance.js';
+import type { DebugManager } from '../debug/DebugManager.js';
 
 export class ApiClient {
   private axiosInstance: AxiosInstance;
   private config: MinderConfig;
   private authManager: AuthManager;
   private proxyManager?: ProxyManager;
+  private debugManager?: DebugManager;
   private requestCache: Map<string, Promise<any>> = new Map();
   private csrfManager?: CSRFTokenManager;
   private rateLimiter?: RateLimiter;
@@ -29,10 +31,11 @@ export class ApiClient {
   private deduplicator?: RequestDeduplicator;
   private performanceMonitor?: PerformanceMonitor;
 
-  constructor(config: MinderConfig, authManager: AuthManager, proxyManager?: ProxyManager) {
+  constructor(config: MinderConfig, authManager: AuthManager, proxyManager?: ProxyManager, debugManager?: DebugManager) {
     this.config = config;
     this.authManager = authManager;
     this.proxyManager = proxyManager;
+    this.debugManager = debugManager;
 
     // Initialize security utilities
     if (config.security?.csrfProtection) {
@@ -85,6 +88,17 @@ export class ApiClient {
     // Request interceptor for auth, CORS, and security
     this.axiosInstance.interceptors.request.use(
       (config) => {
+        // Debug logging - API Request
+        if (this.debugManager && this.config.debug?.networkLogs) {
+          this.debugManager.log('api', `🚀 ${config.method?.toUpperCase()} ${config.url}`, {
+            method: config.method,
+            url: config.url,
+            headers: config.headers,
+            data: config.data,
+            params: config.params
+          });
+        }
+
         const token = this.authManager.getToken();
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
@@ -121,8 +135,34 @@ export class ApiClient {
 
     // Response interceptor for error handling
     this.axiosInstance.interceptors.response.use(
-      (response) => response,
+      (response) => {
+        // Debug logging - API Response Success
+        if (this.debugManager && this.config.debug?.networkLogs) {
+          const duration = response.config.headers?.['X-Request-Start-Time'] 
+            ? Date.now() - parseInt(response.config.headers['X-Request-Start-Time'] as string)
+            : undefined;
+          
+          this.debugManager.log('api', `✅ ${response.status} ${response.config.method?.toUpperCase()} ${response.config.url}${duration ? ` (${duration}ms)` : ''}`, {
+            status: response.status,
+            statusText: response.statusText,
+            data: response.data,
+            headers: response.headers,
+            duration
+          });
+        }
+        return response;
+      },
       async (error) => {
+        // Debug logging - API Response Error
+        if (this.debugManager && this.config.debug?.networkLogs) {
+          this.debugManager.log('api', `❌ ${error.response?.status || 'ERROR'} ${error.config?.method?.toUpperCase()} ${error.config?.url}`, {
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            message: error.message,
+            data: error.response?.data
+          });
+        }
+
         if (error.response?.status === 401) {
           this.authManager.clearAuth();
           if (this.config.auth?.onAuthError) {
