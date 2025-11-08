@@ -21,6 +21,27 @@ Universal data management for React, Next.js, React Native, Expo, Node.js, and E
 npm install minder-data-provider
 ```
 
+### Next.js Users - Important! ⚠️
+
+**If you're using Next.js, you MUST include the `dynamic` field:**
+
+```typescript
+import dynamic from 'next/dynamic';  // Required import
+import { createMinderConfig } from 'minder-data-provider/config';
+
+export const config = createMinderConfig({
+  apiUrl: 'https://api.example.com',
+  dynamic: dynamic,  // ⚠️ REQUIRED for Next.js
+  routes: { users: '/users' }
+});
+```
+
+📖 **See [DYNAMIC_IMPORTS.md](./docs/DYNAMIC_IMPORTS.md) for details**
+
+---
+
+### Standard Setup
+
 ```typescript
 // 1. Configure
 import { createMinderConfig } from 'minder-data-provider/config';

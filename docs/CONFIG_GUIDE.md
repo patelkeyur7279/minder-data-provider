@@ -2,7 +2,25 @@
 
 This guide explains how to configure **minder-data-provider** with examples and all available options.
 
-## 📋 Table of Contents
+## � Important: Next.js Users
+
+**If you're using Next.js, you MUST provide the `dynamic` field in your configuration.** 
+
+See [DYNAMIC_IMPORTS.md](./DYNAMIC_IMPORTS.md) for detailed explanation.
+
+```typescript
+import dynamic from 'next/dynamic';  // Required for Next.js
+
+export const config = createMinderConfig({
+  apiUrl: 'https://api.example.com',
+  dynamic: dynamic,  // ⚠️ REQUIRED for Next.js
+  routes: { /* ... */ }
+});
+```
+
+---
+
+## �📋 Table of Contents
 
 1. [Quick Start](#quick-start)
 2. [Configuration Presets](#configuration-presets)
