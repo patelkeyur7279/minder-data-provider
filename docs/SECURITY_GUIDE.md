@@ -21,13 +21,30 @@ This guide covers security best practices, features, and configurations for `min
 
 #### Recommended Storage Options
 
+**Web Platforms (React, Next.js, Vite):**
+
 | Storage Type | Security | Persistence | Best For |
 |-------------|----------|-------------|----------|
 | `cookie` ⭐ | ✅ High (HttpOnly, Secure, SameSite) | ✅ Persistent | **Production apps** |
 | `sessionStorage` | ⚠️ Medium (XSS vulnerable) | ⚠️ Tab session only | Development/testing |
 | `memory` | ✅ High (in-memory only) | ❌ Page refresh clears | Temporary auth, high-security needs |
 
+**Mobile Platforms (React Native, Expo):**
+
+| Storage Type | Security | Persistence | Best For |
+|-------------|----------|-------------|----------|
+| `SecureStore` ⭐ | ✅ Highest (Encrypted, Keychain) | ✅ Persistent | **Expo apps (recommended)** |
+| `AsyncStorage` | ⚠️ Medium (Unencrypted) | ✅ Persistent | React Native apps |
+| `memory` | ✅ High (in-memory only) | ⚠️ App restart clears | Quick auth sessions |
+
+> **Note for React Native/Expo**: While `AsyncStorage` and `SecureStore` are async, token authentication typically happens once per app session. For the best security on mobile:
+> - **Expo**: Use `SecureStore` (encrypted, backed by iOS Keychain/Android Keystore)
+> - **React Native**: Use `AsyncStorage` for persistence or `memory` for high-security needs
+> - Both automatically handle persistence through the native platform
+
 #### Configuration
+
+**Web (React, Next.js, Vite):**
 
 ```typescript
 import { MinderDataProvider } from 'minder-data-provider';
@@ -47,15 +64,214 @@ const App = () => (
 );
 ```
 
+**React Native:**
+
+```typescript
+import { MinderDataProvider } from 'minder-data-provider';
+
+const App = () => (
+  <MinderDataProvider
+    apiUrl="https://api.example.com"
+    routes={{ users: '/users' }}
+    dynamic
+    auth={{
+      storage: 'AsyncStorage', // ✅ Persistent storage for React Native
+      tokenKey: 'accessToken'
+    }}
+  >
+    {/* Your app */}
+  </MinderDataProvider>
+);
+```
+
+**Expo (Recommended - Encrypted Storage):**
+
+```typescript
+import { MinderDataProvider } from 'minder-data-provider';
+
+const App = () => (
+  <MinderDataProvider
+    apiUrl="https://api.example.com"
+    routes={{ users: '/users' }}
+    dynamic
+    auth={{
+      storage: 'SecureStore', // ✅ Encrypted storage (iOS Keychain/Android Keystore)
+      tokenKey: 'accessToken'
+    }}
+  >
+    {/* Your app */}
+  </MinderDataProvider>
+);
+```
+
+**Electron:**
+
+```typescript
+import { MinderDataProvider } from 'minder-data-provider';
+
+const App = () => (
+  <MinderDataProvider
+    apiUrl="https://api.example.com"
+    routes={{ users: '/users' }}
+    dynamic
+    auth={{
+      storage: 'cookie', // ✅ Works in Electron (Chromium-based)
+      tokenKey: 'accessToken'
+    }}
+  >
+    {/* Your app */}
+  </MinderDataProvider>
+);
+```
+
 **Cookie Security Settings (Automatic)**:
 - `Secure`: Only sent over HTTPS
 - `SameSite=Strict`: Prevents CSRF attacks
 - `HttpOnly`: Not accessible via JavaScript (when set server-side)
 - `path=/`: Available to entire app
 
+## 📱 React Native / Expo Security
+
+### Platform-Specific Storage
+
+React Native and Expo have **different security requirements** than web platforms:
+
+**Key Differences:**
+- ❌ No XSS risk (no direct HTML/JavaScript execution)
+- ❌ No CORS issues (native HTTP clients)
+- ✅ OS-level security (iOS Keychain, Android Keystore)
+- ✅ Apps don't "refresh" like web pages
+
+### Expo with SecureStore (Recommended)
+
+**Best Security:** Uses iOS Keychain and Android Keystore
+
+```typescript
+// App.tsx
+import { MinderDataProvider } from 'minder-data-provider';
+
+export default function App() {
+  return (
+    <MinderDataProvider
+      apiUrl="https://api.example.com"
+      routes={{ users: '/users', posts: '/posts' }}
+      dynamic
+      auth={{
+        storage: 'SecureStore', // ✅ Encrypted storage
+        tokenKey: 'accessToken'
+      }}
+      security={{
+        // Note: Some web security features don't apply to native apps
+        sanitization: false, // No XSS risk in native
+        csrfProtection: false, // Different security model
+        inputValidation: true, // ✅ Still validate input
+        httpsOnly: true // ✅ Enforce HTTPS for API calls
+      }}
+    >
+      <YourApp />
+    </MinderDataProvider>
+  );
+}
+```
+
+**Async Token Access:**
+
+```typescript
+import { useAuth } from 'minder-data-provider';
+
+function MyComponent() {
+  const auth = useAuth();
+  
+  useEffect(() => {
+    // SecureStore is async - use getTokenAsync()
+    const loadToken = async () => {
+      const token = await auth.getTokenAsync();
+      if (token) {
+        console.log('User is authenticated');
+      }
+    };
+    
+    loadToken();
+  }, []);
+}
+```
+
+### React Native with AsyncStorage
+
+**Good for persistence**, but unencrypted:
+
+```typescript
+// App.tsx
+import { MinderDataProvider } from 'minder-data-provider';
+
+export default function App() {
+  return (
+    <MinderDataProvider
+      apiUrl="https://api.example.com"
+      routes={{ users: '/users' }}
+      dynamic
+      auth={{
+        storage: 'AsyncStorage', // ✅ Persistent, ⚠️ Unencrypted
+        tokenKey: 'accessToken'
+      }}
+      security={{
+        httpsOnly: true,
+        inputValidation: true
+      }}
+    >
+      <YourApp />
+    </MinderDataProvider>
+  );
+}
+```
+
+**Installation:**
+
+```bash
+npm install @react-native-async-storage/async-storage
+```
+
+**Async Token Access:**
+
+```typescript
+import { useAuth } from 'minder-data-provider';
+
+function MyComponent() {
+  const auth = useAuth();
+  
+  useEffect(() => {
+    // AsyncStorage is async - use getTokenAsync()
+    const loadToken = async () => {
+      const token = await auth.getTokenAsync();
+      if (token) {
+        // Token loaded from persistent storage
+      }
+    };
+    
+    loadToken();
+  }, []);
+}
+```
+
+### React Native with Memory (Highest Security)
+
+**Best for sensitive data** that shouldn't persist:
+
+```typescript
+auth={{
+  storage: 'memory', // ✅ Most secure, ❌ Lost on app restart
+  tokenKey: 'accessToken'
+}}
+```
+
+**When to use:**
+- Financial apps with strict security requirements
+- Apps handling medical/personal data
+- When you want users to re-authenticate on app restart
+
 ---
 
-## 🌐 HTTPS Enforcement
+
 
 ### Production Requirements
 

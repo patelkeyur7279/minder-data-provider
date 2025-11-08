@@ -231,7 +231,8 @@ const config: MinderConfig = {
   auth: {
     enabled: true,
     tokenKey: 'accessToken',
-    storage: 'cookie', // 'cookie' | 'sessionStorage' | 'memory' (localStorage removed for security)
+    storage: 'cookie', // Web: 'cookie' | 'sessionStorage' | 'memory'
+                       // RN: 'AsyncStorage' | 'SecureStore' (Expo) | 'memory'
     refreshUrl: '/api/auth/refresh',
     tokenRefreshThreshold: 5 * 60 * 1000 // Refresh 5 min before expiry
   },

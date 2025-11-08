@@ -42,8 +42,8 @@ export interface ApiRoute {
 
 export interface AuthConfig {
   tokenKey: string;
-  storage: 'sessionStorage' | 'memory' | 'cookie';
-  tokenStorage?: 'sessionStorage' | 'memory' | 'cookie'; // For light config
+  storage: 'sessionStorage' | 'memory' | 'cookie' | 'AsyncStorage' | 'SecureStore';
+  tokenStorage?: 'sessionStorage' | 'memory' | 'cookie' | 'AsyncStorage' | 'SecureStore'; // For light config
   refreshUrl?: string;
   onAuthError?: () => void;
 }
