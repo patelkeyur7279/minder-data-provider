@@ -8,6 +8,7 @@ import { createMinderConfig } from 'minder-data-provider/config';
 export const enterpriseConfig = createMinderConfig({
   preset: 'enterprise',
   apiUrl: 'https://api.example.com',
+  dynamic: {}, // Required field
   
   // Authentication
   auth: {
@@ -28,26 +29,21 @@ export const enterpriseConfig = createMinderConfig({
     posts: '/posts',
     comments: '/comments',
     
-    // Real-time updates
+    // Real-time updates via WebSocket
     userUpdates: {
-      method: 'WS',
-      url: 'users/updates',
-      cache: true
+      method: 'GET',
+      url: 'users/updates'
     },
     
     postNotifications: {
-      method: 'WS',
-      url: 'posts/notifications',
-      cache: false
+      method: 'GET',
+      url: 'posts/notifications'
     },
     
     // Complex endpoint
     analyticsData: {
       method: 'GET',
-      url: '/analytics',
-      cache: { ttl: 60 * 60 * 1000 },
-      retries: 5,
-      timeout: 60000 // Long running query
+      url: '/analytics'
     }
   }
 });

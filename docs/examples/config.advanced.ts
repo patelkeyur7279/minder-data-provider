@@ -8,6 +8,7 @@ import { createMinderConfig } from 'minder-data-provider/config';
 export const advancedConfig = createMinderConfig({
   preset: 'advanced',
   apiUrl: 'https://api.example.com',
+  dynamic: {}, // Required field
   
   // Authentication
   auth: {
@@ -28,14 +29,12 @@ export const advancedConfig = createMinderConfig({
     // Complex routes with custom options
     userProfile: {
       method: 'GET',
-      url: '/users/:userId/profile',
-      cache: { ttl: 60 * 60 * 1000 } // 1 hour cache
+      url: '/users/:userId/profile'
     },
     
     searchUsers: {
       method: 'GET',
-      url: '/users/search',
-      cache: false // Don't cache search results
+      url: '/users/search'
     }
   }
 });

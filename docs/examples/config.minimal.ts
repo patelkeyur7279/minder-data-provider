@@ -7,6 +7,7 @@ import { createMinderConfig } from 'minder-data-provider/config';
 export const minimalConfig = createMinderConfig({
   preset: 'minimal',
   apiUrl: 'https://api.example.com',
+  dynamic: {}, // Required field
   
   routes: {
     users: '/users',

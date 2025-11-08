@@ -9,38 +9,34 @@ import { createMinderConfig } from 'minder-data-provider/config';
 export const reactWebConfig = createMinderConfig({
   preset: 'standard',
   apiUrl: process.env.REACT_APP_API_URL || 'https://api.example.com',
+  dynamic: {},
   auth: {
     storage: 'cookie'
   },
   cache: {
-    refetchOnWindowFocus: true
+    staleTime: 15 * 60 * 1000
   },
   routes: {
     users: '/users',
     posts: '/posts'
   },
-  debug: {
-    enabled: process.env.NODE_ENV === 'development'
-  }
+  debug: process.env.NODE_ENV === 'development'
 });
 
 // ========================================
 // Next.js
 // ========================================
-import { configureMinder } from 'minder-data-provider/platforms/nextjs';
+import { createMinderConfig as createNextConfig } from 'minder-data-provider/config';
 
-export const nextjsConfig = configureMinder({
+export const nextjsConfig = createNextConfig({
   preset: 'advanced',
   apiUrl: process.env.NEXT_PUBLIC_API_URL || 'https://api.example.com',
+  dynamic: {},
   auth: {
     storage: 'cookie'
   },
   cache: {
-    type: 'persistent'
-  },
-  ssr: {
-    enabled: true,
-    hydrate: true
+    staleTime: 30 * 60 * 1000
   },
   routes: {
     users: '/users',
@@ -51,16 +47,17 @@ export const nextjsConfig = configureMinder({
 // ========================================
 // React Native
 // ========================================
-import { configureMinder as configureMinderNative } from 'minder-data-provider/platforms/native';
+import { createMinderConfig as createNativeConfig } from 'minder-data-provider/config';
 
-export const reactNativeConfig = configureMinderNative({
+export const reactNativeConfig = createNativeConfig({
   preset: 'advanced',
   apiUrl: process.env.REACT_APP_API_URL || 'https://api.example.com',
+  dynamic: {},
   auth: {
     storage: 'memory' // No localStorage on native
   },
   cache: {
-    type: 'persistent' // Uses device filesystem
+    staleTime: 30 * 60 * 1000
   },
   routes: {
     users: '/users',
@@ -71,16 +68,17 @@ export const reactNativeConfig = configureMinderNative({
 // ========================================
 // Electron
 // ========================================
-import { configureMinder as configureMinderElectron } from 'minder-data-provider/platforms/electron';
+import { createMinderConfig as createElectronConfig } from 'minder-data-provider/config';
 
-export const electronConfig = configureMinderElectron({
+export const electronConfig = createElectronConfig({
   preset: 'advanced',
   apiUrl: 'http://localhost:3000', // Local API
+  dynamic: {},
   auth: {
     storage: 'cookie'
   },
   cache: {
-    type: 'persistent' // Uses Electron store
+    staleTime: 30 * 60 * 1000
   },
   routes: {
     users: '/users',
@@ -91,16 +89,17 @@ export const electronConfig = configureMinderElectron({
 // ========================================
 // Expo
 // ========================================
-import { configureMinder as configureMinderExpo } from 'minder-data-provider/platforms/expo';
+import { createMinderConfig as createExpoConfig } from 'minder-data-provider/config';
 
-export const expoConfig = configureMinderExpo({
+export const expoConfig = createExpoConfig({
   preset: 'advanced',
   apiUrl: process.env.EXPO_PUBLIC_API_URL || 'https://api.example.com',
+  dynamic: {},
   auth: {
     storage: 'memory'
   },
   cache: {
-    type: 'persistent' // AsyncStorage
+    staleTime: 30 * 60 * 1000
   },
   routes: {
     users: '/users',
@@ -111,16 +110,17 @@ export const expoConfig = configureMinderExpo({
 // ========================================
 // Node.js
 // ========================================
-import { configureMinder as configureMinderNode } from 'minder-data-provider/platforms/node';
+import { createMinderConfig as createNodeConfig } from 'minder-data-provider/config';
 
-export const nodeConfig = configureMinderNode({
+export const nodeConfig = createNodeConfig({
   preset: 'standard',
   apiUrl: process.env.API_URL || 'https://api.example.com',
+  dynamic: {},
   auth: {
     storage: 'memory' // Server-side memory
   },
   cache: {
-    type: 'memory' // Server-side caching
+    staleTime: 15 * 60 * 1000
   },
   routes: {
     users: '/users',

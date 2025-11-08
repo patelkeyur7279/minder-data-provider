@@ -8,6 +8,7 @@ import { createMinderConfig } from 'minder-data-provider/config';
 export const standardConfig = createMinderConfig({
   preset: 'standard',
   apiUrl: 'https://api.example.com',
+  dynamic: {}, // Required field
   
   // Authentication (stored in httpOnly cookies)
   auth: {
