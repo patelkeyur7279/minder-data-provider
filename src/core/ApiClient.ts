@@ -3,7 +3,15 @@ import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import type { MinderConfig, ApiRoute, ApiError } from './types.js';
 import { AuthManager } from './AuthManager.js';
 import { ProxyManager } from './ProxyManager.js';
-import { MinderConfigError, MinderNetworkError } from '../errors/index.js';
+import { 
+  MinderConfigError, 
+  MinderNetworkError, 
+  MinderTimeoutError, 
+  MinderOfflineError,
+  MinderValidationError,
+  MinderAuthError,
+  MinderAuthorizationError
+} from '../errors/index.js';
 import { 
   CSRFTokenManager, 
   XSSSanitizer, 
@@ -15,12 +23,14 @@ import {
   RequestDeduplicator,
   PerformanceMonitor,
 } from '../utils/performance.js';
+import type { DebugManager } from '../debug/DebugManager.js';
 
 export class ApiClient {
   private axiosInstance: AxiosInstance;
   private config: MinderConfig;
   private authManager: AuthManager;
   private proxyManager?: ProxyManager;
+  private debugManager?: DebugManager;
   private requestCache: Map<string, Promise<any>> = new Map();
   private csrfManager?: CSRFTokenManager;
   private rateLimiter?: RateLimiter;
@@ -29,10 +39,11 @@ export class ApiClient {
   private deduplicator?: RequestDeduplicator;
   private performanceMonitor?: PerformanceMonitor;
 
-  constructor(config: MinderConfig, authManager: AuthManager, proxyManager?: ProxyManager) {
+  constructor(config: MinderConfig, authManager: AuthManager, proxyManager?: ProxyManager, debugManager?: DebugManager) {
     this.config = config;
     this.authManager = authManager;
     this.proxyManager = proxyManager;
+    this.debugManager = debugManager;
 
     // Initialize security utilities
     if (config.security?.csrfProtection) {
@@ -43,7 +54,7 @@ export class ApiClient {
     }
 
     if (config.security?.rateLimiting) {
-      this.rateLimiter = new RateLimiter(config.security.rateLimiting.storage || 'memory');
+      this.rateLimiter = new RateLimiter();
     }
 
     if (config.security?.sanitization) {
@@ -85,6 +96,17 @@ export class ApiClient {
     // Request interceptor for auth, CORS, and security
     this.axiosInstance.interceptors.request.use(
       (config) => {
+        // Debug logging - API Request
+        if (this.debugManager && this.config.debug?.networkLogs) {
+          this.debugManager.log('api', `🚀 ${config.method?.toUpperCase()} ${config.url}`, {
+            method: config.method,
+            url: config.url,
+            headers: config.headers,
+            data: config.data,
+            params: config.params
+          });
+        }
+
         const token = this.authManager.getToken();
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
@@ -121,8 +143,34 @@ export class ApiClient {
 
     // Response interceptor for error handling
     this.axiosInstance.interceptors.response.use(
-      (response) => response,
+      (response) => {
+        // Debug logging - API Response Success
+        if (this.debugManager && this.config.debug?.networkLogs) {
+          const duration = response.config.headers?.['X-Request-Start-Time'] 
+            ? Date.now() - parseInt(response.config.headers['X-Request-Start-Time'] as string)
+            : undefined;
+          
+          this.debugManager.log('api', `✅ ${response.status} ${response.config.method?.toUpperCase()} ${response.config.url}${duration ? ` (${duration}ms)` : ''}`, {
+            status: response.status,
+            statusText: response.statusText,
+            data: response.data,
+            headers: response.headers,
+            duration
+          });
+        }
+        return response;
+      },
       async (error) => {
+        // Debug logging - API Response Error
+        if (this.debugManager && this.config.debug?.networkLogs) {
+          this.debugManager.log('api', `❌ ${error.response?.status || 'ERROR'} ${error.config?.method?.toUpperCase()} ${error.config?.url}`, {
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            message: error.message,
+            data: error.response?.data
+          });
+        }
+
         if (error.response?.status === 401) {
           this.authManager.clearAuth();
           if (this.config.auth?.onAuthError) {
@@ -145,28 +193,107 @@ export class ApiClient {
     if (error && typeof error === 'object' && 'response' in error) {
       const axiosError = error as {
         response?: {
-          data?: { message?: string; code?: string };
+          data?: { message?: string; code?: string; errors?: Record<string, string[]> };
           status?: number;
+          statusText?: string;
+        };
+        config?: {
+          url?: string;
+          method?: string;
         };
         message?: string;
+        code?: string;
       };
       
-      return {
-        message: axiosError.response?.data?.message || axiosError.message || 'API error',
-        status: axiosError.response?.status,
-        code: axiosError.response?.data?.code || 'API_ERROR',
-        details: axiosError.response?.data,
-      };
+      const status = axiosError.response?.status || 0;
+      const url = axiosError.config?.url;
+      const method = axiosError.config?.method?.toUpperCase();
+      const responseData = axiosError.response?.data;
+      
+      // Handle specific HTTP status codes with enhanced errors
+      switch (status) {
+        case 400:
+          return {
+            message: responseData?.message || 'Bad Request',
+            status,
+            code: 'BAD_REQUEST',
+            details: responseData,
+          };
+        
+        case 401:
+          throw new MinderAuthError(
+            responseData?.message || 'Authentication required'
+          );
+        
+        case 403:
+          throw new MinderAuthorizationError(
+            responseData?.message || 'Permission denied'
+          );
+        
+        case 404:
+          const notFoundMsg = responseData?.message || `Resource not found: ${method} ${url}`;
+          throw new MinderNetworkError(notFoundMsg, 404, responseData, url, method);
+        
+        case 422:
+          throw new MinderValidationError(
+            responseData?.message || 'Validation failed',
+            responseData?.errors
+          );
+        
+        case 429:
+          const rateLimitMsg = responseData?.message || 'Too many requests - rate limit exceeded';
+          throw new MinderNetworkError(rateLimitMsg, 429, responseData, url, method);
+        
+        case 500:
+        case 502:
+        case 503:
+        case 504:
+          const serverMsg = responseData?.message || 'Server error - please try again later';
+          throw new MinderNetworkError(serverMsg, status, responseData, url, method);
+        
+        default:
+          throw new MinderNetworkError(
+            responseData?.message || axiosError.message || 'API error',
+            status,
+            responseData,
+            url,
+            method,
+            responseData?.code || 'API_ERROR'
+          );
+      }
     }
     
     // Network error (has request but no response)
     if (error && typeof error === 'object' && 'request' in error) {
-      const networkError = error as { request?: unknown };
-      return {
-        message: 'Network error - please check your connection',
-        code: 'NETWORK_ERROR',
-        details: networkError.request,
+      const networkError = error as { 
+        request?: unknown; 
+        code?: string;
+        config?: { url?: string; method?: string; timeout?: number };
       };
+      
+      // Check for timeout
+      if (networkError.code === 'ECONNABORTED') {
+        throw new MinderTimeoutError(
+          'Request timeout',
+          networkError.config?.timeout || 30000,
+          networkError.config?.url
+        );
+      }
+      
+      // Check for offline
+      if (networkError.code === 'ERR_NETWORK' || typeof navigator !== 'undefined' && !navigator.onLine) {
+        throw new MinderOfflineError('No network connection', networkError.config?.url);
+      }
+      
+      // Generic network error
+      throw new MinderNetworkError(
+        'Network error - please check your connection',
+        0,
+        undefined,
+        networkError.config?.url,
+        networkError.config?.method?.toUpperCase(),
+        'NETWORK_ERROR'
+      );
     }
     
     // Other errors
@@ -194,7 +321,19 @@ export class ApiClient {
   ): Promise<T> {
     const route = this.config.routes?.[routeName];
     if (!route) {
-      throw new MinderConfigError(`Route '${routeName}' not found in configuration`, 'ROUTE_NOT_FOUND');
+      const availableRoutes = Object.keys(this.config.routes || {});
+      const error = new MinderConfigError(
+        `Route '${routeName}' not found in configuration`,
+        `routes.${routeName}`,
+        'ROUTE_NOT_FOUND',
+        { requestedRoute: routeName, availableRoutes }
+      );
+      error.addSuggestion({
+        message: `Available routes: ${availableRoutes.join(', ') || 'none configured'}`,
+        action: 'Add this route to your configuration or check for typos',
+        link: 'https://github.com/patelkeyur7279/minder-data-provider/blob/main/docs/CONFIG_GUIDE.md#routes'
+      });
+      throw error;
     }
 
     let url = route.url;

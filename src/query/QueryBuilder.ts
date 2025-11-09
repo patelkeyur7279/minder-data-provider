@@ -7,8 +7,10 @@
 import { useState, useCallback, useMemo } from 'react';
 
 export interface QueryParams {
-  [key: string]: any;
+  [key: string]: unknown;
 }
+
+export type FilterValue = string | number | boolean | null | unknown[];
 
 export interface SortOption {
   field: string;
@@ -18,7 +20,7 @@ export interface SortOption {
 export interface FilterOption {
   field: string;
   operator: 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'nin' | 'contains' | 'startsWith' | 'endsWith';
-  value: any;
+  value: FilterValue;
 }
 
 export interface PaginationOptions {
@@ -45,7 +47,7 @@ export class QueryBuilder {
   /**
    * Add a filter condition
    */
-  filter(field: string, operator: FilterOption['operator'], value: any): this {
+  filter(field: string, operator: FilterOption['operator'], value: FilterValue): this {
     this.filters.push({ field, operator, value });
     return this;
   }
@@ -53,31 +55,31 @@ export class QueryBuilder {
   /**
    * Shorthand filters
    */
-  where(field: string, value: any): this {
+  where(field: string, value: FilterValue): this {
     return this.filter(field, 'eq', value);
   }
 
-  whereNot(field: string, value: any): this {
+  whereNot(field: string, value: FilterValue): this {
     return this.filter(field, 'ne', value);
   }
 
-  whereIn(field: string, values: any[]): this {
+  whereIn(field: string, values: FilterValue[]): this {
     return this.filter(field, 'in', values);
   }
 
-  whereNotIn(field: string, values: any[]): this {
+  whereNotIn(field: string, values: FilterValue[]): this {
     return this.filter(field, 'nin', values);
   }
 
-  whereGreaterThan(field: string, value: any): this {
+  whereGreaterThan(field: string, value: FilterValue): this {
     return this.filter(field, 'gt', value);
   }
 
-  whereGreaterThanOrEqual(field: string, value: any): this {
+  whereGreaterThanOrEqual(field: string, value: FilterValue): this {
     return this.filter(field, 'gte', value);
   }
 
-  whereLessThan(field: string, value: any): this {
+  whereLessThan(field: string, value: FilterValue): this {
     return this.filter(field, 'lt', value);
   }
 
@@ -199,9 +201,9 @@ export class QueryBuilder {
     const queryString = Object.entries(params)
       .map(([key, value]) => {
         if (Array.isArray(value)) {
-          return value.map(v => `${key}[]=${encodeURIComponent(v)}`).join('&');
+          return value.map(v => `${key}[]=${encodeURIComponent(String(v))}`).join('&');
         }
-        return `${key}=${encodeURIComponent(value)}`;
+        return `${key}=${encodeURIComponent(String(value))}`;
       })
       .join('&');
 

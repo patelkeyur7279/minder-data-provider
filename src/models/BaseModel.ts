@@ -3,21 +3,21 @@ export abstract class BaseModel {
   public createdAt?: Date;
   public updatedAt?: Date;
 
-  constructor(data?: any) {
+  constructor(data?: Record<string, unknown>) {
     if (data) {
       this.fromJSON(data);
     }
   }
 
   // Transform JSON data to model instance
-  public fromJSON(data: any): this {
+  public fromJSON(data: Record<string, unknown>): this {
     Object.keys(data).forEach(key => {
       if (data[key] !== undefined) {
         // Handle date fields
         if ((key === 'createdAt' || key === 'updatedAt') && typeof data[key] === 'string') {
-          (this as Record<string, any>)[key] = new Date(data[key]);
+          (this as Record<string, unknown>)[key] = new Date(data[key] as string);
         } else {
-          (this as Record<string, any>)[key] = data[key];
+          (this as Record<string, unknown>)[key] = data[key];
         }
       }
     });
@@ -25,10 +25,10 @@ export abstract class BaseModel {
   }
 
   // Transform model instance to JSON
-  public toJSON(): any {
-    const json: any = {};
+  public toJSON(): Record<string, unknown> {
+    const json: Record<string, unknown> = {};
     Object.keys(this).forEach(key => {
-      const value = (this as Record<string, any>)[key];
+      const value = (this as Record<string, unknown>)[key];
       if (value !== undefined) {
         // Handle date fields
         if (value instanceof Date) {
@@ -84,7 +84,7 @@ export abstract class BaseModel {
   public merge(data: Partial<this>): this {
     Object.keys(data).forEach(key => {
       if (data[key as keyof this] !== undefined) {
-        (this as Record<string, any>)[key] = data[key as keyof this];
+        (this as Record<string, unknown>)[key] = data[key as keyof this];
       }
     });
     return this;
@@ -94,7 +94,7 @@ export abstract class BaseModel {
   public reset(): this {
     Object.keys(this).forEach(key => {
       if (key !== 'id') {
-        delete (this as Record<string, any>)[key];
+        delete (this as Record<string, unknown>)[key];
       }
     });
     return this;

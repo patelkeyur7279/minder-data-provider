@@ -79,7 +79,7 @@ export class PlatformCapabilityDetector {
       cache: {
         memory: true,
         persistent: true,
-        storageType: 'localStorage'
+        storageType: 'sessionStorage' // Web storage (changed from localStorage for security)
       },
       ssr: false,
       ssg: false,
@@ -132,7 +132,7 @@ export class PlatformCapabilityDetector {
       cache: {
         memory: true,
         persistent: true,
-        storageType: 'localStorage'
+        storageType: 'sessionStorage' // Web storage (changed from localStorage for security)
       },
       ssr: true, // ✨ Full SSR support
       ssg: true, // ✨ Full SSG support

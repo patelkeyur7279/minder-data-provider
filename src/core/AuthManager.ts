@@ -1,59 +1,143 @@
 import type { AuthConfig } from './types.js';
+import type { DebugManager } from '../debug/DebugManager.js';
 
 export class AuthManager {
   private config: AuthConfig;
   private memoryStorage: Map<string, string> = new Map();
+  private debugManager?: DebugManager;
+  private enableLogs: boolean;
+  private AsyncStorage: any = null;
+  private SecureStore: any = null;
 
-  constructor(config?: AuthConfig) {
+  constructor(config?: AuthConfig, debugManager?: DebugManager, enableLogs: boolean = false) {
     this.config = config || {
       tokenKey: 'accessToken',
-      storage: 'localStorage',
+      storage: 'memory',
     };
+    this.debugManager = debugManager;
+    this.enableLogs = enableLogs;
+    
+    // Initialize platform-specific storage
+    if (this.config.storage === 'AsyncStorage') {
+      try {
+        this.AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      } catch {
+        console.warn('[AuthManager] AsyncStorage not available, falling back to memory storage');
+        this.config.storage = 'memory';
+      }
+    } else if (this.config.storage === 'SecureStore') {
+      try {
+        this.SecureStore = require('expo-secure-store');
+      } catch {
+        console.warn('[AuthManager] SecureStore not available, falling back to memory storage');
+        this.config.storage = 'memory';
+      }
+    }
   }
 
   setToken(token: string): void {
     this.setItem(this.config.tokenKey, token);
+    
+    if (this.debugManager && this.enableLogs) {
+      this.debugManager.log('auth', '🔐 AUTH SET TOKEN', {
+        tokenKey: this.config.tokenKey,
+        storage: this.config.storage,
+        tokenLength: token.length,
+      });
+    }
   }
 
   getToken(): string | null {
-    return this.getItem(this.config.tokenKey);
+    const token = this.getItem(this.config.tokenKey);
+    
+    if (this.debugManager && this.enableLogs) {
+      const emoji = token ? '✅' : '❌';
+      this.debugManager.log('auth', `${emoji} AUTH GET TOKEN`, {
+        tokenKey: this.config.tokenKey,
+        hasToken: !!token,
+        storage: this.config.storage,
+      });
+    }
+    
+    return token;
   }
 
   setRefreshToken(token: string): void {
     this.setItem(`${this.config.tokenKey}_refresh`, token);
+    
+    if (this.debugManager && this.enableLogs) {
+      this.debugManager.log('auth', '🔄 AUTH SET REFRESH TOKEN', {
+        tokenKey: `${this.config.tokenKey}_refresh`,
+        storage: this.config.storage,
+        tokenLength: token.length,
+      });
+    }
   }
 
   getRefreshToken(): string | null {
-    return this.getItem(`${this.config.tokenKey}_refresh`);
+    const token = this.getItem(`${this.config.tokenKey}_refresh`);
+    
+    if (this.debugManager && this.enableLogs) {
+      const emoji = token ? '✅' : '❌';
+      this.debugManager.log('auth', `${emoji} AUTH GET REFRESH TOKEN`, {
+        tokenKey: `${this.config.tokenKey}_refresh`,
+        hasToken: !!token,
+        storage: this.config.storage,
+      });
+    }
+    
+    return token;
   }
 
   clearAuth(): void {
     this.removeItem(this.config.tokenKey);
     this.removeItem(`${this.config.tokenKey}_refresh`);
+    
+    if (this.debugManager && this.enableLogs) {
+      this.debugManager.log('auth', '🗑️ AUTH CLEAR', {
+        tokenKey: this.config.tokenKey,
+        storage: this.config.storage,
+      });
+    }
   }
 
   isAuthenticated(): boolean {
     const token = this.getToken();
-    if (!token) return false;
+    if (!token) {
+      if (this.debugManager && this.enableLogs) {
+        this.debugManager.log('auth', '❌ AUTH CHECK: No token', {});
+      }
+      return false;
+    }
 
     // Check if token is expired (if it's a JWT)
     try {
       const payload = JSON.parse(atob(token.split('.')[1] || ''));
       const now = Date.now() / 1000;
-      return payload.exp ? payload.exp > now : true;
+      const isValid = payload.exp ? payload.exp > now : true;
+      
+      if (this.debugManager && this.enableLogs) {
+        const emoji = isValid ? '✅' : '⏰';
+        const status = isValid ? 'VALID' : 'EXPIRED';
+        this.debugManager.log('auth', `${emoji} AUTH CHECK: ${status}`, {
+          exp: payload.exp,
+          now,
+          isValid,
+        });
+      }
+      
+      return isValid;
     } catch {
       // If not a JWT, assume it's valid
+      if (this.debugManager && this.enableLogs) {
+        this.debugManager.log('auth', '✅ AUTH CHECK: Non-JWT token', {});
+      }
       return true;
     }
   }
 
   private setItem(key: string, value: string): void {
     switch (this.config.storage) {
-      case 'localStorage':
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(key, value);
-        }
-        break;
       case 'sessionStorage':
         if (typeof window !== 'undefined') {
           sessionStorage.setItem(key, value);
@@ -62,6 +146,26 @@ export class AuthManager {
       case 'cookie':
         if (typeof document !== 'undefined') {
           document.cookie = `${key}=${value}; path=/; secure; samesite=strict`;
+        }
+        break;
+      case 'AsyncStorage':
+        if (this.AsyncStorage) {
+          // Async but we don't await - fire and forget for backwards compatibility
+          this.AsyncStorage.setItem(key, value).catch((err: Error) => {
+            console.error('[AuthManager] AsyncStorage setItem failed:', err);
+          });
+        } else {
+          this.memoryStorage.set(key, value);
+        }
+        break;
+      case 'SecureStore':
+        if (this.SecureStore) {
+          // Async but we don't await - fire and forget for backwards compatibility
+          this.SecureStore.setItemAsync(key, value).catch((err: Error) => {
+            console.error('[AuthManager] SecureStore setItemAsync failed:', err);
+          });
+        } else {
+          this.memoryStorage.set(key, value);
         }
         break;
       case 'memory':
@@ -73,11 +177,6 @@ export class AuthManager {
 
   private getItem(key: string): string | null {
     switch (this.config.storage) {
-      case 'localStorage':
-        if (typeof window !== 'undefined') {
-          return localStorage.getItem(key);
-        }
-        break;
       case 'sessionStorage':
         if (typeof window !== 'undefined') {
           return sessionStorage.getItem(key);
@@ -89,6 +188,16 @@ export class AuthManager {
           return match ? match[2] || null : null;
         }
         break;
+      case 'AsyncStorage':
+        // Note: AsyncStorage is async, so we can't return the value synchronously
+        // Users should rely on the async nature of React Native's auth flow
+        // For immediate access, use memory storage
+        console.warn('[AuthManager] AsyncStorage is async - token may not be immediately available. Consider using memory storage for synchronous access.');
+        return this.memoryStorage.get(key) || null;
+      case 'SecureStore':
+        // Note: SecureStore is async, so we can't return the value synchronously
+        console.warn('[AuthManager] SecureStore is async - token may not be immediately available. Consider using memory storage for synchronous access.');
+        return this.memoryStorage.get(key) || null;
       case 'memory':
       default:
         return this.memoryStorage.get(key) || null;
@@ -96,13 +205,77 @@ export class AuthManager {
     return null;
   }
 
-  private removeItem(key: string): void {
+  /**
+   * Async version of getItem for AsyncStorage and SecureStore
+   * Use this when you need to retrieve tokens from async storage
+   */
+  async getItemAsync(key: string): Promise<string | null> {
     switch (this.config.storage) {
-      case 'localStorage':
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem(key);
+      case 'AsyncStorage':
+        if (this.AsyncStorage) {
+          try {
+            return await this.AsyncStorage.getItem(key);
+          } catch (err) {
+            console.error('[AuthManager] AsyncStorage getItem failed:', err);
+            return null;
+          }
         }
         break;
+      case 'SecureStore':
+        if (this.SecureStore) {
+          try {
+            return await this.SecureStore.getItemAsync(key);
+          } catch (err) {
+            console.error('[AuthManager] SecureStore getItemAsync failed:', err);
+            return null;
+          }
+        }
+        break;
+      default:
+        // For sync storage, just return the sync value
+        return this.getItem(key);
+    }
+    return null;
+  }
+
+  /**
+   * Async version of getToken for React Native/Expo
+   */
+  async getTokenAsync(): Promise<string | null> {
+    const token = await this.getItemAsync(this.config.tokenKey);
+    
+    if (this.debugManager && this.enableLogs) {
+      const emoji = token ? '✅' : '❌';
+      this.debugManager.log('auth', `${emoji} AUTH GET TOKEN (ASYNC)`, {
+        tokenKey: this.config.tokenKey,
+        hasToken: !!token,
+        storage: this.config.storage,
+      });
+    }
+    
+    return token;
+  }
+
+  /**
+   * Async version of getRefreshToken for React Native/Expo
+   */
+  async getRefreshTokenAsync(): Promise<string | null> {
+    const token = await this.getItemAsync(`${this.config.tokenKey}_refresh`);
+    
+    if (this.debugManager && this.enableLogs) {
+      const emoji = token ? '✅' : '❌';
+      this.debugManager.log('auth', `${emoji} AUTH GET REFRESH TOKEN (ASYNC)`, {
+        tokenKey: `${this.config.tokenKey}_refresh`,
+        hasToken: !!token,
+        storage: this.config.storage,
+      });
+    }
+    
+    return token;
+  }
+
+  private removeItem(key: string): void {
+    switch (this.config.storage) {
       case 'sessionStorage':
         if (typeof window !== 'undefined') {
           sessionStorage.removeItem(key);
@@ -111,6 +284,24 @@ export class AuthManager {
       case 'cookie':
         if (typeof document !== 'undefined') {
           document.cookie = `${key}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+        }
+        break;
+      case 'AsyncStorage':
+        if (this.AsyncStorage) {
+          this.AsyncStorage.removeItem(key).catch((err: Error) => {
+            console.error('[AuthManager] AsyncStorage removeItem failed:', err);
+          });
+        } else {
+          this.memoryStorage.delete(key);
+        }
+        break;
+      case 'SecureStore':
+        if (this.SecureStore) {
+          this.SecureStore.deleteItemAsync(key).catch((err: Error) => {
+            console.error('[AuthManager] SecureStore deleteItemAsync failed:', err);
+          });
+        } else {
+          this.memoryStorage.delete(key);
         }
         break;
       case 'memory':

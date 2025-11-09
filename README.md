@@ -21,38 +21,55 @@ Universal data management for React, Next.js, React Native, Expo, Node.js, and E
 npm install minder-data-provider
 ```
 
+### Next.js Users - Important! ⚠️
+
+**If you're using Next.js, you MUST include the `dynamic` field:**
+
 ```typescript
-// 1. Configure
-import { createMinderConfig } from 'minder-data-provider/config';
+import dynamic from "next/dynamic"; // Required import
+import { createMinderConfig } from "minder-data-provider/config";
 
 export const config = createMinderConfig({
-  apiUrl: 'https://api.example.com',
-  routes: { users: '/users' }
+  apiUrl: "https://api.example.com",
+  dynamic: dynamic, // ⚠️ REQUIRED for Next.js
+  routes: { users: "/users" },
+});
+```
+
+📖 **See [DYNAMIC_IMPORTS.md](./docs/DYNAMIC_IMPORTS.md) for details**
+
+---
+
+### Standard Setup
+
+```typescript
+// 1. Configure
+import { createMinderConfig } from "minder-data-provider/config";
+
+export const config = createMinderConfig({
+  apiUrl: "https://api.example.com",
+  routes: { users: "/users" },
 });
 
 // 2. Setup Provider
-import { MinderDataProvider } from 'minder-data-provider';
+import { MinderDataProvider } from "minder-data-provider";
 
 export default function App({ children }) {
-  return (
-    <MinderDataProvider config={config}>
-      {children}
-    </MinderDataProvider>
-  );
+  return <MinderDataProvider config={config}>{children}</MinderDataProvider>;
 }
 
 // 3. Use in Components
-import { useOneTouchCrud } from 'minder-data-provider/crud';
+import { useOneTouchCrud } from "minder-data-provider/crud";
 
 function Users() {
-  const { data, loading, operations } = useOneTouchCrud('users');
+  const { data, loading, operations } = useOneTouchCrud("users");
 
   return (
     <div>
-      <button onClick={() => operations.create({ name: 'John' })}>
+      <button onClick={() => operations.create({ name: "John" })}>
         Add User
       </button>
-      {data.map(user => (
+      {data.map((user) => (
         <div key={user.id}>{user.name}</div>
       ))}
     </div>
@@ -410,7 +427,8 @@ const { data } = useOneTouchCrud("users");
 - **🌐 CORS Support**: Built-in CORS handling for cross-origin requests
 - **🔌 WebSocket Integration**: Real-time communication with auto-reconnection
 - **💾 Advanced Caching**: Multi-level caching with TTL and invalidation
-- **🔐 Authentication Management**: Token storage with multiple strategies
+- **🔐 Authentication Management**: Secure token storage (cookie, sessionStorage, memory)
+  - ⚠️ **Security Update v2.0.1**: `localStorage` removed for XSS protection
 - **📁 File Upload Support**: Progress tracking and multiple formats
 - **⚡ Optimistic Updates**: Instant UI updates with rollback
 - **🛡️ Type Safety**: Full TypeScript support with auto-generated types
@@ -420,16 +438,16 @@ const { data } = useOneTouchCrud("users");
 
 ### ✅ Production Ready (v2.0)
 
-| Feature                   | Status    | Bundle Size | Description                                        |
-| ------------------------- | --------- | ----------- | -------------------------------------------------- |
-| **CRUD Operations**       | ✅ Stable | 47.82 KB    | Complete create, read, update, delete operations   |
-| **Authentication**        | ✅ Stable | 48.97 KB    | JWT tokens, auto-refresh, multiple storage options |
-| **Caching System**        | ✅ Stable | 48.17 KB    | Multi-level cache with TTL and invalidation        |
-| **Configuration Presets** | ✅ Stable | 8.64 KB     | 4 presets: minimal, standard, advanced, enterprise |
-| **Lazy Loading**          | ✅ Stable | -           | 68% faster startup, load deps on-demand            |
-| **Token Auto-Refresh**    | ✅ Stable | 12 KB       | Auto-refresh JWT 5min before expiration            |
-| **Rate Limiting**         | ✅ Stable | 15 KB       | Server-side rate limiting middleware               |
-| **Bundle Analysis**       | ✅ Stable | -           | Verified 80.8% reduction (47KB → 250KB)            |
+| Feature                   | Status    | Bundle Size | Description                                                             |
+| ------------------------- | --------- | ----------- | ----------------------------------------------------------------------- |
+| **CRUD Operations**       | ✅ Stable | 47.82 KB    | Complete create, read, update, delete operations                        |
+| **Authentication**        | ✅ Stable | 48.97 KB    | JWT tokens, auto-refresh, secure storage (cookie/sessionStorage/memory) |
+| **Caching System**        | ✅ Stable | 48.17 KB    | Multi-level cache with TTL and invalidation                             |
+| **Configuration Presets** | ✅ Stable | 8.64 KB     | 4 presets: minimal, standard, advanced, enterprise                      |
+| **Lazy Loading**          | ✅ Stable | -           | 68% faster startup, load deps on-demand                                 |
+| **Token Auto-Refresh**    | ✅ Stable | 12 KB       | Auto-refresh JWT 5min before expiration                                 |
+| **Rate Limiting**         | ✅ Stable | 15 KB       | Server-side rate limiting middleware                                    |
+| **Bundle Analysis**       | ✅ Stable | -           | Verified 80.8% reduction (47KB → 250KB)                                 |
 
 ### 🚧 Beta (v2.1 - Q1 2026)
 
@@ -1907,9 +1925,9 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - 📖 **[Complete Documentation](./docs/API_REFERENCE.md)** - API Reference, Examples & Guides
 - 📘 **[Migration Guide](./docs/MIGRATION_GUIDE.md)** - Upgrade from v1.x to v2.0
 - ⚡ **[Performance Guide](./docs/PERFORMANCE_GUIDE.md)** - Optimization tips & best practices
-- 💬 [Discord Community](https://discord.gg/minder-data-provider)
+- 💬 [Discord Community](https://discord.gg/dN3eFFjmfy)
 - 🐛 [Issue Tracker](https://github.com/minder-data-provider/issues)
-- 📧 [Email Support](mailto:support@minder-data-provider.com)
+- 📧 [Email Support](mailto:support@patelkeyur7279@gmail.com)
 
 ## 🏆 Why Choose Minder Data Provider v2.0?
 
@@ -1927,4 +1945,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 **v2.0 Highlights**: Modular Architecture • Simplified Config • Advanced Debug Tools • Flexible SSR/CSR • Enhanced Security • Performance Optimizations
 
 Built with ❤️ for the React/Next.js community
-````
+
+```
+
+```

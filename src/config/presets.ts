@@ -115,7 +115,6 @@ export const CONFIG_PRESETS: Record<ConfigPreset, Partial<MinderConfig>> = {
       rateLimiting: {
         requests: 500,
         window: 60000,
-        storage: 'localStorage',
       },
       inputValidation: true,
     },
@@ -176,7 +175,6 @@ export const CONFIG_PRESETS: Record<ConfigPreset, Partial<MinderConfig>> = {
       rateLimiting: {
         requests: 1000,
         window: 60000,
-        storage: 'localStorage',
       },
       headers: {
         contentSecurityPolicy: "default-src 'self'",

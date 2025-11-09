@@ -5,6 +5,54 @@ All notable changes to Minder Data Provider will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.2] - 2025-11-08
+
+### 🧪 Testing & Quality
+
+#### Improved Test Coverage
+
+- **Overall Coverage**: Increased from 34.94% to 53.19% (+18.25%)
+- **Total Tests**: 1,100+ comprehensive tests (up from 443)
+- **Test Suite Growth**: +148% increase in test coverage
+
+#### New Test Suites
+
+- **WebSocketManager**: 40 tests covering connections, subscriptions, heartbeat, reconnection, and error handling (3.7% → 97.53%)
+- **AuthManager**: 55 tests for all storage types (memory, sessionStorage, cookie, AsyncStorage, SecureStore), JWT validation, and debug logging (0.76% → 89.31%)
+- **TokenRefreshManager**: 26 tests for JWT parsing, auto-refresh, manual refresh, and error scenarios (77.77% → 97.97%)
+- **MemoryStorageAdapter**: Enhanced with 36 additional tests covering TTL, garbage collection, edge cases (81.96% → 83.6%)
+- **WebStorageAdapter**: 47 new tests for quota management, error handling, TTL support (45.26% → 71.57%)
+- **CacheManager**: 44 tests for QueryClient integration, cache invalidation, prefetching (2.04% → 93.87%)
+
+#### Modules at 100% Coverage
+
+- BaseModel
+- Config presets
+- DebugManager
+- Constants
+- Core minder utils
+- EnvironmentManager
+
+#### High Coverage Modules (90%+)
+
+- Minder core (95.23%)
+- Logger (94.36%)
+- CacheManager (93.87%)
+- WebSocketManager (97.53%)
+- TokenRefreshManager (97.97%)
+- AuthManager (89.31%)
+
+### 🔧 Bug Fixes
+
+- Fixed async storage handling in AuthManager
+- Improved error handling in WebStorageAdapter quota management
+- Enhanced TTL expiration cleanup in storage adapters
+
+### 📚 Documentation
+
+- Comprehensive test documentation for all new test suites
+- Improved inline code comments
+
 ## [2.0.0] - 2025-11-04
 
 ### 🎉 Major Release

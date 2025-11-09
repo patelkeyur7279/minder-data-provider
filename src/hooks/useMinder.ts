@@ -31,6 +31,7 @@
  * const { data } = useMinder('users', { model: UserModel });
  */
 
+import { useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { UseQueryOptions, UseMutationOptions } from '@tanstack/react-query';
 import { minder } from '../core/minder.js';
@@ -166,8 +167,19 @@ export function useMinder<TData = any>(
 ): UseMinderReturn<TData> {
   const queryClient = useQueryClient();
   
-  // Query key for caching
-  const queryKey = [route, options.params];
+  // Stabilize query key to prevent unnecessary refetches on every render
+  // Only recreate when route or params actually change (deep comparison)
+  const queryKey = useMemo(
+    () => [route, options.params],
+    [route, JSON.stringify(options.params)] // Deep compare params
+  );
+  
+  // Determine if query should be enabled
+  // autoFetch: false should completely disable automatic fetching
+  const isQueryEnabled = useMemo(
+    () => options.enabled !== false && options.autoFetch !== false,
+    [options.enabled, options.autoFetch]
+  );
   
   // =========================================================================
   // QUERY (for GET requests)
@@ -191,7 +203,7 @@ export function useMinder<TData = any>(
       
       return result;
     },
-    enabled: options.enabled !== false && options.autoFetch !== false,
+    enabled: isQueryEnabled,
     staleTime: options.cacheTTL || 5 * 60 * 1000, // 5 minutes default
     refetchOnWindowFocus: options.refetchOnWindowFocus ?? false,
     refetchOnReconnect: options.refetchOnReconnect ?? true,

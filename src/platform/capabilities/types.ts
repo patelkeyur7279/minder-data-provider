@@ -16,7 +16,7 @@ export interface AuthCapabilities {
 export interface CacheCapabilities {
   memory: true; // Always supported
   persistent: boolean;
-  storageType: 'localStorage' | 'AsyncStorage' | 'SecureStore' | 'electron-store' | null;
+  storageType: 'sessionStorage' | 'AsyncStorage' | 'SecureStore' | 'electron-store' | null;
 }
 
 /**

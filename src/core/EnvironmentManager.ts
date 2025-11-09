@@ -62,7 +62,7 @@ export class EnvironmentManager {
       apiBaseUrl: this.buildApiUrl(envOverride),
       auth: {
         tokenKey: this.config.auth?.tokenKey || 'accessToken',
-        storage: this.config.auth?.storage || 'localStorage',
+        storage: this.config.auth?.storage || 'memory', // Secure default
         ...this.config.auth,
         ...envOverride.auth,
       },

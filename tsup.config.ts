@@ -25,11 +25,17 @@ export default defineConfig({
   },
   format: ['cjs', 'esm'],
   dts: true,
-  sourcemap: true,
+  sourcemap: process.env.NODE_ENV !== 'production', // Only in development
   clean: true,
   splitting: false,
   treeshake: true,
-  minify: false, // Keep readable for debugging
+  minify: true, // Enable minification to reduce bundle size
+  
+  // Target modern environments for better tree-shaking  
+  target: 'es2020',
+  
+  // Remove unused code
+  shims: false,
   
   // ✅ All dependencies are external (peer dependencies)
   // Users install these themselves - reduces bundle size by 96%!
@@ -42,7 +48,8 @@ export default defineConfig({
     '@reduxjs/toolkit',
     'react-redux',
     'axios',
-    'immer'
+    'immer',
+    'dompurify'
   ],
   
   esbuildOptions(options) {

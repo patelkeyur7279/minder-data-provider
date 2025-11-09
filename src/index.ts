@@ -33,7 +33,6 @@ export type {
   MinderOptions,
   MinderResult,
   MinderError as MinderRequestError, // Renamed to avoid conflict with error class
-  HttpMethod,
   UploadProgress,
 } from './core/minder.js';
 
@@ -91,7 +90,8 @@ export type { ErrorBoundaryProps } from './components/index.js';
 
 // Platform detection and capabilities
 export { PlatformDetector, PlatformCapabilityDetector } from './platform/index.js';
-export type { Platform, PlatformCapabilities } from './platform/index.js';
+export type { PlatformCapabilities } from './platform/index.js';
+// Note: Platform enum is exported from constants/enums.js instead
 
 // Note: Platform adapters and factories are exported from './platform/index.js'
 // Import from 'minder-data-provider/platform' for platform-specific features
@@ -142,6 +142,94 @@ export {
 export type {
   RateLimitConfig,
 } from './middleware/rate-limiter.js';
+
+// ============================================================================
+// ENUMS & CONSTANTS - Type-safe values for configuration
+// ============================================================================
+
+// Export all enums for type-safe configuration
+export {
+  // HTTP & Network
+  HttpMethod,
+  QueryStatus,
+  NetworkState,
+  RetryStrategy,
+  
+  // Logging & Debugging
+  LogLevel,
+  
+  // Storage & Caching
+  StorageType,
+  CacheType,
+  CacheRequirements,
+  
+  // Security
+  SecurityLevel,
+  TokenType,
+  
+  // Platform
+  Platform,
+  Environment,
+  
+  // Data & Size
+  DataSize,
+  PrefetchStrategy,
+  
+  // Configuration
+  ConfigPreset,
+  
+  // UI & Notifications
+  NotificationType,
+  
+  // WebSocket
+  WebSocketState,
+  
+  // Upload
+  UploadState,
+  
+  // CRUD
+  CrudOperation,
+  
+  // Authentication
+  AuthState,
+  
+  // Sorting & Pagination
+  SortOrder,
+  PaginationType,
+  
+  // Errors
+  ErrorCode,
+  
+  // Constants
+  DEFAULT_VALUES,
+  HTTP_STATUS,
+  MIME_TYPES,
+  STORAGE_KEYS,
+  EVENTS,
+  
+  // Type Guards
+  isHttpMethod,
+  isQueryStatus,
+  isLogLevel,
+  isPlatform,
+  isStorageType,
+  isSecurityLevel,
+  isDataSize,
+  isConfigPreset,
+} from './constants/enums.js';
+
+// Export enum utility types
+export type {
+  HttpMethodType,
+  QueryStatusType,
+  LogLevelType,
+  StorageTypeType,
+  PlatformType,
+  SecurityLevelType,
+  DataSizeType,
+  ConfigPresetType,
+  NotificationTypeType,
+} from './constants/enums.js';
 
 // ============================================================================
 // DEFAULT EXPORT

@@ -140,7 +140,7 @@ export class SmartConfigManager {
    */
   private generateAuthConfig(isLightMode: boolean): AuthConfig {
     return {
-      storage: this.options.security?.level === 'strict' ? 'memory' : 'localStorage',
+      storage: this.options.security?.level === 'strict' ? 'memory' : 'sessionStorage',
       tokenKey: 'auth_token',
       refreshUrl: isLightMode ? undefined : '/refresh-token',
       onAuthError: () => this.handleAuthError(),

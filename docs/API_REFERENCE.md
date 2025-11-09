@@ -24,19 +24,17 @@ Complete API documentation for Minder Data Provider v2.0.
 The main provider component that wraps your application.
 
 ```typescript
-import { MinderDataProvider } from 'minder-data-provider';
+import { MinderDataProvider } from "minder-data-provider";
 
-<MinderDataProvider config={config}>
-  {children}
-</MinderDataProvider>
+<MinderDataProvider config={config}>{children}</MinderDataProvider>;
 ```
 
 **Props:**
 
-| Prop | Type | Required | Description |
-|------|------|----------|-------------|
-| `config` | `MinderConfig` | Yes | Configuration object |
-| `children` | `ReactNode` | Yes | Child components |
+| Prop       | Type           | Required | Description          |
+| ---------- | -------------- | -------- | -------------------- |
+| `config`   | `MinderConfig` | Yes      | Configuration object |
+| `children` | `ReactNode`    | Yes      | Child components     |
 
 ---
 
@@ -47,22 +45,17 @@ import { MinderDataProvider } from 'minder-data-provider';
 Hook for complete CRUD operations with a single call.
 
 ```typescript
-import { useOneTouchCrud } from 'minder-data-provider/crud';
+import { useOneTouchCrud } from "minder-data-provider/crud";
 
-const {
-  data,
-  loading,
-  error,
-  operations
-} = useOneTouchCrud<T>(route, options);
+const { data, loading, error, operations } = useOneTouchCrud<T>(route, options);
 ```
 
 **Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `route` | `string` | Yes | API route name |
-| `options` | `CrudOptions` | No | Configuration options |
+| Parameter | Type          | Required | Description           |
+| --------- | ------------- | -------- | --------------------- |
+| `route`   | `string`      | Yes      | API route name        |
+| `options` | `CrudOptions` | No       | Configuration options |
 
 **Returns:**
 
@@ -89,9 +82,9 @@ const {
 
 ```typescript
 interface CrudOptions {
-  autoFetch?: boolean;          // Auto-fetch on mount (default: true)
-  optimistic?: boolean;         // Optimistic updates (default: true)
-  cache?: boolean;              // Enable caching (default: true)
+  autoFetch?: boolean; // Auto-fetch on mount (default: true)
+  optimistic?: boolean; // Optimistic updates (default: true)
+  cache?: boolean; // Enable caching (default: true)
   onSuccess?: (data: T) => void;
   onError?: (error: Error) => void;
 }
@@ -101,21 +94,25 @@ interface CrudOptions {
 
 ```typescript
 function UsersList() {
-  const { data: users, loading, operations } = useOneTouchCrud<User>('users', {
+  const {
+    data: users,
+    loading,
+    operations,
+  } = useOneTouchCrud<User>("users", {
     optimistic: true,
-    onSuccess: (user) => console.log('Success:', user),
-    onError: (error) => console.error('Error:', error)
+    onSuccess: (user) => console.log("Success:", user),
+    onError: (error) => console.error("Error:", error),
   });
 
   const handleCreate = async () => {
-    await operations.create({ 
-      name: 'John Doe', 
-      email: 'john@example.com' 
+    await operations.create({
+      name: "John Doe",
+      email: "john@example.com",
     });
   };
 
   const handleUpdate = async (id: string) => {
-    await operations.update(id, { name: 'Jane Doe' });
+    await operations.update(id, { name: "Jane Doe" });
   };
 
   const handleDelete = async (id: string) => {
@@ -126,7 +123,7 @@ function UsersList() {
 
   return (
     <div>
-      {users.map(user => (
+      {users.map((user) => (
         <div key={user.id}>
           <span>{user.name}</span>
           <button onClick={() => handleUpdate(user.id)}>Edit</button>
@@ -148,28 +145,21 @@ function UsersList() {
 Hook for authentication management.
 
 ```typescript
-import { useAuth } from 'minder-data-provider/auth';
+import { useAuth } from "minder-data-provider/auth";
 
-const {
-  user,
-  isAuthenticated,
-  login,
-  logout,
-  register,
-  refresh
-} = useAuth();
+const { user, isAuthenticated, login, logout, register, refresh } = useAuth();
 ```
 
 **Returns:**
 
 ```typescript
 {
-  user: User | null;                    // Current user
-  isAuthenticated: boolean;              // Auth status
+  user: User | null; // Current user
+  isAuthenticated: boolean; // Auth status
   login: (credentials: Credentials) => Promise<User>;
   logout: () => Promise<void>;
   register: (data: RegisterData) => Promise<User>;
-  refresh: () => Promise<void>;         // Refresh token
+  refresh: () => Promise<void>; // Refresh token
 }
 ```
 
@@ -178,8 +168,8 @@ const {
 ```typescript
 function LoginForm() {
   const { login, isAuthenticated } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -187,7 +177,7 @@ function LoginForm() {
       await login({ email, password });
       // Redirect to dashboard
     } catch (error) {
-      console.error('Login failed:', error);
+      console.error("Login failed:", error);
     }
   };
 
@@ -197,19 +187,19 @@ function LoginForm() {
 
   return (
     <form onSubmit={handleSubmit}>
-      <input 
-        type="email" 
-        value={email} 
+      <input
+        type='email'
+        value={email}
         onChange={(e) => setEmail(e.target.value)}
-        placeholder="Email"
+        placeholder='Email'
       />
-      <input 
-        type="password" 
-        value={password} 
+      <input
+        type='password'
+        value={password}
         onChange={(e) => setPassword(e.target.value)}
-        placeholder="Password"
+        placeholder='Password'
       />
-      <button type="submit">Login</button>
+      <button type='submit'>Login</button>
     </form>
   );
 }
@@ -224,14 +214,9 @@ function LoginForm() {
 Hook for cache management.
 
 ```typescript
-import { useCache } from 'minder-data-provider/cache';
+import { useCache } from "minder-data-provider/cache";
 
-const {
-  get,
-  set,
-  invalidate,
-  clear
-} = useCache();
+const { get, set, invalidate, clear } = useCache();
 ```
 
 **Methods:**
@@ -253,7 +238,7 @@ function CachedComponent() {
 
   useEffect(() => {
     // Set cache with 5 minute TTL
-    cache.set('users', users, 300000);
+    cache.set("users", users, 300000);
   }, [users]);
 
   const handleRefresh = () => {
@@ -261,7 +246,7 @@ function CachedComponent() {
     cache.invalidate(/^users/);
   };
 
-  const cachedData = cache.get('users');
+  const cachedData = cache.get("users");
 
   return (
     <div>
@@ -281,22 +266,17 @@ function CachedComponent() {
 Hook for WebSocket connections.
 
 ```typescript
-import { useWebSocket } from 'minder-data-provider/websocket';
+import { useWebSocket } from "minder-data-provider/websocket";
 
-const {
-  connected,
-  send,
-  subscribe,
-  unsubscribe
-} = useWebSocket(url, options);
+const { connected, send, subscribe, unsubscribe } = useWebSocket(url, options);
 ```
 
 **Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `url` | `string` | Yes | WebSocket URL |
-| `options` | `WebSocketOptions` | No | Connection options |
+| Parameter | Type               | Required | Description        |
+| --------- | ------------------ | -------- | ------------------ |
+| `url`     | `string`           | Yes      | WebSocket URL      |
+| `options` | `WebSocketOptions` | No       | Connection options |
 
 **Returns:**
 
@@ -313,32 +293,32 @@ const {
 
 ```typescript
 function RealtimeChat() {
-  const ws = useWebSocket('wss://api.example.com/chat', {
+  const ws = useWebSocket("wss://api.example.com/chat", {
     autoConnect: true,
     reconnect: true,
-    reconnectInterval: 3000
+    reconnectInterval: 3000,
   });
 
   useEffect(() => {
     const handleMessage = (data: Message) => {
-      console.log('New message:', data);
+      console.log("New message:", data);
     };
 
-    ws.subscribe('message', handleMessage);
+    ws.subscribe("message", handleMessage);
 
     return () => {
-      ws.unsubscribe('message', handleMessage);
+      ws.unsubscribe("message", handleMessage);
     };
   }, []);
 
   const sendMessage = (text: string) => {
-    ws.send('message', { text, timestamp: Date.now() });
+    ws.send("message", { text, timestamp: Date.now() });
   };
 
   return (
     <div>
-      <div>Status: {ws.connected ? 'Connected' : 'Disconnected'}</div>
-      <button onClick={() => sendMessage('Hello!')}>Send</button>
+      <div>Status: {ws.connected ? "Connected" : "Disconnected"}</div>
+      <button onClick={() => sendMessage("Hello!")}>Send</button>
     </div>
   );
 }
@@ -353,14 +333,9 @@ function RealtimeChat() {
 Hook for file uploads with progress tracking.
 
 ```typescript
-import { useMediaUpload } from 'minder-data-provider/upload';
+import { useMediaUpload } from "minder-data-provider/upload";
 
-const {
-  upload,
-  progress,
-  uploading,
-  error
-} = useMediaUpload(options);
+const { upload, progress, uploading, error } = useMediaUpload(options);
 ```
 
 **Returns:**
@@ -368,7 +343,7 @@ const {
 ```typescript
 {
   upload: (file: File) => Promise<UploadResult>;
-  progress: number;          // 0-100
+  progress: number; // 0-100
   uploading: boolean;
   error: Error | null;
 }
@@ -379,8 +354,8 @@ const {
 ```typescript
 function FileUploader() {
   const { upload, progress, uploading } = useMediaUpload({
-    maxSize: 10 * 1024 * 1024,  // 10MB
-    acceptedTypes: ['image/*', 'application/pdf']
+    maxSize: 10 * 1024 * 1024, // 10MB
+    acceptedTypes: ["image/*", "application/pdf"],
   });
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -388,16 +363,16 @@ function FileUploader() {
     if (file) {
       try {
         const result = await upload(file);
-        console.log('Upload successful:', result.url);
+        console.log("Upload successful:", result.url);
       } catch (error) {
-        console.error('Upload failed:', error);
+        console.error("Upload failed:", error);
       }
     }
   };
 
   return (
     <div>
-      <input type="file" onChange={handleFileChange} disabled={uploading} />
+      <input type='file' onChange={handleFileChange} disabled={uploading} />
       {uploading && <div>Progress: {progress}%</div>}
     </div>
   );
@@ -413,7 +388,7 @@ function FileUploader() {
 Hook for debugging and performance monitoring.
 
 ```typescript
-import { useDebug } from 'minder-data-provider/debug';
+import { useDebug } from "minder-data-provider/debug";
 
 const debug = useDebug();
 ```
@@ -437,15 +412,18 @@ function DebugExample() {
   const debug = useDebug();
 
   const performOperation = async () => {
-    debug.startTimer('api-call');
-    debug.log('api', 'Starting API call', { endpoint: '/users' });
+    debug.startTimer("api-call");
+    debug.log("api", "Starting API call", { endpoint: "/users" });
 
     try {
       const result = await fetchUsers();
-      const duration = debug.endTimer('api-call');
-      debug.log('api', 'API call completed', { duration, count: result.length });
+      const duration = debug.endTimer("api-call");
+      debug.log("api", "API call completed", {
+        duration,
+        count: result.length,
+      });
     } catch (error) {
-      debug.log('error', 'API call failed', error);
+      debug.log("error", "API call failed", error);
     }
   };
 
@@ -485,7 +463,7 @@ window.__MINDER_DEBUG__.clear();
 Create a configuration object with intelligent defaults.
 
 ```typescript
-import { createMinderConfig } from 'minder-data-provider/config';
+import { createMinderConfig } from "minder-data-provider/config";
 
 const config = createMinderConfig(options);
 ```
@@ -496,19 +474,19 @@ const config = createMinderConfig(options);
 interface MinderConfigOptions {
   // Required
   apiUrl: string;
-  
+
   // Routes (auto-generates CRUD)
   routes?: {
     [key: string]: string | RouteConfig;
   };
-  
+
   // Features (boolean = auto-configure)
   auth?: boolean | AuthConfig;
   cache?: boolean | CacheConfig;
   cors?: boolean | CorsConfig;
   websocket?: boolean | WebSocketConfig;
   debug?: boolean | DebugConfig;
-  
+
   // Security
   security?: {
     sanitization?: boolean;
@@ -518,7 +496,7 @@ interface MinderConfigOptions {
       window: number;
     };
   };
-  
+
   // Performance
   performance?: {
     deduplication?: boolean;
@@ -528,7 +506,7 @@ interface MinderConfigOptions {
     retries?: number;
     compression?: boolean;
   };
-  
+
   // SSR
   ssr?: {
     enabled?: boolean;
@@ -543,45 +521,45 @@ interface MinderConfigOptions {
 ```typescript
 // Simple configuration
 const config = createMinderConfig({
-  apiUrl: 'https://api.example.com',
+  apiUrl: "https://api.example.com",
   routes: {
-    users: '/users',      // Auto-generates full CRUD
-    posts: '/posts'
+    users: "/users", // Auto-generates full CRUD
+    posts: "/posts",
   },
-  auth: true,             // Auto-configures auth
-  cache: true,            // Auto-configures cache
-  debug: true             // Enables debug mode
+  auth: true, // Auto-configures auth
+  cache: true, // Auto-configures cache
+  debug: true, // Enables debug mode
 });
 
 // Advanced configuration
 const config = createMinderConfig({
-  apiUrl: 'https://api.example.com',
+  apiUrl: "https://api.example.com",
   routes: {
     users: {
-      method: 'GET',
-      url: '/users',
+      method: "GET",
+      url: "/users",
       cache: true,
-      optimistic: true
-    }
+      optimistic: true,
+    },
   },
   auth: {
-    tokenKey: 'access_token',
-    storage: 'localStorage',
-    autoRefresh: true
+    tokenKey: "access_token",
+    storage: "cookie", // ✅ Secure storage (or 'sessionStorage', 'memory')
+    autoRefresh: true,
   },
   security: {
     sanitization: true,
     csrfProtection: true,
     rateLimiting: {
       requests: 100,
-      window: 60000
-    }
+      window: 60000,
+    },
   },
   performance: {
     deduplication: true,
     batching: true,
-    monitoring: true
-  }
+    monitoring: true,
+  },
 });
 ```
 
@@ -592,11 +570,11 @@ const config = createMinderConfig({
 ### Performance Utilities
 
 ```typescript
-import { 
+import {
   RequestBatcher,
   RequestDeduplicator,
-  PerformanceMonitor 
-} from 'minder-data-provider/utils/performance';
+  PerformanceMonitor,
+} from "minder-data-provider/utils/performance";
 ```
 
 ### React Performance Hooks
@@ -606,15 +584,15 @@ import {
   useDebounce,
   useThrottle,
   useLazyLoad,
-  usePerformanceMonitor
-} from 'minder-data-provider/utils/performance';
+  usePerformanceMonitor,
+} from "minder-data-provider/utils/performance";
 ```
 
 **useDebounce Example:**
 
 ```typescript
 function SearchComponent() {
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 500);
 
   useEffect(() => {
@@ -625,10 +603,10 @@ function SearchComponent() {
   }, [debouncedSearch]);
 
   return (
-    <input 
-      value={search} 
+    <input
+      value={search}
       onChange={(e) => setSearch(e.target.value)}
-      placeholder="Search..."
+      placeholder='Search...'
     />
   );
 }
@@ -643,8 +621,8 @@ function ScrollTracker() {
 
   useEffect(() => {
     const handleScroll = () => setScrollY(window.scrollY);
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
   return <div>Scroll position: {throttledScroll}px</div>;
@@ -659,7 +637,7 @@ function MonitoredComponent() {
 
   useEffect(() => {
     const metrics = monitor.getMetrics();
-    console.log('Performance metrics:', metrics);
+    console.log("Performance metrics:", metrics);
   }, []);
 
   return <div>Check console for metrics</div>;
@@ -677,8 +655,8 @@ import {
   CSRFTokenManager,
   XSSSanitizer,
   RateLimiter,
-  InputValidator
-} from 'minder-data-provider/utils/security';
+  InputValidator,
+} from "minder-data-provider/utils/security";
 ```
 
 **CSRF Protection:**
@@ -704,8 +682,8 @@ const clean = sanitizer.sanitize('<script>alert("xss")</script>Hello');
 
 // Sanitize object
 const cleanData = sanitizer.sanitizeObject({
-  name: '<b>John</b>',
-  bio: '<script>alert("xss")</script>'
+  name: "<b>John</b>",
+  bio: '<script>alert("xss")</script>',
 });
 ```
 
@@ -714,11 +692,11 @@ const cleanData = sanitizer.sanitizeObject({
 ```typescript
 const limiter = new RateLimiter({
   requests: 100,
-  window: 60000  // 1 minute
+  window: 60000, // 1 minute
 });
 
 // Check if allowed
-if (limiter.isAllowed('user-123')) {
+if (limiter.isAllowed("user-123")) {
   // Make API call
 } else {
   // Show rate limit error
@@ -731,12 +709,12 @@ if (limiter.isAllowed('user-123')) {
 const validator = new InputValidator();
 
 // Validate email
-if (!validator.isValidEmail('test@example.com')) {
+if (!validator.isValidEmail("test@example.com")) {
   // Show error
 }
 
 // Validate URL
-if (!validator.isValidUrl('https://example.com')) {
+if (!validator.isValidUrl("https://example.com")) {
   // Show error
 }
 
@@ -757,8 +735,8 @@ import type {
   AuthConfig,
   CacheConfig,
   CrudOptions,
-  PerformanceMetrics
-} from 'minder-data-provider';
+  PerformanceMetrics,
+} from "minder-data-provider";
 ```
 
 ### Type Inference
@@ -772,7 +750,7 @@ interface User {
   email: string;
 }
 
-const { data, operations } = useOneTouchCrud<User>('users');
+const { data, operations } = useOneTouchCrud<User>("users");
 
 // data is typed as User[]
 // operations.create expects Partial<User>
@@ -786,18 +764,18 @@ const { data, operations } = useOneTouchCrud<User>('users');
 All hooks and methods provide consistent error handling:
 
 ```typescript
-const { data, error, operations } = useOneTouchCrud('users');
+const { data, error, operations } = useOneTouchCrud("users");
 
 // Check for errors
 if (error) {
-  console.error('Error:', error.message);
+  console.error("Error:", error.message);
 }
 
 // Try-catch for operations
 try {
-  await operations.create({ name: 'John' });
+  await operations.create({ name: "John" });
 } catch (error) {
-  console.error('Create failed:', error);
+  console.error("Create failed:", error);
 }
 ```
 

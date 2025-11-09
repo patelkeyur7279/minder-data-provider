@@ -166,16 +166,15 @@ export class XSSSanitizer {
 }
 
 /**
- * Enhanced Rate Limiter with localStorage support
+ * Enhanced Rate Limiter with memory storage only
+ * localStorage has been removed for security reasons
  */
 export class RateLimiter {
   private memoryStore: Map<string, number[]> = new Map();
-  private storage: 'memory' | 'localStorage';
   private storageKey = 'minder_rate_limit';
 
-  constructor(storage: 'memory' | 'localStorage' = 'memory') {
-    this.storage = storage;
-    this.loadFromStorage();
+  constructor() {
+    this.cleanup();
   }
 
   check(key: string, maxRequests: number, windowMs: number): boolean {
@@ -197,60 +196,16 @@ export class RateLimiter {
   }
 
   private getRequests(key: string): number[] {
-    if (this.storage === 'localStorage' && typeof localStorage !== 'undefined') {
-      try {
-        const stored = localStorage.getItem(`${this.storageKey}_${key}`);
-        return stored ? JSON.parse(stored) : [];
-      } catch {
-        return this.memoryStore.get(key) || [];
-      }
-    }
     return this.memoryStore.get(key) || [];
   }
 
   private setRequests(key: string, requests: number[]): void {
-    if (this.storage === 'localStorage' && typeof localStorage !== 'undefined') {
-      try {
-        localStorage.setItem(`${this.storageKey}_${key}`, JSON.stringify(requests));
-      } catch {
-        // Fallback to memory if localStorage fails
-        this.memoryStore.set(key, requests);
-      }
-    } else {
-      this.memoryStore.set(key, requests);
-    }
-  }
-
-  private loadFromStorage(): void {
-    if (this.storage === 'localStorage' && typeof localStorage !== 'undefined') {
-      // Cleanup old entries on initialization
-      this.cleanup();
-    }
+    this.memoryStore.set(key, requests);
   }
 
   cleanup(): void {
     const now = Date.now();
     const maxAge = 24 * 60 * 60 * 1000; // 24 hours
-
-    if (this.storage === 'localStorage' && typeof localStorage !== 'undefined') {
-      const keys = Object.keys(localStorage);
-      for (const key of keys) {
-        if (key.startsWith(this.storageKey)) {
-          try {
-            const requests: number[] = JSON.parse(localStorage.getItem(key) || '[]');
-            const validRequests = requests.filter(time => now - time < maxAge);
-            if (validRequests.length === 0) {
-              localStorage.removeItem(key);
-            } else {
-              localStorage.setItem(key, JSON.stringify(validRequests));
-            }
-          } catch {
-            // Remove corrupted entries
-            localStorage.removeItem(key);
-          }
-        }
-      }
-    }
 
     // Cleanup memory store
     for (const [key, requests] of this.memoryStore.entries()) {
@@ -266,19 +221,8 @@ export class RateLimiter {
   reset(key?: string): void {
     if (key) {
       this.memoryStore.delete(key);
-      if (this.storage === 'localStorage' && typeof localStorage !== 'undefined') {
-        localStorage.removeItem(`${this.storageKey}_${key}`);
-      }
     } else {
       this.memoryStore.clear();
-      if (this.storage === 'localStorage' && typeof localStorage !== 'undefined') {
-        const keys = Object.keys(localStorage);
-        for (const k of keys) {
-          if (k.startsWith(this.storageKey)) {
-            localStorage.removeItem(k);
-          }
-        }
-      }
     }
   }
 }
