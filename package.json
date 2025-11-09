@@ -230,5 +230,9 @@
   "bugs": {
     "url": "https://github.com/patelkeyur7279/minder-data-provider/issues"
   },
-  "homepage": "https://github.com/patelkeyur7279/minder-data-provider#readme"
+  "discussions": {
+    "url": "https://github.com/patelkeyur7279/minder-data-provider/discussions"
+  },
+  "Website": "https://mindertech.in",
+  "Discord Community": "https://discord.gg/dN3eFFjmfy"
 }
