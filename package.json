@@ -1,6 +1,6 @@
 {
   "name": "minder-data-provider",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "Production-ready hybrid Redux + TanStack Query data provider for Next.js with CORS support, WebSocket, and advanced caching",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -230,5 +230,9 @@
   "bugs": {
     "url": "https://github.com/patelkeyur7279/minder-data-provider/issues"
   },
-  "homepage": "https://github.com/patelkeyur7279/minder-data-provider#readme"
+  "discussions": {
+    "url": "https://github.com/patelkeyur7279/minder-data-provider/discussions"
+  },
+  "Website": "https://mindertech.in",
+  "Discord Community": "https://discord.gg/dN3eFFjmfy"
 }

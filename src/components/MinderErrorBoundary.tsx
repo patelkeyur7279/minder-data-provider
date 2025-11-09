@@ -113,9 +113,9 @@ export class MinderErrorBoundary extends Component<
       // Default fallback UI with full accessibility support
       return (
         <div
-          role="alert"
-          aria-live="assertive"
-          aria-atomic="true"
+          role='alert'
+          aria-live='assertive'
+          aria-atomic='true'
           aria-label={ariaLabel}
           aria-describedby={errorId}
           tabIndex={-1}
@@ -161,7 +161,7 @@ export class MinderErrorBoundary extends Component<
                     overflow: "auto",
                     fontSize: "12px",
                   }}
-                  aria-label="Error stack trace">
+                  aria-label='Error stack trace'>
                   {errorInfo.componentStack}
                 </pre>
               )}
@@ -175,7 +175,7 @@ export class MinderErrorBoundary extends Component<
                 this.reset();
               }
             }}
-            aria-label="Try again to recover from error"
+            aria-label='Try again to recover from error'
             style={{
               padding: "8px 16px",
               backgroundColor: "#1890ff",

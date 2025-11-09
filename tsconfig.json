@@ -44,7 +44,7 @@
     "esModuleInterop": true,
 
     "allowSyntheticDefaultImports": true,
-    
+
     // Enum Preservation - Required for enums to be available at runtime
     "preserveConstEnums": true
   },
