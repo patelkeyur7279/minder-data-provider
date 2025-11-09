@@ -1,19 +1,13 @@
-'use client';
+"use client";
 
 // ✅ CRITICAL: Import React hooks directly to avoid bundling issues
 // When using namespace imports (import * as React), bundlers can sometimes
 // create invalid references causing "Cannot read properties of null" errors
-import { 
-  createContext, 
-  useContext, 
-  useMemo, 
-  useState, 
-  Suspense 
-} from 'react';
-import type { ReactNode, ComponentType } from 'react';
+import { createContext, useContext, useMemo, useState, Suspense } from "react";
+import type { ReactNode, ComponentType } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { DehydratedState } from "@tanstack/react-query";
-import { HydrationBoundary } from '@tanstack/react-query';
+import { HydrationBoundary } from "@tanstack/react-query";
 
 // const ReactQueryDevtools = dynamic(
 //   () =>
@@ -69,7 +63,7 @@ function getQueryClientConfig(config: MinderConfig) {
         refetchOnReconnect: config.cache?.refetchOnReconnect ?? true,
         retry: config.performance?.retries || 3,
         retryDelay: config.performance?.retryDelay || 1000,
-        enabled: typeof window !== 'undefined' || !config.ssr?.enabled,
+        enabled: typeof window !== "undefined" || !config.ssr?.enabled,
       },
       mutations: {
         retry: config.performance?.retries || 1,
@@ -84,8 +78,10 @@ export function MinderDataProvider({
   dehydratedState,
   fallback,
 }: MinderDataProviderProps) {
-  const [queryClientRef] = useState(() => new QueryClient(getQueryClientConfig(config)));
-  
+  const [queryClientRef] = useState(
+    () => new QueryClient(getQueryClientConfig(config))
+  );
+
   const contextValue = useMemo(() => {
     // Setup environment manager if environments are configured
     let environmentManager: EnvironmentManager | undefined;
@@ -154,17 +150,35 @@ export function MinderDataProvider({
     });
 
     // Create Auth Manager
-    const authManager = new AuthManager(finalConfig.auth, debugManager, finalConfig.debug?.authLogs);
+    const authManager = new AuthManager(
+      finalConfig.auth,
+      debugManager,
+      finalConfig.debug?.authLogs
+    );
 
     // Create API Client with CORS support and proxy
-    const apiClient = new ApiClient(finalConfig, authManager, proxyManager, debugManager);
+    const apiClient = new ApiClient(
+      finalConfig,
+      authManager,
+      proxyManager,
+      debugManager
+    );
 
     // Create Cache Manager
-    const cacheManager = new CacheManager(queryClientRef, debugManager, finalConfig.debug?.cacheLogs);
+    const cacheManager = new CacheManager(
+      queryClientRef,
+      debugManager,
+      finalConfig.debug?.cacheLogs
+    );
 
     // Create WebSocket Manager if configured
     const websocketManager = finalConfig.websocket
-      ? new WebSocketManager(finalConfig.websocket, authManager, debugManager, finalConfig.debug?.websocketLogs)
+      ? new WebSocketManager(
+          finalConfig.websocket,
+          authManager,
+          debugManager,
+          finalConfig.debug?.websocketLogs
+        )
       : undefined;
 
     // Generate Redux slices for all routes
@@ -183,8 +197,10 @@ export function MinderDataProvider({
       preloadedState: finalConfig.redux?.preloadedState,
     });
 
-    let ReactQueryDevtools: ComponentType<{ initialIsOpen?: boolean }> | undefined;
-    if (config.dynamic && process.env.NODE_ENV !== 'production') {
+    let ReactQueryDevtools:
+      | ComponentType<{ initialIsOpen?: boolean }>
+      | undefined;
+    if (config.dynamic && process.env.NODE_ENV !== "production") {
       ReactQueryDevtools = config.dynamic(
         () =>
           import("@tanstack/react-query-devtools").then(
@@ -218,16 +234,15 @@ export function MinderDataProvider({
               {children}
             </HydrationBoundary>
           ) : fallback ? (
-            <Suspense fallback={fallback}>
-              {children}
-            </Suspense>
+            <Suspense fallback={fallback}>{children}</Suspense>
           ) : (
             children
           )}
 
-          {process.env.NODE_ENV !== 'production' && contextValue.ReactQueryDevtools && (
-            <contextValue.ReactQueryDevtools initialIsOpen={false} />
-          )}
+          {process.env.NODE_ENV !== "production" &&
+            contextValue.ReactQueryDevtools && (
+              <contextValue.ReactQueryDevtools initialIsOpen={false} />
+            )}
         </QueryClientProvider>
       </ReduxProvider>
     </MinderContext.Provider>

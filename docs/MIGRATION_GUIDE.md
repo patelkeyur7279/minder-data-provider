@@ -27,7 +27,7 @@ Minder Data Provider v2.0 introduces significant improvements while maintaining 
 ✅ **Advanced debugging tools** for better DX  
 ✅ **Flexible SSR/CSR** rendering strategies  
 ✅ **Enhanced security** features built-in  
-✅ **Performance optimizations** (batching, deduplication, monitoring)  
+✅ **Performance optimizations** (batching, deduplication, monitoring)
 
 ### Migration Timeline
 
@@ -42,63 +42,70 @@ Minder Data Provider v2.0 introduces significant improvements while maintaining 
 ### 1. Configuration Structure
 
 **v1.x:**
+
 ```typescript
 const config = {
-  apiBaseUrl: 'https://api.example.com',
+  apiBaseUrl: "https://api.example.com",
   routes: {
-    users: { method: 'GET', url: '/users' },
-    createUser: { method: 'POST', url: '/users' },
-    updateUser: { method: 'PUT', url: '/users/:id' },
-    deleteUser: { method: 'DELETE', url: '/users/:id' }
-  }
+    users: { method: "GET", url: "/users" },
+    createUser: { method: "POST", url: "/users" },
+    updateUser: { method: "PUT", url: "/users/:id" },
+    deleteUser: { method: "DELETE", url: "/users/:id" },
+  },
 };
 ```
 
 **v2.0:**
+
 ```typescript
-import { createMinderConfig } from 'minder-data-provider/config';
+import { createMinderConfig } from "minder-data-provider/config";
 
 const config = createMinderConfig({
-  apiUrl: 'https://api.example.com',  // Changed from apiBaseUrl
+  apiUrl: "https://api.example.com", // Changed from apiBaseUrl
   routes: {
-    users: '/users'  // Auto-generates full CRUD
-  }
+    users: "/users", // Auto-generates full CRUD
+  },
 });
 ```
 
 ### 2. Import Paths
 
 **v1.x:**
+
 ```typescript
-import { useOneTouchCrud, useAuth, useCache } from 'minder-data-provider';
+import { useOneTouchCrud, useAuth, useCache } from "minder-data-provider";
 ```
 
 **v2.0 (Recommended for smaller bundles):**
+
 ```typescript
-import { useOneTouchCrud } from 'minder-data-provider/crud';
-import { useAuth } from 'minder-data-provider/auth';
-import { useCache } from 'minder-data-provider/cache';
+import { useOneTouchCrud } from "minder-data-provider/crud";
+import { useAuth } from "minder-data-provider/auth";
+import { useCache } from "minder-data-provider/cache";
 ```
 
 **v2.0 (Still supported for backward compatibility):**
+
 ```typescript
-import { useOneTouchCrud, useAuth, useCache } from 'minder-data-provider';
+import { useOneTouchCrud, useAuth, useCache } from "minder-data-provider";
 ```
 
 ### 3. Debug API
 
 **v1.x:**
+
 ```typescript
 // No built-in debug tools
-console.log('Debug info');
+console.log("Debug info");
 ```
 
 **v2.0:**
+
 ```typescript
-import { useDebug } from 'minder-data-provider/debug';
+import { useDebug } from "minder-data-provider/debug";
 
 const debug = useDebug();
-debug.log('api', 'Debug info', { data: 'value' });
+debug.log("api", "Debug info", { data: "value" });
 ```
 
 ---
@@ -108,6 +115,7 @@ debug.log('api', 'Debug info', { data: 'value' });
 ### 1. Auto-Generated CRUD Routes
 
 **v1.x** required explicit route definitions:
+
 ```typescript
 routes: {
   getUsers: { method: 'GET', url: '/users' },
@@ -118,15 +126,17 @@ routes: {
 ```
 
 **v2.0** auto-generates all CRUD operations:
+
 ```typescript
 routes: {
-  users: '/users'  // Generates: GET, POST, PUT, DELETE automatically
+  users: "/users"; // Generates: GET, POST, PUT, DELETE automatically
 }
 ```
 
 ### 2. Simplified Authentication
 
 **v1.x:**
+
 ```typescript
 auth: {
   loginRoute: 'login',
@@ -139,6 +149,7 @@ auth: {
 ```
 
 **v2.0:**
+
 ```typescript
 auth: true  // Auto-configures with intelligent defaults
 
@@ -155,14 +166,14 @@ auth: {
 New in v2.0:
 
 ```typescript
-import { usePerformanceMonitor } from 'minder-data-provider/utils/performance';
+import { usePerformanceMonitor } from "minder-data-provider/utils/performance";
 
 function Component() {
   const monitor = usePerformanceMonitor();
-  
+
   useEffect(() => {
     const metrics = monitor.getMetrics();
-    console.log('Performance:', metrics);
+    console.log("Performance:", metrics);
   }, []);
 }
 ```
@@ -202,36 +213,36 @@ Create a new configuration file using the simplified API:
 
 ```typescript
 // config/minder.config.ts (v2.0)
-import { createMinderConfig } from 'minder-data-provider/config';
+import { createMinderConfig } from "minder-data-provider/config";
 
 export const config = createMinderConfig({
   // Change apiBaseUrl → apiUrl
-  apiUrl: process.env.NEXT_PUBLIC_API_URL || 'https://api.example.com',
-  
+  apiUrl: process.env.NEXT_PUBLIC_API_URL || "https://api.example.com",
+
   // Simplify routes (auto-generates CRUD)
   routes: {
-    users: '/users',
-    posts: '/posts',
-    comments: '/comments'
+    users: "/users",
+    posts: "/posts",
+    comments: "/comments",
   },
-  
+
   // Simplify feature configuration
   auth: true,
   cache: true,
   cors: true,
-  
+
   // Add new features
   security: {
     sanitization: true,
-    csrfProtection: true
+    csrfProtection: true,
   },
-  
+
   performance: {
     deduplication: true,
-    monitoring: true
+    monitoring: true,
   },
-  
-  debug: process.env.NODE_ENV === 'development'
+
+  debug: process.env.NODE_ENV === "development",
 });
 ```
 
@@ -241,26 +252,26 @@ export const config = createMinderConfig({
 
 ```typescript
 // Before (v1.x)
-import { useOneTouchCrud, useAuth } from 'minder-data-provider';
+import { useOneTouchCrud, useAuth } from "minder-data-provider";
 
 // After (v2.0)
-import { useOneTouchCrud } from 'minder-data-provider/crud';
-import { useAuth } from 'minder-data-provider/auth';
+import { useOneTouchCrud } from "minder-data-provider/crud";
+import { useAuth } from "minder-data-provider/auth";
 ```
 
 **Option B: Unified Import (Backward Compatible)**
 
 ```typescript
 // Still works in v2.0
-import { useOneTouchCrud, useAuth } from 'minder-data-provider';
+import { useOneTouchCrud, useAuth } from "minder-data-provider";
 ```
 
 ### Step 4: Update Provider Setup
 
 ```typescript
 // pages/_app.tsx
-import { MinderDataProvider } from 'minder-data-provider';
-import { config } from '../config/minder.config';
+import { MinderDataProvider } from "minder-data-provider";
+import { config } from "../config/minder.config";
 
 export default function App({ Component, pageProps }) {
   return (
@@ -278,13 +289,13 @@ Most components will work without changes, but you can leverage new features:
 ```typescript
 // Before (v1.x)
 function UsersList() {
-  const { data, loading, operations } = useOneTouchCrud('users');
-  
+  const { data, loading, operations } = useOneTouchCrud("users");
+
   if (loading.fetch) return <div>Loading...</div>;
-  
+
   return (
     <div>
-      {data.map(user => (
+      {data.map((user) => (
         <div key={user.id}>{user.name}</div>
       ))}
     </div>
@@ -292,23 +303,23 @@ function UsersList() {
 }
 
 // After (v2.0) - Add debug tools
-import { useDebug } from 'minder-data-provider/debug';
+import { useDebug } from "minder-data-provider/debug";
 
 function UsersList() {
-  const { data, loading, operations } = useOneTouchCrud('users');
+  const { data, loading, operations } = useOneTouchCrud("users");
   const debug = useDebug();
-  
+
   useEffect(() => {
     if (data) {
-      debug.log('data', 'Users loaded', { count: data.length });
+      debug.log("data", "Users loaded", { count: data.length });
     }
   }, [data]);
-  
+
   if (loading.fetch) return <div>Loading...</div>;
-  
+
   return (
     <div>
-      {data.map(user => (
+      {data.map((user) => (
         <div key={user.id}>{user.name}</div>
       ))}
     </div>
@@ -337,10 +348,10 @@ npm run build
 
 ```typescript
 // v1.x
-apiBaseUrl: 'https://api.example.com'
+apiBaseUrl: "https://api.example.com";
 
 // v2.0
-apiUrl: 'https://api.example.com'
+apiUrl: "https://api.example.com";
 ```
 
 ### Routes
@@ -419,27 +430,27 @@ cache: {
 
 ### Module Reorganization
 
-| Feature | v1.x | v2.0 (Modular) | v2.0 (Unified) |
-|---------|------|----------------|----------------|
-| CRUD | `minder-data-provider` | `minder-data-provider/crud` | `minder-data-provider` |
-| Auth | `minder-data-provider` | `minder-data-provider/auth` | `minder-data-provider` |
-| Cache | `minder-data-provider` | `minder-data-provider/cache` | `minder-data-provider` |
+| Feature   | v1.x                   | v2.0 (Modular)                   | v2.0 (Unified)         |
+| --------- | ---------------------- | -------------------------------- | ---------------------- |
+| CRUD      | `minder-data-provider` | `minder-data-provider/crud`      | `minder-data-provider` |
+| Auth      | `minder-data-provider` | `minder-data-provider/auth`      | `minder-data-provider` |
+| Cache     | `minder-data-provider` | `minder-data-provider/cache`     | `minder-data-provider` |
 | WebSocket | `minder-data-provider` | `minder-data-provider/websocket` | `minder-data-provider` |
-| Upload | `minder-data-provider` | `minder-data-provider/upload` | `minder-data-provider` |
-| Debug | N/A | `minder-data-provider/debug` | `minder-data-provider` |
-| Config | N/A | `minder-data-provider/config` | `minder-data-provider` |
-| SSR | N/A | `minder-data-provider/ssr` | `minder-data-provider` |
+| Upload    | `minder-data-provider` | `minder-data-provider/upload`    | `minder-data-provider` |
+| Debug     | N/A                    | `minder-data-provider/debug`     | `minder-data-provider` |
+| Config    | N/A                    | `minder-data-provider/config`    | `minder-data-provider` |
+| SSR       | N/A                    | `minder-data-provider/ssr`       | `minder-data-provider` |
 
 ### Bundle Size Comparison
 
 ```typescript
 // v1.x - Full import (~150KB)
-import { useOneTouchCrud, useAuth, useCache } from 'minder-data-provider';
+import { useOneTouchCrud, useAuth, useCache } from "minder-data-provider";
 
 // v2.0 - Modular imports (45KB + 25KB + 20KB = 90KB)
-import { useOneTouchCrud } from 'minder-data-provider/crud';
-import { useAuth } from 'minder-data-provider/auth';
-import { useCache } from 'minder-data-provider/cache';
+import { useOneTouchCrud } from "minder-data-provider/crud";
+import { useAuth } from "minder-data-provider/auth";
+import { useCache } from "minder-data-provider/cache";
 
 // Savings: 60KB (40% reduction)
 ```
@@ -454,20 +465,20 @@ Most hooks remain compatible, with added features:
 
 ```typescript
 // v1.x
-const { data, loading, error, operations } = useOneTouchCrud('users');
+const { data, loading, error, operations } = useOneTouchCrud("users");
 
 // v2.0 - Same API, enhanced with better TypeScript support
-const { data, loading, error, operations } = useOneTouchCrud<User>('users');
+const { data, loading, error, operations } = useOneTouchCrud<User>("users");
 ```
 
 ### New Options
 
 ```typescript
 // v2.0 adds new options
-const { data, operations } = useOneTouchCrud('users', {
-  optimistic: true,        // New: Optimistic updates
+const { data, operations } = useOneTouchCrud("users", {
+  optimistic: true, // New: Optimistic updates
   onSuccess: (data) => {}, // New: Success callback
-  onError: (error) => {}   // New: Error callback
+  onError: (error) => {}, // New: Error callback
 });
 ```
 
@@ -491,22 +502,24 @@ const [users, setUsers] = useState([]);
 
 useEffect(() => {
   let isCanceled = false;
-  
+
   setLoading(true);
-  fetch('/api/users')
-    .then(res => res.json())
-    .then(data => {
+  fetch("/api/users")
+    .then((res) => res.json())
+    .then((data) => {
       if (!isCanceled) setUsers(data);
     })
     .finally(() => {
       if (!isCanceled) setLoading(false);
     });
-    
-  return () => { isCanceled = true; };
+
+  return () => {
+    isCanceled = true;
+  };
 }, []);
 
 // v2.0 - Automatic optimization
-const { data: users, loading } = useOneTouchCrud('users');
+const { data: users, loading } = useOneTouchCrud("users");
 // Deduplication, caching, and cleanup handled automatically
 ```
 
@@ -519,26 +532,32 @@ const { data: users, loading } = useOneTouchCrud('users');
 #### Issue 1: Configuration Not Found
 
 **Error:**
+
 ```
 Error: MinderConfig not found
 ```
 
 **Solution:**
+
 ```typescript
 // Make sure to use createMinderConfig
-import { createMinderConfig } from 'minder-data-provider/config';
+import { createMinderConfig } from "minder-data-provider/config";
 
-const config = createMinderConfig({ /* ... */ });
+const config = createMinderConfig({
+  /* ... */
+});
 ```
 
 #### Issue 2: Import Errors
 
 **Error:**
+
 ```
 Module not found: Can't resolve 'minder-data-provider/crud'
 ```
 
 **Solution:**
+
 ```bash
 # Make sure you're on v2.0
 npm install minder-data-provider@latest
@@ -551,28 +570,32 @@ npm install
 #### Issue 3: TypeScript Errors
 
 **Error:**
+
 ```
 Type 'User[]' is not assignable to type 'never[]'
 ```
 
 **Solution:**
+
 ```typescript
 // Add generic type
-const { data } = useOneTouchCrud<User>('users');
+const { data } = useOneTouchCrud<User>("users");
 ```
 
 #### Issue 4: Routes Not Working
 
 **Error:**
+
 ```
 404 Not Found on /users
 ```
 
 **Solution:**
+
 ```typescript
 // v2.0 requires explicit route registration
 routes: {
-  users: '/users'  // Must define routes
+  users: "/users"; // Must define routes
 }
 ```
 
@@ -589,11 +612,11 @@ If you encounter issues during migration:
 
 ## Deprecation Timeline
 
-| Feature | v1.x | v2.0 | v3.0 (Future) |
-|---------|------|------|---------------|
-| `apiBaseUrl` | ✅ | ⚠️ Deprecated | ❌ Removed |
-| Unified imports | ✅ | ✅ Supported | ⚠️ Discouraged |
-| Old config format | ✅ | ⚠️ Deprecated | ❌ Removed |
+| Feature           | v1.x | v2.0          | v3.0 (Future)  |
+| ----------------- | ---- | ------------- | -------------- |
+| `apiBaseUrl`      | ✅   | ⚠️ Deprecated | ❌ Removed     |
+| Unified imports   | ✅   | ✅ Supported  | ⚠️ Discouraged |
+| Old config format | ✅   | ⚠️ Deprecated | ❌ Removed     |
 
 ---
 

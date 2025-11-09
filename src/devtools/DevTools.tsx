@@ -119,8 +119,8 @@ export function DevTools({ config = {} }: { config?: DevToolsConfig }) {
 
   return (
     <div
-      role="complementary"
-      aria-label="Minder development tools"
+      role='complementary'
+      aria-label='Minder development tools'
       style={{
         position: "fixed",
         ...positionStyles[position],
@@ -137,7 +137,7 @@ export function DevTools({ config = {} }: { config?: DevToolsConfig }) {
               setIsOpen(true);
             }
           }}
-          aria-label="Open Minder DevTools panel"
+          aria-label='Open Minder DevTools panel'
           aria-expanded={false}
           style={{
             background: "#1e293b",
@@ -153,9 +153,9 @@ export function DevTools({ config = {} }: { config?: DevToolsConfig }) {
         </button>
       ) : (
         <div
-          role="dialog"
-          aria-label="Minder DevTools panel"
-          aria-modal="false"
+          role='dialog'
+          aria-label='Minder DevTools panel'
+          aria-modal='false'
           style={{
             background: "#1e293b",
             color: "#e2e8f0",
@@ -186,7 +186,7 @@ export function DevTools({ config = {} }: { config?: DevToolsConfig }) {
                   setIsOpen(false);
                 }
               }}
-              aria-label="Close Minder DevTools panel"
+              aria-label='Close Minder DevTools panel'
               aria-expanded={true}
               style={{
                 background: "transparent",
@@ -201,8 +201,8 @@ export function DevTools({ config = {} }: { config?: DevToolsConfig }) {
 
           {/* Tabs */}
           <div
-            role="tablist"
-            aria-label="DevTools tabs"
+            role='tablist'
+            aria-label='DevTools tabs'
             style={{
               display: "flex",
               gap: "4px",
@@ -214,8 +214,8 @@ export function DevTools({ config = {} }: { config?: DevToolsConfig }) {
               <TabButton
                 active={activeTab === "network"}
                 onClick={() => setActiveTab("network")}
-                tabId="network"
-                ariaControls="network-panel"
+                tabId='network'
+                ariaControls='network-panel'
                 ariaLabel={`Network tab, ${networkRequests.length} requests`}>
                 Network ({networkRequests.length})
               </TabButton>
@@ -224,8 +224,8 @@ export function DevTools({ config = {} }: { config?: DevToolsConfig }) {
               <TabButton
                 active={activeTab === "cache"}
                 onClick={() => setActiveTab("cache")}
-                tabId="cache"
-                ariaControls="cache-panel"
+                tabId='cache'
+                ariaControls='cache-panel'
                 ariaLabel={`Cache tab, ${cacheEntries.length} entries`}>
                 Cache ({cacheEntries.length})
               </TabButton>
@@ -234,9 +234,9 @@ export function DevTools({ config = {} }: { config?: DevToolsConfig }) {
               <TabButton
                 active={activeTab === "performance"}
                 onClick={() => setActiveTab("performance")}
-                tabId="performance"
-                ariaControls="performance-panel"
-                ariaLabel="Performance metrics tab">
+                tabId='performance'
+                ariaControls='performance-panel'
+                ariaLabel='Performance metrics tab'>
                 Performance
               </TabButton>
             )}
@@ -244,8 +244,8 @@ export function DevTools({ config = {} }: { config?: DevToolsConfig }) {
               <TabButton
                 active={activeTab === "state"}
                 onClick={() => setActiveTab("state")}
-                tabId="state"
-                ariaControls="state-panel"
+                tabId='state'
+                ariaControls='state-panel'
                 ariaLabel={`State tab, ${stateSnapshots.length} snapshots`}>
                 State ({stateSnapshots.length})
               </TabButton>
@@ -254,7 +254,7 @@ export function DevTools({ config = {} }: { config?: DevToolsConfig }) {
 
           {/* Content */}
           <div
-            role="tabpanel"
+            role='tabpanel'
             id={`${activeTab}-panel`}
             aria-labelledby={`tab-${activeTab}`}
             tabIndex={0}
@@ -301,7 +301,7 @@ function TabButton({
 }) {
   return (
     <button
-      role="tab"
+      role='tab'
       id={`tab-${tabId}`}
       aria-controls={ariaControls}
       aria-selected={active}
@@ -332,7 +332,7 @@ function TabButton({
 // Network Tab
 function NetworkTab({ requests, onClear }: any) {
   return (
-    <div role="region" aria-label="Network requests">
+    <div role='region' aria-label='Network requests'>
       <div
         style={{
           marginBottom: "12px",
@@ -348,7 +348,7 @@ function NetworkTab({ requests, onClear }: any) {
               onClear();
             }
           }}
-          aria-label="Clear all network requests"
+          aria-label='Clear all network requests'
           style={{
             background: "#ef4444",
             color: "#fff",
@@ -363,20 +363,20 @@ function NetworkTab({ requests, onClear }: any) {
       </div>
       {requests.length === 0 ? (
         <div
-          role="status"
-          aria-live="polite"
+          role='status'
+          aria-live='polite'
           style={{ color: "#64748b", textAlign: "center", padding: "20px" }}>
           No network requests yet
         </div>
       ) : (
         <div
-          role="list"
+          role='list'
           aria-label={`${requests.length} network requests`}
           style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           {requests.map((req: NetworkRequest) => (
             <div
               key={req.id}
-              role="listitem"
+              role='listitem'
               aria-label={`${req.method} request to ${req.url}, status ${req.status}, duration ${req.duration}ms`}
               style={{
                 background: "#334155",
@@ -421,7 +421,7 @@ function NetworkTab({ requests, onClear }: any) {
 // Cache Tab
 function CacheTab({ entries, onClear }: any) {
   return (
-    <div role="region" aria-label="Cache entries">
+    <div role='region' aria-label='Cache entries'>
       <div
         style={{
           marginBottom: "12px",
@@ -437,7 +437,7 @@ function CacheTab({ entries, onClear }: any) {
               onClear();
             }
           }}
-          aria-label="Clear all cache entries"
+          aria-label='Clear all cache entries'
           style={{
             background: "#ef4444",
             color: "#fff",
@@ -452,21 +452,23 @@ function CacheTab({ entries, onClear }: any) {
       </div>
       {entries.length === 0 ? (
         <div
-          role="status"
-          aria-live="polite"
+          role='status'
+          aria-live='polite'
           style={{ color: "#64748b", textAlign: "center", padding: "20px" }}>
           No cache entries
         </div>
       ) : (
         <div
-          role="list"
+          role='list'
           aria-label={`${entries.length} cache entries`}
           style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           {entries.map((entry: CacheEntry, index: number) => (
             <div
               key={index}
-              role="listitem"
-              aria-label={`Cache entry ${entry.key}, cached at ${new Date(entry.timestamp).toLocaleTimeString()}`}
+              role='listitem'
+              aria-label={`Cache entry ${entry.key}, cached at ${new Date(
+                entry.timestamp
+              ).toLocaleTimeString()}`}
               style={{
                 background: "#334155",
                 padding: "8px",
@@ -493,8 +495,8 @@ function PerformanceTab({ metrics }: any) {
   if (!metrics) {
     return (
       <div
-        role="status"
-        aria-live="polite"
+        role='status'
+        aria-live='polite'
         style={{ color: "#64748b", textAlign: "center", padding: "20px" }}>
         No performance data available
       </div>
@@ -502,13 +504,13 @@ function PerformanceTab({ metrics }: any) {
   }
 
   return (
-    <div role="region" aria-label="Performance metrics">
+    <div role='region' aria-label='Performance metrics'>
       <div style={{ fontWeight: "bold", marginBottom: "12px" }}>
         Performance Metrics
       </div>
       <div
-        role="list"
-        aria-label="Performance statistics"
+        role='list'
+        aria-label='Performance statistics'
         style={{
           display: "grid",
           gridTemplateColumns: "1fr 1fr",
@@ -529,11 +531,11 @@ function PerformanceTab({ metrics }: any) {
             }}>
             Slowest Requests
           </div>
-          <div role="list" aria-label="Slowest requests list">
+          <div role='list' aria-label='Slowest requests list'>
             {metrics.slowestRequests.slice(0, 5).map((req: any, i: number) => (
               <div
                 key={i}
-                role="listitem"
+                role='listitem'
                 aria-label={`${req.route}, ${req.duration} milliseconds`}
                 style={{
                   background: "#334155",
@@ -561,27 +563,29 @@ function PerformanceTab({ metrics }: any) {
 // State Tab
 function StateTab({ snapshots }: any) {
   return (
-    <div role="region" aria-label="State snapshots">
+    <div role='region' aria-label='State snapshots'>
       <div style={{ fontWeight: "bold", marginBottom: "12px" }}>
         State Snapshots
       </div>
       {snapshots.length === 0 ? (
         <div
-          role="status"
-          aria-live="polite"
+          role='status'
+          aria-live='polite'
           style={{ color: "#64748b", textAlign: "center", padding: "20px" }}>
           No state snapshots yet
         </div>
       ) : (
         <div
-          role="list"
+          role='list'
           aria-label={`${snapshots.length} state snapshots`}
           style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           {snapshots.map((snapshot: StateSnapshot, index: number) => (
             <div
               key={index}
-              role="listitem"
-              aria-label={`State snapshot for ${snapshot.route} at ${new Date(snapshot.timestamp).toLocaleTimeString()}`}
+              role='listitem'
+              aria-label={`State snapshot for ${snapshot.route} at ${new Date(
+                snapshot.timestamp
+              ).toLocaleTimeString()}`}
               style={{
                 background: "#334155",
                 padding: "8px",
@@ -606,7 +610,7 @@ function StateTab({ snapshots }: any) {
 function MetricCard({ label, value }: { label: string; value: any }) {
   return (
     <div
-      role="listitem"
+      role='listitem'
       aria-label={`${label}: ${value}`}
       style={{
         background: "#334155",
