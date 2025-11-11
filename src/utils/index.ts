@@ -10,10 +10,39 @@ export * from './performance.js';
 export { Logger, LogLevel, createLogger } from './Logger.js';
 
 // Generate configuration from Next.js API routes
-export function generateConfigFromApiRoutes(apiDir: string): any {
-  // This would scan the API directory and generate routes automatically
-  // Implementation would depend on the file system structure
-  return {};
+export async function generateConfigFromApiRoutes(apiDir: string, options?: {
+  framework?: 'nextjs' | 'express' | 'fastify' | 'custom';
+  baseUrl?: string;
+  includeDynamic?: boolean;
+}): Promise<any> {
+  const { RouteProcessor } = await import('./routeProcessor.js');
+
+  const scanOptions = {
+    baseDir: apiDir,
+    framework: options?.framework || 'nextjs',
+    baseUrl: options?.baseUrl,
+    includeDynamic: options?.includeDynamic ?? true,
+    extensions: ['.ts', '.js', '.tsx', '.jsx']
+  };
+
+  const result = await RouteProcessor.generateFromDirectory(scanOptions);
+
+  if (result.errors.length > 0) {
+    console.warn('Route processing errors:', result.errors);
+  }
+
+  if (result.warnings.length > 0) {
+    console.warn('Route processing warnings:', result.warnings);
+  }
+
+  return {
+    routes: result.routes,
+    processing: {
+      errors: result.errors,
+      warnings: result.warnings,
+      routeCount: Object.keys(result.routes).length
+    }
+  };
 }
 
 // CORS helper
