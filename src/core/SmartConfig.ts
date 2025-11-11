@@ -8,6 +8,7 @@ import type { MinderConfig, AuthConfig, CacheConfig, SecurityConfig } from './ty
 import { analyzeComplexity, type ComplexityMetrics } from '../utils/complexityAnalyzer.js';
 import { LightHttpClient } from './LightHttpClient.js';
 import axios from 'axios';
+import { CacheType, StorageType } from '../constants/enums.js';
 
 interface SmartConfigOptions {
   /**
@@ -126,7 +127,7 @@ export class SmartConfigManager {
    */
   private generateCacheConfig(isLightMode: boolean): CacheConfig {
     return {
-      type: isLightMode ? 'memory' : 'hybrid',
+      type: isLightMode ? CacheType.MEMORY : CacheType.HYBRID,
       staleTime: this.calculateOptimalStaleTime(),
       gcTime: this.calculateOptimalGCTime(),
       maxSize: this.calculateOptimalCacheSize(),
@@ -140,7 +141,7 @@ export class SmartConfigManager {
    */
   private generateAuthConfig(isLightMode: boolean): AuthConfig {
     return {
-      storage: this.options.security?.level === 'strict' ? 'memory' : 'sessionStorage',
+      storage: this.options.security?.level === 'strict' ? StorageType.MEMORY : StorageType.SESSION_STORAGE,
       tokenKey: 'auth_token',
       refreshUrl: isLightMode ? undefined : '/refresh-token',
       onAuthError: () => this.handleAuthError(),

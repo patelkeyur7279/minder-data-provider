@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import type { MinderConfig, ApiRoute, ApiError } from './types.js';
 import { HttpMethod } from '../constants/enums.js';
@@ -263,26 +263,14 @@ export class ApiClient {
   }
 
   private handleError(error: unknown): ApiError {
-    // Type narrowing for axios-like errors with response
-    if (error && typeof error === 'object' && 'response' in error) {
-      const axiosError = error as {
-        response?: {
-          data?: { message?: string; code?: string; errors?: Record<string, string[]> };
-          status?: number;
-          statusText?: string;
-        };
-        config?: {
-          url?: string;
-          method?: string;
-        };
-        message?: string;
-        code?: string;
-      };
+    // Check if it's an AxiosError
+    if (axios.isAxiosError(error)) {
+      const axiosError = error as AxiosError;
       
       const status = axiosError.response?.status || 0;
       const url = axiosError.config?.url;
       const method = axiosError.config?.method?.toUpperCase();
-      const responseData = axiosError.response?.data;
+      const responseData = axiosError.response?.data as any;
       const responseHeaders = axiosError.response?.headers as Record<string, string> | undefined;
       
       switch (status) {

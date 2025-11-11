@@ -108,7 +108,7 @@ export class RouteProcessor {
           }
         } else if (entry.isFile()) {
           const ext = path.extname(entry.name);
-          const extensions = options.extensions || this.DEFAULT_EXTENSIONS;
+          const extensions = options.extensions || RouteProcessor.DEFAULT_EXTENSIONS;
 
           if (extensions.includes(ext)) {
             files.push(fullPath);
@@ -217,6 +217,9 @@ export class RouteProcessor {
     switch (options.framework) {
       case 'nextjs':
         url = url.replace(/^\/api/, '').replace(/^\/pages\/api/, '');
+        if (!url.startsWith('/')) {
+          url = '/' + url;
+        }
         break;
       case 'express':
         url = url.replace(/^\/routes/, '');
@@ -371,7 +374,7 @@ export class RouteProcessor {
     const urls = Object.values(routes).map(r => `${r.method}:${r.url}`);
     const duplicates = urls.filter((url, index) => urls.indexOf(url) !== index);
     if (duplicates.length > 0) {
-      result.errors.push(`Duplicate routes found: ${duplicates.join(', ')}`);
+      result.errors.push(`Duplicate URLs found: ${duplicates.join(', ')}`);
       result.isValid = false;
     }
 

@@ -9,13 +9,24 @@ export * from './performance.js';
 // Export Logger class (but not the default instance)
 export { Logger, LogLevel, createLogger } from './Logger.js';
 
+// Export route processor
+export { RouteProcessor } from './routeProcessor.js';
+
 // Generate configuration from Next.js API routes
 export async function generateConfigFromApiRoutes(apiDir: string, options?: {
   framework?: 'nextjs' | 'express' | 'fastify' | 'custom';
   baseUrl?: string;
   includeDynamic?: boolean;
 }): Promise<any> {
-  const { RouteProcessor } = await import('./routeProcessor.js');
+  // Dynamic import to avoid circular dependencies
+  let RouteProcessor: any;
+  try {
+    RouteProcessor = (await import('./routeProcessor.js')).RouteProcessor;
+  } catch (error) {
+    // In test environments that don't support dynamic imports, try static import
+    const routeProcessorModule = require('./routeProcessor.js');
+    RouteProcessor = routeProcessorModule.RouteProcessor;
+  }
 
   const scanOptions = {
     baseDir: apiDir,

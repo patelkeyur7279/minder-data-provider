@@ -138,16 +138,14 @@ export class RouteScanner {
       if (dependencies['koa'] || dependencies['koa-router']) return 'koa';
       if (dependencies['express']) return 'express';
 
-      // Check for framework-specific files
-      const files = await fs.readdir(baseDir);
-      if (files.includes('next.config.js') || files.includes('next.config.ts')) return 'nextjs';
-      if (files.includes('nest-cli.json')) return 'nestjs';
+      // If package.json exists but no known frameworks, don't do file-based detection
+      return null;
 
     } catch (error) {
-      // Continue with file-based detection
+      // Package.json not found or invalid, try file-based detection
     }
 
-    // File-based detection
+    // File-based detection only when package.json is not available
     for (const [framework, config] of Object.entries(this.FRAMEWORK_CONFIGS)) {
       const hasMatchingFiles = await this.hasMatchingFiles(baseDir, config);
       if (hasMatchingFiles) {
@@ -170,15 +168,15 @@ export class RouteScanner {
     const lines = content.split('\n');
 
     // Extract named exports (GET, POST, PUT, DELETE, etc.)
-    const methodRegex = /^export\s+(?:async\s+)?function\s+(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)/gm;
+    const methodRegex = /^\s*export\s+(?:async\s+)?function\s+(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)/gm;
     let match;
 
     while ((match = methodRegex.exec(content)) !== null) {
       const method = match[1]?.toUpperCase() as HttpMethod;
       const lineNumber = content.substring(0, match.index).split('\n').length;
 
-      const routeName = this.generateRouteName(relativePath, 'nextjs');
-      const url = this.generateRouteUrl(relativePath, 'nextjs');
+      const routeName = RouteScanner.generateRouteName(relativePath, 'nextjs');
+      const url = RouteScanner.generateRouteUrl(relativePath, 'nextjs');
 
       if (method) {
         routes.push({
@@ -196,8 +194,8 @@ export class RouteScanner {
 
     // If no named exports, check for default export (assumes GET)
     if (routes.length === 0 && content.includes('export default')) {
-      const routeName = this.generateRouteName(relativePath, 'nextjs');
-      const url = this.generateRouteUrl(relativePath, 'nextjs');
+      const routeName = RouteScanner.generateRouteName(relativePath, 'nextjs');
+      const url = RouteScanner.generateRouteUrl(relativePath, 'nextjs');
 
       routes.push({
         name: routeName,
@@ -236,7 +234,7 @@ export class RouteScanner {
         const method = methodStr.toUpperCase() as HttpMethod;
         const lineNumber = content.substring(0, match.index).split('\n').length;
 
-        const routeName = this.generateRouteName(relativePath, 'express')
+        const routeName = RouteScanner.generateRouteName(relativePath, 'express')
           .replace(/Router$/, '') // Remove Router suffix
           .replace(/Routes$/, ''); // Remove Routes suffix
 
@@ -279,7 +277,7 @@ export class RouteScanner {
         const method = methodStr.toUpperCase() as HttpMethod;
         const lineNumber = content.substring(0, match.index).split('\n').length;
 
-        const routeName = this.generateRouteName(relativePath, 'fastify');
+        const routeName = RouteScanner.generateRouteName(relativePath, 'fastify');
 
         routes.push({
           name: `${method.toLowerCase()}${routeName}${url.replace(/[^a-zA-Z0-9]/g, '')}`,
@@ -363,7 +361,7 @@ export class RouteScanner {
         const method = methodStr.toUpperCase() as HttpMethod;
         const lineNumber = content.substring(0, match.index).split('\n').length;
 
-        const routeName = this.generateRouteName(relativePath, 'koa');
+        const routeName = RouteScanner.generateRouteName(relativePath, 'koa');
 
         routes.push({
           name: `${method.toLowerCase()}${routeName}${url.replace(/[^a-zA-Z0-9]/g, '')}`,
