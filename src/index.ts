@@ -36,6 +36,36 @@ export type {
   UploadProgress,
 } from './core/minder.js';
 
+// 🆕 Global config helpers (NEW in v2.1)
+export {
+  getGlobalMinderConfig,
+  setGlobalMinderConfig,
+  clearGlobalMinderConfig,
+  hasGlobalMinderConfig,
+} from './core/globalConfig.js';
+
+// 🆕 Global auth manager (NEW in v2.1)
+export { globalAuthManager, GlobalAuthManager } from './auth/GlobalAuthManager.js';
+
+// 🆕 Upload progress store (NEW in v2.1)
+export {
+  getUploadProgress,
+  setUploadProgress,
+  subscribeToUploadProgress,
+  clearUploadProgress,
+  getAllUploadProgress,
+  clearAllUploadProgress,
+} from './upload/uploadProgressStore.js';
+
+// 🆕 Route helpers (NEW in v2.1)
+export {
+  replaceUrlParams,
+  hasUnreplacedParams,
+  extractParamNames,
+  getRouteSuggestions,
+  levenshteinDistance,
+} from './utils/routeHelpers.js';
+
 // React hook
 export { useMinder } from './hooks/useMinder.js';
 export type {

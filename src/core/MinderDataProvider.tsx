@@ -3,7 +3,13 @@
 // ✅ CRITICAL: Import React hooks directly to avoid bundling issues
 // When using namespace imports (import * as React), bundlers can sometimes
 // create invalid references causing "Cannot read properties of null" errors
-import { createContext, useContext, useMemo, useState, Suspense } from "react";
+import React, {
+  createContext,
+  useContext,
+  useMemo,
+  useState,
+  Suspense,
+} from "react";
 import type { ReactNode, ComponentType } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { DehydratedState } from "@tanstack/react-query";
@@ -30,6 +36,7 @@ import { ProxyManager } from "./ProxyManager.js";
 import { DebugManager } from "../debug/DebugManager.js";
 import { DevTools } from "../devtools/DevTools.js";
 import { DebugLogType } from "../constants/enums.js";
+import { setGlobalMinderConfig } from "./globalConfig.js";
 
 interface MinderContextValue {
   config: MinderConfig;
@@ -227,6 +234,11 @@ export function MinderDataProvider({
       ReactQueryDevtools,
     };
   }, [config, queryClientRef]);
+
+  // Set global config for standalone hook usage
+  useMemo(() => {
+    setGlobalMinderConfig(contextValue.config);
+  }, [contextValue.config]);
 
   return (
     <MinderContext.Provider value={contextValue}>

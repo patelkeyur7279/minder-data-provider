@@ -437,18 +437,21 @@ const { data } = useMinder("users");
 ### **🆕 New in v2.0.3 (November 2025)**
 
 - **✅ Built-in Validation System**: Type-based and custom validation rules
+
   - Validates data before create/update operations
   - Support for email, URL, date, array, object validation
   - Async validation for server-side checks
   - Detailed error reporting with field-level messages
 
 - **🔄 Enhanced Retry Configuration**: Per-operation retry policies
+
   - Exponential backoff with jitter
   - Conditional retry based on error type
   - Separate retry strategies for each CRUD operation
   - Works with optimistic and pessimistic updates
 
 - **📄 Pagination Helper**: Smart pagination management
+
   - Automatic page tracking and state management
   - Multiple styles: offset, cursor, page-based
   - Smart prefetching of next/previous pages
@@ -456,6 +459,7 @@ const { data } = useMinder("users");
   - Optimized for infinite scroll
 
 - **💾 Offline Queue Persistence**: Durable offline support
+
   - Persists failed requests across sessions
   - Automatic retry when connection restored
   - Conflict resolution strategies
