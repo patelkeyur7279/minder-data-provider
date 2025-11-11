@@ -117,7 +117,7 @@ npm install && npm start
 **Path**: `web/admin-dashboard/`  
 **Features**:
 
-- Full CRUD with `useOneTouchCrud()`
+- Full CRUD with `useMinder()`
 - User management
 - Real-time stats
 - **Tests**: ✅ 20 passing

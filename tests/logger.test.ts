@@ -2,7 +2,8 @@
  * @jest-environment node
  */
 
-import { Logger, LogLevel, createLogger, defaultLogger } from '../src/utils/Logger';
+import { Logger, LogLevel, createLogger } from '../src/utils/Logger';
+import { defaultLogger } from '../src/logger/index';
 
 describe('Logger', () => {
   let consoleLogSpy: jest.SpyInstance;

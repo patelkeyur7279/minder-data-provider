@@ -56,7 +56,7 @@ export class OfflineManager {
   }
 
   /**
-   * Initialize offline manager
+   * Initialize offline manager with better error handling
    */
   async initialize(): Promise<void> {
     if (!this.config.enabled) {
@@ -66,21 +66,37 @@ export class OfflineManager {
     // Load queue from storage
     await this.loadQueue();
 
-    // Setup network listener
+    // Setup network listener with fallbacks
     await this.setupNetworkListener();
 
     // Initial network state check
     const state = await this.checkNetworkState();
     this.updateNetworkState(state);
+
+    // Log initialization status
+    if (this.netInfoUnsubscribe) {
+      logger.debug('Offline manager initialized with network detection');
+    } else {
+      logger.warn('Offline manager initialized without reliable network detection - offline features may be limited');
+      console.warn(`
+⚠️  Minder Offline Support: Limited Network Detection
+
+Offline request queuing will work, but automatic sync when reconnecting may be unreliable.
+For better offline support:
+
+React Native: Install @react-native-community/netinfo
+Expo: NetInfo is built-in, check your setup
+Web: Using basic online/offline detection
+      `.trim());
+    }
   }
 
   /**
-   * Setup network state listener (React Native/Expo)
+   * Setup network state listener (React Native/Expo with fallback)
    */
   private async setupNetworkListener(): Promise<void> {
     try {
       // Try to dynamically load NetInfo (optional peer dependency)
-      // Using dynamic require to avoid build-time resolution
       const loadNetInfo = new Function('return import("@react-native-community/netinfo")');
       const NetInfo = await loadNetInfo().then((m: any) => m.default);
 
@@ -94,18 +110,55 @@ export class OfflineManager {
 
         this.updateNetworkState(networkState);
       });
+      
+      logger.debug('NetInfo listener setup successfully');
     } catch (error) {
-      // NetInfo not available, manual network checks required
-      logger.warn('NetInfo not available. Manual network checks required.');
+      // NetInfo not available, setup fallback network detection
+      logger.warn('NetInfo not available, using fallback network detection');
+      this.setupFallbackNetworkListener();
     }
   }
 
   /**
-   * Check current network state
+   * Setup fallback network detection for when NetInfo is not available
+   */
+  private setupFallbackNetworkListener(): void {
+    // Use navigator.onLine for basic online/offline detection
+    if (typeof window !== 'undefined' && 'onLine' in navigator) {
+      const updateOnlineStatus = () => {
+        const isOnline = navigator.onLine;
+        const networkState: NetworkState = {
+          isConnected: isOnline,
+          type: isOnline ? 'unknown' : 'none',
+        };
+        this.updateNetworkState(networkState);
+      };
+
+      // Listen for online/offline events
+      window.addEventListener('online', updateOnlineStatus);
+      window.addEventListener('offline', updateOnlineStatus);
+
+      // Set initial state
+      updateOnlineStatus();
+
+      // Store cleanup function
+      this.netInfoUnsubscribe = () => {
+        window.removeEventListener('online', updateOnlineStatus);
+        window.removeEventListener('offline', updateOnlineStatus);
+      };
+    } else {
+      // No network detection available, assume always online
+      logger.warn('No network detection available, assuming always online');
+      this.networkState = { isConnected: true };
+    }
+  }
+
+  /**
+   * Check current network state with multiple fallback methods
    */
   async checkNetworkState(): Promise<NetworkState> {
     try {
-      // Try to dynamically load NetInfo (optional peer dependency)
+      // Try NetInfo first (React Native/Expo)
       const loadNetInfo = new Function('return import("@react-native-community/netinfo")');
       const NetInfo = await loadNetInfo().then((m: any) => m.default);
 
@@ -117,8 +170,34 @@ export class OfflineManager {
         isMetered: (state.details as any)?.isConnectionMetered,
       };
     } catch (error) {
-      // Fallback: assume online
-      return { isConnected: true };
+      // Fallback 1: Use navigator.onLine (web)
+      if (typeof navigator !== 'undefined' && 'onLine' in navigator) {
+        return {
+          isConnected: navigator.onLine,
+          type: navigator.onLine ? 'unknown' : 'none',
+        };
+      }
+
+      // Fallback 2: Try a simple fetch request to detect connectivity
+      try {
+        // Try to fetch a small resource from a reliable CDN
+        await fetch('https://www.google.com/favicon.ico', {
+          method: 'HEAD',
+          mode: 'no-cors',
+          cache: 'no-cache',
+          signal: AbortSignal.timeout(5000) // 5 second timeout
+        });
+        return {
+          isConnected: true,
+          type: 'unknown',
+        };
+      } catch {
+        // Assume offline if fetch fails
+        return {
+          isConnected: false,
+          type: 'none',
+        };
+      }
     }
   }
 

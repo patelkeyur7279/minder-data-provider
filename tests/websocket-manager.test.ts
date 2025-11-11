@@ -253,36 +253,36 @@ describe('WebSocketManager', () => {
     it('should receive and parse messages', async () => {
       wsManager = new WebSocketManager(wsConfig, authManager);
       await wsManager.connect();
-      
+
       const callback = jest.fn();
       wsManager.subscribe('test-event', callback);
-      
-      // Simulate message
-      const ws = (wsManager as any).ws as MockWebSocket;
-      ws.simulateMessage({ type: 'test-event', data: { value: 123 } });
-      
+
+      // Simulate message through adapter
+      const adapter = (wsManager as any).adapter;
+      adapter.config.onMessage?.(JSON.stringify({ type: 'test-event', data: { value: 123 } }));
+
       expect(callback).toHaveBeenCalledWith({ value: 123 });
     });
 
     it('should handle invalid JSON messages', async () => {
       wsManager = new WebSocketManager(wsConfig, authManager);
       await wsManager.connect();
-      
-      const ws = (wsManager as any).ws as MockWebSocket;
-      
-      // Simulate invalid JSON
+
+      const adapter = (wsManager as any).adapter;
+
+      // Simulate invalid JSON - should not throw
       expect(() => {
-        ws.onmessage?.(new MessageEvent('message', { data: 'invalid json' }));
+        adapter.config.onMessage?.('invalid json');
       }).not.toThrow();
     });
 
     it('should log received message with debug manager', async () => {
       wsManager = new WebSocketManager(wsConfig, authManager, debugManager, true);
       await wsManager.connect();
-      
-      const ws = (wsManager as any).ws as MockWebSocket;
-      ws.simulateMessage({ type: 'test-event', data: { value: 123 } });
-      
+
+      const adapter = (wsManager as any).adapter;
+      adapter.config.onMessage?.(JSON.stringify({ type: 'test-event', data: { value: 123 } }));
+
       expect(debugManager.log).toHaveBeenCalledWith(
         'websocket',
         '📨 WS MESSAGE',
@@ -310,23 +310,23 @@ describe('WebSocketManager', () => {
     it('should call subscribed callback on message', async () => {
       const callback = jest.fn();
       wsManager.subscribe('test-event', callback);
-      
-      const ws = (wsManager as any).ws as MockWebSocket;
-      ws.simulateMessage({ type: 'test-event', data: { value: 123 } });
-      
+
+      const adapter = (wsManager as any).adapter;
+      adapter.config.onMessage?.(JSON.stringify({ type: 'test-event', data: { value: 123 } }));
+
       expect(callback).toHaveBeenCalledWith({ value: 123 });
     });
 
     it('should support multiple subscribers', async () => {
       const callback1 = jest.fn();
       const callback2 = jest.fn();
-      
+
       wsManager.subscribe('test-event', callback1);
       wsManager.subscribe('test-event', callback2);
-      
-      const ws = (wsManager as any).ws as MockWebSocket;
-      ws.simulateMessage({ type: 'test-event', data: { value: 123 } });
-      
+
+      const adapter = (wsManager as any).adapter;
+      adapter.config.onMessage?.(JSON.stringify({ type: 'test-event', data: { value: 123 } }));
+
       expect(callback1).toHaveBeenCalledWith({ value: 123 });
       expect(callback2).toHaveBeenCalledWith({ value: 123 });
     });
@@ -334,12 +334,12 @@ describe('WebSocketManager', () => {
     it('should unsubscribe correctly', async () => {
       const callback = jest.fn();
       const unsubscribe = wsManager.subscribe('test-event', callback);
-      
+
       unsubscribe();
-      
-      const ws = (wsManager as any).ws as MockWebSocket;
-      ws.simulateMessage({ type: 'test-event', data: { value: 123 } });
-      
+
+      const adapter = (wsManager as any).adapter;
+      adapter.config.onMessage?.(JSON.stringify({ type: 'test-event', data: { value: 123 } }));
+
       expect(callback).not.toHaveBeenCalled();
     });
 
@@ -424,10 +424,10 @@ describe('WebSocketManager', () => {
     it('should attempt reconnection on close', async () => {
       wsManager = new WebSocketManager(wsConfig, authManager);
       await wsManager.connect();
-      
-      const ws = (wsManager as any).ws as MockWebSocket;
-      ws.close(1000, 'Normal closure');
-      
+
+      const adapter = (wsManager as any).adapter;
+      adapter.config.onClose?.(new CloseEvent('close', { code: 1000, reason: 'Normal closure' }));
+
       // Should schedule reconnection
       const reconnectAttempts = (wsManager as any).reconnectAttempts;
       expect(reconnectAttempts).toBeGreaterThan(0);
@@ -437,10 +437,10 @@ describe('WebSocketManager', () => {
       const configNoReconnect = { ...wsConfig, reconnect: false };
       wsManager = new WebSocketManager(configNoReconnect, authManager);
       await wsManager.connect();
-      
-      const ws = (wsManager as any).ws as MockWebSocket;
-      ws.close(1000, 'Normal closure');
-      
+
+      const adapter = (wsManager as any).adapter;
+      adapter.config.onClose?.(new CloseEvent('close', { code: 1000, reason: 'Normal closure' }));
+
       // Should not increment reconnect attempts
       await new Promise(resolve => setTimeout(resolve, 50));
       const reconnectAttempts = (wsManager as any).reconnectAttempts;
@@ -450,19 +450,19 @@ describe('WebSocketManager', () => {
     it('should stop reconnecting after max attempts', async () => {
       wsManager = new WebSocketManager(wsConfig, authManager);
       (wsManager as any).maxReconnectAttempts = 2;
-      
+
       await wsManager.connect();
-      
-      const ws = (wsManager as any).ws as MockWebSocket;
-      
+
+      const adapter = (wsManager as any).adapter;
+
       // Simulate multiple closes
-      ws.close(1000, 'Close 1');
+      adapter.config.onClose?.(new CloseEvent('close', { code: 1000, reason: 'Close 1' }));
       await new Promise(resolve => setTimeout(resolve, 50));
-      
-      if ((wsManager as any).ws) {
-        ((wsManager as any).ws as MockWebSocket).close(1000, 'Close 2');
+
+      if ((wsManager as any).adapter) {
+        ((wsManager as any).adapter).config.onClose?.(new CloseEvent('close', { code: 1000, reason: 'Close 2' }));
       }
-      
+
       const reconnectAttempts = (wsManager as any).reconnectAttempts;
       expect(reconnectAttempts).toBeLessThanOrEqual(2);
     });
@@ -470,10 +470,10 @@ describe('WebSocketManager', () => {
     it('should log close event with debug manager', async () => {
       wsManager = new WebSocketManager(wsConfig, authManager, debugManager, true);
       await wsManager.connect();
-      
-      const ws = (wsManager as any).ws as MockWebSocket;
-      ws.close(1000, 'Test close');
-      
+
+      const adapter = (wsManager as any).adapter;
+      adapter.config.onClose?.(new CloseEvent('close', { code: 1000, reason: 'Test close' }));
+
       expect(debugManager.log).toHaveBeenCalledWith(
         'websocket',
         '🔌 WS CLOSED',
@@ -574,13 +574,13 @@ describe('WebSocketManager', () => {
     it('should handle subscribe to non-existent event type', async () => {
       wsManager = new WebSocketManager(wsConfig, authManager);
       await wsManager.connect();
-      
+
       const callback = jest.fn();
       wsManager.subscribe('non-existent', callback);
-      
-      const ws = (wsManager as any).ws as MockWebSocket;
-      ws.simulateMessage({ type: 'other-event', data: {} });
-      
+
+      const adapter = (wsManager as any).adapter;
+      adapter.config.onMessage?.(JSON.stringify({ type: 'other-event', data: {} }));
+
       expect(callback).not.toHaveBeenCalled();
     });
 

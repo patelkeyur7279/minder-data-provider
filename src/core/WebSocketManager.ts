@@ -2,13 +2,16 @@ import { Logger, LogLevel } from '../utils/Logger.js';
 import type { WebSocketConfig } from './types.js';
 import { AuthManager } from './AuthManager.js';
 import type { DebugManager } from '../debug/DebugManager.js';
+import { DebugLogType } from '../constants/enums.js';
+import { createWebSocketAdapterWithFallback } from '../platform/adapters/websocket/WebSocketAdapterFactory.js';
+import type { WebSocketAdapter } from '../platform/adapters/websocket/WebSocketAdapter.js';
 
 const logger = new Logger('WebSocketManager', { level: LogLevel.WARN });
 
 export class WebSocketManager {
   private config: WebSocketConfig;
   private authManager: AuthManager;
-  private ws: WebSocket | null = null;
+  private adapter: WebSocketAdapter | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
@@ -28,76 +31,84 @@ export class WebSocketManager {
       try {
         const token = this.authManager.getToken();
         const url = token ? `${this.config.url}?token=${token}` : this.config.url;
-        
+
         if (this.debugManager && this.enableLogs) {
-          this.debugManager.log('websocket', '🔌 WS CONNECTING', {
+          this.debugManager.log(DebugLogType.WEBSOCKET, '🔌 WS CONNECTING', {
             url: this.config.url,
             hasToken: !!token,
             protocols: this.config.protocols,
           });
         }
-        
-        this.ws = new WebSocket(url, this.config.protocols);
 
-        this.ws.onopen = () => {
-          logger.debug('connected');
-          this.reconnectAttempts = 0;
-          this.startHeartbeat();
-          
-          if (this.debugManager && this.enableLogs) {
-            this.debugManager.log('websocket', '✅ WS CONNECTED', {
-              url: this.config.url,
-              readyState: this.ws?.readyState,
-            });
-          }
-          
-          resolve();
-        };
+        // Create platform-specific adapter with enhanced config
+        const adapterConfig = {
+          url,
+          protocols: this.config.protocols,
+          autoReconnect: this.config.reconnect ?? true,
+          maxReconnectAttempts: this.maxReconnectAttempts,
+          enableHeartbeat: !!this.config.heartbeat,
+          heartbeatInterval: this.config.heartbeat || 30000,
+          onOpen: () => {
+            logger.debug('connected');
+            this.reconnectAttempts = 0;
+            this.startHeartbeat();
 
-        this.ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            
             if (this.debugManager && this.enableLogs) {
-              this.debugManager.log('websocket', '📨 WS MESSAGE', {
-                type: data.type,
-                dataSize: JSON.stringify(data).length,
+              this.debugManager.log(DebugLogType.WEBSOCKET, '✅ WS CONNECTED', {
+                url: this.config.url,
+                readyState: this.adapter?.getState(),
               });
             }
-            
-            this.handleMessage(data);
-          } catch (error) {
-            logger.error('Failed to parse message:', error);
-          }
+
+            resolve();
+          },
+          onClose: (event: CloseEvent) => {
+            logger.debug('disconnected:', event.code, event.reason);
+            this.stopHeartbeat();
+
+            if (this.debugManager && this.enableLogs) {
+              this.debugManager.log(DebugLogType.WEBSOCKET, '🔌 WS CLOSED', {
+                code: event.code,
+                reason: event.reason,
+                reconnectAttempts: this.reconnectAttempts,
+              });
+            }
+
+            if (this.config.reconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
+              this.reconnectAttempts++;
+              setTimeout(() => this.connect(), 1000 * this.reconnectAttempts);
+            }
+          },
+          onError: (error: Error) => {
+            logger.error('error:', error);
+
+            if (this.debugManager && this.enableLogs) {
+              this.debugManager.log(DebugLogType.WEBSOCKET, '❌ WS ERROR', { error });
+            }
+
+            reject(error);
+          },
+          onMessage: (data: any) => {
+            try {
+              const parsedData = typeof data === 'string' ? JSON.parse(data) : data;
+
+              if (this.debugManager && this.enableLogs) {
+                this.debugManager.log(DebugLogType.WEBSOCKET, '📨 WS MESSAGE', {
+                  type: parsedData.type,
+                  dataSize: JSON.stringify(parsedData).length,
+                });
+              }
+
+              this.handleMessage(parsedData);
+            } catch (error) {
+              logger.error('Failed to parse message:', error);
+            }
+          },
         };
 
-        this.ws.onclose = (event) => {
-          logger.debug('disconnected:', event.code, event.reason);
-          this.stopHeartbeat();
-          
-          if (this.debugManager && this.enableLogs) {
-            this.debugManager.log('websocket', '🔌 WS CLOSED', {
-              code: event.code,
-              reason: event.reason,
-              reconnectAttempts: this.reconnectAttempts,
-            });
-          }
-          
-          if (this.config.reconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
-            this.reconnectAttempts++;
-            setTimeout(() => this.connect(), 1000 * this.reconnectAttempts);
-          }
-        };
+        this.adapter = createWebSocketAdapterWithFallback(adapterConfig);
+        this.adapter.connect().catch(reject);
 
-        this.ws.onerror = (error) => {
-          logger.error('error:', error);
-          
-          if (this.debugManager && this.enableLogs) {
-            this.debugManager.log('websocket', '❌ WS ERROR', { error });
-          }
-          
-          reject(error);
-        };
       } catch (error) {
         reject(error);
       }
@@ -106,23 +117,23 @@ export class WebSocketManager {
 
   disconnect(): void {
     this.stopHeartbeat();
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
-      
+    if (this.adapter) {
+      this.adapter.disconnect();
+      this.adapter = null;
+
       if (this.debugManager && this.enableLogs) {
-        this.debugManager.log('websocket', '🔌 WS DISCONNECT', {});
+        this.debugManager.log(DebugLogType.WEBSOCKET, '🔌 WS DISCONNECT', {});
       }
     }
   }
 
   send(type: string, data: unknown): void {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+    if (this.adapter && this.adapter.isConnected()) {
       const message = { type, data };
-      this.ws.send(JSON.stringify(message));
-      
+      this.adapter.send(JSON.stringify(message));
+
       if (this.debugManager && this.enableLogs) {
-        this.debugManager.log('websocket', '📤 WS SEND', {
+        this.debugManager.log(DebugLogType.WEBSOCKET, '📤 WS SEND', {
           type,
           dataSize: JSON.stringify(message).length,
         });
@@ -134,23 +145,23 @@ export class WebSocketManager {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());
     }
-    
+
     this.listeners.get(event)!.add(callback);
-    
+
     if (this.debugManager && this.enableLogs) {
-      this.debugManager.log('websocket', '👂 WS SUBSCRIBE', {
+      this.debugManager.log(DebugLogType.WEBSOCKET, '👂 WS SUBSCRIBE', {
         event,
         listenerCount: this.listeners.get(event)?.size || 0,
       });
     }
-    
+
     return () => {
       const eventListeners = this.listeners.get(event);
       if (eventListeners) {
         eventListeners.delete(callback);
-        
+
         if (this.debugManager && this.enableLogs) {
-          this.debugManager.log('websocket', '🔇 WS UNSUBSCRIBE', {
+          this.debugManager.log(DebugLogType.WEBSOCKET, '🔇 WS UNSUBSCRIBE', {
             event,
             listenerCount: eventListeners.size,
           });
@@ -182,6 +193,6 @@ export class WebSocketManager {
   }
 
   isConnected(): boolean {
-    return this.ws?.readyState === WebSocket.OPEN;
+    return this.adapter?.isConnected() ?? false;
   }
 }

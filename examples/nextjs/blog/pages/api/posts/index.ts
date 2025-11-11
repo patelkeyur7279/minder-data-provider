@@ -47,6 +47,6 @@ export default async function handler(
   // Return successful response
   res.status(200).json({
     success: true,
-    data,
+    data: data || [],
   });
 }

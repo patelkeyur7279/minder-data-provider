@@ -1,36 +1,41 @@
 import type { AuthConfig } from './types.js';
 import type { DebugManager } from '../debug/DebugManager.js';
+import { StorageType, DebugLogType } from '../constants/enums.js';
 
 export class AuthManager {
   private config: AuthConfig;
   private memoryStorage: Map<string, string> = new Map();
   private debugManager?: DebugManager;
   private enableLogs: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private AsyncStorage: any = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private SecureStore: any = null;
 
   constructor(config?: AuthConfig, debugManager?: DebugManager, enableLogs: boolean = false) {
     this.config = config || {
       tokenKey: 'accessToken',
-      storage: 'memory',
+      storage: StorageType.MEMORY,
     };
     this.debugManager = debugManager;
     this.enableLogs = enableLogs;
     
     // Initialize platform-specific storage
-    if (this.config.storage === 'AsyncStorage') {
+    if (this.config.storage === StorageType.ASYNC_STORAGE) {
       try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         this.AsyncStorage = require('@react-native-async-storage/async-storage').default;
       } catch {
         console.warn('[AuthManager] AsyncStorage not available, falling back to memory storage');
-        this.config.storage = 'memory';
+        this.config.storage = StorageType.MEMORY;
       }
-    } else if (this.config.storage === 'SecureStore') {
+    } else if (this.config.storage === StorageType.SECURE_STORE) {
       try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         this.SecureStore = require('expo-secure-store');
       } catch {
-        console.warn('[AuthManager] SecureStore not available, falling back to memory storage');
-        this.config.storage = 'memory';
+        console.warn('[AuthManager] AsyncStorage not available, falling back to memory storage');
+        this.config.storage = StorageType.MEMORY;
       }
     }
   }
@@ -39,7 +44,7 @@ export class AuthManager {
     this.setItem(this.config.tokenKey, token);
     
     if (this.debugManager && this.enableLogs) {
-      this.debugManager.log('auth', '🔐 AUTH SET TOKEN', {
+      this.debugManager.log(DebugLogType.AUTH, '🔐 AUTH SET TOKEN', {
         tokenKey: this.config.tokenKey,
         storage: this.config.storage,
         tokenLength: token.length,
@@ -52,7 +57,7 @@ export class AuthManager {
     
     if (this.debugManager && this.enableLogs) {
       const emoji = token ? '✅' : '❌';
-      this.debugManager.log('auth', `${emoji} AUTH GET TOKEN`, {
+      this.debugManager.log(DebugLogType.AUTH, `${emoji} AUTH GET TOKEN`, {
         tokenKey: this.config.tokenKey,
         hasToken: !!token,
         storage: this.config.storage,
@@ -66,7 +71,7 @@ export class AuthManager {
     this.setItem(`${this.config.tokenKey}_refresh`, token);
     
     if (this.debugManager && this.enableLogs) {
-      this.debugManager.log('auth', '🔄 AUTH SET REFRESH TOKEN', {
+      this.debugManager.log(DebugLogType.AUTH, '🔄 AUTH SET REFRESH TOKEN', {
         tokenKey: `${this.config.tokenKey}_refresh`,
         storage: this.config.storage,
         tokenLength: token.length,
@@ -79,7 +84,7 @@ export class AuthManager {
     
     if (this.debugManager && this.enableLogs) {
       const emoji = token ? '✅' : '❌';
-      this.debugManager.log('auth', `${emoji} AUTH GET REFRESH TOKEN`, {
+      this.debugManager.log(DebugLogType.AUTH, `${emoji} AUTH GET REFRESH TOKEN`, {
         tokenKey: `${this.config.tokenKey}_refresh`,
         hasToken: !!token,
         storage: this.config.storage,
@@ -94,7 +99,7 @@ export class AuthManager {
     this.removeItem(`${this.config.tokenKey}_refresh`);
     
     if (this.debugManager && this.enableLogs) {
-      this.debugManager.log('auth', '🗑️ AUTH CLEAR', {
+      this.debugManager.log(DebugLogType.AUTH, '🗑️ AUTH CLEAR', {
         tokenKey: this.config.tokenKey,
         storage: this.config.storage,
       });
@@ -105,7 +110,7 @@ export class AuthManager {
     const token = this.getToken();
     if (!token) {
       if (this.debugManager && this.enableLogs) {
-        this.debugManager.log('auth', '❌ AUTH CHECK: No token', {});
+        this.debugManager.log(DebugLogType.AUTH, '❌ AUTH CHECK: No token', {});
       }
       return false;
     }
@@ -119,7 +124,7 @@ export class AuthManager {
       if (this.debugManager && this.enableLogs) {
         const emoji = isValid ? '✅' : '⏰';
         const status = isValid ? 'VALID' : 'EXPIRED';
-        this.debugManager.log('auth', `${emoji} AUTH CHECK: ${status}`, {
+        this.debugManager.log(DebugLogType.AUTH, `${emoji} AUTH CHECK: ${status}`, {
           exp: payload.exp,
           now,
           isValid,
@@ -130,7 +135,7 @@ export class AuthManager {
     } catch {
       // If not a JWT, assume it's valid
       if (this.debugManager && this.enableLogs) {
-        this.debugManager.log('auth', '✅ AUTH CHECK: Non-JWT token', {});
+        this.debugManager.log(DebugLogType.AUTH, '✅ AUTH CHECK: Non-JWT token', {});
       }
       return true;
     }
@@ -138,17 +143,17 @@ export class AuthManager {
 
   private setItem(key: string, value: string): void {
     switch (this.config.storage) {
-      case 'sessionStorage':
+      case StorageType.SESSION_STORAGE:
         if (typeof window !== 'undefined') {
           sessionStorage.setItem(key, value);
         }
         break;
-      case 'cookie':
+      case StorageType.COOKIE:
         if (typeof document !== 'undefined') {
           document.cookie = `${key}=${value}; path=/; secure; samesite=strict`;
         }
         break;
-      case 'AsyncStorage':
+      case StorageType.ASYNC_STORAGE:
         if (this.AsyncStorage) {
           // Async but we don't await - fire and forget for backwards compatibility
           this.AsyncStorage.setItem(key, value).catch((err: Error) => {
@@ -158,7 +163,7 @@ export class AuthManager {
           this.memoryStorage.set(key, value);
         }
         break;
-      case 'SecureStore':
+      case StorageType.SECURE_STORE:
         if (this.SecureStore) {
           // Async but we don't await - fire and forget for backwards compatibility
           this.SecureStore.setItemAsync(key, value).catch((err: Error) => {
@@ -168,7 +173,7 @@ export class AuthManager {
           this.memoryStorage.set(key, value);
         }
         break;
-      case 'memory':
+      case StorageType.MEMORY:
       default:
         this.memoryStorage.set(key, value);
         break;
@@ -177,28 +182,28 @@ export class AuthManager {
 
   private getItem(key: string): string | null {
     switch (this.config.storage) {
-      case 'sessionStorage':
+      case StorageType.SESSION_STORAGE:
         if (typeof window !== 'undefined') {
           return sessionStorage.getItem(key);
         }
         break;
-      case 'cookie':
+      case StorageType.COOKIE:
         if (typeof document !== 'undefined') {
           const match = document.cookie.match(new RegExp(`(^| )${key}=([^;]+)`));
           return match ? match[2] || null : null;
         }
         break;
-      case 'AsyncStorage':
+      case StorageType.ASYNC_STORAGE:
         // Note: AsyncStorage is async, so we can't return the value synchronously
         // Users should rely on the async nature of React Native's auth flow
         // For immediate access, use memory storage
         console.warn('[AuthManager] AsyncStorage is async - token may not be immediately available. Consider using memory storage for synchronous access.');
         return this.memoryStorage.get(key) || null;
-      case 'SecureStore':
+      case StorageType.SECURE_STORE:
         // Note: SecureStore is async, so we can't return the value synchronously
         console.warn('[AuthManager] SecureStore is async - token may not be immediately available. Consider using memory storage for synchronous access.');
         return this.memoryStorage.get(key) || null;
-      case 'memory':
+      case StorageType.MEMORY:
       default:
         return this.memoryStorage.get(key) || null;
     }
@@ -211,7 +216,7 @@ export class AuthManager {
    */
   async getItemAsync(key: string): Promise<string | null> {
     switch (this.config.storage) {
-      case 'AsyncStorage':
+      case StorageType.ASYNC_STORAGE:
         if (this.AsyncStorage) {
           try {
             return await this.AsyncStorage.getItem(key);
@@ -221,7 +226,7 @@ export class AuthManager {
           }
         }
         break;
-      case 'SecureStore':
+      case StorageType.SECURE_STORE:
         if (this.SecureStore) {
           try {
             return await this.SecureStore.getItemAsync(key);
@@ -246,7 +251,7 @@ export class AuthManager {
     
     if (this.debugManager && this.enableLogs) {
       const emoji = token ? '✅' : '❌';
-      this.debugManager.log('auth', `${emoji} AUTH GET TOKEN (ASYNC)`, {
+      this.debugManager.log(DebugLogType.AUTH, `${emoji} AUTH GET TOKEN (ASYNC)`, {
         tokenKey: this.config.tokenKey,
         hasToken: !!token,
         storage: this.config.storage,
@@ -264,7 +269,7 @@ export class AuthManager {
     
     if (this.debugManager && this.enableLogs) {
       const emoji = token ? '✅' : '❌';
-      this.debugManager.log('auth', `${emoji} AUTH GET REFRESH TOKEN (ASYNC)`, {
+      this.debugManager.log(DebugLogType.AUTH, `${emoji} AUTH GET REFRESH TOKEN (ASYNC)`, {
         tokenKey: `${this.config.tokenKey}_refresh`,
         hasToken: !!token,
         storage: this.config.storage,
@@ -276,17 +281,17 @@ export class AuthManager {
 
   private removeItem(key: string): void {
     switch (this.config.storage) {
-      case 'sessionStorage':
+      case StorageType.SESSION_STORAGE:
         if (typeof window !== 'undefined') {
           sessionStorage.removeItem(key);
         }
         break;
-      case 'cookie':
+      case StorageType.COOKIE:
         if (typeof document !== 'undefined') {
           document.cookie = `${key}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
         }
         break;
-      case 'AsyncStorage':
+      case StorageType.ASYNC_STORAGE:
         if (this.AsyncStorage) {
           this.AsyncStorage.removeItem(key).catch((err: Error) => {
             console.error('[AuthManager] AsyncStorage removeItem failed:', err);
@@ -295,7 +300,7 @@ export class AuthManager {
           this.memoryStorage.delete(key);
         }
         break;
-      case 'SecureStore':
+      case StorageType.SECURE_STORE:
         if (this.SecureStore) {
           this.SecureStore.deleteItemAsync(key).catch((err: Error) => {
             console.error('[AuthManager] SecureStore deleteItemAsync failed:', err);
@@ -304,7 +309,7 @@ export class AuthManager {
           this.memoryStorage.delete(key);
         }
         break;
-      case 'memory':
+      case StorageType.MEMORY:
       default:
         this.memoryStorage.delete(key);
         break;

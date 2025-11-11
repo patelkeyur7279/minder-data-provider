@@ -7,6 +7,7 @@
 
 import { Logger, LogLevel } from '../../../utils/Logger.js';
 import { BaseStorageAdapter, StorageAdapterOptions } from './StorageAdapter.js';
+import { MinderConfigError } from '../../../errors/MinderError.js';
 
 const logger = new Logger('NativeStorageAdapter', { level: LogLevel.ERROR });
 
@@ -18,16 +19,36 @@ export class NativeStorageAdapter extends BaseStorageAdapter {
     
     try {
       // Dynamic import for React Native AsyncStorage
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       this.AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      
+      if (!this.AsyncStorage) {
+        throw new Error('AsyncStorage default export not found');
+      }
     } catch (error) {
-      logger.warn('@react-native-async-storage/async-storage not found. Please install it as a peer dependency.');
-      this.AsyncStorage = null;
+      throw new MinderConfigError(
+        '❌ AsyncStorage Not Found!\n\n' +
+        'React Native apps require @react-native-async-storage/async-storage.\n\n' +
+        '📦 Installation:\n' +
+        '  npm install @react-native-async-storage/async-storage\n' +
+        '  # or\n' +
+        '  yarn add @react-native-async-storage/async-storage\n\n' +
+        '🔧 Then rebuild your app:\n' +
+        '  npx pod-install          # iOS\n' +
+        '  npx react-native run-ios # or run-android\n\n' +
+        '📚 Documentation:\n' +
+        '  https://react-native-async-storage.github.io/async-storage/\n\n' +
+        '💡 Alternative: Use different storage:\n' +
+        '  configureMinder({\n' +
+        '    apiUrl: "...",\n' +
+        '    auth: { storage: StorageType.MEMORY }  // No AsyncStorage needed\n' +
+        '  });\n\n' +
+        `Original error: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
   
   async getItem(key: string): Promise<string | null> {
-    if (!this.AsyncStorage) return null;
-    
     try {
       const prefixedKey = this.getPrefixedKey(key);
       const wrapped = await this.AsyncStorage.getItem(prefixedKey);
@@ -50,8 +71,6 @@ export class NativeStorageAdapter extends BaseStorageAdapter {
   }
   
   async setItem(key: string, value: string, ttl?: number): Promise<void> {
-    if (!this.AsyncStorage) return;
-    
     try {
       await this.checkMaxSize();
       
@@ -65,8 +84,6 @@ export class NativeStorageAdapter extends BaseStorageAdapter {
   }
   
   async removeItem(key: string): Promise<void> {
-    if (!this.AsyncStorage) return;
-    
     try {
       const prefixedKey = this.getPrefixedKey(key);
       await this.AsyncStorage.removeItem(prefixedKey);
@@ -76,8 +93,6 @@ export class NativeStorageAdapter extends BaseStorageAdapter {
   }
   
   async clear(): Promise<void> {
-    if (!this.AsyncStorage) return;
-    
     try {
       if (this.options.namespace) {
         // Only clear items with our namespace
@@ -94,8 +109,6 @@ export class NativeStorageAdapter extends BaseStorageAdapter {
   }
   
   async getAllKeys(): Promise<string[]> {
-    if (!this.AsyncStorage) return [];
-    
     try {
       const allKeys = await this.AsyncStorage.getAllKeys();
       const prefix = this.options.namespace ? `${this.options.namespace}:` : '';
@@ -115,8 +128,6 @@ export class NativeStorageAdapter extends BaseStorageAdapter {
   }
   
   async getSize(): Promise<number> {
-    if (!this.AsyncStorage) return 0;
-    
     try {
       const keys = await this.getAllKeys();
       const prefixedKeys = keys.map(k => this.getPrefixedKey(k));
@@ -141,8 +152,6 @@ export class NativeStorageAdapter extends BaseStorageAdapter {
    * Optimized for React Native AsyncStorage
    */
   async multiGet(keys: string[]): Promise<Array<[string, string | null]>> {
-    if (!this.AsyncStorage) return [];
-    
     try {
       const prefixedKeys = keys.map(k => this.getPrefixedKey(k));
       const results = await this.AsyncStorage.multiGet(prefixedKeys);
@@ -163,8 +172,6 @@ export class NativeStorageAdapter extends BaseStorageAdapter {
    * Optimized for React Native AsyncStorage
    */
   async multiSet(keyValuePairs: Array<[string, string]>, ttl?: number): Promise<void> {
-    if (!this.AsyncStorage) return;
-    
     try {
       const wrappedPairs = keyValuePairs.map(([key, value]) => [
         this.getPrefixedKey(key),

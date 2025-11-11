@@ -11,8 +11,10 @@
  */
 
 import type { MinderConfig } from '../core/types.js';
+import { CacheType, LogLevel, StorageType, ConfigPreset } from '../constants/enums.js';
 
-export type ConfigPreset = 'minimal' | 'standard' | 'advanced' | 'enterprise';
+export type { ConfigPreset } from '../constants/enums.js';
+export type ConfigPresetType = 'minimal' | 'standard' | 'advanced' | 'enterprise';
 
 /**
  * Preset configurations for different use cases
@@ -26,7 +28,7 @@ export const CONFIG_PRESETS: Record<ConfigPreset, Partial<MinderConfig>> = {
   minimal: {
     // Only CRUD, no extras
     cache: {
-      type: 'memory',
+      type: CacheType.MEMORY,
       ttl: 5 * 60 * 1000, // 5 minutes
       maxSize: 50, // 50 items
     },
@@ -39,7 +41,7 @@ export const CONFIG_PRESETS: Record<ConfigPreset, Partial<MinderConfig>> = {
     },
     debug: {
       enabled: false,
-      logLevel: 'error',
+      logLevel: LogLevel.ERROR,
     },
   },
 
@@ -51,11 +53,11 @@ export const CONFIG_PRESETS: Record<ConfigPreset, Partial<MinderConfig>> = {
   standard: {
     auth: {
       tokenKey: 'token',
-      storage: 'cookie', // Changed from localStorage (v2.1) - More secure, XSS resistant
+      storage: StorageType.COOKIE, // Changed from localStorage (v2.1) - More secure, XSS resistant
       refreshUrl: '/api/auth/refresh',
     },
     cache: {
-      type: 'hybrid', // Memory + IndexedDB fallback
+      type: CacheType.HYBRID, // Memory + IndexedDB fallback
       ttl: 15 * 60 * 1000, // 15 minutes
       maxSize: 200,
       refetchOnWindowFocus: true,
@@ -80,7 +82,7 @@ export const CONFIG_PRESETS: Record<ConfigPreset, Partial<MinderConfig>> = {
     },
     debug: {
       enabled: process.env.NODE_ENV === 'development',
-      logLevel: 'warn',
+      logLevel: LogLevel.WARN,
       performance: true,
     },
   },
@@ -92,12 +94,12 @@ export const CONFIG_PRESETS: Record<ConfigPreset, Partial<MinderConfig>> = {
    */
   advanced: {
     auth: {
-      tokenKey: 'token',
-      storage: 'cookie', // Changed from localStorage (v2.1) - More secure, XSS resistant
-      refreshUrl: '/api/auth/refresh',
+      tokenKey: 'auth_token',
+      storage: StorageType.COOKIE, // HTTPOnly + Secure + SameSite
+      refreshUrl: '/api/v2/auth/refresh',
     },
     cache: {
-      type: 'persistent', // IndexedDB for offline support
+      type: CacheType.PERSISTENT, // IndexedDB with sync
       ttl: 30 * 60 * 1000, // 30 minutes
       maxSize: 1000,
       refetchOnWindowFocus: true,
@@ -106,36 +108,29 @@ export const CONFIG_PRESETS: Record<ConfigPreset, Partial<MinderConfig>> = {
     security: {
       sanitization: {
         enabled: true,
-        allowedTags: ['b', 'i', 'em', 'strong', 'a', 'p'],
+        allowedTags: ['b', 'i', 'em', 'strong', 'a', 'p', 'ul', 'ol', 'li'],
       },
-      csrfProtection: {
-        enabled: true,
-        tokenLength: 32,
-      },
+      csrfProtection: true,
       rateLimiting: {
-        requests: 500,
+        requests: 200,
         window: 60000,
       },
-      inputValidation: true,
+      encryption: true,
     },
     performance: {
       deduplication: true,
       batching: true,
-      batchDelay: 50,
-      monitoring: true,
-      retries: 3,
-      retryDelay: 1000,
-      timeout: 30000,
+      batchDelay: 25,
+      retries: 5,
+      timeout: 45000,
       compression: true,
-      bundleAnalysis: true,
       lazyLoading: true,
     },
     debug: {
       enabled: process.env.NODE_ENV === 'development',
-      logLevel: 'info',
+      logLevel: LogLevel.INFO,
       performance: true,
       devTools: true,
-      networkLogs: true,
     },
   },
 
@@ -147,11 +142,11 @@ export const CONFIG_PRESETS: Record<ConfigPreset, Partial<MinderConfig>> = {
   enterprise: {
     auth: {
       tokenKey: 'token',
-      storage: 'cookie',
+      storage: StorageType.COOKIE,
       refreshUrl: '/api/auth/refresh',
     },
     cache: {
-      type: 'persistent',
+      type: CacheType.PERSISTENT,
       ttl: 60 * 60 * 1000, // 1 hour
       maxSize: 5000,
       refetchOnWindowFocus: true,
@@ -202,7 +197,108 @@ export const CONFIG_PRESETS: Record<ConfigPreset, Partial<MinderConfig>> = {
     },
     debug: {
       enabled: process.env.NODE_ENV === 'development',
-      logLevel: 'debug',
+      logLevel: LogLevel.DEBUG,
+      performance: true,
+      devTools: true,
+      networkLogs: true,
+    },
+  },
+
+  /**
+   * BALANCED - Balanced configuration for medium apps
+   * Bundle: ~100KB
+   * Features: Good balance of features and performance
+   */
+  balanced: {
+    auth: {
+      tokenKey: 'token',
+      storage: StorageType.COOKIE,
+      refreshUrl: '/api/auth/refresh',
+    },
+    cache: {
+      type: CacheType.HYBRID,
+      ttl: 20 * 60 * 1000, // 20 minutes
+      maxSize: 300,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+    },
+    security: {
+      sanitization: true,
+      csrfProtection: true,
+      rateLimiting: {
+        requests: 150,
+        window: 60000,
+      },
+    },
+    performance: {
+      deduplication: true,
+      batching: true,
+      batchDelay: 30,
+      retries: 3,
+      timeout: 30000,
+      compression: true,
+      lazyLoading: true,
+    },
+    debug: {
+      enabled: process.env.NODE_ENV === 'development',
+      logLevel: LogLevel.WARN,
+      performance: true,
+    },
+  },
+
+  /**
+   * COMPREHENSIVE - Feature-complete configuration
+   * Bundle: ~140KB
+   * Features: Almost everything except enterprise-level security
+   */
+  comprehensive: {
+    auth: {
+      tokenKey: 'auth_token',
+      storage: StorageType.COOKIE,
+      refreshUrl: '/api/auth/refresh',
+    },
+    cache: {
+      type: CacheType.PERSISTENT,
+      ttl: 45 * 60 * 1000, // 45 minutes
+      maxSize: 2000,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+    },
+    websocket: {
+      url: '', // User must provide
+      reconnect: true,
+      heartbeat: 30000,
+    },
+    security: {
+      sanitization: {
+        enabled: true,
+        allowedTags: ['b', 'i', 'em', 'strong', 'a', 'p', 'ul', 'ol', 'li'],
+      },
+      csrfProtection: true,
+      rateLimiting: {
+        requests: 500,
+        window: 60000,
+      },
+      inputValidation: true,
+    },
+    performance: {
+      deduplication: true,
+      batching: true,
+      batchDelay: 40,
+      monitoring: true,
+      retries: 4,
+      retryDelay: 1000,
+      timeout: 45000,
+      compression: true,
+      lazyLoading: true,
+    },
+    ssr: {
+      enabled: true,
+      hydrate: true,
+    },
+    debug: {
+      enabled: process.env.NODE_ENV === 'development',
+      logLevel: LogLevel.INFO,
       performance: true,
       devTools: true,
       networkLogs: true,
@@ -239,40 +335,55 @@ export function createConfigFromPreset(
  * Analyzes config to recommend best preset
  */
 export function detectPreset(config: Partial<MinderConfig>): ConfigPreset {
-  let score = {
+  const score = {
     minimal: 0,
     standard: 0,
+    balanced: 0,
     advanced: 0,
+    comprehensive: 0,
     enterprise: 0,
   };
 
   // Has auth?
   if (config.auth) {
     score.standard += 1;
+    score.balanced += 1;
     score.advanced += 1;
+    score.comprehensive += 1;
     score.enterprise += 1;
   }
 
   // Has WebSocket?
   if (config.websocket) {
+    score.comprehensive += 2;
     score.enterprise += 3;
   }
 
   // Has SSR?
   if (config.ssr?.enabled) {
     score.advanced += 2;
+    score.comprehensive += 2;
     score.enterprise += 2;
   }
 
   // Complex security?
   if (config.security?.encryption || config.security?.headers) {
+    score.comprehensive += 1;
     score.enterprise += 2;
   }
 
   // High cache size?
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if (config.cache && (config.cache as any).maxSize > 500) {
     score.advanced += 1;
+    score.comprehensive += 1;
     score.enterprise += 1;
+  }
+
+  // Medium complexity?
+  const routeCount = Object.keys(config.routes || {}).length;
+  if (routeCount > 10 && routeCount <= 20) {
+    score.balanced += 2;
   }
 
   // Find highest score
@@ -315,6 +426,20 @@ export function getPresetInfo(preset: ConfigPreset) {
       features: ['All Features', 'WebSocket', 'Monitoring', 'Advanced Security'],
       useCase: 'Enterprise apps, real-time systems',
     },
+    balanced: {
+      name: 'Balanced',
+      description: 'Balanced configuration for medium apps',
+      bundleSize: '~100KB',
+      features: ['CRUD', 'Auth', 'Cache', 'Security', 'Performance'],
+      useCase: 'Medium apps, balanced feature set',
+    },
+    comprehensive: {
+      name: 'Comprehensive',
+      description: 'Feature-complete configuration',
+      bundleSize: '~140KB',
+      features: ['Most Features', 'WebSocket', 'SSR', 'Advanced Cache'],
+      useCase: 'Feature-rich apps, comprehensive solutions',
+    },
   };
 
   return info[preset];
@@ -323,6 +448,7 @@ export function getPresetInfo(preset: ConfigPreset) {
 /**
  * Deep merge utility
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function deepMerge(target: any, source: any): any {
   const output = { ...target };
   
@@ -343,6 +469,7 @@ function deepMerge(target: any, source: any): any {
   return output;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function isObject(item: any): boolean {
   return item && typeof item === 'object' && !Array.isArray(item);
 }

@@ -26,7 +26,7 @@ export interface RateLimitOptions {
   maxRequests: number; // Max requests per window
 }
 
-export function rateLimiter(options: RateLimitOptions) {
+export function rateLimiter(options: RateLimitOptions): (req: Request, res: Response, next: NextFunction) => void | undefined {
   const { windowMs, maxRequests } = options;
 
   return (req: Request, res: Response, next: NextFunction) => {
@@ -55,13 +55,14 @@ export function rateLimiter(options: RateLimitOptions) {
 
     // Check if limit exceeded
     if (store[identifier].count > maxRequests) {
-      return res.status(429).json({
+      res.status(429).json({
         success: false,
         error: {
           message: 'Too many requests, please try again later.',
           code: 'RATE_LIMIT_EXCEEDED',
         },
       });
+      return;
     }
 
     next();

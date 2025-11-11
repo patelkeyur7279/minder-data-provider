@@ -1,4 +1,5 @@
 import type { MinderConfig, EnvironmentOverride } from './types.js';
+import { StorageType, HttpMethod } from '../constants/enums.js';
 import { MinderConfigError } from '../errors/index.js';
 
 export class EnvironmentManager {
@@ -30,10 +31,12 @@ export class EnvironmentManager {
 
     // Server-side detection
     try {
-      const nodeEnv = (globalThis as any).process?.env?.NODE_ENV;
+      const nodeEnv = (globalThis as { process?: { env?: { NODE_ENV?: string } } }).process?.env?.NODE_ENV;
       if (nodeEnv === 'development') return 'development';
       if (nodeEnv === 'test') return 'test';
-    } catch {}
+    } catch {
+      // Ignore errors in non-Node.js environments
+    }
     return 'production';
   }
 
@@ -62,7 +65,7 @@ export class EnvironmentManager {
       apiBaseUrl: this.buildApiUrl(envOverride),
       auth: {
         tokenKey: this.config.auth?.tokenKey || 'accessToken',
-        storage: this.config.auth?.storage || 'memory', // Secure default
+        storage: this.config.auth?.storage || StorageType.MEMORY, // Secure default
         ...this.config.auth,
         ...envOverride.auth,
       },
@@ -93,7 +96,7 @@ export class EnvironmentManager {
       ...corsConfig,
       credentials: corsConfig.credentials ?? true,
       origin: corsConfig.origin || '*',
-      methods: corsConfig.methods || ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      methods: corsConfig.methods || [HttpMethod.GET, HttpMethod.POST, HttpMethod.PUT, HttpMethod.DELETE, HttpMethod.OPTIONS],
       headers: corsConfig.headers || ['Content-Type', 'Authorization', 'X-Requested-With'],
     };
   }
