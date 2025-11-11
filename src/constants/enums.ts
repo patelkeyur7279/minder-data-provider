@@ -139,6 +139,7 @@ export enum DebugLogType {
   CACHE = 'cache',
   AUTH = 'auth',
   WEBSOCKET = 'websocket',
+  UPLOAD = 'upload',
 }
 
 // ============================================

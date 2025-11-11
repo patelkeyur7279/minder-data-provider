@@ -43,6 +43,15 @@ export type {
   UseMinderReturn,
 } from './hooks/useMinder.js';
 
+// Pagination hook
+export { usePaginatedMinder } from './hooks/usePaginatedMinder.js';
+export type {
+  UsePaginatedMinderOptions,
+  UsePaginatedMinderReturn,
+  PaginationConfig,
+  PageData,
+} from './hooks/usePaginatedMinder.js';
+
 // ============================================================================
 // LEGACY EXPORTS - For backward compatibility
 // ============================================================================
@@ -99,6 +108,14 @@ export type { PlatformCapabilities } from './platform/index.js';
 
 // FeatureLoader for dynamic bundle optimization
 export { FeatureLoader, createFeatureLoader } from './core/FeatureLoader.js';
+
+// 🚀 Dynamic Loader for lazy loading dependencies (NEW in v2.0.3)
+export {
+  DynamicLoader,
+  getDynamicLoader,
+  createDynamicLoader,
+  type DynamicLoaderConfig,
+} from './core/DynamicLoader.js';
 export type { FeatureFlags, FeatureModules, FeatureLoaderOptions } from './core/FeatureLoader.js';
 
 // ============================================================================

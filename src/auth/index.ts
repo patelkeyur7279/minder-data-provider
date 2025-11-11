@@ -10,3 +10,11 @@ export {
   type TokenRefreshConfig,
   type JWTPayload,
 } from './TokenRefreshManager.js';
+
+// 🔒 Secure Authentication (NEW)
+export {
+  SecureAuthManager,
+  createSecureAuthManager,
+  type SecureAuthConfig,
+  type CSRFToken,
+} from './SecureAuthManager.js';

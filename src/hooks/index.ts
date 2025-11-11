@@ -320,3 +320,10 @@ export function useUIState() {
 export { useConfiguration } from './useConfiguration.js';
 export { useMinder } from './useMinder.js';
 export type { UseMinderOptions, UseMinderReturn } from './useMinder.js';
+export { usePaginatedMinder } from './usePaginatedMinder.js';
+export type { 
+  UsePaginatedMinderOptions, 
+  UsePaginatedMinderReturn,
+  PaginationConfig,
+  PageData,
+} from './usePaginatedMinder.js';

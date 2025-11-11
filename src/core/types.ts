@@ -16,7 +16,13 @@ export interface MinderConfig {
   dynamic: any;
   auth?: AuthConfig;
   cache?: CacheConfig;
+  /**
+   * @deprecated Use `corsHelper` instead. Will be removed in v3.0.
+   * This field name was misleading - it doesn't configure server CORS.
+   */
   cors?: CorsConfig;
+  /** CORS helper configuration - Does NOT bypass CORS, only adds helpful client-side features */
+  corsHelper?: CorsHelperConfig;
   websocket?: WebSocketConfig;
   redux?: ReduxConfig;
   performance?: PerformanceConfig;
@@ -34,7 +40,11 @@ export interface MinderConfig {
 
 export interface EnvironmentOverride {
   apiBaseUrl?: string;
+  /**
+   * @deprecated Use `corsHelper` instead
+   */
   cors?: CorsConfig;
+  corsHelper?: CorsHelperConfig;
   auth?: Partial<AuthConfig>;
   cache?: Partial<CacheConfig>;
   debug?: boolean;
@@ -77,6 +87,68 @@ export interface CorsConfig {
   headers?: string[];
 }
 
+/**
+ * CORS Helper Configuration
+ * 
+ * ⚠️ IMPORTANT: This configuration does NOT bypass CORS restrictions!
+ * 
+ * CORS (Cross-Origin Resource Sharing) is a browser security feature
+ * that MUST be configured on your API server, not in the client.
+ * 
+ * What this configuration DOES:
+ * - ✅ Adds helpful headers (Origin, credentials)
+ * - ✅ Provides better CORS error messages
+ * - ✅ Can route requests through a proxy server
+ * 
+ * What this configuration CANNOT do:
+ * - ❌ Cannot bypass CORS policy
+ * - ❌ Cannot configure server CORS headers
+ * - ❌ Cannot fix CORS errors (server must fix them)
+ * 
+ * To fix CORS errors:
+ * 1. Configure CORS on your API server
+ * 2. Add Access-Control-Allow-Origin header on server
+ * 3. Use a proxy server if you can't modify the API
+ * 
+ * @see https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS
+ */
+export interface CorsHelperConfig {
+  /**
+   * Enable CORS helper features
+   * @default false
+   */
+  enabled?: boolean;
+  
+  /**
+   * Proxy server URL to route requests through
+   * Useful when you can't modify the target API's CORS headers
+   * @example 'https://your-proxy.com/api'
+   */
+  proxy?: string;
+  
+  /**
+   * Include credentials (cookies, authorization headers) in requests
+   * @default false
+   */
+  credentials?: boolean;
+  
+  /**
+   * Expected origin(s) - for validation only
+   * This does NOT set server CORS headers
+   */
+  origin?: string | string[];
+  
+  /**
+   * HTTP methods to include in preflight requests
+   */
+  methods?: HttpMethod[];
+  
+  /**
+   * Headers to include in preflight requests
+   */
+  headers?: string[];
+}
+
 export interface WebSocketConfig {
   url: string;
   protocols?: string[];
@@ -90,6 +162,49 @@ export interface ReduxConfig {
   preloadedState?: any;
 }
 
+export interface RetryConfig {
+  /**
+   * Maximum number of retry attempts
+   * @default 3
+   */
+  maxRetries?: number;
+  
+  /**
+   * HTTP status codes that should trigger a retry
+   * @default [408, 429, 500, 502, 503, 504]
+   */
+  retryableStatusCodes?: number[];
+  
+  /**
+   * Backoff strategy for retry delays
+   * - 'exponential': delay increases exponentially (1s, 2s, 4s, 8s...)
+   * - 'linear': delay increases linearly (1s, 2s, 3s, 4s...)
+   * - Function: custom delay calculation based on attempt number
+   * @default 'exponential'
+   */
+  backoff?: 'exponential' | 'linear' | ((attempt: number) => number);
+  
+  /**
+   * Base delay in milliseconds for retry backoff
+   * @default 1000
+   */
+  baseDelay?: number;
+  
+  /**
+   * Maximum delay in milliseconds between retries
+   * @default 30000
+   */
+  maxDelay?: number;
+  
+  /**
+   * Custom function to determine if a request should be retried
+   * @param error - The error that occurred
+   * @param attempt - The current attempt number (0-indexed)
+   * @returns true to retry, false to stop
+   */
+  shouldRetry?: (error: any, attempt: number) => boolean;
+}
+
 export interface PerformanceConfig {
   deduplication?: boolean;
   batching?: boolean;
@@ -101,6 +216,10 @@ export interface PerformanceConfig {
   compression?: boolean;
   bundleAnalysis?: boolean;
   lazyLoading?: boolean;
+  /**
+   * Enhanced retry configuration with custom strategies
+   */
+  retryConfig?: RetryConfig;
 }
 
 export interface DebugConfig {

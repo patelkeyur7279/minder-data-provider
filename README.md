@@ -10,7 +10,7 @@ Universal data management for React, Next.js, React Native, Expo, Node.js, and E
 [![GitHub stars](https://img.shields.io/github/stars/patelkeyur7279/minder-data-provider.svg)](https://github.com/patelkeyur7279/minder-data-provider)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-100%25-blue.svg)](http://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/Tests-441%20Passing-success)](./tests)
+[![Tests](https://img.shields.io/badge/Tests-1300%20Passing-success)](./tests)
 [![CI](https://github.com/patelkeyur7279/minder-data-provider/workflows/CI/badge.svg)](https://github.com/patelkeyur7279/minder-data-provider/actions)
 
 ---
@@ -433,6 +433,41 @@ const { data } = useMinder("users");
 - **⚡ Optimistic Updates**: Instant UI updates with rollback
 - **🛡️ Type Safety**: Full TypeScript support with auto-generated types
 - **🎯 Next.js Optimized**: SSR/SSG compatible with hydration support
+
+### **🆕 New in v2.0.3 (November 2025)**
+
+- **✅ Built-in Validation System**: Type-based and custom validation rules
+  - Validates data before create/update operations
+  - Support for email, URL, date, array, object validation
+  - Async validation for server-side checks
+  - Detailed error reporting with field-level messages
+
+- **🔄 Enhanced Retry Configuration**: Per-operation retry policies
+  - Exponential backoff with jitter
+  - Conditional retry based on error type
+  - Separate retry strategies for each CRUD operation
+  - Works with optimistic and pessimistic updates
+
+- **📄 Pagination Helper**: Smart pagination management
+  - Automatic page tracking and state management
+  - Multiple styles: offset, cursor, page-based
+  - Smart prefetching of next/previous pages
+  - Navigation helpers (goToPage, nextPage, prevPage)
+  - Optimized for infinite scroll
+
+- **💾 Offline Queue Persistence**: Durable offline support
+  - Persists failed requests across sessions
+  - Automatic retry when connection restored
+  - Conflict resolution strategies
+  - Queue manipulation (add, remove, clear)
+  - Sync state tracking
+
+- **🔒 Security Enhancements**: Production-grade security
+  - Stricter input validation (breaking change - see CHANGELOG)
+  - Enhanced CSRF protection
+  - Rate limiting with sliding window
+  - XSS prevention with DOMPurify
+  - All 61 security tests passing
 
 ## � Feature Status
 

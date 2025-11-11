@@ -4,6 +4,7 @@ import type { MinderConfig, ApiRoute, EnvironmentOverride } from '../core/types.
 import { createConfigFromPreset, type ConfigPreset, getPresetInfo } from './presets.js';
 import { HttpMethod, StorageType, Platform, LogLevel } from '../constants/enums.js';
 import { PlatformDetector } from '../platform/PlatformDetector.js';
+import { MinderConfigError } from '../errors/MinderError.js';
 
 const logger = new Logger('Config', { level: LoggerLogLevel.DEBUG });
 
@@ -37,6 +38,14 @@ export interface UnifiedMinderConfig {
   /** API routes - auto-generates CRUD operations */
   routes?: Record<string, string | ApiRoute>;
 
+  /**
+   * Next.js dynamic import function - Required for Next.js apps
+   * @example
+   * import dynamic from 'next/dynamic';
+   * configureMinder({ apiUrl: '...', dynamic: dynamic })
+   */
+  dynamic?: any;
+
   /** Authentication configuration */
   auth?: boolean | {
     storage?: StorageType;
@@ -52,10 +61,41 @@ export interface UnifiedMinderConfig {
     refetchOnReconnect?: boolean;
   };
 
-  /** CORS configuration */
+  /**
+   * CORS configuration
+   * @deprecated Use corsHelper instead. Will be removed in v3.0.
+   * The name "cors" was misleading - this config does NOT bypass CORS restrictions!
+   * CORS must be configured on your API server, not in the client.
+   */
   cors?: boolean | {
     enabled?: boolean;
     proxy?: string;
+  };
+
+  /**
+   * CORS Helper configuration
+   * ⚠️ IMPORTANT: This does NOT bypass CORS restrictions!
+   * CORS must be configured on your API server, not in the client.
+   * 
+   * What this DOES:
+   * - Add helpful request headers
+   * - Better error messages for CORS issues
+   * - Proxy routing support
+   * 
+   * What this CANNOT do:
+   * - Bypass browser CORS security
+   * - Configure server CORS headers
+   * - Fix CORS errors from the client
+   * 
+   * @see https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS
+   */
+  corsHelper?: boolean | {
+    enabled?: boolean;
+    proxy?: string;
+    credentials?: boolean;
+    origin?: string;
+    methods?: string[];
+    headers?: string[];
   };
 
   /** WebSocket configuration */
@@ -118,6 +158,11 @@ export function configureMinder(config: UnifiedMinderConfig): MinderConfig {
   // Auto-detect platform and environment
   const platform = PlatformDetector.detect();
   const isDevelopment = process.env.NODE_ENV === 'development';
+
+  // Next.js auto-detection and validation
+  if (platform === Platform.NEXT_JS) {
+    validateNextJsConfig(config);
+  }
 
   // Generate complete configuration with smart defaults
   const fullConfig = buildFullConfig(config, platform, isDevelopment);
@@ -259,7 +304,8 @@ function getPlatformDefaults(platform: Platform, apiUrl: string): Partial<Minder
           gcTime: 30 * 60 * 1000,
           refetchOnWindowFocus: false,
         },
-        cors: { enabled: false },
+        cors: { enabled: false }, // Deprecated, kept for backward compatibility
+        corsHelper: { enabled: false },
         offline: { enabled: true },
       };
 
@@ -272,7 +318,8 @@ function getPlatformDefaults(platform: Platform, apiUrl: string): Partial<Minder
           gcTime: 30 * 60 * 1000,
           refetchOnWindowFocus: false,
         },
-        cors: { enabled: false },
+        cors: { enabled: false }, // Deprecated, kept for backward compatibility
+        corsHelper: { enabled: false },
         offline: { enabled: true },
       };
 
@@ -285,7 +332,8 @@ function getPlatformDefaults(platform: Platform, apiUrl: string): Partial<Minder
           gcTime: 60 * 60 * 1000,
           refetchOnWindowFocus: false,
         },
-        cors: { enabled: false },
+        cors: { enabled: false }, // Deprecated, kept for backward compatibility
+        corsHelper: { enabled: false },
         websocket: {
           url: apiUrl.replace(/^http/, 'ws') + '/ws',
           reconnect: true,
@@ -301,7 +349,8 @@ function getPlatformDefaults(platform: Platform, apiUrl: string): Partial<Minder
           staleTime: 5 * 60 * 1000,
           gcTime: 10 * 60 * 1000,
         },
-        cors: { enabled: false },
+        cors: { enabled: false }, // Deprecated, kept for backward compatibility
+        corsHelper: { enabled: false },
       };
 
     default:
@@ -347,18 +396,47 @@ function applyUserConfig(
     }
   }
 
-  // CORS configuration
-  if (userConfig.cors !== undefined) {
-    if (userConfig.cors === true) {
+  // CORS configuration (backward compatibility)
+  // Handle both old 'cors' and new 'corsHelper' fields
+  const corsConfig = (userConfig as any).corsHelper !== undefined 
+    ? (userConfig as any).corsHelper 
+    : userConfig.cors;
+  
+  if (corsConfig !== undefined) {
+    // Show deprecation warning if using old 'cors' field
+    if (userConfig.cors !== undefined && (userConfig as any).corsHelper === undefined) {
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn(
+          '[Minder] DEPRECATION WARNING: config.cors is deprecated and will be removed in v3.0.\n' +
+          'Please use config.corsHelper instead.\n\n' +
+          'Why? The name "cors" was misleading - this config does NOT bypass CORS restrictions!\n' +
+          'CORS must be configured on your API server, not in the client.\n\n' +
+          'Change:\n' +
+          '  cors: { enabled: true, proxy: "..." }\n' +
+          'To:\n' +
+          '  corsHelper: { enabled: true, proxy: "..." }\n\n' +
+          'See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS'
+        );
+      }
+    }
+    
+    if (corsConfig === true) {
       baseConfig.cors = { enabled: true, credentials: true };
-    } else if (userConfig.cors === false) {
+      (baseConfig as any).corsHelper = { enabled: true, credentials: true };
+    } else if (corsConfig === false) {
       baseConfig.cors = { enabled: false };
+      (baseConfig as any).corsHelper = { enabled: false };
     } else {
-      baseConfig.cors = {
-        enabled: userConfig.cors.enabled ?? true,
-        proxy: userConfig.cors.proxy,
-        credentials: true,
+      const config = {
+        enabled: corsConfig.enabled ?? true,
+        proxy: corsConfig.proxy,
+        credentials: corsConfig.credentials ?? true,
+        origin: corsConfig.origin,
+        methods: corsConfig.methods,
+        headers: corsConfig.headers,
       };
+      baseConfig.cors = config; // Keep for backward compatibility
+      (baseConfig as any).corsHelper = config; // New field
     }
   }
 
@@ -458,8 +536,54 @@ function getEnabledFeatures(config: Partial<MinderConfig>): string[] {
   return features;
 }
 
+/**
+ * Validate Next.js specific configuration
+ * Next.js requires the 'dynamic' property to enable dynamic imports
+ * 
+ * @throws {MinderConfigError} if dynamic import is not configured in Next.js
+ */
+function validateNextJsConfig(config: UnifiedMinderConfig): void {
+  // Check if dynamic property exists and is not empty
+  const dynamicConfig = (config as any).dynamic;
+  
+  if (!dynamicConfig || typeof dynamicConfig !== 'function') {
+    const error = new MinderConfigError(
+      'Next.js detected: Missing required "dynamic" configuration',
+      'dynamic',
+      'NEXTJS_DYNAMIC_REQUIRED'
+    );
+    
+    error.addSuggestion({
+      message: 'Next.js requires the "dynamic" import to enable code splitting',
+      action: 'Add `dynamic: dynamic` to your configuration',
+      link: 'https://github.com/patelkeyur7279/minder-data-provider/blob/main/docs/DYNAMIC_IMPORTS.md'
+    });
+    
+    error.addSuggestion({
+      message: 'Import the dynamic function from Next.js',
+      action: 'Add `import dynamic from "next/dynamic";` at the top of your file'
+    });
+    
+    error.addSuggestion({
+      message: 'Example configuration:',
+      action: `
+import dynamic from "next/dynamic";
+import { createMinderConfig } from "minder-data-provider/config";
+
+export const config = createMinderConfig({
+  apiUrl: "https://api.example.com",
+  dynamic: dynamic, // ⚠️ Required for Next.js
+  routes: { users: "/users" }
+});
+      `.trim()
+    });
+    
+    throw error;
+  }
+}
+
 // Re-export preset utilities for advanced users
 export { createConfigFromPreset, getPresetInfo, type ConfigPreset } from './presets.js';
 
 // Re-export core types that users might need when working with config
-export type { MinderConfig, ApiRoute, EnvironmentOverride } from '../core/types.js';
+export type { MinderConfig, ApiRoute, EnvironmentOverride, CorsHelperConfig } from '../core/types.js';
