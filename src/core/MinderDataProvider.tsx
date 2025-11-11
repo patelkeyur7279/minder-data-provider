@@ -29,6 +29,7 @@ import { EnvironmentManager } from "./EnvironmentManager.js";
 import { ProxyManager } from "./ProxyManager.js";
 import { DebugManager } from "../debug/DebugManager.js";
 import { DevTools } from "../devtools/DevTools.js";
+import { DebugLogType } from "../constants/enums.js";
 
 interface MinderContextValue {
   config: MinderConfig;
@@ -101,7 +102,7 @@ export function MinderDataProvider({
     if (debugEnabled) {
       debugManager = new DebugManager(true);
       debugManager.log(
-        "api",
+        DebugLogType.API,
         "Minder Data Provider initialized with debug mode"
       );
     }

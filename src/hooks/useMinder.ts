@@ -1,34 +1,40 @@
 /**
- * 🎯 useMinder - React Hook Wrapper for Minder
+ * 🎯 useMinder - Unified React Hook for ALL Data Operations
  * 
- * Provides reactive state management with TanStack Query
- * Perfect for React components that need automatic re-renders
+ * The ONE hook for everything: fetching, mutations, and CRUD operations.
+ * Context-aware: works with or without MinderDataProvider.
  * 
  * Features:
  * - Automatic data fetching on mount
  * - Caching and deduplication
  * - Loading and error states
  * - Optimistic updates
+ * - Parameter replacement for dynamic routes
+ * - CRUD operations (when within MinderDataProvider)
  * - SSR/CSR compatible
  * 
  * @example
- * // Simple fetch with auto-refetch
- * const { data, loading } = useMinder('users');
+ * // Fetch all posts (collection)
+ * const { items: posts, operations } = useMinder('posts');
+ * await operations.create({ title: 'New Post' });
  * 
  * @example
- * // Manual fetch control
- * const { data, refetch } = useMinder('users', { autoFetch: false });
+ * // Fetch single post with parameters
+ * const { data: post } = useMinder('postById', { params: { id: 123 } });
+ * 
+ * @example
+ * // Custom mutations
+ * const { mutate } = useMinder('likePost', { params: { id: 123 } });
+ * await mutate(); // POST /api/posts/123/like
+ * 
+ * @example
+ * // Manual control
+ * const { data, refetch } = useMinder('posts', { autoFetch: false });
  * await refetch();
  * 
  * @example
- * // Mutations (create/update/delete)
- * const { mutate, loading } = useMinder('users');
- * await mutate({ name: 'John' }); // Create
- * await mutate({ id: 1, name: 'Jane' }); // Update
- * 
- * @example
- * // With model class
- * const { data } = useMinder('users', { model: UserModel });
+ * // Outside MinderDataProvider (direct URLs)
+ * const { data } = useMinder('/api/posts/123');
  */
 
 import { useMemo } from 'react';
@@ -36,6 +42,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { UseQueryOptions, UseMutationOptions } from '@tanstack/react-query';
 import { minder } from '../core/minder.js';
 import type { MinderOptions, MinderResult } from '../core/minder.js';
+import { useMinderContext } from '../core/MinderDataProvider.js';
+import { HttpMethod } from '../constants/enums.js';
 
 // ============================================================================
 // TYPES
@@ -91,9 +99,14 @@ export interface UseMinderOptions<TData = any> extends MinderOptions<TData> {
  */
 export interface UseMinderReturn<TData = any> {
   /**
-   * Response data (null if loading or error)
+   * Response data (single item or array)
    */
   data: TData | null;
+  
+  /**
+   * Alias for data when working with collections
+   */
+  items: TData | null;
   
   /**
    * Loading state (true during fetch or mutation)
@@ -119,6 +132,18 @@ export interface UseMinderReturn<TData = any> {
    * Mutate data (create/update/delete)
    */
   mutate: (data?: any) => Promise<MinderResult<TData>>;
+  
+  /**
+   * CRUD operations (available when within MinderDataProvider)
+   */
+  operations?: {
+    create: (item: Partial<TData>) => Promise<TData>;
+    update: (id: string | number, item: Partial<TData>) => Promise<TData>;
+    delete: (id: string | number) => Promise<void>;
+    fetch: () => Promise<TData[]>;
+    refresh: () => void;
+    clear: () => void;
+  };
   
   /**
    * Is currently fetching data
@@ -167,15 +192,22 @@ export function useMinder<TData = any>(
 ): UseMinderReturn<TData> {
   const queryClient = useQueryClient();
   
+  // Try to get context (ApiClient) - gracefully fallback if not available
+  let context: any = null;
+  try {
+    context = useMinderContext();
+  } catch {
+    // Not within MinderDataProvider - use global config
+  }
+  
   // Stabilize query key to prevent unnecessary refetches on every render
-  // Only recreate when route or params actually change (deep comparison)
+  // Include route and params for proper caching
   const queryKey = useMemo(
     () => [route, options.params],
-    [route, JSON.stringify(options.params)] // Deep compare params
+    [route, JSON.stringify(options.params)]
   );
   
   // Determine if query should be enabled
-  // autoFetch: false should completely disable automatic fetching
   const isQueryEnabled = useMemo(
     () => options.enabled !== false && options.autoFetch !== false,
     [options.enabled, options.autoFetch]
@@ -188,10 +220,45 @@ export function useMinder<TData = any>(
   const query = useQuery({
     queryKey,
     queryFn: async (): Promise<MinderResult<TData>> => {
-      const result = await minder<TData>(route, null, {
-        ...options,
-        method: 'GET',
-      });
+      let result: MinderResult<TData>;
+      
+      if (context?.apiClient) {
+        // Use ApiClient for parameter replacement (when within MinderDataProvider)
+        try {
+          const data = await context.apiClient.request(route, undefined, options.params);
+          result = {
+            data: data as TData,
+            error: null,
+            status: 200,
+            success: true,
+            metadata: {
+              method: HttpMethod.GET,
+              url: route,
+              duration: 0,
+              cached: false,
+            },
+          };
+        } catch (error: any) {
+          result = {
+            data: null,
+            error,
+            status: error.status || 500,
+            success: false,
+            metadata: {
+              method: HttpMethod.GET,
+              url: route,
+              duration: 0,
+              cached: false,
+            },
+          };
+        }
+      } else {
+        // Use core minder function (global config, no parameter replacement)
+        result = await minder<TData>(route, null, {
+          ...options,
+          method: HttpMethod.GET,
+        });
+      }
       
       // If error, throw to trigger React Query error state
       // But still provide structured error to user
@@ -218,7 +285,42 @@ export function useMinder<TData = any>(
   
   const mutation = useMutation({
     mutationFn: async (data?: any): Promise<MinderResult<TData>> => {
-      const result = await minder<TData>(route, data, options);
+      let result: MinderResult<TData>;
+      
+      if (context?.apiClient) {
+        // Use ApiClient for parameter replacement (when within MinderDataProvider)
+        try {
+          const responseData = await context.apiClient.request(route, data, options.params);
+          result = {
+            data: responseData as TData,
+            error: null,
+            status: 200,
+            success: true,
+            metadata: {
+              method: options.method || HttpMethod.POST,
+              url: route,
+              duration: 0,
+              cached: false,
+            },
+          };
+        } catch (error: any) {
+          result = {
+            data: null,
+            error,
+            status: error.status || 500,
+            success: false,
+            metadata: {
+              method: options.method || HttpMethod.POST,
+              url: route,
+              duration: 0,
+              cached: false,
+            },
+          };
+        }
+      } else {
+        // Use core minder function (global config, no parameter replacement)
+        result = await minder<TData>(route, data, options);
+      }
       
       // Don't throw errors - return structured result
       return result;
@@ -251,14 +353,50 @@ export function useMinder<TData = any>(
     await queryClient.invalidateQueries({ queryKey });
   };
   
-  const refetch = async (): Promise<MinderResult<TData>> => {
+  const refetchData = async (): Promise<MinderResult<TData>> => {
     const result = await query.refetch();
     return result.data as MinderResult<TData>;
   };
   
-  const mutate = async (data?: any): Promise<MinderResult<TData>> => {
+  const mutateData = async (data?: any): Promise<MinderResult<TData>> => {
     return mutation.mutateAsync(data);
   };
+  
+  // =========================================================================
+  // CRUD OPERATIONS (when within MinderDataProvider)
+  // =========================================================================
+  
+  let crudOperations: any = undefined;
+  if (context?.apiClient && context?.cacheManager) {
+    // Create CRUD operations similar to useOneTouchCrud
+    const createMutation = useMutation({
+      mutationFn: (item: Partial<TData>) => context.apiClient.request(route, item),
+      onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+    });
+
+    const updateMutation = useMutation({
+      mutationFn: ({ id, item }: { id: string | number; item: Partial<TData> }) =>
+        context.apiClient.request(route, item, { id }),
+      onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+    });
+
+    const deleteMutation = useMutation({
+      mutationFn: (id: string | number) => context.apiClient.request(route, undefined, { id }),
+      onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+    });
+
+    crudOperations = {
+      create: (item: Partial<TData>) => createMutation.mutateAsync(item),
+      update: (id: string | number, item: Partial<TData>) => updateMutation.mutateAsync({ id, item }),
+      delete: (id: string | number) => deleteMutation.mutateAsync(id),
+      fetch: async () => {
+        const result = await query.refetch();
+        return (result.data?.data || []) as TData[];
+      },
+      refresh: () => queryClient.invalidateQueries({ queryKey }),
+      clear: () => context.cacheManager.clearCache(route),
+    };
+  }
   
   // =========================================================================
   // RETURN
@@ -272,13 +410,15 @@ export function useMinder<TData = any>(
   return {
     // Data & states
     data: resultData,
+    items: resultData,  // Alias for collections
     loading: query.isLoading || mutation.isPending,
     error: resultError,
     success: resultSuccess,
     
     // Operations
-    refetch,
-    mutate,
+    refetch: refetchData,
+    mutate: mutateData,
+    operations: crudOperations,
     invalidate,
     
     // TanStack Query states

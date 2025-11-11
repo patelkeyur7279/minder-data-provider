@@ -6,10 +6,19 @@ import { useState, useCallback, useEffect } from 'react';
 
 // Main hook for CRUD operations
 /**
+ * @deprecated Use useMinder instead - it now provides all CRUD operations
  * Hook for CRUD operations with automatic or manual data fetching
+ * Supports parameter replacement for dynamic routes like :id
  * @param routeName - The route name for API endpoint
  * @param options - Configuration options for the hook
  * @returns CrudOperations object with data, loading states, errors and operations
+ * 
+ * @example
+ * // ✅ RECOMMENDED: Use useMinder instead
+ * const { items, operations } = useMinder('posts');
+ * 
+ * // ❌ DEPRECATED: This still works but useMinder is better
+ * const { data, operations } = useOneTouchCrud('posts');
  */
 export function useOneTouchCrud<T = any>(
   routeName: string,
@@ -19,6 +28,10 @@ export function useOneTouchCrud<T = any>(
      * If false, you need to call operations.fetch() manually
      */
     autoFetch?: boolean;
+    /**
+     * Parameters for initial fetch (supports :id replacement)
+     */
+    params?: Record<string, any>;
     /**
      * Enable/disable automatic background refetching
      */
@@ -39,8 +52,8 @@ export function useOneTouchCrud<T = any>(
     error: fetchError,
     refetch
   } = useQuery({
-    queryKey: [routeName],
-    queryFn: () => apiClient.request<T[]>(routeName),  // ✅ Request T[] instead of T
+    queryKey: [routeName, options.params], // Include params in cache key
+    queryFn: () => apiClient.request<T[]>(routeName, undefined, options.params), // Pass params for :id replacement
     enabled: options.autoFetch !== false, // Only fetch if autoFetch is not explicitly false
     staleTime: options.cacheTime || 0,
     refetchOnWindowFocus: options.enableAutoRefetch,

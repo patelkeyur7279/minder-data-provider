@@ -1,168 +1,125 @@
-import { CorsManager, CorsIssueType, CorsStrategy } from '../src/utils/corsManager';
-import { ApiClient } from '../src/core/ApiClient';
-import { MinderNetworkError } from '../src/errors';
+import { CorsManager } from '../src/utils/corsManager';
 import { HttpMethod } from '../src/constants/enums';
-import { AuthManager } from '../src/core/AuthManager';
-import axios from 'axios';
-
-// Mock axios
-jest.mock('axios');
-const mockedAxios = axios as jest.Mocked<typeof axios>;
+import type { CorsConfig } from '../src/core/types';
 
 describe('CorsManager', () => {
   let corsManager: CorsManager;
-  const mockConfig = {
+  const mockConfig: CorsConfig = {
     enabled: true,
     credentials: true,
-    origin: ['https://example.com'],
-    methods: [HttpMethod.GET, HttpMethod.POST, HttpMethod.PUT, HttpMethod.DELETE],
+    methods: [HttpMethod.GET, HttpMethod.POST],
     headers: ['Content-Type', 'Authorization']
   };
 
   beforeEach(() => {
     corsManager = new CorsManager(mockConfig);
-    corsManager.clearCache(); // Clear cache between tests
   });
 
-  describe('detectCorsIssue', () => {
-    it('should detect CORS preflight failure', () => {
-      const error = {
-        response: {
-          status: 405,
-          statusText: 'Method Not Allowed',
-          data: { message: 'OPTIONS method not allowed' },
-          headers: { 'content-type': 'application/json' }
-        }
-      };
-
-      const result = corsManager.detectCorsIssue(error, 'https://api.example.com/preflight', 'OPTIONS', {});
-
-      expect(result.hasCorsIssue).toBe(true);
-      expect(result.issueType).toBe(CorsIssueType.PREFLIGHT_FAILED);
-      expect(result.suggestedStrategy).toBe(CorsStrategy.PROXY);
+  describe('constructor', () => {
+    it('should create CorsManager with config', () => {
+      expect(corsManager).toBeDefined();
     });
 
-    it('should detect CORS origin blocked', () => {
-      const error = {
-        response: {
-          status: 403,
-          statusText: 'Forbidden',
-          data: { message: 'Origin not allowed' },
-          headers: { 'access-control-allow-origin': 'null' }
-        }
-      };
-
-      const result = corsManager.detectCorsIssue(error, 'https://api.example.com/origin', 'GET', {});
-
-      expect(result.hasCorsIssue).toBe(true);
-      expect(result.issueType).toBe(CorsIssueType.ORIGIN_BLOCKED);
-      expect(result.suggestedStrategy).toBe(CorsStrategy.DYNAMIC_ORIGIN);
-    });
-
-    it('should detect CORS method not allowed', () => {
-      const error = {
-        response: {
-          status: 405,
-          statusText: 'Method Not Allowed',
-          data: { message: 'PUT method not allowed' },
-          headers: { 'access-control-allow-methods': 'GET, POST' }
-        }
-      };
-
-      const result = corsManager.detectCorsIssue(error, 'https://api.example.com/method', 'PUT', {});
-
-      expect(result.hasCorsIssue).toBe(true);
-      expect(result.issueType).toBe(CorsIssueType.METHOD_NOT_ALLOWED);
-      expect(result.suggestedStrategy).toBe(CorsStrategy.FALLBACK);
-    });
-
-    it('should return false for non-CORS errors', () => {
-      const error = {
-        response: {
-          status: 404,
-          statusText: 'Not Found',
-          data: { message: 'Resource not found' }
-        }
-      };
-
-      const result = corsManager.detectCorsIssue(error, 'https://api.example.com/notfound', 'GET', { 'Origin': 'https://example.com' });
-
-      expect(result.hasCorsIssue).toBe(false);
-    });
-  });
-
-  describe('performPreflight', () => {
-    beforeEach(() => {
-      // Mock fetch globally
-      global.fetch = jest.fn();
-    });
-
-    afterEach(() => {
-      jest.restoreAllMocks();
-    });
-
-    it('should perform successful preflight request', async () => {
-      const mockResponse = {
-        ok: true,
-        headers: {
-          get: jest.fn((header) => {
-            switch (header) {
-              case 'Access-Control-Allow-Methods':
-                return 'GET, POST, PUT, DELETE';
-              case 'Access-Control-Allow-Headers':
-                return 'content-type, authorization';
-              case 'Access-Control-Max-Age':
-                return '3600';
-              default:
-                return null;
-            }
-          })
-        }
-      };
-
-      (global.fetch as jest.Mock).mockResolvedValue(mockResponse);
-
-      const result = await corsManager.performPreflight('https://api.example.com/users', HttpMethod.GET, ['content-type']);
-
-      expect(result.success).toBe(true);
-      expect(result.allowedMethods).toEqual([HttpMethod.GET, HttpMethod.POST, HttpMethod.PUT, HttpMethod.DELETE]);
-      expect(result.allowedHeaders).toEqual(['content-type', 'authorization']);
-      expect(result.maxAge).toBe(3600);
-    });
-
-    it('should handle preflight failure', async () => {
-      const mockResponse = {
-        ok: false,
-        status: 405
-      };
-
-      (global.fetch as jest.Mock).mockResolvedValue(mockResponse);
-
-      const result = await corsManager.performPreflight('https://api.example.com/users', HttpMethod.GET, ['content-type']);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('405');
+    it('should enable CORS by default in browser environment', () => {
+      const manager = new CorsManager();
+      expect(manager).toBeDefined();
     });
   });
 
   describe('getCorsHeaders', () => {
-    it('should return appropriate CORS headers', () => {
-      const headers = corsManager.getCorsHeaders(HttpMethod.GET);
+    it('should return CORS headers when enabled', () => {
+      const headers = corsManager.getCorsHeaders(HttpMethod.GET, { 'Custom-Header': 'value' });
 
-      expect(headers).toHaveProperty('Access-Control-Request-Method', 'GET');
-      expect(headers).toHaveProperty('Access-Control-Request-Headers');
+      expect(headers).toHaveProperty('Custom-Header', 'value');
+      expect(headers).toHaveProperty('Credentials', 'include');
+    });
+
+    it('should return original headers when CORS disabled', () => {
+      const disabledManager = new CorsManager({ enabled: false });
+      const headers = disabledManager.getCorsHeaders(HttpMethod.GET, { 'Test': 'value' });
+
+      expect(headers).toEqual({ 'Test': 'value' });
+      expect(headers).not.toHaveProperty('Credentials');
     });
   });
 
-  describe('shouldTriggerPreflight', () => {
-    it('should return true for complex requests', () => {
-      const result = corsManager.shouldTriggerPreflight(HttpMethod.PUT, { 'Content-Type': 'application/json' });
-      expect(result).toBe(true);
+  describe('handleCorsError', () => {
+    it('should return no retry for non-CORS errors', async () => {
+      const error = new Error('Network error');
+      const result = await corsManager.handleCorsError(error, 'https://api.example.com', 'GET', {});
+
+      expect(result.shouldRetry).toBe(false);
+      expect(result.userFriendlyMessage).toBe('');
     });
 
-    it('should return false for simple requests', () => {
-      const result = corsManager.shouldTriggerPreflight(HttpMethod.GET, { 'Content-Type': 'text/plain' });
-      expect(result).toBe(false);
+    it('should detect CORS errors and provide user-friendly messages', async () => {
+      const corsError = new Error('CORS policy blocked request');
+      const result = await corsManager.handleCorsError(corsError, 'https://api.example.com', 'GET', {});
+
+      expect(result.shouldRetry).toBe(false);
+      expect(result.userFriendlyMessage).toContain('Connection Blocked');
+    });
+
+    it('should try automatic fixes for credentials errors', async () => {
+      // Create manager with proxy config to test proxy fallback
+      const corsManagerWithProxy = new CorsManager({
+        ...mockConfig,
+        proxy: 'https://proxy.example.com'
+      });
+
+      // Mock development environment
+      const originalEnv = process.env.NODE_ENV;
+      Object.defineProperty(process.env, 'NODE_ENV', {
+        value: 'development',
+        writable: true
+      });
+
+      const corsError = new Error('Credentials flag is true, but the CORS policy');
+      const result = await corsManagerWithProxy.handleCorsError(corsError, 'https://api.example.com', 'GET', { 'Credentials': 'include' });
+
+      expect(result.shouldRetry).toBe(true);
+      expect(result.useProxy).toBe(true);
+      expect(result.userFriendlyMessage).toContain('Using development proxy');
+
+      // Restore original env
+      Object.defineProperty(process.env, 'NODE_ENV', {
+        value: originalEnv,
+        writable: true
+      });
+    });
+
+    it('should try automatic fixes for header errors', async () => {
+      const corsError = new Error('Request header field x-custom-header is not allowed by Access-Control-Allow-Headers');
+      const result = await corsManager.handleCorsError(corsError, 'https://api.example.com', 'GET', {
+        'Content-Type': 'application/json',
+        'X-Custom-Header': 'value'
+      });
+
+      expect(result.shouldRetry).toBe(true);
+      expect(result.modifiedHeaders).toBeDefined();
+      // Should keep essential headers and x- headers
+      expect(result.modifiedHeaders!['Content-Type']).toBe('application/json');
+      expect(result.modifiedHeaders!['X-Custom-Header']).toBe('value'); // x- headers are kept
+    });
+  });
+
+  describe('validateConfig', () => {
+    it('should validate CORS configuration', () => {
+      const result = corsManager.validateConfig();
+
+      expect(result.isValid).toBe(true);
+      expect(Array.isArray(result.warnings)).toBe(true);
+    });
+
+    it('should warn about credentials without origin', () => {
+      const configWithCredentials: CorsConfig = {
+        enabled: true,
+        credentials: true
+      };
+      const manager = new CorsManager(configWithCredentials);
+      const result = manager.validateConfig();
+
+      expect(result.warnings.length).toBeGreaterThan(0);
     });
   });
 });

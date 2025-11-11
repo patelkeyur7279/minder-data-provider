@@ -1,7 +1,7 @@
 // Utility functions for the package
 
-// Export security utilities
-export * from './security.js';
+// Export route validation utilities
+export { validateRoutes } from './routeValidation.js';
 
 // Export performance utilities
 export * from './performance.js';
@@ -9,52 +9,10 @@ export * from './performance.js';
 // Export Logger class (but not the default instance)
 export { Logger, LogLevel, createLogger } from './Logger.js';
 
-// Export route processor
-export { RouteProcessor } from './routeProcessor.js';
-
-// Generate configuration from Next.js API routes
-export async function generateConfigFromApiRoutes(apiDir: string, options?: {
-  framework?: 'nextjs' | 'express' | 'fastify' | 'custom';
-  baseUrl?: string;
-  includeDynamic?: boolean;
-}): Promise<any> {
-  // Dynamic import to avoid circular dependencies
-  let RouteProcessor: any;
-  try {
-    RouteProcessor = (await import('./routeProcessor.js')).RouteProcessor;
-  } catch (error) {
-    // In test environments that don't support dynamic imports, try static import
-    const routeProcessorModule = require('./routeProcessor.js');
-    RouteProcessor = routeProcessorModule.RouteProcessor;
-  }
-
-  const scanOptions = {
-    baseDir: apiDir,
-    framework: options?.framework || 'nextjs',
-    baseUrl: options?.baseUrl,
-    includeDynamic: options?.includeDynamic ?? true,
-    extensions: ['.ts', '.js', '.tsx', '.jsx']
-  };
-
-  const result = await RouteProcessor.generateFromDirectory(scanOptions);
-
-  if (result.errors.length > 0) {
-    console.warn('Route processing errors:', result.errors);
-  }
-
-  if (result.warnings.length > 0) {
-    console.warn('Route processing warnings:', result.warnings);
-  }
-
-  return {
-    routes: result.routes,
-    processing: {
-      errors: result.errors,
-      warnings: result.warnings,
-      routeCount: Object.keys(result.routes).length
-    }
-  };
-}
+// NOTE: generateConfigFromApiRoutes and RouteProcessor are Node.js only
+// and should not be statically exported to avoid including fs/path modules
+// in browser bundles. Use the Node.js platform entry point instead:
+// import { RouteProcessor, generateConfigFromApiRoutes } from 'minder-data-provider/platforms/node';
 
 // CORS helper
 export function createCorsConfig(options?: {

@@ -1,7 +1,7 @@
 import axios, { AxiosError } from 'axios';
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import type { MinderConfig, ApiRoute, ApiError } from './types.js';
-import { HttpMethod } from '../constants/enums.js';
+import { HttpMethod, DebugLogType } from '../constants/enums.js';
 import { AuthManager } from './AuthManager.js';
 import { ProxyManager } from './ProxyManager.js';
 import { 
@@ -106,7 +106,7 @@ export class ApiClient {
       async (config) => {
         // Debug logging - API Request
         if (this.debugManager && this.config.debug?.networkLogs) {
-          this.debugManager.log('api', `🚀 ${config.method?.toUpperCase()} ${config.url}`, {
+          this.debugManager.log(DebugLogType.API, `🚀 ${config.method?.toUpperCase()} ${config.url}`, {
             method: config.method,
             url: config.url,
             headers: config.headers,
@@ -138,40 +138,13 @@ export class ApiClient {
           }
         }
 
-        // Add CORS preflight handling
+        // Add CORS headers automatically
         if (this.corsManager) {
-          // Check if preflight is needed
-          const headersRecord = config.headers as Record<string, string>;
-          if (this.corsManager.shouldTriggerPreflight(config.method as HttpMethod, headersRecord)) {
-            // Perform preflight check
-            const preflightResult = await this.corsManager.performPreflight(
-              config.url || '',
-              config.method as HttpMethod,
-              Object.keys(headersRecord)
-            );
-
-            if (!preflightResult.success) {
-              throw new MinderNetworkError(
-                `CORS preflight failed: ${preflightResult.error}`,
-                0,
-                preflightResult,
-                config.url,
-                config.method,
-                'CORS_PREFLIGHT_FAILED'
-              );
-            }
-          }
-
-          // Add CORS headers
           const corsHeaders = this.corsManager.getCorsHeaders(
             config.method as HttpMethod,
             config.headers as Record<string, string>
           );
           Object.assign(config.headers, corsHeaders);
-        } else if (this.config.cors) {
-          // Fallback to basic CORS handling
-          config.headers['Access-Control-Request-Method'] = config.method?.toUpperCase();
-          config.headers['Access-Control-Request-Headers'] = 'Content-Type, Authorization';
         }
 
         return config;
@@ -188,7 +161,7 @@ export class ApiClient {
             ? Date.now() - parseInt(response.config.headers['X-Request-Start-Time'] as string)
             : undefined;
           
-          this.debugManager.log('api', `✅ ${response.status} ${response.config.method?.toUpperCase()} ${response.config.url}${duration ? ` (${duration}ms)` : ''}`, {
+          this.debugManager.log(DebugLogType.API, `✅ ${response.status} ${response.config.method?.toUpperCase()} ${response.config.url}${duration ? ` (${duration}ms)` : ''}`, {
             status: response.status,
             statusText: response.statusText,
             data: response.data,
@@ -201,7 +174,7 @@ export class ApiClient {
       async (error) => {
         // Debug logging - API Response Error
         if (this.debugManager && this.config.debug?.networkLogs) {
-          this.debugManager.log('api', `❌ ${error.response?.status || 'ERROR'} ${error.config?.method?.toUpperCase()} ${error.config?.url}`, {
+          this.debugManager.log(DebugLogType.API, `❌ ${error.response?.status || 'ERROR'} ${error.config?.method?.toUpperCase()} ${error.config?.url}`, {
             status: error.response?.status,
             statusText: error.response?.statusText,
             message: error.message,

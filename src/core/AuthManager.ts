@@ -1,6 +1,6 @@
 import type { AuthConfig } from './types.js';
 import type { DebugManager } from '../debug/DebugManager.js';
-import { StorageType } from '../constants/enums.js';
+import { StorageType, DebugLogType } from '../constants/enums.js';
 
 export class AuthManager {
   private config: AuthConfig;
@@ -40,7 +40,7 @@ export class AuthManager {
     this.setItem(this.config.tokenKey, token);
     
     if (this.debugManager && this.enableLogs) {
-      this.debugManager.log('auth', '🔐 AUTH SET TOKEN', {
+      this.debugManager.log(DebugLogType.AUTH, '🔐 AUTH SET TOKEN', {
         tokenKey: this.config.tokenKey,
         storage: this.config.storage,
         tokenLength: token.length,
@@ -53,7 +53,7 @@ export class AuthManager {
     
     if (this.debugManager && this.enableLogs) {
       const emoji = token ? '✅' : '❌';
-      this.debugManager.log('auth', `${emoji} AUTH GET TOKEN`, {
+      this.debugManager.log(DebugLogType.AUTH, `${emoji} AUTH GET TOKEN`, {
         tokenKey: this.config.tokenKey,
         hasToken: !!token,
         storage: this.config.storage,
@@ -67,7 +67,7 @@ export class AuthManager {
     this.setItem(`${this.config.tokenKey}_refresh`, token);
     
     if (this.debugManager && this.enableLogs) {
-      this.debugManager.log('auth', '🔄 AUTH SET REFRESH TOKEN', {
+      this.debugManager.log(DebugLogType.AUTH, '🔄 AUTH SET REFRESH TOKEN', {
         tokenKey: `${this.config.tokenKey}_refresh`,
         storage: this.config.storage,
         tokenLength: token.length,
@@ -80,7 +80,7 @@ export class AuthManager {
     
     if (this.debugManager && this.enableLogs) {
       const emoji = token ? '✅' : '❌';
-      this.debugManager.log('auth', `${emoji} AUTH GET REFRESH TOKEN`, {
+      this.debugManager.log(DebugLogType.AUTH, `${emoji} AUTH GET REFRESH TOKEN`, {
         tokenKey: `${this.config.tokenKey}_refresh`,
         hasToken: !!token,
         storage: this.config.storage,
@@ -95,7 +95,7 @@ export class AuthManager {
     this.removeItem(`${this.config.tokenKey}_refresh`);
     
     if (this.debugManager && this.enableLogs) {
-      this.debugManager.log('auth', '🗑️ AUTH CLEAR', {
+      this.debugManager.log(DebugLogType.AUTH, '🗑️ AUTH CLEAR', {
         tokenKey: this.config.tokenKey,
         storage: this.config.storage,
       });
@@ -106,7 +106,7 @@ export class AuthManager {
     const token = this.getToken();
     if (!token) {
       if (this.debugManager && this.enableLogs) {
-        this.debugManager.log('auth', '❌ AUTH CHECK: No token', {});
+        this.debugManager.log(DebugLogType.AUTH, '❌ AUTH CHECK: No token', {});
       }
       return false;
     }
@@ -120,7 +120,7 @@ export class AuthManager {
       if (this.debugManager && this.enableLogs) {
         const emoji = isValid ? '✅' : '⏰';
         const status = isValid ? 'VALID' : 'EXPIRED';
-        this.debugManager.log('auth', `${emoji} AUTH CHECK: ${status}`, {
+        this.debugManager.log(DebugLogType.AUTH, `${emoji} AUTH CHECK: ${status}`, {
           exp: payload.exp,
           now,
           isValid,
@@ -131,7 +131,7 @@ export class AuthManager {
     } catch {
       // If not a JWT, assume it's valid
       if (this.debugManager && this.enableLogs) {
-        this.debugManager.log('auth', '✅ AUTH CHECK: Non-JWT token', {});
+        this.debugManager.log(DebugLogType.AUTH, '✅ AUTH CHECK: Non-JWT token', {});
       }
       return true;
     }
@@ -247,7 +247,7 @@ export class AuthManager {
     
     if (this.debugManager && this.enableLogs) {
       const emoji = token ? '✅' : '❌';
-      this.debugManager.log('auth', `${emoji} AUTH GET TOKEN (ASYNC)`, {
+      this.debugManager.log(DebugLogType.AUTH, `${emoji} AUTH GET TOKEN (ASYNC)`, {
         tokenKey: this.config.tokenKey,
         hasToken: !!token,
         storage: this.config.storage,
@@ -265,7 +265,7 @@ export class AuthManager {
     
     if (this.debugManager && this.enableLogs) {
       const emoji = token ? '✅' : '❌';
-      this.debugManager.log('auth', `${emoji} AUTH GET REFRESH TOKEN (ASYNC)`, {
+      this.debugManager.log(DebugLogType.AUTH, `${emoji} AUTH GET REFRESH TOKEN (ASYNC)`, {
         tokenKey: `${this.config.tokenKey}_refresh`,
         hasToken: !!token,
         storage: this.config.storage,

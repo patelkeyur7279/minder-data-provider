@@ -1,6 +1,7 @@
 import { RouteProcessor } from '../src/utils/routeProcessor.js';
 import { RouteScanner } from '../src/utils/routeScanner.js';
-import { generateConfigFromApiRoutes } from '../src/utils/index.js';
+import { generateConfigFromApiRoutes } from '../src/platforms/node.js';
+import { validateRoutes } from '../src/utils/index.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { HttpMethod } from '../src/constants/enums.js';
@@ -43,7 +44,7 @@ describe('Route Processing', () => {
           }
         };
 
-        const result = RouteProcessor.validateRoutes(routes);
+        const result = validateRoutes(routes);
 
         expect(result.isValid).toBe(true);
         expect(result.errors).toHaveLength(0);
@@ -57,7 +58,7 @@ describe('Route Processing', () => {
           } as any
         };
 
-        const result = RouteProcessor.validateRoutes(routes);
+        const result = validateRoutes(routes);
 
         expect(result.isValid).toBe(false);
         expect(result.errors).toContain('Route "invalidRoute" is missing method');
@@ -70,7 +71,7 @@ describe('Route Processing', () => {
           } as any
         };
 
-        const result = RouteProcessor.validateRoutes(routes);
+        const result = validateRoutes(routes);
 
         expect(result.isValid).toBe(false);
         expect(result.errors).toContain('Route "invalidRoute" is missing url');
@@ -84,7 +85,7 @@ describe('Route Processing', () => {
           }
         };
 
-        const result = RouteProcessor.validateRoutes(routes);
+        const result = validateRoutes(routes);
 
         expect(result.isValid).toBe(false);
         expect(result.errors).toContain('Route "invalidRoute" has invalid method "INVALID"');
@@ -102,10 +103,10 @@ describe('Route Processing', () => {
           }
         };
 
-        const result = RouteProcessor.validateRoutes(routes);
+        const result = validateRoutes(routes);
 
         expect(result.isValid).toBe(false);
-        expect(result.errors.some(error => error.includes('Duplicate URLs found'))).toBe(true);
+        expect(result.errors.some((error: string) => error.includes('Duplicate URLs found'))).toBe(true);
       });
 
       it('should warn about URLs not starting with slash', () => {
@@ -116,7 +117,7 @@ describe('Route Processing', () => {
           }
         };
 
-        const result = RouteProcessor.validateRoutes(routes);
+        const result = validateRoutes(routes);
 
         expect(result.isValid).toBe(false);
         expect(result.errors).toContain('Route "invalidRoute" URL must start with "/"');
@@ -130,7 +131,7 @@ describe('Route Processing', () => {
           }
         };
 
-        const result = RouteProcessor.validateRoutes(routes);
+        const result = validateRoutes(routes);
 
         expect(result.isValid).toBe(false);
         expect(result.errors).toContain('Route "invalidRoute" has duplicate parameters');

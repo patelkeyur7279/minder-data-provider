@@ -60,11 +60,50 @@ export class StorageAdapterFactory {
   private static createWebStorage(options?: StorageAdapterOptions): StorageAdapter {
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
+        // Test if localStorage actually works (not disabled/private browsing)
+        const testKey = '__minder_test__';
+        window.localStorage.setItem(testKey, 'test');
+        window.localStorage.removeItem(testKey);
+        
         return new WebStorageAdapter(localStorage, options);
       }
     } catch (error) {
-      logger.warn('localStorage not available:', error);
+      logger.warn('localStorage not available or disabled:', error);
+      
+      console.warn(`
+⚠️  Minder Storage Warning: localStorage not available
+
+This usually means:
+- Private browsing mode is enabled
+- Cookies/localStorage are disabled in browser settings
+- Storage quota is exceeded
+- Running in a restricted environment
+
+Using sessionStorage instead (if available) or falling back to memory storage.
+      `.trim());
     }
+    
+    // Try sessionStorage as fallback
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        const testKey = '__minder_test__';
+        window.sessionStorage.setItem(testKey, 'test');
+        window.sessionStorage.removeItem(testKey);
+        
+        return new WebStorageAdapter(sessionStorage, options);
+      }
+    } catch (error) {
+      logger.warn('sessionStorage also not available:', error);
+    }
+    
+    console.warn(`
+🚨 Minder Storage Error: No persistent web storage available
+
+Both localStorage and sessionStorage are disabled or unavailable.
+This usually means you're in private browsing mode or have strict privacy settings.
+
+Falling back to memory storage - data will be lost when the page refreshes!
+    `.trim());
     
     return new MemoryStorageAdapter(options);
   }
@@ -79,11 +118,50 @@ export class StorageAdapterFactory {
       if ((adapter as any).AsyncStorage) {
         return adapter;
       }
+      
+      // AsyncStorage not available - warn user and provide guidance
+      const error = new Error(
+        'AsyncStorage is not available. This usually means @react-native-async-storage/async-storage is not installed or linked properly.'
+      );
+      logger.error('AsyncStorage initialization failed:', error);
+      
+      // Provide helpful guidance
+      console.warn(`
+🚨 Minder Storage Error: AsyncStorage not available
+
+This means your React Native app cannot persist data properly.
+To fix this:
+
+1. Install AsyncStorage:
+   npm install @react-native-async-storage/async-storage
+   # or
+   yarn add @react-native-async-storage/async-storage
+
+2. For React Native 0.60+: It's auto-linked
+   For older versions: react-native link @react-native-async-storage/async-storage
+
+3. If using Expo: AsyncStorage is built-in, check your setup
+
+Falling back to memory storage - data will be lost on app restart!
+      `.trim());
+      
+      return new MemoryStorageAdapter(options);
     } catch (error) {
-      logger.warn('AsyncStorage not available:', error);
+      logger.error('AsyncStorage creation failed:', error);
+      
+      console.warn(`
+🚨 Minder Storage Error: Failed to create AsyncStorage adapter
+
+Error: ${error instanceof Error ? error.message : 'Unknown error'}
+
+This usually indicates a configuration issue with your React Native setup.
+Falling back to memory storage - data will be lost on app restart!
+
+Check your React Native AsyncStorage installation and linking.
+      `.trim());
+      
+      return new MemoryStorageAdapter(options);
     }
-    
-    return new MemoryStorageAdapter(options);
   }
 
   /**
@@ -96,11 +174,54 @@ export class StorageAdapterFactory {
       if ((adapter as any).SecureStore) {
         return adapter;
       }
+      
+      // SecureStore not available - warn user and provide guidance
+      const error = new Error(
+        'Expo SecureStore is not available. This usually means expo-secure-store is not installed.'
+      );
+      logger.error('SecureStore initialization failed:', error);
+      
+      console.warn(`
+🚨 Minder Storage Error: Expo SecureStore not available
+
+This means your Expo app cannot use encrypted storage.
+To fix this:
+
+1. Install SecureStore:
+   npx expo install expo-secure-store
+
+2. If not using Expo managed workflow, SecureStore may not be available
+
+Falling back to AsyncStorage (if available) or memory storage.
+      `.trim());
+      
+      // Try to fall back to AsyncStorage for Expo
+      try {
+        return this.createNativeStorage(options);
+      } catch {
+        return new MemoryStorageAdapter(options);
+      }
     } catch (error) {
-      logger.warn('SecureStore not available:', error);
+      logger.error('SecureStore creation failed:', error);
+      
+      console.warn(`
+🚨 Minder Storage Error: Failed to create Expo SecureStore adapter
+
+Error: ${error instanceof Error ? error.message : 'Unknown error'}
+
+This usually indicates expo-secure-store is not properly installed.
+Falling back to AsyncStorage (if available) or memory storage.
+
+Install with: npx expo install expo-secure-store
+      `.trim());
+      
+      // Try to fall back to AsyncStorage for Expo
+      try {
+        return this.createNativeStorage(options);
+      } catch {
+        return new MemoryStorageAdapter(options);
+      }
     }
-    
-    return new MemoryStorageAdapter(options);
   }
 
   /**
@@ -113,11 +234,48 @@ export class StorageAdapterFactory {
       if ((adapter as any).store) {
         return adapter;
       }
+      
+      // electron-store not available - warn user and provide guidance
+      const error = new Error(
+        'electron-store is not available. This usually means electron-store is not installed.'
+      );
+      logger.error('electron-store initialization failed:', error);
+      
+      console.warn(`
+🚨 Minder Storage Error: electron-store not available
+
+This means your Electron app cannot persist data to disk.
+To fix this:
+
+1. Install electron-store:
+   npm install electron-store
+   # or
+   yarn add electron-store
+
+2. Make sure you're running in the Electron main process context
+
+Falling back to memory storage - data will be lost when the app restarts!
+      `.trim());
+      
+      return new MemoryStorageAdapter(options);
     } catch (error) {
-      logger.warn('electron-store not available:', error);
+      logger.error('electron-store creation failed:', error);
+      
+      console.warn(`
+🚨 Minder Storage Error: Failed to create electron-store adapter
+
+Error: ${error instanceof Error ? error.message : 'Unknown error'}
+
+This usually indicates electron-store is not properly installed or
+you're trying to use it in the renderer process instead of main process.
+
+Falling back to memory storage - data will be lost when the app restarts!
+
+Install with: npm install electron-store
+      `.trim());
+      
+      return new MemoryStorageAdapter(options);
     }
-    
-    return new MemoryStorageAdapter(options);
   }
 
   /**

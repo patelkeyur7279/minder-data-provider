@@ -59,10 +59,10 @@ export default function App({ children }) {
 }
 
 // 3. Use in Components
-import { useOneTouchCrud } from "minder-data-provider/crud";
+import { useMinder } from "minder-data-provider";
 
 function Users() {
-  const { data, loading, operations } = useOneTouchCrud("users");
+  const { data, loading, operations } = useMinder("users");
 
   return (
     <div>
@@ -98,7 +98,7 @@ Minder Data Provider provides **one unified API** that scales automatically:
 
 ```typescript
 // ✅ Minder Approach: Same code, any scale
-const { data, operations } = useOneTouchCrud("users");
+const { data, operations } = useMinder("users");
 
 // Works for:
 // ✓ Prototype with 10 users
@@ -129,7 +129,7 @@ const { data, operations } = useOneTouchCrud("users");
 
 ```typescript
 // Your Code (Never Changes)
-const { data, operations } = useOneTouchCrud("users");
+const { data, operations } = useMinder("users");
 
 // What Minder Does Behind The Scenes:
 // 📊 10 users        → Simple fetch, basic cache
@@ -158,10 +158,10 @@ const { data, operations } = useOneTouchCrud("users");
 
 ```typescript
 // Same code works on ALL platforms
-import { useOneTouchCrud } from "minder-data-provider/crud";
+import { useMinder } from "minder-data-provider";
 
 function UserList() {
-  const { data, operations } = useOneTouchCrud("users");
+  const { data, operations } = useMinder("users");
 
   // ✅ Works in React web app
   // ✅ Works in Next.js SSR
@@ -202,7 +202,7 @@ const useUpdateUser = () =>
 // ... 20 more lines per resource
 
 // ✅ Minder: One line, full CRUD
-const { data, operations } = useOneTouchCrud("users");
+const { data, operations } = useMinder("users");
 // Auto-generates: query, mutations, optimistic updates, cache invalidation
 ```
 
@@ -263,7 +263,7 @@ axios.get("/users", {
 });
 
 // ✅ Minder: Configured once, works everywhere
-const { data } = useOneTouchCrud("users");
+const { data } = useMinder("users");
 // Auto-includes: auth headers, retries, compression, CORS, CSRF protection
 ```
 
@@ -295,7 +295,7 @@ const fetchUsers = (): Promise<UserResponse> => {
 };
 
 // ✅ Minder: Types inferred automatically
-const { data } = useOneTouchCrud("users");
+const { data } = useMinder("users");
 //     ^^ User[] - fully typed, no manual definitions
 ```
 
@@ -339,7 +339,7 @@ const { data } = useOneTouchCrud("users");
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  YOUR CODE (Simple API)                                     │
-│  const { data, operations } = useOneTouchCrud('users');     │
+│  const { data, operations } = useMinder('users');     │
 └─────────────────────────────────────────────────────────────┘
                            ↓
 ┌─────────────────────────────────────────────────────────────┐
@@ -536,10 +536,10 @@ export default function App({ children }) {
 }
 
 // 3. Use in components
-import { useOneTouchCrud } from "minder-data-provider/crud";
+import { useMinder } from "minder-data-provider";
 
 function Users() {
-  const { data, loading, operations } = useOneTouchCrud("users");
+  const { data, loading, operations } = useMinder("users");
 
   if (loading.fetch) return <div>Loading...</div>;
 
@@ -615,7 +615,7 @@ import { useCache } from "minder-data-provider/cache";
 
 function Dashboard() {
   const cache = useCache();
-  const { data } = useOneTouchCrud("users");
+  const { data } = useMinder("users");
 
   // Cache hit rate automatically optimized
   console.log("Cache stats:", cache.getStats());
@@ -1001,7 +1001,7 @@ export const config = createMinderConfig({
 
 // components/Users.tsx
 function Users() {
-  const { data, loading, operations } = useOneTouchCrud("users");
+  const { data, loading, operations } = useMinder("users");
 
   return (
     <>
@@ -1041,14 +1041,21 @@ export const config = createMinderConfig({
 ### 2. Modular Imports (Tree-Shaking)
 
 ```typescript
-// Import only what you need (87% smaller bundle)
-import { useOneTouchCrud } from "minder-data-provider/crud";
+// ✅ HOOK ONLY (Smallest bundle: ~25KB)
+// Perfect for minimal setups or custom providers
+import { useMinder } from "minder-data-provider/hook";
+
+// ✅ AUTH MODULE (~15KB)
 import { useAuth } from "minder-data-provider/auth";
+
+// ✅ CACHE MODULE (~10KB)
 import { useCache } from "minder-data-provider/cache";
+
+// ✅ DEBUG MODULE (~5KB)
 import { useDebug } from "minder-data-provider/debug";
 
-// Or import everything (if you need all features)
-import { useOneTouchCrud, useAuth, useCache } from "minder-data-provider";
+// ✅ FULL LIBRARY (Everything: ~150KB)
+import { useMinder, useAuth, useCache } from "minder-data-provider";
 ```
 
 ### 3. Setup Provider
@@ -1067,10 +1074,10 @@ export default function App({ children }) {
 
 ```typescript
 // components/UserManager.tsx
-import { useOneTouchCrud, useAuth, useDebug } from "minder-data-provider";
+import { useMinder, useAuth, useDebug } from "minder-data-provider";
 
 export function UserManager() {
-  const { data: users, loading, operations } = useOneTouchCrud("users");
+  const { data: users, loading, operations } = useMinder("users");
   const auth = useAuth();
   const debug = useDebug();
 
@@ -1200,7 +1207,7 @@ const config = createMinderConfig({
 ```typescript
 // Same code, different optimizations
 
-const { data } = useOneTouchCrud("users");
+const { data } = useMinder("users");
 
 // Web Browser
 // → Uses localStorage
@@ -1239,13 +1246,13 @@ const { data } = useOneTouchCrud("users");
 // ✅ Request Deduplication
 // Multiple components request same data? → One API call
 const UserProfile = () => {
-  const { data } = useOneTouchCrud("users"); // Request 1
+  const { data } = useMinder("users"); // Request 1
 };
 const UserList = () => {
-  const { data } = useOneTouchCrud("users"); // DEDUPED (no request)
+  const { data } = useMinder("users"); // DEDUPED (no request)
 };
 const UserStats = () => {
-  const { data } = useOneTouchCrud("users"); // DEDUPED (no request)
+  const { data } = useMinder("users"); // DEDUPED (no request)
 };
 // Result: 1 API call instead of 3
 
@@ -1286,7 +1293,7 @@ operations.update(userId, data);
 
 ```typescript
 // You write this:
-const { data } = useOneTouchCrud("users");
+const { data } = useMinder("users");
 
 // TypeScript knows:
 // data is User[]
@@ -1353,7 +1360,7 @@ const config = createMinderConfig({
 
 ```typescript
 // Minimal app (47KB)
-import { useOneTouchCrud } from "minder-data-provider/crud";
+import { useMinder } from "minder-data-provider";
 
 // Add auth (25KB more)
 import { useAuth } from "minder-data-provider/auth";
@@ -1376,7 +1383,7 @@ import { useWebSocket } from "minder-data-provider/websocket";
 
 ```typescript
 // Your code (written in 2024)
-const { data, operations } = useOneTouchCrud("users");
+const { data, operations } = useMinder("users");
 
 // Works with v2.0 (2024)
 // Works with v2.5 (2025)
@@ -1404,7 +1411,7 @@ const config = createMinderConfig({
 
 // Build features fast
 function App() {
-  const { data, operations } = useOneTouchCrud("posts");
+  const { data, operations } = useMinder("posts");
   return <PostList posts={data} onCreate={operations.create} />;
 }
 ```
@@ -1508,7 +1515,7 @@ export async function getServerSideProps() {
 import { withCSR } from "minder-data-provider/ssr";
 
 function InteractiveComponent() {
-  const { data } = useOneTouchCrud(withCSR("users"));
+  const { data } = useMinder(withCSR("users"));
   // Client-side rendering with real-time updates
 }
 ```
@@ -1634,12 +1641,13 @@ const url = qb
 
 ## 📊 Bundle Size Comparison (Verified)
 
-| Import Method                         | Bundle Size | Savings   | Status      |
-| ------------------------------------- | ----------- | --------- | ----------- |
-| Full Import (Enterprise)              | 249.58 KB   | -         | ✅ Verified |
-| Advanced (Standard + WebSocket + SSR) | 194.45 KB   | 22%       | ✅ Verified |
-| Standard (CRUD + Auth + Cache)        | 144.96 KB   | 42%       | ✅ Verified |
-| Minimal (CRUD Only)                   | 47.82 KB    | **80.8%** | ✅ Verified |
+| Import Method                         | Bundle Size  | Savings   | Status      |
+| ------------------------------------- | ------------ | --------- | ----------- |
+| Full Import (Enterprise)              | 249.58 KB    | -         | ✅ Verified |
+| Advanced (Standard + WebSocket + SSR) | 194.45 KB    | 22%       | ✅ Verified |
+| Standard (CRUD + Auth + Cache)        | 144.96 KB    | 42%       | ✅ Verified |
+| **Hook Only** (useMinder only)        | **60.86 KB** | **58%**   | ✅ Verified |
+| Minimal (CRUD Only)                   | 47.82 KB     | **80.8%** | ✅ Verified |
 
 **Verification**: Run `yarn analyze-bundle` to see detailed report.
 
@@ -1648,15 +1656,20 @@ const url = qb
 ## 🎯 Available Modules
 
 ```typescript
-// Modular imports for optimal bundle size
-import { useOneTouchCrud } from "minder-data-provider/crud"; // ~45KB
-import { useAuth } from "minder-data-provider/auth"; // ~25KB
-import { useCache } from "minder-data-provider/cache"; // ~20KB
-import { useWebSocket } from "minder-data-provider/websocket"; // ~15KB
-import { useMediaUpload } from "minder-data-provider/upload"; // ~10KB
+// ✅ HOOK ONLY (Smallest: ~61KB) - Just the useMinder hook
+import { useMinder } from "minder-data-provider/hook";
+
+// ✅ FEATURE MODULES (Tree-shakeable)
+import { useAuth } from "minder-data-provider/auth"; // ~15KB
+import { useCache } from "minder-data-provider/cache"; // ~10KB
+import { useWebSocket } from "minder-data-provider/websocket"; // ~8KB
+import { useMediaUpload } from "minder-data-provider/upload"; // ~6KB
 import { useDebug } from "minder-data-provider/debug"; // ~5KB
+
+// ✅ UTILITY MODULES
 import { createMinderConfig } from "minder-data-provider/config"; // ~3KB
 import { withSSR, withCSR } from "minder-data-provider/ssr"; // ~8KB
+import { QueryBuilder } from "minder-data-provider/query"; // ~12KB
 ```
 
 ## 🔧 Advanced Configuration
@@ -1875,7 +1888,7 @@ const config = createMinderConfig({
 import { useOneTouchCrud, useAuth } from "minder-data-provider";
 
 // v2.0 (Optimized bundle)
-import { useOneTouchCrud } from "minder-data-provider/crud";
+import { useMinder } from "minder-data-provider";
 import { useAuth } from "minder-data-provider/auth";
 ```
 

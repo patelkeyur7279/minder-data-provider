@@ -228,7 +228,7 @@ export type {
   SecurityLevelType,
   DataSizeType,
   ConfigPresetType,
-  NotificationTypeType,
+  NotificationType as NotificationTypeType,
 } from './constants/enums.js';
 
 // ============================================================================

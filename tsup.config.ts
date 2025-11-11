@@ -5,6 +5,9 @@ export default defineConfig({
     // Main entry (universal)
     index: 'src/index.ts',
     
+    // Hook-only entry (smaller bundle)
+    hook: 'src/hook/index.ts',
+    
     // Platform-specific entry points
     'platforms/web': 'src/platforms/web.ts',
     'platforms/nextjs': 'src/platforms/nextjs.ts',
@@ -50,7 +53,11 @@ export default defineConfig({
     'react-redux',
     'axios',
     'immer',
-    'dompurify'
+    'dompurify',
+    // Node.js built-ins that should not be in browser bundles
+    'fs',
+    'path',
+    'fs/promises'
   ],
   
   esbuildOptions(options) {

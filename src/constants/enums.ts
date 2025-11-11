@@ -132,6 +132,16 @@ export enum NotificationType {
 }
 
 // ============================================
+// Debug Log Types
+// ============================================
+export enum DebugLogType {
+  API = 'api',
+  CACHE = 'cache',
+  AUTH = 'auth',
+  WEBSOCKET = 'websocket',
+}
+
+// ============================================
 // Environment Types
 // ============================================
 export enum Environment {
@@ -390,6 +400,13 @@ export const isStorageType = createEnumTypeGuard(StorageType);
 export const isSecurityLevel = createEnumTypeGuard(SecurityLevel);
 
 /**
+ * Type guard for DebugLogType enum
+ * @param value - String value to check
+ * @returns True if value is a valid DebugLogType
+ */
+export const isDebugLogType = createEnumTypeGuard(DebugLogType);
+
+/**
  * Type guard for DataSize enum
  * @param value - String value to check
  * @returns True if value is a valid DataSize
@@ -415,7 +432,7 @@ export type PlatformType = `${Platform}`;
 export type SecurityLevelType = `${SecurityLevel}`;
 export type DataSizeType = `${DataSize}`;
 export type ConfigPresetType = `${ConfigPreset}`;
-export type NotificationTypeType = `${NotificationType}`;
+export type DebugLogTypeType = `${DebugLogType}`;
 
 // Export all for easy access
 export default {
@@ -431,6 +448,7 @@ export default {
   PrefetchStrategy,
   ConfigPreset,
   NotificationType,
+  DebugLogType,
   Environment,
   WebSocketState,
   UploadState,

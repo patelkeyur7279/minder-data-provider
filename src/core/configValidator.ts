@@ -1,6 +1,6 @@
 import type { MinderConfig } from './types.js';
 import type { ConfigValidationResult, ValidationOptions } from './config.types.js';
-import { RouteProcessor } from '../utils/routeProcessor.js';
+import { validateRoutes } from '../utils/routeValidation.js';
 
 /**
  * Validates configuration and provides helpful error messages
@@ -27,8 +27,8 @@ export function validateConfig(
 
   // Route validation
   if (options.validateRoutes) {
-    // Use RouteProcessor for comprehensive validation
-    const routeValidation = RouteProcessor.validateRoutes(config.routes || {});
+    // Use route validation for comprehensive validation
+    const routeValidation = validateRoutes(config.routes || {});
 
     errors.push(...routeValidation.errors);
     warnings.push(...routeValidation.warnings);

@@ -6,11 +6,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { PerformanceMonitor } from "../utils/performance";
 import type { DebugConfig } from "../core/types.js";
-import type {
-  NetworkRequest,
-  CacheEntry,
-  StateSnapshot,
-} from "./types.js";
+import type { NetworkRequest, CacheEntry, StateSnapshot } from "./types.js";
 
 // Re-export types for backward compatibility
 export type {
