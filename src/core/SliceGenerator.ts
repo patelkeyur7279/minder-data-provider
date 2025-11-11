@@ -3,6 +3,7 @@ import type { PayloadAction } from '@reduxjs/toolkit';
 import type { ApiRoute, ApiError } from './types.js';
 import { ApiClient } from './ApiClient.js';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface SliceState<T = any> {
   items: T[];
   currentItem: T | null;
@@ -29,29 +30,36 @@ export function createApiSlices(routes: Record<string, ApiRoute>, apiClient: Api
   const slices: Record<string, unknown> = {};
   const reducers: Record<string, unknown> = {};
 
-  Object.entries(routes).forEach(([routeName, route]) => {
+  Object.entries(routes).forEach(([routeName]) => {
     // Create async thunks for each route
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const fetchThunk = createAsyncThunk<any, any>(
       `${routeName}/fetch`,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       async (params?: any) => {
         return await apiClient.request(routeName, undefined, params);
       }
     );
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const createThunk = createAsyncThunk<any, any>(
       `${routeName}/create`,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       async (data: any) => {
         return await apiClient.request(routeName, data);
       }
     );
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updateThunk = createAsyncThunk<any, { id: string | number; data: any }>(
       `${routeName}/update`,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       async ({ id, data }: { id: string | number; data: any }) => {
         return await apiClient.request(routeName, data, { id });
       }
     );
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const deleteThunk = createAsyncThunk<any, string | number>(
       `${routeName}/delete`,
       async (id: string | number) => {
@@ -95,15 +103,18 @@ export function createApiSlices(routes: Record<string, ApiRoute>, apiClient: Api
             delete: null,
           };
         },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         setCurrentItem: (state, action: PayloadAction<any>) => {
           state.currentItem = action.payload;
         },
         clearCurrentItem: (state) => {
           state.currentItem = null;
         },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         addItem: (state, action: PayloadAction<any>) => {
           state.items.push(action.payload);
         },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         updateItem: (state, action: PayloadAction<{ id: string | number; data: any }>) => {
           const index = state.items.findIndex(item => item.id === action.payload.id);
           if (index !== -1) {
@@ -198,12 +209,19 @@ export function createApiSlices(routes: Record<string, ApiRoute>, apiClient: Api
         delete: deleteThunk,
       },
       selectors: {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         selectItems: (state: any) => state[routeName]?.items || [],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         selectCurrentItem: (state: any) => state[routeName]?.currentItem,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         selectLoading: (state: any) => state[routeName]?.loading || {},
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         selectErrors: (state: any) => state[routeName]?.errors || {},
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         selectMeta: (state: any) => state[routeName]?.meta || {},
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         selectIsLoading: (state: any) => Object.values(state[routeName]?.loading || {}).some(Boolean),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         selectHasError: (state: any) => Object.values(state[routeName]?.errors || {}).some(Boolean),
       },
     };

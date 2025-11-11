@@ -36,12 +36,51 @@ export type {
   UploadProgress,
 } from './core/minder.js';
 
+// 🆕 Global config helpers (NEW in v2.1)
+export {
+  getGlobalMinderConfig,
+  setGlobalMinderConfig,
+  clearGlobalMinderConfig,
+  hasGlobalMinderConfig,
+} from './core/globalConfig.js';
+
+// 🆕 Global auth manager (NEW in v2.1)
+export { globalAuthManager, GlobalAuthManager } from './auth/GlobalAuthManager.js';
+
+// 🆕 Upload progress store (NEW in v2.1)
+export {
+  getUploadProgress,
+  setUploadProgress,
+  subscribeToUploadProgress,
+  clearUploadProgress,
+  getAllUploadProgress,
+  clearAllUploadProgress,
+} from './upload/uploadProgressStore.js';
+
+// 🆕 Route helpers (NEW in v2.1)
+export {
+  replaceUrlParams,
+  hasUnreplacedParams,
+  extractParamNames,
+  getRouteSuggestions,
+  levenshteinDistance,
+} from './utils/routeHelpers.js';
+
 // React hook
 export { useMinder } from './hooks/useMinder.js';
 export type {
   UseMinderOptions,
   UseMinderReturn,
 } from './hooks/useMinder.js';
+
+// Pagination hook
+export { usePaginatedMinder } from './hooks/usePaginatedMinder.js';
+export type {
+  UsePaginatedMinderOptions,
+  UsePaginatedMinderReturn,
+  PaginationConfig,
+  PageData,
+} from './hooks/usePaginatedMinder.js';
 
 // ============================================================================
 // LEGACY EXPORTS - For backward compatibility
@@ -99,6 +138,14 @@ export type { PlatformCapabilities } from './platform/index.js';
 
 // FeatureLoader for dynamic bundle optimization
 export { FeatureLoader, createFeatureLoader } from './core/FeatureLoader.js';
+
+// 🚀 Dynamic Loader for lazy loading dependencies (NEW in v2.0.3)
+export {
+  DynamicLoader,
+  getDynamicLoader,
+  createDynamicLoader,
+  type DynamicLoaderConfig,
+} from './core/DynamicLoader.js';
 export type { FeatureFlags, FeatureModules, FeatureLoaderOptions } from './core/FeatureLoader.js';
 
 // ============================================================================
@@ -228,11 +275,13 @@ export type {
   SecurityLevelType,
   DataSizeType,
   ConfigPresetType,
-  NotificationTypeType,
+  NotificationType as NotificationTypeType,
 } from './constants/enums.js';
 
 // ============================================================================
-// DEFAULT EXPORT
+// LOGGER EXPORTS
 // ============================================================================
 
-export { minder as default } from './core/minder.js';
+// Export logger for application logging
+export { defaultLogger, Logger, createLogger } from './utils/Logger.js';
+export type { LoggerConfig } from './utils/Logger.js';

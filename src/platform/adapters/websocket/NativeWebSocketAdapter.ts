@@ -6,11 +6,8 @@
  * @module NativeWebSocketAdapter
  */
 
-import { Logger, LogLevel } from '../../../utils/Logger.js';
 import { WebSocketAdapter, type WebSocketConfig } from './WebSocketAdapter.js';
 import { MinderWebSocketError } from '../../../errors/index.js';
-
-const logger = new Logger('NativeWebSocketAdapter', { level: LogLevel.WARN });
 
 /**
  * React Native WebSocket Adapter

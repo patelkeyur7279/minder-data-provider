@@ -11,10 +11,7 @@
  * @module WebSocketAdapter
  */
 
-import { Logger, LogLevel } from '../../../utils/Logger.js';
 import { MinderWebSocketError } from '../../../errors/index.js';
-
-const logger = new Logger('WebSocketAdapter', { level: LogLevel.WARN });
 
 /**
  * WebSocket connection state

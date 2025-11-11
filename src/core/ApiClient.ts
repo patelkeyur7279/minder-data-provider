@@ -1,6 +1,7 @@
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import type { MinderConfig, ApiRoute, ApiError } from './types.js';
+import { HttpMethod, DebugLogType } from '../constants/enums.js';
 import { AuthManager } from './AuthManager.js';
 import { ProxyManager } from './ProxyManager.js';
 import { 
@@ -18,6 +19,7 @@ import {
   RateLimiter, 
   getSecurityHeaders 
 } from '../utils/security.js';
+import { CorsManager, handleCorsError } from '../utils/corsManager.js';
 import {
   RequestBatcher,
   RequestDeduplicator,
@@ -31,6 +33,7 @@ export class ApiClient {
   private authManager: AuthManager;
   private proxyManager?: ProxyManager;
   private debugManager?: DebugManager;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private requestCache: Map<string, Promise<any>> = new Map();
   private csrfManager?: CSRFTokenManager;
   private rateLimiter?: RateLimiter;
@@ -38,6 +41,7 @@ export class ApiClient {
   private requestBatcher?: RequestBatcher;
   private deduplicator?: RequestDeduplicator;
   private performanceMonitor?: PerformanceMonitor;
+  private corsManager?: CorsManager;
 
   constructor(config: MinderConfig, authManager: AuthManager, proxyManager?: ProxyManager, debugManager?: DebugManager) {
     this.config = config;
@@ -74,6 +78,11 @@ export class ApiClient {
       this.performanceMonitor = new PerformanceMonitor();
     }
 
+    // Initialize CORS manager
+    if (config.cors?.enabled) {
+      this.corsManager = new CorsManager(config.cors);
+    }
+
     // Use proxy baseURL if enabled, otherwise use original
     const baseURL = proxyManager?.isEnabled() ? proxyManager.config.baseUrl : config.apiBaseUrl;
 
@@ -95,10 +104,10 @@ export class ApiClient {
   private setupInterceptors() {
     // Request interceptor for auth, CORS, and security
     this.axiosInstance.interceptors.request.use(
-      (config) => {
+      async (config) => {
         // Debug logging - API Request
         if (this.debugManager && this.config.debug?.networkLogs) {
-          this.debugManager.log('api', `🚀 ${config.method?.toUpperCase()} ${config.url}`, {
+          this.debugManager.log(DebugLogType.API, `🚀 ${config.method?.toUpperCase()} ${config.url}`, {
             method: config.method,
             url: config.url,
             headers: config.headers,
@@ -130,10 +139,13 @@ export class ApiClient {
           }
         }
 
-        // Add CORS preflight handling
-        if (this.config.cors) {
-          config.headers['Access-Control-Request-Method'] = config.method?.toUpperCase();
-          config.headers['Access-Control-Request-Headers'] = 'Content-Type, Authorization';
+        // Add CORS headers automatically
+        if (this.corsManager) {
+          const corsHeaders = this.corsManager.getCorsHeaders(
+            config.method as HttpMethod,
+            config.headers as Record<string, string>
+          );
+          Object.assign(config.headers, corsHeaders);
         }
 
         return config;
@@ -150,7 +162,7 @@ export class ApiClient {
             ? Date.now() - parseInt(response.config.headers['X-Request-Start-Time'] as string)
             : undefined;
           
-          this.debugManager.log('api', `✅ ${response.status} ${response.config.method?.toUpperCase()} ${response.config.url}${duration ? ` (${duration}ms)` : ''}`, {
+          this.debugManager.log(DebugLogType.API, `✅ ${response.status} ${response.config.method?.toUpperCase()} ${response.config.url}${duration ? ` (${duration}ms)` : ''}`, {
             status: response.status,
             statusText: response.statusText,
             data: response.data,
@@ -163,7 +175,7 @@ export class ApiClient {
       async (error) => {
         // Debug logging - API Response Error
         if (this.debugManager && this.config.debug?.networkLogs) {
-          this.debugManager.log('api', `❌ ${error.response?.status || 'ERROR'} ${error.config?.method?.toUpperCase()} ${error.config?.url}`, {
+          this.debugManager.log(DebugLogType.API, `❌ ${error.response?.status || 'ERROR'} ${error.config?.method?.toUpperCase()} ${error.config?.url}`, {
             status: error.response?.status,
             statusText: error.response?.statusText,
             message: error.message,
@@ -178,6 +190,42 @@ export class ApiClient {
           }
         }
 
+        // Handle CORS errors automatically
+        if (this.corsManager) {
+          const corsHandling = await handleCorsError(error, this.corsManager, {
+            url: error.config?.url || '',
+            method: error.config?.method as HttpMethod || HttpMethod.GET,
+            headers: error.config?.headers as Record<string, string> || {},
+            data: error.config?.data
+          });
+
+          if (corsHandling.shouldRetry) {
+            if (corsHandling.modifiedRequest) {
+              // Retry with modified request
+              return this.axiosInstance.request({
+                ...error.config,
+                ...corsHandling.modifiedRequest
+              });
+            } else if (corsHandling.useProxy && this.proxyManager) {
+              // Retry through proxy
+              const proxyConfig = { ...error.config };
+              proxyConfig.url = this.proxyManager.rewriteUrl(error.config?.url || '', {} as ApiRoute);
+              proxyConfig.baseURL = '';
+              return this.axiosInstance.request(proxyConfig);
+            } else if (corsHandling.fallbackUrl) {
+              // Retry with fallback URL
+              return this.axiosInstance.request({
+                ...error.config,
+                url: corsHandling.fallbackUrl
+              });
+            }
+          }
+
+          if (corsHandling.error) {
+            throw corsHandling.error;
+          }
+        }
+
         const apiError = this.handleError(error);
         if (this.config.onError) {
           this.config.onError(apiError);
@@ -189,28 +237,17 @@ export class ApiClient {
   }
 
   private handleError(error: unknown): ApiError {
-    // Type narrowing for axios-like errors with response
-    if (error && typeof error === 'object' && 'response' in error) {
-      const axiosError = error as {
-        response?: {
-          data?: { message?: string; code?: string; errors?: Record<string, string[]> };
-          status?: number;
-          statusText?: string;
-        };
-        config?: {
-          url?: string;
-          method?: string;
-        };
-        message?: string;
-        code?: string;
-      };
+    // Check if it's an AxiosError
+    if (axios.isAxiosError(error)) {
+      const axiosError = error as AxiosError;
       
       const status = axiosError.response?.status || 0;
       const url = axiosError.config?.url;
       const method = axiosError.config?.method?.toUpperCase();
-      const responseData = axiosError.response?.data;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const responseData = axiosError.response?.data as any;
+      const responseHeaders = axiosError.response?.headers as Record<string, string> | undefined;
       
-      // Handle specific HTTP status codes with enhanced errors
       switch (status) {
         case 400:
           return {
@@ -226,30 +263,49 @@ export class ApiClient {
           );
         
         case 403:
+          // Check if this is a CORS origin blocked error
+          if (responseHeaders?.['access-control-allow-origin'] === 'null') {
+            const corsMsg = responseData?.message || 'CORS origin blocked - request origin not allowed';
+            throw new MinderNetworkError(corsMsg, 403, responseData, url, method, 'CORS_ORIGIN_BLOCKED');
+          }
           throw new MinderAuthorizationError(
             responseData?.message || 'Permission denied'
           );
         
-        case 404:
+        case 404: {
           const notFoundMsg = responseData?.message || `Resource not found: ${method} ${url}`;
           throw new MinderNetworkError(notFoundMsg, 404, responseData, url, method);
+        }
         
-        case 422:
+        case 405: {
+          // Check if this is a CORS preflight failed error
+          if (method === 'OPTIONS') {
+            const corsMsg = responseData?.message || 'CORS preflight request failed - server does not allow OPTIONS method';
+            throw new MinderNetworkError(corsMsg, 405, responseData, url, method, 'CORS_PREFLIGHT_FAILED');
+          }
+          const methodMsg = responseData?.message || `Method not allowed: ${method} ${url}`;
+          throw new MinderNetworkError(methodMsg, 405, responseData, url, method);
+        }
+        
+        case 422: {
           throw new MinderValidationError(
             responseData?.message || 'Validation failed',
             responseData?.errors
           );
+        }
         
-        case 429:
+        case 429: {
           const rateLimitMsg = responseData?.message || 'Too many requests - rate limit exceeded';
           throw new MinderNetworkError(rateLimitMsg, 429, responseData, url, method);
+        }
         
         case 500:
         case 502:
         case 503:
-        case 504:
+        case 504: {
           const serverMsg = responseData?.message || 'Server error - please try again later';
           throw new MinderNetworkError(serverMsg, status, responseData, url, method);
+        }
         
         default:
           throw new MinderNetworkError(
@@ -313,8 +369,10 @@ export class ApiClient {
     return this.sanitizer.sanitize(data);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async request<T = any>(
     routeName: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     data?: any,
     params?: Record<string, unknown>,
     options?: AxiosRequestConfig
@@ -417,8 +475,10 @@ export class ApiClient {
     // Transform response using model if specified
     if (route.model && response.data) {
       if (Array.isArray(response.data)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return response.data.map((item: any) => new (route.model as any)().fromJSON(item)) as T;
       } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return new (route.model as any)().fromJSON(response.data) as T;
       }
     }
@@ -431,6 +491,7 @@ export class ApiClient {
     routeName: string,
     file: File,
     onProgress?: (progress: { loaded: number; total: number; percentage: number }) => void
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ): Promise<any> {
     const formData = new FormData();
     formData.append('file', file);

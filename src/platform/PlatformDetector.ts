@@ -3,7 +3,10 @@
  * Automatically detects the runtime platform and provides platform-specific utilities
  */
 
-export type Platform = 'web' | 'nextjs' | 'react-native' | 'expo' | 'electron' | 'node';
+import { Platform } from '../constants/enums.js';
+
+// Re-export Platform type for backward compatibility
+export type { Platform };
 
 // Type declarations for platform-specific globals
 declare global {
@@ -28,7 +31,7 @@ export class PlatformDetector {
   private static cache: Platform | null = null;
 
   /**
-   * Detects the current platform
+   * Detects the current platform using multiple reliable indicators
    * Uses caching to avoid repeated detection logic
    */
   static detect(): Platform {
@@ -36,68 +39,126 @@ export class PlatformDetector {
 
     // Server-side detection (Node.js environment)
     if (typeof window === 'undefined') {
-      // Check if Next.js
-      if (
-        process.env.NEXT_RUNTIME ||
-        process.env.__NEXT_PROCESSED_ENV ||
-        typeof __NEXT_DATA__ !== 'undefined'
-      ) {
-        this.cache = 'nextjs';
-        return 'nextjs';
-      }
-      
-      // Default to Node.js for server-side
-      this.cache = 'node';
-      return 'node';
+      this.cache = this.detectServerPlatform();
+      return this.cache;
     }
 
-    // Client-side detection
-    const win = window as any;
+    // Client-side detection with fallback chain
+    this.cache = this.detectClientPlatform();
+    return this.cache;
+  }
 
-    // Electron detection
-    if (
-      win.electron ||
-      win.process?.type === 'renderer' ||
-      navigator.userAgent.includes('Electron')
-    ) {
-      this.cache = 'electron';
-      return 'electron';
+  /**
+   * Detect platform on server-side
+   */
+  private static detectServerPlatform(): Platform {
+    // Next.js server detection
+    if (process.env.NEXT_RUNTIME ||
+        process.env.__NEXT_PROCESSED_ENV ||
+        typeof __NEXT_DATA__ !== 'undefined') {
+      return Platform.NEXT_JS;
+    }
+    
+    // Default to Node.js for server-side
+    return Platform.NODE;
+  }
+
+  /**
+   * Detect platform on client-side using multiple indicators
+   */
+  private static detectClientPlatform(): Platform {
+    // Electron detection (most specific first)
+    if (this.isElectron()) {
+      return Platform.ELECTRON;
     }
 
     // Expo detection
-    if (
-      win.expo ||
-      win.ExpoModules ||
-      win.Expo ||
-      typeof expo !== 'undefined'
-    ) {
-      this.cache = 'expo';
-      return 'expo';
+    if (this.isExpo()) {
+      return Platform.EXPO;
     }
 
     // React Native detection
-    if (
-      win.ReactNativeWebView ||
-      navigator.product === 'ReactNative'
-    ) {
-      this.cache = 'react-native';
-      return 'react-native';
+    if (this.isReactNative()) {
+      return Platform.REACT_NATIVE;
     }
 
     // Next.js client-side detection
-    if (
-      win.__NEXT_DATA__ ||
-      win.next ||
-      win.__BUILD_MANIFEST ||
-      document.getElementById('__next')
-    ) {
-      this.cache = 'nextjs';
-      return 'nextjs';
+    if (this.isNextJs()) {
+      return Platform.NEXT_JS;
     }
 
     // Default to web for browser environments
-    this.cache = 'web';
-    return 'web';
+    return Platform.WEB;
+  }
+
+  /**
+   * Check if running in Electron
+   */
+  private static isElectron(): boolean {
+    const win = window as any;
+    
+    // Multiple indicators for Electron
+    return !!(
+      win.electron ||
+      win.process?.type === 'renderer' ||
+      navigator.userAgent.includes('Electron') ||
+      (typeof process !== 'undefined' && process.versions?.electron)
+    );
+  }
+
+  /**
+   * Check if running in Expo
+   */
+  private static isExpo(): boolean {
+    const win = window as any;
+    
+    // Multiple indicators for Expo
+    return !!(
+      win.expo ||
+      win.ExpoModules ||
+      win.Expo ||
+      typeof expo !== 'undefined' ||
+      // Check for Expo Router
+      win.ExpoRouter ||
+      // Check for Expo constants
+      (win.Constants && win.Constants.expoVersion)
+    );
+  }
+
+  /**
+   * Check if running in React Native
+   */
+  private static isReactNative(): boolean {
+    const win = window as any;
+    
+    // Multiple indicators for React Native
+    return !!(
+      win.ReactNativeWebView ||
+      navigator.product === 'ReactNative' ||
+      // Check for RN-specific globals
+      win.__fbBatchedBridge ||
+      // Check for RN dimensions
+      (win.Dimensions && typeof win.Dimensions.get === 'function')
+    );
+  }
+
+  /**
+   * Check if running in Next.js
+   */
+  private static isNextJs(): boolean {
+    const win = window as any;
+    
+    // Multiple indicators for Next.js
+    return !!(
+      win.__NEXT_DATA__ ||
+      win.next ||
+      win.__BUILD_MANIFEST ||
+      document.getElementById('__next') ||
+      // Check for Next.js router
+      win.next?.router ||
+      // Check for Next.js head
+      win.next?.Head
+    );
   }
 
   /**

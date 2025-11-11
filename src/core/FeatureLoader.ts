@@ -38,16 +38,27 @@ export interface FeatureFlags {
  * Lazy-loaded feature modules
  */
 export interface FeatureModules {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   AuthManager?: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   CacheManager?: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   WebSocketManager?: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   UploadManager?: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   PluginManager?: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   DevTools?: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   SSRManager?: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   OfflineManager?: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   StorageAdapter?: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   Logger?: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   PerformanceMonitor?: any;
 }
 
@@ -70,6 +81,7 @@ export class FeatureLoader {
   private features: FeatureFlags;
   private modules: FeatureModules = {};
   private loadedModules = new Set<string>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private loadPromises = new Map<string, Promise<any>>();
   private autoDetect: boolean;
   private lazy: boolean;
@@ -90,6 +102,7 @@ export class FeatureLoader {
    * Analyze configuration to determine required features
    */
   private analyzeFeatures(): FeatureFlags {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const config = this.config as any;
     const platform = this.autoDetect ? PlatformDetector.detect() : null;
     const capabilities = platform 
@@ -192,7 +205,7 @@ export class FeatureLoader {
    */
   public getEnabledFeatures(): string[] {
     return Object.entries(this.features)
-      .filter(([_, enabled]) => enabled)
+      .filter(([, enabled]) => enabled)
       .map(([feature]) => feature);
   }
 
@@ -210,6 +223,7 @@ export class FeatureLoader {
   /**
    * Load a specific feature module
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   public async loadFeature(feature: string): Promise<any> {
     // Return cached module if already loaded
     if (this.loadedModules.has(feature)) {
@@ -240,6 +254,7 @@ export class FeatureLoader {
   /**
    * Dynamically import feature module
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async loadFeatureModule(feature: string): Promise<any> {
     if (!this.lazy) {
       // If lazy loading is disabled, import synchronously
@@ -290,29 +305,39 @@ export class FeatureLoader {
   /**
    * Synchronous feature loading (when lazy loading is disabled)
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private loadFeatureSync(feature: string): any {
     // Note: This requires all features to be bundled
     // Used for testing or when bundle size is not a concern
     try {
       switch (feature) {
         case 'auth':
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
           return require('../auth');
         case 'cache':
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
           return require('../cache');
         case 'websocket':
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
           return require('../websocket');
         case 'upload':
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
           return require('../upload');
         case 'plugins':
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
           return require('../plugins');
         case 'devtools':
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
           return require('../devtools');
         case 'ssr':
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
           return require('../ssr');
         case 'storage':
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
           return require('../platform/adapters/storage');
         case 'logger':
         case 'performance':
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
           return require('../debug');
         default:
           throw new MinderConfigError(`Unknown feature: ${feature}`, 'UNKNOWN_FEATURE');
@@ -422,6 +447,7 @@ export class FeatureLoader {
    * Create a minimal feature loader (only core features)
    */
   public static createMinimal(config: MinderConfig): FeatureLoader {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const minimalConfig: any = { ...config };
     // Disable all optional features
     delete minimalConfig.auth;
@@ -442,14 +468,21 @@ export class FeatureLoader {
    * Create a full-featured loader (all features enabled)
    */
   public static createFull(config: MinderConfig): FeatureLoader {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const fullConfig: any = { ...config };
     
     // Enable all features
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     fullConfig.auth = { enabled: true, ...((config as any).auth || {}) };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     fullConfig.cache = { enabled: true, ...((config as any).cache || {}) };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     fullConfig.websocket = { enabled: true, ...((config as any).websocket || {}) };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     fullConfig.plugins = { enabled: true, ...((config as any).plugins || {}) };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     fullConfig.devtools = { enabled: true, ...((config as any).devtools || {}) };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     fullConfig.ssr = { enabled: true, ...((config as any).ssr || {}) };
     
     return new FeatureLoader({

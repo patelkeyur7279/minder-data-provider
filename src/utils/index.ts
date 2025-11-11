@@ -1,20 +1,18 @@
 // Utility functions for the package
 
-// Export security utilities
-export * from './security.js';
+// Export route validation utilities
+export { validateRoutes } from './routeValidation.js';
 
 // Export performance utilities
 export * from './performance.js';
 
-// Export Logger
-export * from './Logger.js';
+// Export Logger class (but not the default instance)
+export { Logger, LogLevel, createLogger } from './Logger.js';
 
-// Generate configuration from Next.js API routes
-export function generateConfigFromApiRoutes(apiDir: string): any {
-  // This would scan the API directory and generate routes automatically
-  // Implementation would depend on the file system structure
-  return {};
-}
+// NOTE: generateConfigFromApiRoutes and RouteProcessor are Node.js only
+// and should not be statically exported to avoid including fs/path modules
+// in browser bundles. Use the Node.js platform entry point instead:
+// import { RouteProcessor, generateConfigFromApiRoutes } from 'minder-data-provider/platforms/node';
 
 // CORS helper
 export function createCorsConfig(options?: {

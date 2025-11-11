@@ -20,8 +20,10 @@ export class ExpoStorageAdapter extends BaseStorageAdapter {
     
     try {
       // Dynamic import for Expo SecureStore
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       this.SecureStore = require('expo-secure-store');
-    } catch (error) {
+    } catch {
+       
       logger.warn('expo-secure-store not found. Please install it as a peer dependency.');
       this.SecureStore = null;
     }

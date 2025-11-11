@@ -3,7 +3,13 @@
 // ✅ CRITICAL: Import React hooks directly to avoid bundling issues
 // When using namespace imports (import * as React), bundlers can sometimes
 // create invalid references causing "Cannot read properties of null" errors
-import { createContext, useContext, useMemo, useState, Suspense } from "react";
+import React, {
+  createContext,
+  useContext,
+  useMemo,
+  useState,
+  Suspense,
+} from "react";
 import type { ReactNode, ComponentType } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { DehydratedState } from "@tanstack/react-query";
@@ -28,6 +34,9 @@ import { WebSocketManager } from "./WebSocketManager.js";
 import { EnvironmentManager } from "./EnvironmentManager.js";
 import { ProxyManager } from "./ProxyManager.js";
 import { DebugManager } from "../debug/DebugManager.js";
+import { DevTools } from "../devtools/DevTools.js";
+import { DebugLogType } from "../constants/enums.js";
+import { setGlobalMinderConfig } from "./globalConfig.js";
 
 interface MinderContextValue {
   config: MinderConfig;
@@ -100,7 +109,7 @@ export function MinderDataProvider({
     if (debugEnabled) {
       debugManager = new DebugManager(true);
       debugManager.log(
-        "api",
+        DebugLogType.API,
         "Minder Data Provider initialized with debug mode"
       );
     }
@@ -186,6 +195,7 @@ export function MinderDataProvider({
 
     // Create Redux store
     const store = configureStore({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       reducer: slices.reducers as any,
       middleware: (getDefaultMiddleware) =>
         getDefaultMiddleware({
@@ -225,6 +235,11 @@ export function MinderDataProvider({
     };
   }, [config, queryClientRef]);
 
+  // Set global config for standalone hook usage
+  useMemo(() => {
+    setGlobalMinderConfig(contextValue.config);
+  }, [contextValue.config]);
+
   return (
     <MinderContext.Provider value={contextValue}>
       <ReduxProvider store={contextValue.store}>
@@ -243,6 +258,11 @@ export function MinderDataProvider({
             contextValue.ReactQueryDevtools && (
               <contextValue.ReactQueryDevtools initialIsOpen={false} />
             )}
+
+          {/* Custom DevTools */}
+          {contextValue.config.debug?.devTools && (
+            <DevTools config={contextValue.config.debug} />
+          )}
         </QueryClientProvider>
       </ReduxProvider>
     </MinderContext.Provider>

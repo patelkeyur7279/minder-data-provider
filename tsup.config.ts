@@ -5,6 +5,9 @@ export default defineConfig({
     // Main entry (universal)
     index: 'src/index.ts',
     
+    // Hook-only entry (smaller bundle)
+    hook: 'src/hook/index.ts',
+    
     // Platform-specific entry points
     'platforms/web': 'src/platforms/web.ts',
     'platforms/nextjs': 'src/platforms/nextjs.ts',
@@ -22,6 +25,7 @@ export default defineConfig({
     'debug/index': 'src/debug/index.ts',
     'config/index': 'src/config/index.ts',
     'ssr/index': 'src/ssr/index.ts',
+    'logger/index': 'src/logger/index.ts',
   },
   format: ['cjs', 'esm'],
   dts: true,
@@ -49,12 +53,14 @@ export default defineConfig({
     'react-redux',
     'axios',
     'immer',
-    'dompurify'
+    'dompurify',
+    // Node.js built-ins that should not be in browser bundles
+    'fs',
+    'path',
+    'fs/promises'
   ],
   
   esbuildOptions(options) {
-    options.banner = {
-      js: '"use client";', // Mark as client component for Next.js
-    };
+    // Removed global "use client" banner - should only be in specific files that need it
   },
 });

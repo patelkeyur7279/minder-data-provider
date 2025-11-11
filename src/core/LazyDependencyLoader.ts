@@ -42,7 +42,9 @@ export interface LoadingMetrics {
  */
 export class LazyDependencyLoader {
   private config: MinderConfig;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private loadedModules: Map<string, any> = new Map();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private loadPromises: Map<string, Promise<any>> = new Map();
   private loadTimes: Map<string, number> = new Map(); // NEW: Track load times
   private logger: Logger;
@@ -98,6 +100,7 @@ export class LazyDependencyLoader {
   /**
    * Load Immer only if optimistic updates enabled
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async loadImmer(): Promise<any> {
     const hasOptimistic = Object.values(this.config.routes).some(
       (route) => route.optimistic
@@ -202,6 +205,7 @@ export class LazyDependencyLoader {
    * Called only for features that are definitely used
    */
   async preloadCritical() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const promises: Promise<any>[] = [];
 
     // Always load these (small, always needed)
