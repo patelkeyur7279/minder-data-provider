@@ -1,0 +1,109 @@
+{
+  "timestamp": "2025-11-11T15:10:06.191Z",
+  "presets": {
+    "minimal": {
+      "name": "Minimal (CRUD Only)",
+      "description": "Basic CRUD operations with TanStack Query",
+      "modules": [
+        "crud/index"
+      ],
+      "claimed": "45KB",
+      "actual": "5.06KB",
+      "actualBytes": 5181,
+      "files": [
+        {
+          "module": "crud/index",
+          "size": "5.06KB",
+          "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/crud/index.mjs"
+        }
+      ]
+    },
+    "standard": {
+      "name": "Standard (Production SaaS)",
+      "description": "CRUD + Auth + Cache + Security",
+      "modules": [
+        "crud/index",
+        "auth/index",
+        "cache/index"
+      ],
+      "claimed": "90KB",
+      "actual": "25.83KB",
+      "actualBytes": 26450,
+      "files": [
+        {
+          "module": "crud/index",
+          "size": "5.06KB",
+          "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/crud/index.mjs"
+        },
+        {
+          "module": "auth/index",
+          "size": "14.35KB",
+          "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/auth/index.mjs"
+        },
+        {
+          "module": "cache/index",
+          "size": "6.42KB",
+          "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/cache/index.mjs"
+        }
+      ]
+    },
+    "advanced": {
+      "name": "Advanced (Enterprise)",
+      "description": "Standard + Offline + SSR + WebSocket",
+      "modules": [
+        "crud/index",
+        "auth/index",
+        "cache/index",
+        "websocket/index",
+        "ssr/index"
+      ],
+      "claimed": "120KB",
+      "actual": "32.38KB",
+      "actualBytes": 33157,
+      "files": [
+        {
+          "module": "crud/index",
+          "size": "5.06KB",
+          "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/crud/index.mjs"
+        },
+        {
+          "module": "auth/index",
+          "size": "14.35KB",
+          "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/auth/index.mjs"
+        },
+        {
+          "module": "cache/index",
+          "size": "6.42KB",
+          "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/cache/index.mjs"
+        },
+        {
+          "module": "websocket/index",
+          "size": "4.00KB",
+          "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/websocket/index.mjs"
+        },
+        {
+          "module": "ssr/index",
+          "size": "2.55KB",
+          "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/ssr/index.mjs"
+        }
+      ]
+    },
+    "enterprise": {
+      "name": "Enterprise (All Features)",
+      "description": "All features including DevTools",
+      "modules": [
+        "index"
+      ],
+      "claimed": "150KB",
+      "actual": "156.17KB",
+      "actualBytes": 159918,
+      "files": [
+        {
+          "module": "index",
+          "size": "156.17KB",
+          "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/index.mjs"
+        }
+      ]
+    }
+  }
+}

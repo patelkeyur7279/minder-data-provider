@@ -30,6 +30,57 @@ export * from '../ssr/index.js';
 // Debug
 export { DebugManager } from '../debug/index.js';
 
+// Route processing (Node.js only)
+export { RouteProcessor } from '../utils/routeProcessor.js';
+
+// Generate configuration from Next.js API routes
+export async function generateConfigFromApiRoutes(
+  apiDir: string,
+  options?: {
+    framework?: 'nextjs' | 'express' | 'fastify' | 'custom';
+    baseUrl?: string;
+    includeDynamic?: boolean;
+  }
+): Promise<any> {
+  // Dynamic import to avoid circular dependencies
+  let RouteProcessor: any;
+  try {
+    RouteProcessor = (await import('../utils/routeProcessor.js')).RouteProcessor;
+  } catch (error) {
+    // In test environments that don't support dynamic imports, try static import
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const routeProcessorModule = require('../utils/routeProcessor.js');
+    RouteProcessor = routeProcessorModule.RouteProcessor;
+  }
+
+  const scanOptions = {
+    baseDir: apiDir,
+    framework: options?.framework || 'nextjs',
+    baseUrl: options?.baseUrl,
+    includeDynamic: options?.includeDynamic ?? true,
+    extensions: ['.ts', '.js', '.tsx', '.jsx']
+  };
+
+  const result = await RouteProcessor.generateFromDirectory(scanOptions);
+
+  if (result.errors.length > 0) {
+    console.warn('Route processing errors:', result.errors);
+  }
+
+  if (result.warnings.length > 0) {
+    console.warn('Route processing warnings:', result.warnings);
+  }
+
+  return {
+    routes: result.routes,
+    processing: {
+      errors: result.errors,
+      warnings: result.warnings,
+      routeCount: Object.keys(result.routes).length
+    }
+  };
+}
+
 // Core types
 export * from '../core/types.js';
 

@@ -1,6 +1,7 @@
 import { QueryClient } from '@tanstack/react-query';
 import type { Query, QueryState } from '@tanstack/react-query';
 import type { DebugManager } from '../debug/DebugManager.js';
+import { DebugLogType } from '../constants/enums.js';
 
 export class CacheManager {
   private queryClient: QueryClient;
@@ -14,6 +15,7 @@ export class CacheManager {
   }
 
   // Get cached data for a specific query
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getCachedData<T = any>(queryKey: string | string[]): T | undefined {
     const key = Array.isArray(queryKey) ? queryKey : [queryKey];
     const data = this.queryClient.getQueryData<T>(key);
@@ -21,7 +23,7 @@ export class CacheManager {
     if (this.debugManager && this.enableLogs) {
       const emoji = data ? '✅' : '❌';
       const status = data ? 'HIT' : 'MISS';
-      this.debugManager.log('cache', `${emoji} CACHE ${status} ${JSON.stringify(key)}`, {
+      this.debugManager.log(DebugLogType.CACHE, `${emoji} CACHE ${status} ${JSON.stringify(key)}`, {
         queryKey: key,
         hasData: !!data,
         dataSize: data ? JSON.stringify(data).length : 0,
@@ -32,12 +34,13 @@ export class CacheManager {
   }
 
   // Set cached data for a specific query
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   setCachedData<T = any>(queryKey: string | string[], data: T): void {
     const key = Array.isArray(queryKey) ? queryKey : [queryKey];
     this.queryClient.setQueryData<T>(key, data);
     
     if (this.debugManager && this.enableLogs) {
-      this.debugManager.log('cache', `💾 CACHE SET ${JSON.stringify(key)}`, {
+      this.debugManager.log(DebugLogType.CACHE, `💾 CACHE SET ${JSON.stringify(key)}`, {
         queryKey: key,
         dataSize: JSON.stringify(data).length,
       });
@@ -48,7 +51,7 @@ export class CacheManager {
   invalidateQueries(queryKey?: string | string[]): Promise<void> {
     if (this.debugManager && this.enableLogs) {
       const keyStr = queryKey ? JSON.stringify(Array.isArray(queryKey) ? queryKey : [queryKey]) : 'ALL';
-      this.debugManager.log('cache', `🔄 CACHE INVALIDATE ${keyStr}`, { queryKey });
+      this.debugManager.log(DebugLogType.CACHE, `🔄 CACHE INVALIDATE ${keyStr}`, { queryKey });
     }
     
     if (queryKey) {
@@ -64,7 +67,7 @@ export class CacheManager {
     this.queryClient.removeQueries({ queryKey: key });
     
     if (this.debugManager && this.enableLogs) {
-      this.debugManager.log('cache', `🗑️ CACHE REMOVE ${JSON.stringify(key)}`, { queryKey: key });
+      this.debugManager.log(DebugLogType.CACHE, `🗑️ CACHE REMOVE ${JSON.stringify(key)}`, { queryKey: key });
     }
   }
 
@@ -75,7 +78,7 @@ export class CacheManager {
     } else {
       this.queryClient.clear();
       if (this.debugManager && this.enableLogs) {
-        this.debugManager.log('cache', '🗑️ CACHE CLEAR ALL', {});
+        this.debugManager.log(DebugLogType.CACHE, '🗑️ CACHE CLEAR ALL', {});
       }
     }
   }
@@ -94,7 +97,7 @@ export class CacheManager {
     const key = Array.isArray(queryKey) ? queryKey : [queryKey];
     
     if (this.debugManager && this.enableLogs) {
-      this.debugManager.log('cache', `⏬ CACHE PREFETCH ${JSON.stringify(key)}`, {
+      this.debugManager.log(DebugLogType.CACHE, `⏬ CACHE PREFETCH ${JSON.stringify(key)}`, {
         queryKey: key,
         staleTime: options?.staleTime,
         gcTime: options?.gcTime,

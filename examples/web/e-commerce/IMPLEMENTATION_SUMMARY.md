@@ -339,7 +339,7 @@ npm run preview
 
 ### Related Examples:
 
-- [Admin Dashboard](../admin-dashboard/) - Full CRUD with `useOneTouchCrud()`
+- [Admin Dashboard](../admin-dashboard/) - Full CRUD with `useMinder()`
 - [Social Feed](../social-feed/) - Infinite scroll
 - [Search App](../search-app/) - Advanced search patterns
 

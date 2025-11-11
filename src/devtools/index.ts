@@ -4,4 +4,4 @@
  */
 
 export { DevTools, DevToolsEvents } from './DevTools';
-export type { DevToolsConfig } from './DevTools';
+export type { DevToolsConfig } from './types';

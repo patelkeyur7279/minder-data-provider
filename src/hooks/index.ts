@@ -1,15 +1,25 @@
+"use client";
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSelector, useDispatch } from 'react-redux';
 import { useMinderContext } from '../core/MinderDataProvider.js';
 import type { CrudOperations, UploadProgress, MediaUploadResult } from '../core/types.js';
-import { useState, useCallback, useEffect } from 'react';
 
 // Main hook for CRUD operations
 /**
+ * @deprecated Use useMinder instead - it now provides all CRUD operations
  * Hook for CRUD operations with automatic or manual data fetching
+ * Supports parameter replacement for dynamic routes like :id
  * @param routeName - The route name for API endpoint
  * @param options - Configuration options for the hook
  * @returns CrudOperations object with data, loading states, errors and operations
+ * 
+ * @example
+ * // ✅ RECOMMENDED: Use useMinder instead
+ * const { items, operations } = useMinder('posts');
+ * 
+ * // ❌ DEPRECATED: This still works but useMinder is better
+ * const { data, operations } = useOneTouchCrud('posts');
  */
 export function useOneTouchCrud<T = any>(
   routeName: string,
@@ -20,6 +30,10 @@ export function useOneTouchCrud<T = any>(
      */
     autoFetch?: boolean;
     /**
+     * Parameters for initial fetch (supports :id replacement)
+     */
+    params?: Record<string, any>;
+    /**
      * Enable/disable automatic background refetching
      */
     enableAutoRefetch?: boolean;
@@ -29,6 +43,9 @@ export function useOneTouchCrud<T = any>(
     cacheTime?: number;
   } = {}
 ): CrudOperations<T> {
+  const React = require('react');
+  const { useCallback: useCallbackLocal } = React as typeof import('react');
+  const { useCallback } = require('react');
   const { apiClient, cacheManager } = useMinderContext();
   const queryClient = useQueryClient();
 
@@ -39,8 +56,8 @@ export function useOneTouchCrud<T = any>(
     error: fetchError,
     refetch
   } = useQuery({
-    queryKey: [routeName],
-    queryFn: () => apiClient.request<T[]>(routeName),  // ✅ Request T[] instead of T
+    queryKey: [routeName, options.params], // Include params in cache key
+    queryFn: () => apiClient.request<T[]>(routeName, undefined, options.params), // Pass params for :id replacement
     enabled: options.autoFetch !== false, // Only fetch if autoFetch is not explicitly false
     staleTime: options.cacheTime || 0,
     refetchOnWindowFocus: options.enableAutoRefetch,
@@ -74,23 +91,23 @@ export function useOneTouchCrud<T = any>(
 
   const operations = {
     // Manual fetch function that uses refetch from useQuery
-    fetch: useCallback(async () => {
+    fetch: useCallbackLocal(async () => {
       const result = await refetch();
       return (result.data || []) as T[];  // ✅ Return T[] instead of T
     }, [refetch]),
     // Create new item
-    create: useCallback((item: Partial<T>) => createMutation.mutateAsync(item), [createMutation]),
+    create: useCallbackLocal((item: Partial<T>) => createMutation.mutateAsync(item), [createMutation]),
     // Update existing item
-    update: useCallback(
+    update: useCallbackLocal(
       (id: string | number, item: Partial<T>) => updateMutation.mutateAsync({ id, item }),
       [updateMutation]
     ),
     // Delete item
-    delete: useCallback((id: string | number) => deleteMutation.mutateAsync(id), [deleteMutation]),
+    delete: useCallbackLocal((id: string | number) => deleteMutation.mutateAsync(id), [deleteMutation]),
     // Force refresh data
-    refresh: useCallback(() => queryClient.invalidateQueries({ queryKey: [routeName] }), [queryClient, routeName]),
+    refresh: useCallbackLocal(() => queryClient.invalidateQueries({ queryKey: [routeName] }), [queryClient, routeName]),
     // Clear cached data
-    clear: useCallback(() => cacheManager.clearCache(routeName), [cacheManager, routeName]),
+    clear: useCallbackLocal(() => cacheManager.clearCache(routeName), [cacheManager, routeName]),
   };
 
   return {
@@ -170,6 +187,8 @@ export function useReduxSlice(routeName: string) {
 
 // Current user hook
 export function useCurrentUser() {
+  const React = require('react');
+  const { useState, useEffect } = React as typeof import('react');
   const { authManager } = useMinderContext();
   const [user, setUser] = useState<any>(null);
 
@@ -198,6 +217,8 @@ export function useCurrentUser() {
 
 // Media upload hook
 export function useMediaUpload(routeName: string) {
+  const React = require('react');
+  const { useState, useCallback } = React as typeof import('react');
   const { apiClient } = useMinderContext();
   const [progress, setProgress] = useState<UploadProgress>({ loaded: 0, total: 0, percentage: 0 });
 
@@ -243,6 +264,8 @@ export function useWebSocket() {
 
 // UI State hook
 export function useUIState() {
+  const React = require('react');
+  const { useState, useCallback } = React as typeof import('react');
   const [uiState, setUIState] = useState({
     modals: {} as Record<string, boolean>,
     notifications: [] as any[],
@@ -250,35 +273,35 @@ export function useUIState() {
   });
 
   const showModal = useCallback((modalName: string) => {
-    setUIState(prev => ({
+    setUIState((prev: any) => ({
       ...prev,
       modals: { ...prev.modals, [modalName]: true },
     }));
   }, []);
 
   const hideModal = useCallback((modalName: string) => {
-    setUIState(prev => ({
+    setUIState((prev: any) => ({
       ...prev,
       modals: { ...prev.modals, [modalName]: false },
     }));
   }, []);
 
   const addNotification = useCallback((notification: any) => {
-    setUIState(prev => ({
+    setUIState((prev: any) => ({
       ...prev,
       notifications: [...prev.notifications, { ...notification, id: Date.now() }],
     }));
   }, []);
 
   const removeNotification = useCallback((id: string | number) => {
-    setUIState(prev => ({
+    setUIState((prev: any) => ({
       ...prev,
-      notifications: prev.notifications.filter(n => n.id !== id),
+      notifications: prev.notifications.filter((n: any) => n.id !== id),
     }));
   }, []);
 
   const setLoading = useCallback((key: string, loading: boolean) => {
-    setUIState(prev => ({
+    setUIState((prev: any) => ({
       ...prev,
       loading: { ...prev.loading, [key]: loading },
     }));
@@ -297,3 +320,10 @@ export function useUIState() {
 export { useConfiguration } from './useConfiguration.js';
 export { useMinder } from './useMinder.js';
 export type { UseMinderOptions, UseMinderReturn } from './useMinder.js';
+export { usePaginatedMinder } from './usePaginatedMinder.js';
+export type { 
+  UsePaginatedMinderOptions, 
+  UsePaginatedMinderReturn,
+  PaginationConfig,
+  PageData,
+} from './usePaginatedMinder.js';

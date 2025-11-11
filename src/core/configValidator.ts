@@ -1,5 +1,6 @@
 import type { MinderConfig } from './types.js';
 import type { ConfigValidationResult, ValidationOptions } from './config.types.js';
+import { validateRoutes } from '../utils/routeValidation.js';
 
 /**
  * Validates configuration and provides helpful error messages
@@ -26,14 +27,78 @@ export function validateConfig(
 
   // Route validation
   if (options.validateRoutes) {
+    // Use route validation for comprehensive validation
+    const routeValidation = validateRoutes(config.routes || {});
+
+    errors.push(...routeValidation.errors);
+    warnings.push(...routeValidation.warnings);
+
+    // Additional route-specific validations
     Object.entries(config.routes || {}).forEach(([key, route]) => {
-      if (!route.method) {
-        errors.push(`Route "${key}" is missing method`);
+      // Check for URL parameter consistency
+      const urlParams = route.url.match(/:(\w+)/g) || [];
+      if (urlParams.length > 0) {
+        // Ensure route name reflects parameters
+        const hasParamInName = urlParams.some(param => key.includes(param.slice(1)));
+        if (!hasParamInName && urlParams.length > 0) {
+          warnings.push(`Route "${key}" has URL parameters but name doesn't reflect them. Consider renaming to include parameter names.`);
+        }
+
+        // Check for common parameter naming issues
+        const invalidParams = urlParams.filter(param => !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(param.slice(1)));
+        if (invalidParams.length > 0) {
+          errors.push(`Route "${key}" has invalid parameter names: ${invalidParams.join(', ')}. Parameters must match /^[a-zA-Z_][a-zA-Z0-9_]*$/.`);
+        }
       }
-      if (!route.url) {
-        errors.push(`Route "${key}" is missing url`);
+
+      // Method-specific validations
+      if (route.method === 'GET' && route.url.includes(':id')) {
+        warnings.push(`Route "${key}" uses GET with ID parameter. Consider if this should be a different method or if the parameter is optional.`);
+      }
+
+      // Timeout consistency check
+      if (route.timeout && config.performance?.timeout && route.timeout > config.performance.timeout * 2) {
+        warnings.push(`Route "${key}" timeout (${route.timeout}ms) is much higher than global timeout (${config.performance.timeout}ms).`);
+      }
+
+      // Header validation
+      if (route.headers) {
+        const securityHeaders = ['authorization', 'x-api-key', 'x-csrf-token'];
+        const hasSecurityHeaders = Object.keys(route.headers).some(header =>
+          securityHeaders.includes(header.toLowerCase())
+        );
+
+        if (hasSecurityHeaders && !config.security?.headers) {
+          warnings.push(`Route "${key}" defines security headers but global security headers are not configured.`);
+        }
+      }
+
+      // Model validation
+      if (route.model) {
+        // Check if model is a valid constructor
+        if (typeof route.model !== 'function' || !route.model.prototype) {
+          errors.push(`Route "${key}" model must be a valid class constructor.`);
+        }
       }
     });
+
+    // Cross-route validations
+    const routes = Object.entries(config.routes || {});
+    const urls = routes.map(([_, route]) => route.url);
+    const duplicateUrls = urls.filter((url, index) => urls.indexOf(url) !== index);
+
+    if (duplicateUrls.length > 0) {
+      warnings.push(`Duplicate URLs found across routes: ${[...new Set(duplicateUrls)].join(', ')}. Consider using different HTTP methods or URL patterns.`);
+    }
+
+    // REST API pattern validation
+    const restPatterns = routes.filter(([key]) =>
+      /^(get|create|update|delete|list|fetch)/.test(key.toLowerCase())
+    );
+
+    if (restPatterns.length > 0 && restPatterns.length < routes.length * 0.5) {
+      warnings.push('Mixed naming conventions detected. Consider using consistent REST API naming patterns.');
+    }
   }
 
   // Security validation

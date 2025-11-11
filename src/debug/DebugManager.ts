@@ -1,4 +1,5 @@
 import { Logger, LogLevel } from '../utils/Logger.js';
+import { DebugLogType } from '../constants/enums.js';
 
 // Extend Window interface for type-safe global access
 declare global {
@@ -8,7 +9,7 @@ declare global {
 }
 
 export interface DebugLogEntry {
-  type: 'api' | 'cache' | 'auth' | 'websocket';
+  type: DebugLogType;
   message: string;
   data?: unknown;
   timestamp: number;
@@ -31,7 +32,7 @@ export class DebugManager {
     }
   }
 
-  log(type: 'api' | 'cache' | 'auth' | 'websocket', message: string, data?: unknown): void {
+  log(type: DebugLogType, message: string, data?: unknown): void {
     if (!this.enabled) return;
     
     const logEntry: DebugLogEntry = {

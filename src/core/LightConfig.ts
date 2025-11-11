@@ -4,6 +4,7 @@
  */
 import { LightHttpClient } from './LightHttpClient.js';
 import type { MinderConfig, ApiRoute } from './types.js';
+import { HttpMethod, StorageType, LogLevel } from '../constants/enums.js';
 
 interface LightConfig {
   apiBaseUrl: string;
@@ -32,7 +33,7 @@ export function createLightConfig(config: LightConfig): MinderConfig & { validat
   // Convert simple route definitions to full config
   const routes = Object.entries(config.routes).reduce((acc, [key, url]) => {
     acc[key] = {
-      method: 'GET',
+      method: HttpMethod.GET,
       url,
       cache: config.features?.cache !== false,
     };
@@ -54,7 +55,7 @@ export function createLightConfig(config: LightConfig): MinderConfig & { validat
     routes,
     dynamic: isDevelopment(),
     auth: config.features?.auth ? {
-      storage: 'memory', // Secure default (was localStorage)
+      storage: StorageType.MEMORY, // Secure default (was localStorage)
       tokenKey: 'auth_token',
     } : undefined,
     cache: config.features?.cache ? {
@@ -70,7 +71,7 @@ export function createLightConfig(config: LightConfig): MinderConfig & { validat
     } : undefined,
     debug: config.features?.debug ? {
       enabled: true,
-      logLevel: 'error',
+      logLevel: LogLevel.ERROR,
     } : undefined,
     httpClient, // Use light HTTP client instead of Axios
   };
