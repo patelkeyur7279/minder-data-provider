@@ -11,7 +11,6 @@
  * @module FileUploadAdapter
  */
 
-import { Logger, LogLevel } from '../../../utils/Logger.js';
 import { MinderValidationError, MinderNetworkError } from '../../../errors/index.js';
 import type {
   FileMetadata,
@@ -29,8 +28,6 @@ export type {
   FileUploadConfig,
   FilePickerOptions,
 } from './types.js';
-
-const logger = new Logger('FileUploadAdapter', { level: LogLevel.WARN });
 
 /**
  * Abstract File Upload Adapter
@@ -187,8 +184,6 @@ export abstract class FileUploadAdapter {
 
     try {
       const startTime = Date.now();
-      let lastLoaded = 0;
-      let lastTime = startTime;
 
       const response = await fetch(this.config.url, {
         method: this.config.method,

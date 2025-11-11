@@ -1,7 +1,7 @@
 import { Logger, LogLevel } from '../utils/Logger.js';
 import type { ApiRoute } from './types.js';
-import corsMiddleware from './corsMiddleware.js';
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const logger = new Logger('ProxyManager', { level: LogLevel.DEBUG });
 
 export interface ProxyConfig {
@@ -23,6 +23,7 @@ export class ProxyManager {
     return this.config.enabled;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   public rewriteUrl(originalUrl: string, route?: ApiRoute): string {
     if (!this.config.enabled) {
       return originalUrl;
@@ -63,6 +64,7 @@ export class ProxyManager {
     return `
     // pages/api/minder-proxy/[...path].js
     const corsPath = require.resolve('./corsMiddleware');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const corsMiddleware = require(corsPath);
 
     export default async function handler(req, res) {

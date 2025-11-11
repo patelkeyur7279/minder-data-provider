@@ -61,8 +61,6 @@ export default defineConfig({
   ],
   
   esbuildOptions(options) {
-    options.banner = {
-      js: '"use client";', // Mark as client component for Next.js
-    };
+    // Removed global "use client" banner - should only be in specific files that need it
   },
 });

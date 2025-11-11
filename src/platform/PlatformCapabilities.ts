@@ -5,14 +5,23 @@
 
 import { Platform, PlatformDetector } from './PlatformDetector.js';
 import type {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   AuthCapabilities,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   CacheCapabilities,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   WebSocketCapabilities,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   CorsCapabilities,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   FileUploadCapabilities,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   OfflineCapabilities,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   PushNotificationCapabilities,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   SecurityCapabilities,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   DevToolsCapabilities,
   PlatformCapabilities,
 } from './capabilities/types.js';

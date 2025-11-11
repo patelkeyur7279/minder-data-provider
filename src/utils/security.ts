@@ -21,6 +21,7 @@ export function generateSecureCSRFToken(length: number = 32): string {
     return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
   } else if (typeof global !== 'undefined' && global.crypto) {
     // Node.js environment
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { randomBytes } = require('crypto');
     return randomBytes(length).toString('hex');
   } else {

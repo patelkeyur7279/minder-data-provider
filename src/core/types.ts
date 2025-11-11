@@ -7,6 +7,7 @@ import {
   SecurityLevel,
   NotificationType
 } from '../constants/enums.js';
+import type { OfflineConfig } from '../platform/offline/types.js';
 
 // Core configuration types
 export interface MinderConfig {
@@ -22,6 +23,7 @@ export interface MinderConfig {
   debug?: DebugConfig;
   security?: SecurityConfig;
   ssr?: SSRConfig;
+  offline?: OfflineConfig;
   environments?: Record<string, EnvironmentOverride>;
   defaultEnvironment?: string;
   autoDetectEnvironment?: boolean;

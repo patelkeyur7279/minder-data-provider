@@ -7,7 +7,9 @@ export class AuthManager {
   private memoryStorage: Map<string, string> = new Map();
   private debugManager?: DebugManager;
   private enableLogs: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private AsyncStorage: any = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private SecureStore: any = null;
 
   constructor(config?: AuthConfig, debugManager?: DebugManager, enableLogs: boolean = false) {
@@ -21,6 +23,7 @@ export class AuthManager {
     // Initialize platform-specific storage
     if (this.config.storage === StorageType.ASYNC_STORAGE) {
       try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         this.AsyncStorage = require('@react-native-async-storage/async-storage').default;
       } catch {
         console.warn('[AuthManager] AsyncStorage not available, falling back to memory storage');
@@ -28,9 +31,10 @@ export class AuthManager {
       }
     } else if (this.config.storage === StorageType.SECURE_STORE) {
       try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         this.SecureStore = require('expo-secure-store');
       } catch {
-        console.warn('[AuthManager] SecureStore not available, falling back to memory storage');
+        console.warn('[AuthManager] AsyncStorage not available, falling back to memory storage');
         this.config.storage = StorageType.MEMORY;
       }
     }

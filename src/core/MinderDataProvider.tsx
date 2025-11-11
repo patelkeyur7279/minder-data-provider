@@ -188,6 +188,7 @@ export function MinderDataProvider({
 
     // Create Redux store
     const store = configureStore({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       reducer: slices.reducers as any,
       middleware: (getDefaultMiddleware) =>
         getDefaultMiddleware({

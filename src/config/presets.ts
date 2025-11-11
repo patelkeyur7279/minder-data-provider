@@ -335,7 +335,7 @@ export function createConfigFromPreset(
  * Analyzes config to recommend best preset
  */
 export function detectPreset(config: Partial<MinderConfig>): ConfigPreset {
-  let score = {
+  const score = {
     minimal: 0,
     standard: 0,
     balanced: 0,
@@ -373,6 +373,7 @@ export function detectPreset(config: Partial<MinderConfig>): ConfigPreset {
   }
 
   // High cache size?
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if (config.cache && (config.cache as any).maxSize > 500) {
     score.advanced += 1;
     score.comprehensive += 1;
@@ -447,6 +448,7 @@ export function getPresetInfo(preset: ConfigPreset) {
 /**
  * Deep merge utility
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function deepMerge(target: any, source: any): any {
   const output = { ...target };
   
@@ -467,6 +469,7 @@ function deepMerge(target: any, source: any): any {
   return output;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function isObject(item: any): boolean {
   return item && typeof item === 'object' && !Array.isArray(item);
 }

@@ -339,18 +339,24 @@ Install with: npm install electron-store
     
     // Try to detect peer dependencies
     try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('@react-native-async-storage/async-storage');
       availableAdapters.push('NativeStorageAdapter');
+      // eslint-disable-next-line no-empty
     } catch {}
     
     try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('expo-secure-store');
       availableAdapters.push('ExpoStorageAdapter');
+      // eslint-disable-next-line no-empty
     } catch {}
     
     try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('electron-store');
       availableAdapters.push('ElectronStorageAdapter');
+      // eslint-disable-next-line no-empty
     } catch {}
     
     return {

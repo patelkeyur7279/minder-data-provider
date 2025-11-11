@@ -15,6 +15,7 @@ export class CacheManager {
   }
 
   // Get cached data for a specific query
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getCachedData<T = any>(queryKey: string | string[]): T | undefined {
     const key = Array.isArray(queryKey) ? queryKey : [queryKey];
     const data = this.queryClient.getQueryData<T>(key);
@@ -33,6 +34,7 @@ export class CacheManager {
   }
 
   // Set cached data for a specific query
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   setCachedData<T = any>(queryKey: string | string[], data: T): void {
     const key = Array.isArray(queryKey) ? queryKey : [queryKey];
     this.queryClient.setQueryData<T>(key, data);

@@ -33,6 +33,7 @@ export class ApiClient {
   private authManager: AuthManager;
   private proxyManager?: ProxyManager;
   private debugManager?: DebugManager;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private requestCache: Map<string, Promise<any>> = new Map();
   private csrfManager?: CSRFTokenManager;
   private rateLimiter?: RateLimiter;
@@ -243,6 +244,7 @@ export class ApiClient {
       const status = axiosError.response?.status || 0;
       const url = axiosError.config?.url;
       const method = axiosError.config?.method?.toUpperCase();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const responseData = axiosError.response?.data as any;
       const responseHeaders = axiosError.response?.headers as Record<string, string> | undefined;
       
@@ -270,11 +272,12 @@ export class ApiClient {
             responseData?.message || 'Permission denied'
           );
         
-        case 404:
+        case 404: {
           const notFoundMsg = responseData?.message || `Resource not found: ${method} ${url}`;
           throw new MinderNetworkError(notFoundMsg, 404, responseData, url, method);
+        }
         
-        case 405:
+        case 405: {
           // Check if this is a CORS preflight failed error
           if (method === 'OPTIONS') {
             const corsMsg = responseData?.message || 'CORS preflight request failed - server does not allow OPTIONS method';
@@ -282,23 +285,27 @@ export class ApiClient {
           }
           const methodMsg = responseData?.message || `Method not allowed: ${method} ${url}`;
           throw new MinderNetworkError(methodMsg, 405, responseData, url, method);
+        }
         
-        case 422:
+        case 422: {
           throw new MinderValidationError(
             responseData?.message || 'Validation failed',
             responseData?.errors
           );
+        }
         
-        case 429:
+        case 429: {
           const rateLimitMsg = responseData?.message || 'Too many requests - rate limit exceeded';
           throw new MinderNetworkError(rateLimitMsg, 429, responseData, url, method);
+        }
         
         case 500:
         case 502:
         case 503:
-        case 504:
+        case 504: {
           const serverMsg = responseData?.message || 'Server error - please try again later';
           throw new MinderNetworkError(serverMsg, status, responseData, url, method);
+        }
         
         default:
           throw new MinderNetworkError(
@@ -362,8 +369,10 @@ export class ApiClient {
     return this.sanitizer.sanitize(data);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async request<T = any>(
     routeName: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     data?: any,
     params?: Record<string, unknown>,
     options?: AxiosRequestConfig
@@ -466,8 +475,10 @@ export class ApiClient {
     // Transform response using model if specified
     if (route.model && response.data) {
       if (Array.isArray(response.data)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return response.data.map((item: any) => new (route.model as any)().fromJSON(item)) as T;
       } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return new (route.model as any)().fromJSON(response.data) as T;
       }
     }
@@ -480,6 +491,7 @@ export class ApiClient {
     routeName: string,
     file: File,
     onProgress?: (progress: { loaded: number; total: number; percentage: number }) => void
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ): Promise<any> {
     const formData = new FormData();
     formData.append('file', file);

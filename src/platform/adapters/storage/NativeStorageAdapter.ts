@@ -18,8 +18,10 @@ export class NativeStorageAdapter extends BaseStorageAdapter {
     
     try {
       // Dynamic import for React Native AsyncStorage
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       this.AsyncStorage = require('@react-native-async-storage/async-storage').default;
-    } catch (error) {
+    } catch {
+       
       logger.warn('@react-native-async-storage/async-storage not found. Please install it as a peer dependency.');
       this.AsyncStorage = null;
     }

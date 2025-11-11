@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * 🎯 useMinder - Unified React Hook for ALL Data Operations
  * 

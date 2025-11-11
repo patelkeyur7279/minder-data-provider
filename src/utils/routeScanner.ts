@@ -165,7 +165,6 @@ export class RouteScanner {
     relativePath: string
   ): Promise<RouteInfo[]> {
     const routes: RouteInfo[] = [];
-    const lines = content.split('\n');
 
     // Extract named exports (GET, POST, PUT, DELETE, etc.)
     const methodRegex = /^\s*export\s+(?:async\s+)?function\s+(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)/gm;
@@ -220,7 +219,6 @@ export class RouteScanner {
     relativePath: string
   ): Promise<RouteInfo[]> {
     const routes: RouteInfo[] = [];
-    const lines = content.split('\n');
 
     // Match router.method() calls
     const methodRegex = /(?:router|app)\.(get|post|put|delete|patch|head|options)\s*\(\s*['"`]([^'"`]+)['"`]/gi;
@@ -263,7 +261,6 @@ export class RouteScanner {
     relativePath: string
   ): Promise<RouteInfo[]> {
     const routes: RouteInfo[] = [];
-    const lines = content.split('\n');
 
     // Match fastify.route() or app.route() calls
     const routeRegex = /(?:fastify|app)\.route\s*\(\s*\{[^}]*method\s*:\s*['"`]([^'"`]+)['"`][^}]*url\s*:\s*['"`]([^'"`]+)['"`]/gi;
@@ -304,7 +301,6 @@ export class RouteScanner {
     relativePath: string
   ): Promise<RouteInfo[]> {
     const routes: RouteInfo[] = [];
-    const lines = content.split('\n');
 
     // Match @Get, @Post, etc. decorators
     const decoratorRegex = /@(Get|Post|Put|Delete|Patch|Head|Options)\s*\(\s*['"`]([^'"`]+)['"`]\s*\)/gi;
@@ -347,7 +343,6 @@ export class RouteScanner {
     relativePath: string
   ): Promise<RouteInfo[]> {
     const routes: RouteInfo[] = [];
-    const lines = content.split('\n');
 
     // Match router.method() calls (similar to Express)
     const methodRegex = /router\.(get|post|put|delete|patch|head|options)\s*\(\s*['"`]([^'"`]+)['"`]/gi;

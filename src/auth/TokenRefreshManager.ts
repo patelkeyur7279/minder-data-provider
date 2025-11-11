@@ -21,6 +21,7 @@ export interface JWTPayload {
   exp?: number; // Expiration timestamp (seconds since epoch)
   iat?: number; // Issued at timestamp
   sub?: string; // Subject (user ID)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any;
 }
 

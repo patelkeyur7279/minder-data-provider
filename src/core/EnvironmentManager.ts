@@ -1,4 +1,3 @@
-import { Logger, LogLevel } from '../utils/Logger.js';
 import type { MinderConfig, EnvironmentOverride } from './types.js';
 import { StorageType, HttpMethod } from '../constants/enums.js';
 import { MinderConfigError } from '../errors/index.js';
@@ -32,10 +31,12 @@ export class EnvironmentManager {
 
     // Server-side detection
     try {
-      const nodeEnv = (globalThis as any).process?.env?.NODE_ENV;
+      const nodeEnv = (globalThis as { process?: { env?: { NODE_ENV?: string } } }).process?.env?.NODE_ENV;
       if (nodeEnv === 'development') return 'development';
       if (nodeEnv === 'test') return 'test';
-    } catch {}
+    } catch {
+      // Ignore errors in non-Node.js environments
+    }
     return 'production';
   }
 

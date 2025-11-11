@@ -181,7 +181,7 @@ Web: Using basic online/offline detection
       // Fallback 2: Try a simple fetch request to detect connectivity
       try {
         // Try to fetch a small resource from a reliable CDN
-        const response = await fetch('https://www.google.com/favicon.ico', {
+        await fetch('https://www.google.com/favicon.ico', {
           method: 'HEAD',
           mode: 'no-cors',
           cache: 'no-cache',

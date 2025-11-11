@@ -1680,7 +1680,7 @@ import { QueryBuilder } from "minder-data-provider/query"; // ~12KB
 import type { MinderConfig } from "minder-data-provider";
 
 export const config: MinderConfig = {
-  apiBaseUrl: "https://api.example.com",
+  apiUrl: "https://api.example.com",
 
   routes: {
     users: {

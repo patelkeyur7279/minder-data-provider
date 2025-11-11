@@ -67,8 +67,6 @@ export class PlatformDetector {
    * Detect platform on client-side using multiple indicators
    */
   private static detectClientPlatform(): Platform {
-    const win = window as any;
-
     // Electron detection (most specific first)
     if (this.isElectron()) {
       return Platform.ELECTRON;
