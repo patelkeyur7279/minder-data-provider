@@ -12,50 +12,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 This release dramatically improves the `useMinder()` hook with 11 critical enhancements that make it work seamlessly with or without `MinderDataProvider`. All features now have intelligent fallbacks and work in any context.
 
 #### Global Configuration & Authentication
+
 - **Global Config Access** - `useMinder()` works without provider using `setGlobalMinderConfig()`
 - **Standalone Authentication** - New `GlobalAuthManager` with JWT parsing, expiry checking, and persistent storage
 - **Shared Auth State** - Authentication state synchronized across all hook instances globally
 
 #### Enhanced Developer Experience
+
 - **Intelligent Route Validation** - Helpful suggestions using Levenshtein distance (e.g., "Did you mean: posts, users?")
 - **Smart Parameter Replacement** - `replaceUrlParams()` works without provider context
 - **Detailed Error Messages** - Detects unreplaced `:param` placeholders with clear guidance
 
 #### Upload & Progress Tracking
+
 - **Shared Upload Progress** - New global `uploadProgressStore` synchronizes progress across all components
 - **Live Progress Updates** - Subscribe to upload progress changes with automatic notifications
 - **Multi-Component Sync** - All instances see identical upload progress in real-time
 
 #### Advanced Query Features
+
 - **Custom Query Keys** - Full control over React Query cache with `queryKey` option
 - **Infinite Scroll Support** - Complete `useInfiniteQuery` integration with bidirectional pagination
 - **Per-Hook Retry Config** - Override global retry settings per hook instance
 - **Cache Control API** - New `cache`, `staleTime`, `gcTime` options for fine-tuned caching
 
 #### Request Management
+
 - **Request Cancellation** - New `cancel()` method and `isCancelled` state to prevent race conditions
 - **Conditional Fetching** - Improved `enabled`/`autoFetch` handling with proper query skipping
 
 #### New Files Added
+
 - `src/auth/GlobalAuthManager.ts` - Standalone auth manager (176 lines)
 - `src/upload/uploadProgressStore.ts` - Shared upload state (93 lines)
 - `src/utils/routeHelpers.ts` - Route validation & helpers (104 lines)
 - `src/core/globalConfig.ts` - Global config management (55 lines)
 
 #### Enhanced APIs
+
 - `src/hooks/useMinder.ts` - 11 enhancements integrated (+250 lines)
 - `src/core/MinderDataProvider.tsx` - Auto-sets global config (+4 lines)
 - `src/index.ts` - Exports all new utilities (+35 lines)
 
 #### Test Coverage
+
 - **Enhancement Tests**: 42 tests validating all 11 fixes
 - **End-User Scenarios**: 28 tests covering 14 real-world use cases
 - **Total Tests**: 1,397 tests (100% passing)
 
 #### Breaking Changes
+
 **None** - This release is 100% backward compatible. All existing code continues to work without modifications.
 
 #### Migration Benefits
+
 - **From React Query**: Familiar API + auth/upload/websocket built-in
 - **From SWR**: Similar patterns + more features out of the box
 - **No Provider Needed**: Use `setGlobalMinderConfig()` for simple setups
