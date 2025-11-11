@@ -460,3 +460,6 @@ function getEnabledFeatures(config: Partial<MinderConfig>): string[] {
 
 // Re-export preset utilities for advanced users
 export { createConfigFromPreset, getPresetInfo, type ConfigPreset } from './presets.js';
+
+// Re-export core types that users might need when working with config
+export type { MinderConfig, ApiRoute, EnvironmentOverride } from '../core/types.js';

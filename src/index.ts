@@ -232,7 +232,9 @@ export type {
 } from './constants/enums.js';
 
 // ============================================================================
-// DEFAULT EXPORT
+// LOGGER EXPORTS
 // ============================================================================
 
-export { minder as default } from './core/minder.js';
+// Export logger for application logging
+export { defaultLogger, Logger, createLogger } from './utils/Logger.js';
+export type { LoggerConfig } from './utils/Logger.js';
