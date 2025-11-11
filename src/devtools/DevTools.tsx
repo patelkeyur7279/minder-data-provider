@@ -5,8 +5,8 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import { PerformanceMonitor } from "../utils/performance";
+import type { DebugConfig } from "../core/types.js";
 import type {
-  DevToolsConfig,
   NetworkRequest,
   CacheEntry,
   StateSnapshot,
@@ -32,18 +32,27 @@ declare global {
 /**
  * DevTools UI Component
  */
-export function DevTools({ config = {} }: { config?: DevToolsConfig }) {
+export function DevTools({ config }: { config?: DebugConfig }) {
+  // Map DebugConfig to DevTools settings with defaults
   const {
-    enabled = process.env.NODE_ENV === "development",
-    position = "bottom-right",
+    enabled = config?.devTools ?? false,
+    position = "bottom-right" as const,
     defaultOpen = false,
-    showNetworkTab = true,
-    showCacheTab = true,
-    showPerformanceTab = true,
+    showNetworkTab = config?.networkLogs ?? true,
+    showCacheTab = config?.cacheLogs ?? true,
+    showPerformanceTab = config?.performance ?? true,
     showStateTab = true,
-  } = config;
+  } = {
+    enabled: config?.devTools ?? false,
+    position: "bottom-right" as const,
+    defaultOpen: false,
+    showNetworkTab: config?.networkLogs ?? true,
+    showCacheTab: config?.cacheLogs ?? true,
+    showPerformanceTab: config?.performance ?? true,
+    showStateTab: true,
+  };
 
-  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const [isOpen, setIsOpen] = useState<boolean>(defaultOpen);
   const [activeTab, setActiveTab] = useState("network");
   const [networkRequests, setNetworkRequests] = useState<NetworkRequest[]>([]);
   const [cacheEntries, setCacheEntries] = useState<CacheEntry[]>([]);

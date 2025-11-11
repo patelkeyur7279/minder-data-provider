@@ -28,6 +28,7 @@ import { WebSocketManager } from "./WebSocketManager.js";
 import { EnvironmentManager } from "./EnvironmentManager.js";
 import { ProxyManager } from "./ProxyManager.js";
 import { DebugManager } from "../debug/DebugManager.js";
+import { DevTools } from "../devtools/DevTools.js";
 
 interface MinderContextValue {
   config: MinderConfig;
@@ -243,6 +244,11 @@ export function MinderDataProvider({
             contextValue.ReactQueryDevtools && (
               <contextValue.ReactQueryDevtools initialIsOpen={false} />
             )}
+
+          {/* Custom DevTools */}
+          {contextValue.config.debug?.devTools && (
+            <DevTools config={contextValue.config.debug} />
+          )}
         </QueryClientProvider>
       </ReduxProvider>
     </MinderContext.Provider>
