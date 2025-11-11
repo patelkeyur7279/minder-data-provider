@@ -1,6 +1,7 @@
 import axios from 'axios';
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import type { MinderConfig, ApiRoute, ApiError } from './types.js';
+import { HttpMethod } from '../constants/enums.js';
 import { AuthManager } from './AuthManager.js';
 import { ProxyManager } from './ProxyManager.js';
 import { 
@@ -18,6 +19,7 @@ import {
   RateLimiter, 
   getSecurityHeaders 
 } from '../utils/security.js';
+import { CorsManager, handleCorsError } from '../utils/corsManager.js';
 import {
   RequestBatcher,
   RequestDeduplicator,
@@ -38,6 +40,7 @@ export class ApiClient {
   private requestBatcher?: RequestBatcher;
   private deduplicator?: RequestDeduplicator;
   private performanceMonitor?: PerformanceMonitor;
+  private corsManager?: CorsManager;
 
   constructor(config: MinderConfig, authManager: AuthManager, proxyManager?: ProxyManager, debugManager?: DebugManager) {
     this.config = config;
@@ -74,6 +77,11 @@ export class ApiClient {
       this.performanceMonitor = new PerformanceMonitor();
     }
 
+    // Initialize CORS manager
+    if (config.cors?.enabled) {
+      this.corsManager = new CorsManager(config.cors);
+    }
+
     // Use proxy baseURL if enabled, otherwise use original
     const baseURL = proxyManager?.isEnabled() ? proxyManager.config.baseUrl : config.apiBaseUrl;
 
@@ -95,7 +103,7 @@ export class ApiClient {
   private setupInterceptors() {
     // Request interceptor for auth, CORS, and security
     this.axiosInstance.interceptors.request.use(
-      (config) => {
+      async (config) => {
         // Debug logging - API Request
         if (this.debugManager && this.config.debug?.networkLogs) {
           this.debugManager.log('api', `🚀 ${config.method?.toUpperCase()} ${config.url}`, {
@@ -131,7 +139,37 @@ export class ApiClient {
         }
 
         // Add CORS preflight handling
-        if (this.config.cors) {
+        if (this.corsManager) {
+          // Check if preflight is needed
+          const headersRecord = config.headers as Record<string, string>;
+          if (this.corsManager.shouldTriggerPreflight(config.method as HttpMethod, headersRecord)) {
+            // Perform preflight check
+            const preflightResult = await this.corsManager.performPreflight(
+              config.url || '',
+              config.method as HttpMethod,
+              Object.keys(headersRecord)
+            );
+
+            if (!preflightResult.success) {
+              throw new MinderNetworkError(
+                `CORS preflight failed: ${preflightResult.error}`,
+                0,
+                preflightResult,
+                config.url,
+                config.method,
+                'CORS_PREFLIGHT_FAILED'
+              );
+            }
+          }
+
+          // Add CORS headers
+          const corsHeaders = this.corsManager.getCorsHeaders(
+            config.method as HttpMethod,
+            config.headers as Record<string, string>
+          );
+          Object.assign(config.headers, corsHeaders);
+        } else if (this.config.cors) {
+          // Fallback to basic CORS handling
           config.headers['Access-Control-Request-Method'] = config.method?.toUpperCase();
           config.headers['Access-Control-Request-Headers'] = 'Content-Type, Authorization';
         }
@@ -178,6 +216,42 @@ export class ApiClient {
           }
         }
 
+        // Handle CORS errors automatically
+        if (this.corsManager) {
+          const corsHandling = await handleCorsError(error, this.corsManager, {
+            url: error.config?.url || '',
+            method: error.config?.method as HttpMethod || HttpMethod.GET,
+            headers: error.config?.headers as Record<string, string> || {},
+            data: error.config?.data
+          });
+
+          if (corsHandling.shouldRetry) {
+            if (corsHandling.modifiedRequest) {
+              // Retry with modified request
+              return this.axiosInstance.request({
+                ...error.config,
+                ...corsHandling.modifiedRequest
+              });
+            } else if (corsHandling.useProxy && this.proxyManager) {
+              // Retry through proxy
+              const proxyConfig = { ...error.config };
+              proxyConfig.url = this.proxyManager.rewriteUrl(error.config?.url || '', {} as ApiRoute);
+              proxyConfig.baseURL = '';
+              return this.axiosInstance.request(proxyConfig);
+            } else if (corsHandling.fallbackUrl) {
+              // Retry with fallback URL
+              return this.axiosInstance.request({
+                ...error.config,
+                url: corsHandling.fallbackUrl
+              });
+            }
+          }
+
+          if (corsHandling.error) {
+            throw corsHandling.error;
+          }
+        }
+
         const apiError = this.handleError(error);
         if (this.config.onError) {
           this.config.onError(apiError);
@@ -209,8 +283,8 @@ export class ApiClient {
       const url = axiosError.config?.url;
       const method = axiosError.config?.method?.toUpperCase();
       const responseData = axiosError.response?.data;
+      const responseHeaders = axiosError.response?.headers as Record<string, string> | undefined;
       
-      // Handle specific HTTP status codes with enhanced errors
       switch (status) {
         case 400:
           return {
@@ -226,6 +300,11 @@ export class ApiClient {
           );
         
         case 403:
+          // Check if this is a CORS origin blocked error
+          if (responseHeaders?.['access-control-allow-origin'] === 'null') {
+            const corsMsg = responseData?.message || 'CORS origin blocked - request origin not allowed';
+            throw new MinderNetworkError(corsMsg, 403, responseData, url, method, 'CORS_ORIGIN_BLOCKED');
+          }
           throw new MinderAuthorizationError(
             responseData?.message || 'Permission denied'
           );
@@ -233,6 +312,15 @@ export class ApiClient {
         case 404:
           const notFoundMsg = responseData?.message || `Resource not found: ${method} ${url}`;
           throw new MinderNetworkError(notFoundMsg, 404, responseData, url, method);
+        
+        case 405:
+          // Check if this is a CORS preflight failed error
+          if (method === 'OPTIONS') {
+            const corsMsg = responseData?.message || 'CORS preflight request failed - server does not allow OPTIONS method';
+            throw new MinderNetworkError(corsMsg, 405, responseData, url, method, 'CORS_PREFLIGHT_FAILED');
+          }
+          const methodMsg = responseData?.message || `Method not allowed: ${method} ${url}`;
+          throw new MinderNetworkError(methodMsg, 405, responseData, url, method);
         
         case 422:
           throw new MinderValidationError(
