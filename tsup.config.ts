@@ -22,6 +22,7 @@ export default defineConfig({
     'debug/index': 'src/debug/index.ts',
     'config/index': 'src/config/index.ts',
     'ssr/index': 'src/ssr/index.ts',
+    'logger/index': 'src/logger/index.ts',
   },
   format: ['cjs', 'esm'],
   dts: true,

@@ -99,6 +99,11 @@
       "types": "./dist/ssr/index.d.ts",
       "import": "./dist/ssr/index.mjs",
       "require": "./dist/ssr/index.js"
+    },
+    "./logger": {
+      "types": "./dist/logger/index.d.ts",
+      "import": "./dist/logger/index.mjs",
+      "require": "./dist/logger/index.js"
     }
   },
   "scripts": {

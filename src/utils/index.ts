@@ -6,8 +6,8 @@ export * from './security.js';
 // Export performance utilities
 export * from './performance.js';
 
-// Export Logger
-export * from './Logger.js';
+// Export Logger class (but not the default instance)
+export { Logger, LogLevel, createLogger } from './Logger.js';
 
 // Generate configuration from Next.js API routes
 export function generateConfigFromApiRoutes(apiDir: string): any {
