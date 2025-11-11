@@ -1,490 +1,977 @@
-# 🚀 Minder Data Provider
+# 🚀 Minder Data Provider# 🚀 Minder Data Provider
 
-> **One library. Zero code changes. Scales from prototype to enterprise.**
 
-Universal data management for React, Next.js, React Native, Expo, Node.js, and Electron.
 
-[![npm version](https://img.shields.io/npm/v/minder-data-provider.svg)](https://www.npmjs.com/package/minder-data-provider)
-[![npm downloads](https://img.shields.io/npm/dm/minder-data-provider.svg)](https://www.npmjs.com/package/minder-data-provider)
-[![Bundle Size](https://img.shields.io/bundlephobia/minzip/minder-data-provider)](https://bundlephobia.com/package/minder-data-provider)
-[![GitHub stars](https://img.shields.io/github/stars/patelkeyur7279/minder-data-provider.svg)](https://github.com/patelkeyur7279/minder-data-provider)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+> **The all-in-one React data management solution. Zero boilerplate. Production-ready.**> **One library. Zero code changes. Scales from prototype to enterprise.**
+
+
+
+Universal data layer for React, Next.js, React Native, Expo, Electron, and Node.js.Universal data management for React, Next.js, React Native, Expo, Node.js, and Electron.
+
+
+
+[![npm version](https://img.shields.io/npm/v/minder-data-provider.svg)](https://www.npmjs.com/package/minder-data-provider)[![npm version](https://img.shields.io/npm/v/minder-data-provider.svg)](https://www.npmjs.com/package/minder-data-provider)
+
+[![Bundle Size](https://img.shields.io/bundlephobia/minzip/minder-data-provider)](https://bundlephobia.com/package/minder-data-provider)[![npm downloads](https://img.shields.io/npm/dm/minder-data-provider.svg)](https://www.npmjs.com/package/minder-data-provider)
+
+[![Tests](https://img.shields.io/badge/Tests-1397%20Passing-success)](./tests)[![Bundle Size](https://img.shields.io/bundlephobia/minzip/minder-data-provider)](https://bundlephobia.com/package/minder-data-provider)
+
+[![TypeScript](https://img.shields.io/badge/TypeScript-100%25-blue.svg)](http://www.typescriptlang.org/)[![GitHub stars](https://img.shields.io/github/stars/patelkeyur7279/minder-data-provider.svg)](https://github.com/patelkeyur7279/minder-data-provider)
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+
 [![TypeScript](https://img.shields.io/badge/TypeScript-100%25-blue.svg)](http://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/Tests-1300%20Passing-success)](./tests)
+
+---[![Tests](https://img.shields.io/badge/Tests-1300%20Passing-success)](./tests)
+
 [![CI](https://github.com/patelkeyur7279/minder-data-provider/workflows/CI/badge.svg)](https://github.com/patelkeyur7279/minder-data-provider/actions)
+
+## ⚡ Quick Start
 
 ---
 
-## ✨ Quick Start
+```bash
+
+npm install minder-data-provider## ✨ Quick Start
+
+```
 
 ```bash
-npm install minder-data-provider
+
+### Option 1: Simple Setup (No Provider Needed!)npm install minder-data-provider
+
 ```
-
-### Next.js Users - Important! ⚠️
-
-**If you're using Next.js, you MUST include the `dynamic` field:**
 
 ```typescript
-import dynamic from "next/dynamic"; // Required import
-import { createMinderConfig } from "minder-data-provider/config";
 
-export const config = createMinderConfig({
+import { setGlobalMinderConfig, useMinder } from 'minder-data-provider';### Next.js Users - Important! ⚠️
+
+
+
+// 1. Set global config once (app entry point)**If you're using Next.js, you MUST include the `dynamic` field:**
+
+setGlobalMinderConfig({
+
+  apiBaseUrl: 'https://api.example.com',```typescript
+
+  routes: {import dynamic from "next/dynamic"; // Required import
+
+    users: { method: 'GET', url: '/users' }import { createMinderConfig } from "minder-data-provider/config";
+
+  }
+
+});export const config = createMinderConfig({
+
   apiUrl: "https://api.example.com",
-  dynamic: dynamic, // ⚠️ REQUIRED for Next.js
-  routes: { users: "/users" },
-});
+
+// 2. Use anywhere in your app  dynamic: dynamic, // ⚠️ REQUIRED for Next.js
+
+function Users() {  routes: { users: "/users" },
+
+  const { data, loading, create, update, delete: remove } = useMinder('users');});
+
 ```
+
+  if (loading.fetch) return <div>Loading...</div>;
 
 📖 **See [DYNAMIC_IMPORTS.md](./docs/DYNAMIC_IMPORTS.md) for details**
 
----
+  return (
 
-### Standard Setup
+    <div>---
 
-```typescript
-// 1. Configure
-import { createMinderConfig } from "minder-data-provider/config";
+      <button onClick={() => create({ name: 'John' })}>Add User</button>
 
-export const config = createMinderConfig({
-  apiUrl: "https://api.example.com",
-  routes: { users: "/users" },
-});
+      {data.map(user => (### Standard Setup
 
-// 2. Setup Provider
+        <div key={user.id}>
+
+          {user.name}```typescript
+
+          <button onClick={() => remove(user.id)}>Delete</button>// 1. Configure
+
+        </div>import { createMinderConfig } from "minder-data-provider/config";
+
+      ))}
+
+    </div>export const config = createMinderConfig({
+
+  );  apiUrl: "https://api.example.com",
+
+}  routes: { users: "/users" },
+
+```});
+
+
+
+### Option 2: With Provider (Advanced Features)// 2. Setup Provider
+
 import { MinderDataProvider } from "minder-data-provider";
 
-export default function App({ children }) {
-  return <MinderDataProvider config={config}>{children}</MinderDataProvider>;
+```typescript
+
+import { MinderDataProvider, useMinder } from 'minder-data-provider';export default function App({ children }) {
+
+import { createMinderConfig } from 'minder-data-provider/config';  return <MinderDataProvider config={config}>{children}</MinderDataProvider>;
+
 }
 
-// 3. Use in Components
-import { useMinder } from "minder-data-provider";
+// 1. Create config
+
+const config = createMinderConfig({// 3. Use in Components
+
+  apiBaseUrl: 'https://api.example.com',import { useMinder } from "minder-data-provider";
+
+  routes: {
+
+    users: { method: 'GET', url: '/users' },function Users() {
+
+    posts: { method: 'GET', url: '/posts' }  const { data, loading, operations } = useMinder("users");
+
+  }
+
+});  return (
+
+    <div>
+
+// 2. Wrap your app      <button onClick={() => operations.create({ name: "John" })}>
+
+export default function App({ children }) {        Add User
+
+  return (      </button>
+
+    <MinderDataProvider config={config}>      {data.map((user) => (
+
+      {children}        <div key={user.id}>{user.name}</div>
+
+    </MinderDataProvider>      ))}
+
+  );    </div>
+
+}  );
+
+}
+
+// 3. Use in components (same as option 1!)```
 
 function Users() {
-  const { data, loading, operations } = useMinder("users");
 
-  return (
-    <div>
-      <button onClick={() => operations.create({ name: "John" })}>
-        Add User
-      </button>
-      {data.map((user) => (
-        <div key={user.id}>{user.name}</div>
-      ))}
-    </div>
-  );
-}
+  const { data, loading, create, update, delete: remove } = useMinder('users');That's it! Full CRUD, caching, optimistic updates, and type safety included.
+
+  // ...
+
+}### **The Problem**
+
 ```
-
-That's it! Full CRUD, caching, optimistic updates, and type safety included.
-
-### **The Problem**
 
 Building modern applications requires juggling multiple libraries, complex configurations, and platform-specific code:
 
+**That's it!** Full CRUD, caching, auth, and type safety included.
+
 ```typescript
-// ❌ Traditional Approach: Different code for each use case
+
+---// ❌ Traditional Approach: Different code for each use case
+
 // Starter App: useQuery from React Query
-// Scale to 100 users: Add Redux
+
+## ✨ What's New in v2.1.0// Scale to 100 users: Add Redux
+
 // Scale to 10K users: Add caching layer
-// Scale to 100K users: Add offline support
+
+### 🎯 Works Without Provider!// Scale to 100K users: Add offline support
+
 // Each step = REWRITE YOUR CODE
-```
 
-### **The Solution**
+```typescript```
 
-Minder Data Provider provides **one unified API** that scales automatically:
+// Before: Required MinderDataProvider wrapper
 
-```typescript
+// After: Just set global config and go!### **The Solution**
+
+
+
+setGlobalMinderConfig({ /* config */ });Minder Data Provider provides **one unified API** that scales automatically:
+
+const { data } = useMinder('users'); // Works anywhere!
+
+``````typescript
+
 // ✅ Minder Approach: Same code, any scale
-const { data, operations } = useMinder("users");
 
-// Works for:
-// ✓ Prototype with 10 users
-// ✓ Startup with 1K users
-// ✓ Scale-up with 100K users
-// ✓ Enterprise with 10M users
-// NO CODE CHANGES REQUIRED
-```
+### 🔥 All-in-One Hookconst { data, operations } = useMinder("users");
 
-**Write once. Scale forever.**
 
----
 
----
+```typescript// Works for:
 
-## 🏗️ **Scale Without Limits**
+const {// ✓ Prototype with 10 users
 
-### **From Zero to Hero - Same Code**
+  data,              // Your data// ✓ Startup with 1K users
 
-| Stage          | Users       | Traffic | Code Changes |
-| -------------- | ----------- | ------- | ------------ |
-| **Prototype**  | 10          | Low     | ✅ 0 changes |
-| **MVP**        | 1,000       | Medium  | ✅ 0 changes |
-| **Growth**     | 100,000     | High    | ✅ 0 changes |
-| **Enterprise** | 10,000,000+ | Massive | ✅ 0 changes |
+  loading,           // Loading states// ✓ Scale-up with 100K users
 
-**How?** Intelligent auto-scaling architecture:
+  error,             // Error handling// ✓ Enterprise with 10M users
 
-```typescript
-// Your Code (Never Changes)
-const { data, operations } = useMinder("users");
+  // NO CODE CHANGES REQUIRED
 
-// What Minder Does Behind The Scenes:
-// 📊 10 users        → Simple fetch, basic cache
+  // CRUD Operations```
+
+  create,            // Create new item
+
+  update,            // Update existing**Write once. Scale forever.**
+
+  delete: remove,    // Delete item
+
+  ---
+
+  // Auth (works standalone!)
+
+  auth,              // Login, logout, token management---
+
+  
+
+  // Upload (shared progress!)## 🏗️ **Scale Without Limits**
+
+  upload,            // File upload with progress
+
+  ### **From Zero to Hero - Same Code**
+
+  // Cache Control
+
+  cache,             // Manual cache control| Stage          | Users       | Traffic | Code Changes |
+
+  | -------------- | ----------- | ------- | ------------ |
+
+  // Advanced| **Prototype**  | 10          | Low     | ✅ 0 changes |
+
+  cancel,            // Cancel ongoing request| **MVP**        | 1,000       | Medium  | ✅ 0 changes |
+
+  fetchNextPage,     // Infinite scroll| **Growth**     | 100,000     | High    | ✅ 0 changes |
+
+  websocket,         // Real-time updates| **Enterprise** | 10,000,000+ | Massive | ✅ 0 changes |
+
+  
+
+} = useMinder('users', {**How?** Intelligent auto-scaling architecture:
+
+  // Custom options
+
+  queryKey: ['custom-key'],```typescript
+
+  staleTime: 5000,// Your Code (Never Changes)
+
+  infinite: true,const { data, operations } = useMinder("users");
+
+  retryConfig: { maxAttempts: 5 }
+
+});// What Minder Does Behind The Scenes:
+
+```// 📊 10 users        → Simple fetch, basic cache
+
 // 📈 1K users        → Request deduplication, smart cache
-// 🚀 100K users      → Multi-level cache, background sync, CDN hints
+
+### 🚀 Major Features// 🚀 100K users      → Multi-level cache, background sync, CDN hints
+
 // 💎 10M users       → Distributed cache, queue system, rate limiting
-// ALL AUTOMATIC. ZERO CONFIG REQUIRED.
-```
 
----
+- ✅ **No Provider Required** - Global config works everywhere// ALL AUTOMATIC. ZERO CONFIG REQUIRED.
 
-## 🌐 **Platform Support**
+- ✅ **Standalone Auth** - JWT parsing, expiry checking, auto-refresh```
 
-### **One Codebase. Six Platforms. Zero Headaches.**
+- ✅ **Shared Upload Progress** - All components see same progress
 
-| Platform                     | Status        | Use Case              | Bundle Size |
+- ✅ **Smart Route Validation** - Helpful suggestions ("Did you mean: users?")---
+
+- ✅ **Infinite Scroll** - Built-in pagination support
+
+- ✅ **Custom Query Keys** - Full cache control## 🌐 **Platform Support**
+
+- ✅ **Request Cancellation** - Prevent race conditions
+
+- ✅ **Per-Hook Retry** - Custom retry logic per request### **One Codebase. Six Platforms. Zero Headaches.**
+
+
+
+---| Platform                     | Status        | Use Case              | Bundle Size |
+
 | ---------------------------- | ------------- | --------------------- | ----------- |
-| **🌐 Web (React + Vite)**    | ✅ Production | SPAs, dashboards      | 47-250 KB   |
-| **⚡ Next.js (SSR/SSG/ISR)** | ✅ Production | SEO, E-commerce       | 145-195 KB  |
-| **🖥️ Node.js (Express)**     | ✅ Production | APIs, microservices   | 120 KB      |
-| **📱 React Native**          | ✅ Production | iOS, Android apps     | Variable    |
-| **🎯 Expo**                  | ✅ Production | Cross-platform mobile | Variable    |
-| **⚙️ Electron**              | ✅ Production | Desktop apps          | Variable    |
 
-**Write once. Deploy everywhere.**
+## 🎯 Core Features| **🌐 Web (React + Vite)**    | ✅ Production | SPAs, dashboards      | 47-250 KB   |
+
+| **⚡ Next.js (SSR/SSG/ISR)** | ✅ Production | SEO, E-commerce       | 145-195 KB  |
+
+### 🔄 Complete CRUD Operations| **🖥️ Node.js (Express)**     | ✅ Production | APIs, microservices   | 120 KB      |
+
+| **📱 React Native**          | ✅ Production | iOS, Android apps     | Variable    |
+
+```typescript| **🎯 Expo**                  | ✅ Production | Cross-platform mobile | Variable    |
+
+const { data, create, update, delete: remove } = useMinder('users');| **⚙️ Electron**              | ✅ Production | Desktop apps          | Variable    |
+
+
+
+// Create**Write once. Deploy everywhere.**
+
+await create({ name: 'John', email: 'john@example.com' });
 
 ```typescript
-// Same code works on ALL platforms
-import { useMinder } from "minder-data-provider";
 
-function UserList() {
-  const { data, operations } = useMinder("users");
+// Update// Same code works on ALL platforms
 
-  // ✅ Works in React web app
-  // ✅ Works in Next.js SSR
+await update(userId, { name: 'John Doe' });import { useMinder } from "minder-data-provider";
+
+
+
+// Deletefunction UserList() {
+
+await remove(userId);  const { data, operations } = useMinder("users");
+
+
+
+// All include: optimistic updates, error handling, cache invalidation  // ✅ Works in React web app
+
+```  // ✅ Works in Next.js SSR
+
   // ✅ Works in React Native
-  // ✅ Works in Expo
+
+### 🔐 Built-in Authentication  // ✅ Works in Expo
+
   // ✅ Works in Electron
-  // ✅ Works in Node.js API
-}
+
+```typescript  // ✅ Works in Node.js API
+
+const { auth } = useMinder('users');}
+
 ```
 
----
+// Login
 
-## 💡 **The Tech Stack & Why It's Powerful**
+await auth.setToken('your-jwt-token');---
 
-### **Built on Giants**
 
-We didn't reinvent the wheel. We made it **autonomous**.
 
-#### **1. TanStack Query (React Query)** - The Foundation
+// Check auth status## 💡 **The Tech Stack & Why It's Powerful**
+
+if (auth.isAuthenticated()) {
+
+  console.log('User:', auth.getCurrentUser());### **Built on Giants**
+
+  console.log('Expires:', auth.getTokenExpiryTime());
+
+}We didn't reinvent the wheel. We made it **autonomous**.
+
+
+
+// Logout#### **1. TanStack Query (React Query)** - The Foundation
+
+await auth.clearAuth();
 
 **Why?** Industry standard for server state management  
-**Our Addition:** Auto-configuration + zero boilerplate + enterprise patterns
+
+// Works WITHOUT provider - shared globally!**Our Addition:** Auto-configuration + zero boilerplate + enterprise patterns
+
+```
 
 ```typescript
-// ❌ Traditional React Query: Manual setup for each resource
+
+### 📁 File Upload with Progress// ❌ Traditional React Query: Manual setup for each resource
+
 const useUsers = () =>
-  useQuery(["users"], fetchUsers, {
-    /* config */
-  });
-const useCreateUser = () =>
-  useMutation(createUser, {
-    /* config */
-  });
-const useUpdateUser = () =>
-  useMutation(updateUser, {
-    /* config */
-  });
-// ... 20 more lines per resource
 
-// ✅ Minder: One line, full CRUD
+```typescript  useQuery(["users"], fetchUsers, {
+
+const { upload } = useMinder('media');    /* config */
+
+  });
+
+// Upload fileconst useCreateUser = () =>
+
+upload.uploadFile(file, 'upload-id', {  useMutation(createUser, {
+
+  onProgress: (progress) => {    /* config */
+
+    console.log(`${progress.percentage}% uploaded`);  });
+
+  }const useUpdateUser = () =>
+
+});  useMutation(updateUser, {
+
+    /* config */
+
+// Check progress from any component  });
+
+const progress = upload.getProgress('upload-id');// ... 20 more lines per resource
+
+console.log(progress.percentage); // All components see same value!
+
+```// ✅ Minder: One line, full CRUD
+
 const { data, operations } = useMinder("users");
-// Auto-generates: query, mutations, optimistic updates, cache invalidation
+
+### ∞ Infinite Scroll / Pagination// Auto-generates: query, mutations, optimistic updates, cache invalidation
+
 ```
-
-**What We Added:**
-
-- ✅ Automatic CRUD generation
-- ✅ Smart cache invalidation
-- ✅ Optimistic updates out-of-the-box
-- ✅ Request deduplication
-- ✅ Background refetching
-- ✅ Offline queue system
-
-#### **2. Redux Toolkit** - State Persistence
-
-**Why?** Predictable state management with DevTools  
-**Our Addition:** Automatic slice generation + middleware integration
 
 ```typescript
-// ❌ Traditional Redux: 100+ lines per resource
-const userSlice = createSlice({
-  /* reducers */
-});
-const userActions = {
-  /* action creators */
-};
-const userSelectors = {
-  /* selectors */
-};
-// ... massive boilerplate
 
-// ✅ Minder: Auto-generated from config
-routes: {
-  users: "/users";
-}
-// Automatically creates: slices, actions, selectors, middleware
-```
+const {**What We Added:**
+
+  data,
+
+  fetchNextPage,- ✅ Automatic CRUD generation
+
+  hasNextPage,- ✅ Smart cache invalidation
+
+  isFetchingNextPage- ✅ Optimistic updates out-of-the-box
+
+} = useMinder('posts', {- ✅ Request deduplication
+
+  infinite: true,- ✅ Background refetching
+
+  getNextPageParam: (lastPage) => lastPage.nextCursor,- ✅ Offline queue system
+
+  initialPageParam: 0
+
+});#### **2. Redux Toolkit** - State Persistence
+
+
+
+return (**Why?** Predictable state management with DevTools  
+
+  <div>**Our Addition:** Automatic slice generation + middleware integration
+
+    {data.pages.map(page => 
+
+      page.items.map(item => <Item key={item.id} {...item} />)```typescript
+
+    )}// ❌ Traditional Redux: 100+ lines per resource
+
+    {hasNextPage && (const userSlice = createSlice({
+
+      <button onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>  /* reducers */
+
+        Load More});
+
+      </button>const userActions = {
+
+    )}  /* action creators */
+
+  </div>};
+
+);const userSelectors = {
+
+```  /* selectors */
+
+};
+
+### 🎯 Smart Cache Control// ... massive boilerplate
+
+
+
+```typescript// ✅ Minder: Auto-generated from config
+
+const { cache } = useMinder('users', {routes: {
+
+  queryKey: ['users', 'active'],  // Custom cache key  users: "/users";
+
+  staleTime: 5 * 60 * 1000,       // 5 minutes}
+
+  gcTime: 10 * 60 * 1000,         // 10 minutes// Automatically creates: slices, actions, selectors, middleware
+
+  cache: true```
+
+});
 
 **What We Added:**
 
-- ✅ Zero boilerplate slice generation
-- ✅ Automatic action creators
-- ✅ Built-in middleware (logging, error handling, persistence)
-- ✅ DevTools integration
+// Manual cache control
+
+cache.invalidate(['users']);     // Invalidate specific keys- ✅ Zero boilerplate slice generation
+
+cache.clear();                   // Clear all cache- ✅ Automatic action creators
+
+cache.prefetch(() => fetchData(), { staleTime: 60000 });- ✅ Built-in middleware (logging, error handling, persistence)
+
+```- ✅ DevTools integration
+
 - ✅ Time-travel debugging
+
+### 🚫 Request Cancellation
 
 #### **3. Axios** - HTTP Client
 
-**Why?** Reliable, configurable, interceptor support  
+```typescript
+
+const { cancel, isCancelled } = useMinder('users');**Why?** Reliable, configurable, interceptor support  
+
 **Our Addition:** Smart retry + compression + CORS + security
 
-```typescript
-// ❌ Traditional Axios: Manual configuration everywhere
-axios.get("/users", {
-  headers: { Authorization: `Bearer ${token}` },
-  timeout: 5000,
-  retry: { times: 3 },
-  // ... repeat for every request
-});
+// Cancel on unmount or navigation
 
-// ✅ Minder: Configured once, works everywhere
+useEffect(() => {```typescript
+
+  return () => {// ❌ Traditional Axios: Manual configuration everywhere
+
+    if (!isCancelled) {axios.get("/users", {
+
+      cancel();  headers: { Authorization: `Bearer ${token}` },
+
+    }  timeout: 5000,
+
+  };  retry: { times: 3 },
+
+}, []);  // ... repeat for every request
+
+```});
+
+
+
+---// ✅ Minder: Configured once, works everywhere
+
 const { data } = useMinder("users");
-// Auto-includes: auth headers, retries, compression, CORS, CSRF protection
+
+## 🌐 Platform Support// Auto-includes: auth headers, retries, compression, CORS, CSRF protection
+
 ```
+
+Works on **6+ platforms** with the same code:
 
 **What We Added:**
 
-- ✅ Auto-retry with exponential backoff
-- ✅ Request/response compression
-- ✅ CORS handling
-- ✅ CSRF protection
-- ✅ Rate limiting
-- ✅ Request sanitization
+| Platform | Status | Use Case |
+
+|----------|--------|----------|- ✅ Auto-retry with exponential backoff
+
+| **React (Web)** | ✅ Production | SPAs, Dashboards |- ✅ Request/response compression
+
+| **Next.js** | ✅ Production | SSR, SSG, ISR |- ✅ CORS handling
+
+| **React Native** | ✅ Production | iOS, Android Apps |- ✅ CSRF protection
+
+| **Expo** | ✅ Production | Cross-platform Mobile |- ✅ Rate limiting
+
+| **Electron** | ✅ Production | Desktop Apps |- ✅ Request sanitization
+
+| **Node.js** | ✅ Production | APIs, Microservices |
 
 #### **4. TypeScript** - Type Safety
 
-**Why?** Catch errors before runtime  
-**Our Addition:** Auto-generated types + full inference
-
-```typescript
-// ❌ Traditional: Manual type definitions
-interface User {
-  id: number;
-  name: string;
-}
-interface UserResponse {
-  data: User[];
-}
-const fetchUsers = (): Promise<UserResponse> => {
-  /* ... */
-};
-
-// ✅ Minder: Types inferred automatically
-const { data } = useMinder("users");
-//     ^^ User[] - fully typed, no manual definitions
-```
-
-**What We Added:**
-
-- ✅ Automatic type generation from API responses
-- ✅ Full TypeScript inference
-- ✅ Generic constraints for safety
-- ✅ Branded types for security
-
-#### **5. Platform-Specific Adapters**
-
-**Why?** Each platform has unique requirements  
-**Our Addition:** Automatic platform detection + optimization
-
-```typescript
-// Auto-detects platform and optimizes accordingly:
-
-// Web → Use localStorage, Service Workers
-// Next.js → Use cookies, SSR prefetching
-// React Native → Use AsyncStorage, offline queue
-// Node.js → Use in-memory cache, file system
-// Electron → Use secure store, IPC
-
-// YOU DON'T CONFIGURE ANYTHING. WE DO IT.
-```
-
-**What We Added:**
-
-- ✅ Automatic platform detection
-- ✅ Platform-optimized storage
-- ✅ Platform-specific caching strategies
-- ✅ Adaptive bundle splitting
-
 ---
 
-## 🎯 **Our Approach: Intelligent Automation**
+**Why?** Catch errors before runtime  
 
-### **The 3-Layer Architecture**
+## 📦 Bundle Sizes**Our Addition:** Auto-generated types + full inference
+
+
+
+| Configuration | Bundle Size | Use Case |```typescript
+
+|---------------|-------------|----------|// ❌ Traditional: Manual type definitions
+
+| **Minimal** | 48 KB | Simple CRUD |interface User {
+
+| **Standard** | 145 KB | + Auth + Cache |  id: number;
+
+| **Full** | 195 KB | All Features |  name: string;
+
+}
+
+Tree-shakeable modules - only pay for what you use!interface UserResponse {
+
+  data: User[];
+
+---}
+
+const fetchUsers = (): Promise<UserResponse> => {
+
+## 🎓 Real-World Examples  /* ... */
+
+};
+
+### Simple Todo App
+
+// ✅ Minder: Types inferred automatically
+
+```typescriptconst { data } = useMinder("users");
+
+function TodoApp() {//     ^^ User[] - fully typed, no manual definitions
+
+  const { data: todos, create, update, delete: remove } = useMinder('todos');```
+
+
+
+  return (**What We Added:**
+
+    <div>
+
+      <button onClick={() => create({ text: 'New todo', done: false })}>- ✅ Automatic type generation from API responses
+
+        Add Todo- ✅ Full TypeScript inference
+
+      </button>- ✅ Generic constraints for safety
+
+      {todos.map(todo => (- ✅ Branded types for security
+
+        <div key={todo.id}>
+
+          <input#### **5. Platform-Specific Adapters**
+
+            type="checkbox"
+
+            checked={todo.done}**Why?** Each platform has unique requirements  
+
+            onChange={() => update(todo.id, { done: !todo.done })}**Our Addition:** Automatic platform detection + optimization
+
+          />
+
+          {todo.text}```typescript
+
+          <button onClick={() => remove(todo.id)}>Delete</button>// Auto-detects platform and optimizes accordingly:
+
+        </div>
+
+      ))}// Web → Use localStorage, Service Workers
+
+    </div>// Next.js → Use cookies, SSR prefetching
+
+  );// React Native → Use AsyncStorage, offline queue
+
+}// Node.js → Use in-memory cache, file system
+
+```// Electron → Use secure store, IPC
+
+
+
+### User Profile with Auth// YOU DON'T CONFIGURE ANYTHING. WE DO IT.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  YOUR CODE (Simple API)                                     │
-│  const { data, operations } = useMinder('users');     │
-└─────────────────────────────────────────────────────────────┘
-                           ↓
-┌─────────────────────────────────────────────────────────────┐
-│  INTELLIGENCE LAYER (Auto-Configuration)                    │
+
+```typescript
+
+function UserProfile() {**What We Added:**
+
+  const { data: user, auth, update } = useMinder('profile');
+
+- ✅ Automatic platform detection
+
+  if (!auth.isAuthenticated()) {- ✅ Platform-optimized storage
+
+    return <LoginPage />;- ✅ Platform-specific caching strategies
+
+  }- ✅ Adaptive bundle splitting
+
+
+
+  return (---
+
+    <div>
+
+      <h1>Welcome, {user.name}</h1>## 🎯 **Our Approach: Intelligent Automation**
+
+      <p>Token expires: {new Date(auth.getTokenExpiryTime()).toLocaleString()}</p>
+
+      <button onClick={() => update(user.id, { name: 'New Name' })}>### **The 3-Layer Architecture**
+
+        Update Name
+
+      </button>```
+
+      <button onClick={() => auth.clearAuth()}>┌─────────────────────────────────────────────────────────────┐
+
+        Logout│  YOUR CODE (Simple API)                                     │
+
+      </button>│  const { data, operations } = useMinder('users');     │
+
+    </div>└─────────────────────────────────────────────────────────────┘
+
+  );                           ↓
+
+}┌─────────────────────────────────────────────────────────────┐
+
+```│  INTELLIGENCE LAYER (Auto-Configuration)                    │
+
 │  • Detects: Platform, scale, network conditions             │
-│  • Optimizes: Cache strategy, request batching, bundle      │
-│  • Manages: Auth, errors, offline, security                 │
-└─────────────────────────────────────────────────────────────┘
-                           ↓
-┌─────────────────────────────────────────────────────────────┐
-│  FOUNDATION LAYER (Best-in-Class Libraries)                 │
-│  React Query + Redux + Axios + Platform SDKs                │
-└─────────────────────────────────────────────────────────────┘
-```
 
-### **What Makes It Powerful**
+### File Upload│  • Optimizes: Cache strategy, request batching, bundle      │
+
+│  • Manages: Auth, errors, offline, security                 │
+
+```typescript└─────────────────────────────────────────────────────────────┘
+
+function FileUploader() {                           ↓
+
+  const { upload } = useMinder('media');┌─────────────────────────────────────────────────────────────┐
+
+  const [progress, setProgress] = useState(0);│  FOUNDATION LAYER (Best-in-Class Libraries)                 │
+
+│  React Query + Redux + Axios + Platform SDKs                │
+
+  const handleUpload = (file) => {└─────────────────────────────────────────────────────────────┘
+
+    upload.uploadFile(file, 'file-1', {```
+
+      onProgress: (p) => setProgress(p.percentage)
+
+    });### **What Makes It Powerful**
+
+  };
 
 1. **🧠 Smart Defaults**
 
-   - No configuration needed for 90% of use cases
-   - Intelligent defaults based on environment
-   - Production-ready out of the box
+  return (
 
-2. **🔧 Zero Boilerplate**
+    <div>   - No configuration needed for 90% of use cases
 
-   - One config file replaces hundreds of lines
+      <input type="file" onChange={(e) => handleUpload(e.target.files[0])} />   - Intelligent defaults based on environment
+
+      {progress > 0 && <progress value={progress} max={100} />}   - Production-ready out of the box
+
+    </div>
+
+  );2. **🔧 Zero Boilerplate**
+
+}
+
+```   - One config file replaces hundreds of lines
+
    - Auto-generates all CRUD operations
-   - Automatic type generation
 
-3. **📦 Modular Architecture**
+### Infinite Scroll Blog   - Automatic type generation
 
-   - Import only what you need
-   - 80% bundle size reduction
-   - Tree-shakeable modules
 
-4. **🚀 Performance First**
 
-   - Request deduplication
-   - Multi-level caching
-   - Background synchronization
+```typescript3. **📦 Modular Architecture**
+
+function BlogFeed() {
+
+  const {   - Import only what you need
+
+    data,   - 80% bundle size reduction
+
+    fetchNextPage,   - Tree-shakeable modules
+
+    hasNextPage,
+
+    isFetchingNextPage4. **🚀 Performance First**
+
+  } = useMinder('posts', {
+
+    infinite: true,   - Request deduplication
+
+    getNextPageParam: (lastPage) => lastPage.nextCursor   - Multi-level caching
+
+  });   - Background synchronization
+
    - Lazy loading
 
-5. **🛡️ Security Built-In**
+  return (
 
-   - XSS protection
-   - CSRF tokens
-   - Rate limiting
-   - Input sanitization
-   - Secure storage
+    <div>5. **🛡️ Security Built-In**
 
-6. **🌐 Platform Agnostic**
-   - Works on 6+ platforms
-   - Same API everywhere
-   - Automatic platform optimization
+      {data?.pages.map(page =>
 
----
+        page.posts.map(post => (   - XSS protection
+
+          <BlogPost key={post.id} {...post} />   - CSRF tokens
+
+        ))   - Rate limiting
+
+      )}   - Input sanitization
+
+      {hasNextPage && (   - Secure storage
+
+        <button onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
+
+          {isFetchingNextPage ? 'Loading...' : 'Load More'}6. **🌐 Platform Agnostic**
+
+        </button>   - Works on 6+ platforms
+
+      )}   - Same API everywhere
+
+    </div>   - Automatic platform optimization
+
+  );
+
+}---
+
+```
 
 - **📦 Modular Imports**: Tree-shakeable modules reduce bundle size by up to 87%
-- **🔧 Simplified Configuration**: One-line setup with intelligent defaults
+
+---- **🔧 Simplified Configuration**: One-line setup with intelligent defaults
+
 - **🔍 Advanced Debug Tools**: Comprehensive debugging with performance monitoring
-- **🌐 Flexible SSR/CSR**: Choose rendering strategy per component
+
+## 🔒 Security Features- **🌐 Flexible SSR/CSR**: Choose rendering strategy per component
+
 - **🛡️ Enhanced Security**: Built-in sanitization, CSRF protection, and rate limiting
-- **⚡ Performance Optimizations**: Request deduplication, compression, and lazy loading
 
-## ✨ What's New in v2.0
+Built-in enterprise-grade security:- **⚡ Performance Optimizations**: Request deduplication, compression, and lazy loading
 
-### **Revolutionary Improvements**
 
-- **📦 87% Smaller Bundles** - Modular imports (47KB vs 250KB)
+
+- ✅ **XSS Protection** - Automatic input sanitization## ✨ What's New in v2.0
+
+- ✅ **CSRF Protection** - Token-based protection
+
+- ✅ **Rate Limiting** - Prevent abuse### **Revolutionary Improvements**
+
+- ✅ **JWT Validation** - Automatic expiry checking
+
+- ✅ **Secure Storage** - httpOnly cookies (recommended)- **📦 87% Smaller Bundles** - Modular imports (47KB vs 250KB)
+
 - **🔧 One-Line Setup** - Intelligent defaults, zero config
-- **🔍 Advanced DevTools** - Performance monitoring + debugging
+
+---- **🔍 Advanced DevTools** - Performance monitoring + debugging
+
 - **🌐 Flexible SSR/CSR** - Choose rendering per component
-- **🛡️ Enterprise Security** - XSS, CSRF, rate limiting built-in
+
+## ⚡ Performance Features- **🛡️ Enterprise Security** - XSS, CSRF, rate limiting built-in
+
 - **⚡ Auto-Scaling** - Adapts from 10 to 10M users automatically
-- **🎯 6+ Platforms** - Web, Next.js, Node, React Native, Expo, Electron
 
----
+Optimized for production:- **🎯 6+ Platforms** - Web, Next.js, Node, React Native, Expo, Electron
 
-## 🎁 Features That Scale With You
 
-### **✅ Core Features (Every Scale)**
+
+- ✅ **Request Deduplication** - Multiple requests = one API call---
+
+- ✅ **Smart Caching** - Multi-level with automatic invalidation
+
+- ✅ **Optimistic Updates** - Instant UI, background sync## 🎁 Features That Scale With You
+
+- ✅ **Background Refetch** - Always fresh data
+
+- ✅ **Tree Shaking** - Import only what you need### **✅ Core Features (Every Scale)**
+
+- ✅ **Lazy Loading** - Load features on-demand
 
 - **🔄 One-Touch CRUD Operations**: Complete CRUD with a single hook call
-- **🏪 Hybrid State Management**: TanStack Query + Redux integration
+
+---- **🏪 Hybrid State Management**: TanStack Query + Redux integration
+
 - **🌐 CORS Support**: Built-in CORS handling for cross-origin requests
-- **🔌 WebSocket Integration**: Real-time communication with auto-reconnection
+
+## 📚 Documentation- **🔌 WebSocket Integration**: Real-time communication with auto-reconnection
+
 - **💾 Advanced Caching**: Multi-level caching with TTL and invalidation
-- **🔐 Authentication Management**: Secure token storage (cookie, sessionStorage, memory)
-  - ⚠️ **Security Update v2.0.1**: `localStorage` removed for XSS protection
-- **📁 File Upload Support**: Progress tracking and multiple formats
-- **⚡ Optimistic Updates**: Instant UI updates with rollback
-- **🛡️ Type Safety**: Full TypeScript support with auto-generated types
+
+- **[API Reference](./docs/API_REFERENCE.md)** - Complete API documentation- **🔐 Authentication Management**: Secure token storage (cookie, sessionStorage, memory)
+
+- **[Config Guide](./docs/CONFIG_GUIDE.md)** - Configuration options  - ⚠️ **Security Update v2.0.1**: `localStorage` removed for XSS protection
+
+- **[Examples](./docs/EXAMPLES.md)** - Real-world examples- **📁 File Upload Support**: Progress tracking and multiple formats
+
+- **[Migration Guide](./docs/MIGRATION_GUIDE.md)** - Upgrade from older versions- **⚡ Optimistic Updates**: Instant UI updates with rollback
+
+- **[Security Guide](./SECURITY.md)** - Security best practices- **🛡️ Type Safety**: Full TypeScript support with auto-generated types
+
 - **🎯 Next.js Optimized**: SSR/SSG compatible with hydration support
+
+---
 
 ### **🆕 New in v2.0.3 (November 2025)**
 
+## 🧪 Testing
+
 - **✅ Built-in Validation System**: Type-based and custom validation rules
 
-  - Validates data before create/update operations
-  - Support for email, URL, date, array, object validation
-  - Async validation for server-side checks
+```bash
+
+npm test              # Run all tests  - Validates data before create/update operations
+
+npm run test:coverage # With coverage report  - Support for email, URL, date, array, object validation
+
+```  - Async validation for server-side checks
+
   - Detailed error reporting with field-level messages
+
+**Test Status**: 1,397 tests passing (100%)
 
 - **🔄 Enhanced Retry Configuration**: Per-operation retry policies
 
+---
+
   - Exponential backoff with jitter
-  - Conditional retry based on error type
+
+## 🤝 Contributing  - Conditional retry based on error type
+
   - Separate retry strategies for each CRUD operation
-  - Works with optimistic and pessimistic updates
 
-- **📄 Pagination Helper**: Smart pagination management
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for details.  - Works with optimistic and pessimistic updates
 
-  - Automatic page tracking and state management
+
+
+---- **📄 Pagination Helper**: Smart pagination management
+
+
+
+## 📄 License  - Automatic page tracking and state management
+
   - Multiple styles: offset, cursor, page-based
-  - Smart prefetching of next/previous pages
+
+MIT License - see [LICENSE](LICENSE) for details.  - Smart prefetching of next/previous pages
+
   - Navigation helpers (goToPage, nextPage, prevPage)
-  - Optimized for infinite scroll
 
-- **💾 Offline Queue Persistence**: Durable offline support
+---  - Optimized for infinite scroll
 
-  - Persists failed requests across sessions
-  - Automatic retry when connection restored
-  - Conflict resolution strategies
-  - Queue manipulation (add, remove, clear)
+
+
+## 💬 Support- **💾 Offline Queue Persistence**: Durable offline support
+
+
+
+- 📖 [Documentation](./docs/API_REFERENCE.md)  - Persists failed requests across sessions
+
+- 💬 [Discord Community](https://discord.gg/dN3eFFjmfy)  - Automatic retry when connection restored
+
+- 🐛 [Issue Tracker](https://github.com/patelkeyur7279/minder-data-provider/issues)  - Conflict resolution strategies
+
+- 📧 [Email](mailto:patelkeyur7279@gmail.com)  - Queue manipulation (add, remove, clear)
+
   - Sync state tracking
 
+---
+
 - **🔒 Security Enhancements**: Production-grade security
-  - Stricter input validation (breaking change - see CHANGELOG)
+
+## 🏆 Why Choose Minder?  - Stricter input validation (breaking change - see CHANGELOG)
+
   - Enhanced CSRF protection
-  - Rate limiting with sliding window
-  - XSS prevention with DOMPurify
-  - All 61 security tests passing
 
-## � Feature Status
+| Feature | Minder | React Query | SWR | Apollo |  - Rate limiting with sliding window
 
-### ✅ Production Ready (v2.0)
+|---------|--------|-------------|-----|--------|  - XSS prevention with DOMPurify
 
-| Feature                   | Status    | Bundle Size | Description                                                             |
-| ------------------------- | --------- | ----------- | ----------------------------------------------------------------------- |
+| **CRUD Operations** | ✅ Built-in | ❌ Manual | ❌ Manual | ✅ GraphQL only |  - All 61 security tests passing
+
+| **Authentication** | ✅ Built-in | ❌ External | ❌ External | ❌ External |
+
+| **File Upload** | ✅ Built-in | ❌ External | ❌ External | ❌ External |## � Feature Status
+
+| **WebSocket** | ✅ Built-in | ❌ External | ❌ External | ✅ Subscriptions |
+
+| **Works Without Provider** | ✅ Yes | ✅ Yes | ✅ Yes | ❌ No |### ✅ Production Ready (v2.0)
+
+| **Shared Upload Progress** | ✅ Unique | ❌ No | ❌ No | ❌ No |
+
+| **Route Validation** | ✅ Smart | ❌ No | ❌ No | ❌ No || Feature                   | Status    | Bundle Size | Description                                                             |
+
+| **One Hook for All** | ✅ Yes | ❌ Multiple | ❌ Multiple | ❌ Multiple || ------------------------- | --------- | ----------- | ----------------------------------------------------------------------- |
+
 | **CRUD Operations**       | ✅ Stable | 47.82 KB    | Complete create, read, update, delete operations                        |
-| **Authentication**        | ✅ Stable | 48.97 KB    | JWT tokens, auto-refresh, secure storage (cookie/sessionStorage/memory) |
+
+---| **Authentication**        | ✅ Stable | 48.97 KB    | JWT tokens, auto-refresh, secure storage (cookie/sessionStorage/memory) |
+
 | **Caching System**        | ✅ Stable | 48.17 KB    | Multi-level cache with TTL and invalidation                             |
-| **Configuration Presets** | ✅ Stable | 8.64 KB     | 4 presets: minimal, standard, advanced, enterprise                      |
+
+**Built with ❤️ for the React community**| **Configuration Presets** | ✅ Stable | 8.64 KB     | 4 presets: minimal, standard, advanced, enterprise                      |
+
 | **Lazy Loading**          | ✅ Stable | -           | 68% faster startup, load deps on-demand                                 |
-| **Token Auto-Refresh**    | ✅ Stable | 12 KB       | Auto-refresh JWT 5min before expiration                                 |
+
+**v2.1.0** - November 2025| **Token Auto-Refresh**    | ✅ Stable | 12 KB       | Auto-refresh JWT 5min before expiration                                 |
+
 | **Rate Limiting**         | ✅ Stable | 15 KB       | Server-side rate limiting middleware                                    |
 | **Bundle Analysis**       | ✅ Stable | -           | Verified 80.8% reduction (47KB → 250KB)                                 |
 
