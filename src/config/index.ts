@@ -1,6 +1,7 @@
 import { Logger, LogLevel } from '../utils/Logger.js';
 import type { MinderConfig, ApiRoute } from '../core/types.js';
 import { createConfigFromPreset, type ConfigPreset, getPresetInfo } from './presets.js';
+import { HttpMethod, StorageType } from '../constants/enums.js';
 
 const logger = new Logger('Config', { level: LogLevel.DEBUG });
 
@@ -8,12 +9,12 @@ export interface SimpleConfig {
   apiUrl: string;
   routes?: Record<string, string | ApiRoute>;
   dynamic: any;
-  
+
   // NEW: Preset support
-  preset?: ConfigPreset; // 'minimal' | 'standard' | 'advanced' | 'enterprise'
-  
+  preset?: ConfigPreset;
+
   // Existing options (simplified)
-  auth?: boolean | { storage?: 'sessionStorage' | 'memory' | 'cookie' | 'AsyncStorage' | 'SecureStore' };
+  auth?: boolean | { storage?: StorageType };
   cache?: boolean | { staleTime?: number };
   cors?: boolean;
   websocket?: boolean | string;
@@ -39,10 +40,10 @@ export function createMinderConfig(simple: SimpleConfig): MinderConfig {
     Object.entries(simple.routes).forEach(([key, value]) => {
       if (typeof value === 'string') {
         // Auto-generate CRUD operations
-        routes[key] = { method: 'GET', url: value };
-        routes[`create${key.charAt(0).toUpperCase() + key.slice(1)}`] = { method: 'POST', url: value };
-        routes[`update${key.charAt(0).toUpperCase() + key.slice(1)}`] = { method: 'PUT', url: `${value}/:id` };
-        routes[`delete${key.charAt(0).toUpperCase() + key.slice(1)}`] = { method: 'DELETE', url: `${value}/:id` };
+        routes[key] = { method: HttpMethod.GET, url: value };
+        routes[`create${key.charAt(0).toUpperCase() + key.slice(1)}`] = { method: HttpMethod.POST, url: value };
+        routes[`update${key.charAt(0).toUpperCase() + key.slice(1)}`] = { method: HttpMethod.PUT, url: `${value}/:id` };
+        routes[`delete${key.charAt(0).toUpperCase() + key.slice(1)}`] = { method: HttpMethod.DELETE, url: `${value}/:id` };
       } else {
         routes[key] = value;
       }
@@ -61,7 +62,7 @@ export function createMinderConfig(simple: SimpleConfig): MinderConfig {
       auth: {
         ...(baseConfig.auth || {}),
         tokenKey: 'accessToken',
-        storage: typeof simple.auth === 'object' ? simple.auth.storage || 'cookie' : 'cookie'
+        storage: typeof simple.auth === 'object' ? simple.auth.storage || StorageType.COOKIE : StorageType.COOKIE
       }
     }),
     
@@ -81,7 +82,7 @@ export function createMinderConfig(simple: SimpleConfig): MinderConfig {
         ...(baseConfig.cors || {}),
         enabled: true,
         credentials: true,
-        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+        methods: [HttpMethod.GET, HttpMethod.POST, HttpMethod.PUT, HttpMethod.DELETE, HttpMethod.OPTIONS]
       }
     }),
     

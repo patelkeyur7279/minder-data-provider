@@ -1,4 +1,12 @@
 import { BaseModel } from '../models/BaseModel.js';
+import {
+  HttpMethod,
+  StorageType,
+  LogLevel,
+  CacheType,
+  SecurityLevel,
+  NotificationType
+} from '../constants/enums.js';
 
 // Core configuration types
 export interface MinderConfig {
@@ -31,7 +39,7 @@ export interface EnvironmentOverride {
 }
 
 export interface ApiRoute {
-  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  method: HttpMethod;
   url: string;
   model?: typeof BaseModel;
   headers?: Record<string, string>;
@@ -42,14 +50,14 @@ export interface ApiRoute {
 
 export interface AuthConfig {
   tokenKey: string;
-  storage: 'sessionStorage' | 'memory' | 'cookie' | 'AsyncStorage' | 'SecureStore';
-  tokenStorage?: 'sessionStorage' | 'memory' | 'cookie' | 'AsyncStorage' | 'SecureStore'; // For light config
+  storage: StorageType;
+  tokenStorage?: StorageType; // For light config
   refreshUrl?: string;
   onAuthError?: () => void;
 }
 
 export interface CacheConfig {
-  type?: 'memory' | 'persistent' | 'hybrid'; // For light config
+  type?: CacheType; // For light config
   staleTime?: number;
   gcTime?: number;
   ttl?: number; // For light config
@@ -63,7 +71,7 @@ export interface CorsConfig {
   proxy?: string;
   credentials?: boolean;
   origin?: string | string[];
-  methods?: string[];
+  methods?: HttpMethod[];
   headers?: string[];
 }
 
@@ -95,7 +103,7 @@ export interface PerformanceConfig {
 
 export interface DebugConfig {
   enabled?: boolean;
-  logLevel?: 'error' | 'warn' | 'info' | 'debug';
+  logLevel?: LogLevel;
   performance?: boolean;
   devTools?: boolean;
   networkLogs?: boolean;
@@ -120,7 +128,7 @@ export interface SecurityConfig {
   rateLimiting?: {
     requests: number;
     window: number; // in milliseconds
-    storage?: 'memory';
+    storage?: StorageType;
   };
   headers?: {
     contentSecurityPolicy?: string;
@@ -190,7 +198,7 @@ export interface ApiError {
 
 export interface Notification {
   id: string;
-  type: 'success' | 'error' | 'warning' | 'info';
+  type: NotificationType;
   message: string;
   timestamp: number;
 }

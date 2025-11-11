@@ -59,8 +59,8 @@ jobs:
           git tag -a "v$VERSION" -m "Release v$VERSION"
           git push origin "v$VERSION"
 
-      - name: Publish to npm
-        if: steps.version_check.outputs.changed == 'true'
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # - name: Publish to npm
+      #   if: steps.version_check.outputs.changed == 'true'
+      #   run: npm publish --provenance --access public
+      #   env:
+      #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

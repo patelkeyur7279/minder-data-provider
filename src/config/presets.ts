@@ -11,6 +11,7 @@
  */
 
 import type { MinderConfig } from '../core/types.js';
+import { CacheType, LogLevel, StorageType } from '../constants/enums.js';
 
 export type ConfigPreset = 'minimal' | 'standard' | 'advanced' | 'enterprise';
 
@@ -26,7 +27,7 @@ export const CONFIG_PRESETS: Record<ConfigPreset, Partial<MinderConfig>> = {
   minimal: {
     // Only CRUD, no extras
     cache: {
-      type: 'memory',
+      type: CacheType.MEMORY,
       ttl: 5 * 60 * 1000, // 5 minutes
       maxSize: 50, // 50 items
     },
@@ -39,7 +40,7 @@ export const CONFIG_PRESETS: Record<ConfigPreset, Partial<MinderConfig>> = {
     },
     debug: {
       enabled: false,
-      logLevel: 'error',
+      logLevel: LogLevel.ERROR,
     },
   },
 
@@ -51,11 +52,11 @@ export const CONFIG_PRESETS: Record<ConfigPreset, Partial<MinderConfig>> = {
   standard: {
     auth: {
       tokenKey: 'token',
-      storage: 'cookie', // Changed from localStorage (v2.1) - More secure, XSS resistant
+      storage: StorageType.COOKIE, // Changed from localStorage (v2.1) - More secure, XSS resistant
       refreshUrl: '/api/auth/refresh',
     },
     cache: {
-      type: 'hybrid', // Memory + IndexedDB fallback
+      type: CacheType.HYBRID, // Memory + IndexedDB fallback
       ttl: 15 * 60 * 1000, // 15 minutes
       maxSize: 200,
       refetchOnWindowFocus: true,
@@ -80,7 +81,7 @@ export const CONFIG_PRESETS: Record<ConfigPreset, Partial<MinderConfig>> = {
     },
     debug: {
       enabled: process.env.NODE_ENV === 'development',
-      logLevel: 'warn',
+      logLevel: LogLevel.WARN,
       performance: true,
     },
   },
@@ -92,12 +93,12 @@ export const CONFIG_PRESETS: Record<ConfigPreset, Partial<MinderConfig>> = {
    */
   advanced: {
     auth: {
-      tokenKey: 'token',
-      storage: 'cookie', // Changed from localStorage (v2.1) - More secure, XSS resistant
-      refreshUrl: '/api/auth/refresh',
+      tokenKey: 'auth_token',
+      storage: StorageType.COOKIE, // HTTPOnly + Secure + SameSite
+      refreshUrl: '/api/v2/auth/refresh',
     },
     cache: {
-      type: 'persistent', // IndexedDB for offline support
+      type: CacheType.PERSISTENT, // IndexedDB with sync
       ttl: 30 * 60 * 1000, // 30 minutes
       maxSize: 1000,
       refetchOnWindowFocus: true,
@@ -106,36 +107,29 @@ export const CONFIG_PRESETS: Record<ConfigPreset, Partial<MinderConfig>> = {
     security: {
       sanitization: {
         enabled: true,
-        allowedTags: ['b', 'i', 'em', 'strong', 'a', 'p'],
+        allowedTags: ['b', 'i', 'em', 'strong', 'a', 'p', 'ul', 'ol', 'li'],
       },
-      csrfProtection: {
-        enabled: true,
-        tokenLength: 32,
-      },
+      csrfProtection: true,
       rateLimiting: {
-        requests: 500,
+        requests: 200,
         window: 60000,
       },
-      inputValidation: true,
+      encryption: true,
     },
     performance: {
       deduplication: true,
       batching: true,
-      batchDelay: 50,
-      monitoring: true,
-      retries: 3,
-      retryDelay: 1000,
-      timeout: 30000,
+      batchDelay: 25,
+      retries: 5,
+      timeout: 45000,
       compression: true,
-      bundleAnalysis: true,
       lazyLoading: true,
     },
     debug: {
       enabled: process.env.NODE_ENV === 'development',
-      logLevel: 'info',
+      logLevel: LogLevel.INFO,
       performance: true,
       devTools: true,
-      networkLogs: true,
     },
   },
 
@@ -147,11 +141,11 @@ export const CONFIG_PRESETS: Record<ConfigPreset, Partial<MinderConfig>> = {
   enterprise: {
     auth: {
       tokenKey: 'token',
-      storage: 'cookie',
+      storage: StorageType.COOKIE,
       refreshUrl: '/api/auth/refresh',
     },
     cache: {
-      type: 'persistent',
+      type: CacheType.PERSISTENT,
       ttl: 60 * 60 * 1000, // 1 hour
       maxSize: 5000,
       refetchOnWindowFocus: true,
@@ -202,7 +196,7 @@ export const CONFIG_PRESETS: Record<ConfigPreset, Partial<MinderConfig>> = {
     },
     debug: {
       enabled: process.env.NODE_ENV === 'development',
-      logLevel: 'debug',
+      logLevel: LogLevel.DEBUG,
       performance: true,
       devTools: true,
       networkLogs: true,
