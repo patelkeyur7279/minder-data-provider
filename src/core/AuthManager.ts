@@ -23,7 +23,7 @@ export class AuthManager {
     // Initialize platform-specific storage
     if (this.config.storage === StorageType.ASYNC_STORAGE) {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
+         
         this.AsyncStorage = require('@react-native-async-storage/async-storage').default;
       } catch {
         console.warn('[AuthManager] AsyncStorage not available, falling back to memory storage');
@@ -31,7 +31,7 @@ export class AuthManager {
       }
     } else if (this.config.storage === StorageType.SECURE_STORE) {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
+         
         this.SecureStore = require('expo-secure-store');
       } catch {
         console.warn('[AuthManager] AsyncStorage not available, falling back to memory storage');
@@ -117,7 +117,17 @@ export class AuthManager {
 
     // Check if token is expired (if it's a JWT)
     try {
-      const payload = JSON.parse(atob(token.split('.')[1] || ''));
+      // Validate JWT has 3 parts (header.payload.signature)
+      const parts = token.split('.');
+      if (parts.length !== 3 || !parts[1]) {
+        // Not a valid JWT format, assume it's valid
+        if (this.debugManager && this.enableLogs) {
+          this.debugManager.log(DebugLogType.AUTH, '✅ AUTH CHECK: Non-JWT token', {});
+        }
+        return true;
+      }
+
+      const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
       const now = Date.now() / 1000;
       const isValid = payload.exp ? payload.exp > now : true;
       
@@ -133,7 +143,7 @@ export class AuthManager {
       
       return isValid;
     } catch {
-      // If not a JWT, assume it's valid
+      // If parsing fails, assume it's valid
       if (this.debugManager && this.enableLogs) {
         this.debugManager.log(DebugLogType.AUTH, '✅ AUTH CHECK: Non-JWT token', {});
       }

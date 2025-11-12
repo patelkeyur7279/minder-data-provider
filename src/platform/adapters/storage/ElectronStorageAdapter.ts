@@ -18,7 +18,7 @@ export class ElectronStorageAdapter extends BaseStorageAdapter {
     
     try {
       // Dynamic import for electron-store
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
+       
       const Store = require('electron-store');
       this.store = new Store({
         name: options.namespace || 'minder-cache',
@@ -190,7 +190,7 @@ export class ElectronStorageAdapter extends BaseStorageAdapter {
     // In production, this should be stored securely (e.g., using electron's safeStorage)
     // For now, we'll use a simple obfuscation
     const appName = process.env.npm_package_name || 'minder-app';
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+     
     const machineId = require('os').hostname();
     
     return `${appName}-${machineId}`;

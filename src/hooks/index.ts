@@ -196,8 +196,15 @@ export function useCurrentUser() {
     const token = authManager.getToken();
     if (token) {
       try {
+        // Validate JWT has 3 parts (header.payload.signature)
+        const parts = token.split('.');
+        if (parts.length !== 3 || !parts[1]) {
+          setUser(null);
+          return;
+        }
+        
         // Decode JWT token to get user info
-        const payload = JSON.parse(atob(token.split('.')[1] || ''));
+        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
         setUser(payload);
       } catch {
         setUser(null);

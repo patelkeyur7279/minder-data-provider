@@ -343,10 +343,10 @@ export interface UseMinderReturn<TData = any> {
    * CRUD operations (available when within MinderDataProvider)
    */
   operations?: {
-    create: (item: Partial<TData>) => Promise<TData>;
-    update: (id: string | number, item: Partial<TData>) => Promise<TData>;
-    delete: (id: string | number) => Promise<void>;
-    fetch: () => Promise<TData[]>;
+    create: (item: Partial<TData>, options?: { params?: Record<string, any> }) => Promise<TData>;
+    update: (id: string | number, item: Partial<TData>, options?: { params?: Record<string, any> }) => Promise<TData>;
+    delete: (id: string | number, options?: { params?: Record<string, any> }) => Promise<void>;
+    fetch: (options?: { params?: Record<string, any> }) => Promise<TData[]>;
     refresh: () => void;
     clear: () => void;
   };
@@ -385,7 +385,7 @@ export interface UseMinderReturn<TData = any> {
     connect: () => void;
     disconnect: () => void;
     send: (type: string, data: any) => void;
-    subscribe: (event: string, callback: (data: any) => void) => void;
+    subscribe: (event: string, callback: (data: any) => void) => (() => void);
     isConnected: () => boolean;
   };
   
@@ -883,39 +883,58 @@ export function useMinder<TData = any>(
   if (context?.apiClient && context?.cacheManager) {
     // Create CRUD operations similar to useOneTouchCrud
     const createMutation = useMutation({
-      mutationFn: async (item: Partial<TData>) => {
+      mutationFn: async ({ item, params }: { 
+        item: Partial<TData>; 
+        params?: Record<string, any> 
+      }) => {
         // Validate before create
         let validatedItem = item;
         if (options.validate) {
           validatedItem = await options.validate(item as TData);
         }
-        return context.apiClient.request(route, validatedItem);
+        // ✅ Pass params to request for dynamic URL replacement
+        return context.apiClient.request(route, validatedItem, params);
       },
       onSuccess: () => queryClient.invalidateQueries({ queryKey }),
     });
 
     const updateMutation = useMutation({
-      mutationFn: async ({ id, item }: { id: string | number; item: Partial<TData> }) => {
+      mutationFn: async ({ id, item, params }: { 
+        id: string | number; 
+        item: Partial<TData>;
+        params?: Record<string, any>
+      }) => {
         // Validate before update
         let validatedItem = item;
         if (options.validate) {
           validatedItem = await options.validate(item as TData);
         }
-        return context.apiClient.request(route, validatedItem, { id });
+        // ✅ Merge id with params for URL replacement
+        return context.apiClient.request(route, validatedItem, { ...params, id });
       },
       onSuccess: () => queryClient.invalidateQueries({ queryKey }),
     });
 
     const deleteMutation = useMutation({
-      mutationFn: (id: string | number) => context.apiClient.request(route, undefined, { id }),
+      mutationFn: ({ id, params }: { 
+        id: string | number;
+        params?: Record<string, any>
+      }) => {
+        // ✅ Merge id with params for URL replacement
+        return context.apiClient.request(route, undefined, { ...params, id });
+      },
       onSuccess: () => queryClient.invalidateQueries({ queryKey }),
     });
 
     crudOperations = {
-      create: (item: Partial<TData>) => createMutation.mutateAsync(item),
-      update: (id: string | number, item: Partial<TData>) => updateMutation.mutateAsync({ id, item }),
-      delete: (id: string | number) => deleteMutation.mutateAsync(id),
-      fetch: async () => {
+      // ✅ Accept params option in all CRUD operations
+      create: (item: Partial<TData>, opts?: { params?: Record<string, any> }) => 
+        createMutation.mutateAsync({ item, params: opts?.params }),
+      update: (id: string | number, item: Partial<TData>, opts?: { params?: Record<string, any> }) => 
+        updateMutation.mutateAsync({ id, item, params: opts?.params }),
+      delete: (id: string | number, opts?: { params?: Record<string, any> }) => 
+        deleteMutation.mutateAsync({ id, params: opts?.params }),
+      fetch: async (opts?: { params?: Record<string, any> }) => {
         const result = await query.refetch();
         return (result.data?.data || []) as TData[];
       },
@@ -980,8 +999,14 @@ export function useMinder<TData = any>(
         const token = context.authManager.getToken();
         if (token) {
           try {
+            // Validate JWT has 3 parts (header.payload.signature)
+            const parts = token.split('.');
+            if (parts.length !== 3 || !parts[1]) {
+              return null;
+            }
+            
             // Decode JWT token to get user info
-            const payload = JSON.parse(atob(token.split('.')[1] || ''));
+            const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
             return payload;
           } catch {
             return null;
@@ -1055,7 +1080,9 @@ export function useMinder<TData = any>(
       context?.websocketManager?.send(type, data);
     },
     subscribe: (event: string, callback: (data: any) => void) => {
-      context?.websocketManager?.subscribe(event, callback);
+      // ✅ Return unsubscribe function for cleanup
+      const unsubscribe = context?.websocketManager?.subscribe(event, callback);
+      return unsubscribe || (() => {}); // Return noop if no manager
     },
     isConnected: () => {
       return context?.websocketManager?.isConnected() || false;
