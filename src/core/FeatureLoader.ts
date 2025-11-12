@@ -312,32 +312,32 @@ export class FeatureLoader {
     try {
       switch (feature) {
         case 'auth':
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
+           
           return require('../auth');
         case 'cache':
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
+           
           return require('../cache');
         case 'websocket':
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
+           
           return require('../websocket');
         case 'upload':
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
+           
           return require('../upload');
         case 'plugins':
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
+           
           return require('../plugins');
         case 'devtools':
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
+           
           return require('../devtools');
         case 'ssr':
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
+           
           return require('../ssr');
         case 'storage':
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
+           
           return require('../platform/adapters/storage');
         case 'logger':
         case 'performance':
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
+           
           return require('../debug');
         default:
           throw new MinderConfigError(`Unknown feature: ${feature}`, 'UNKNOWN_FEATURE');

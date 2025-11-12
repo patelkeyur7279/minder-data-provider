@@ -237,7 +237,13 @@ export class SecureAuthManager extends AuthManager {
    */
   private parseJWT(token: string): JWTPayload | null {
     try {
-      const payload = JSON.parse(atob(token.split('.')[1] || ''));
+      // Validate JWT has 3 parts (header.payload.signature)
+      const parts = token.split('.');
+      if (parts.length !== 3 || !parts[1]) {
+        return null;
+      }
+      
+      const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
       return payload as JWTPayload;
     } catch {
       return null;

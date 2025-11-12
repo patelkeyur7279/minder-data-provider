@@ -48,7 +48,7 @@ export async function generateConfigFromApiRoutes(
     RouteProcessor = (await import('../utils/routeProcessor.js')).RouteProcessor;
   } catch (error) {
     // In test environments that don't support dynamic imports, try static import
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+     
     const routeProcessorModule = require('../utils/routeProcessor.js');
     RouteProcessor = routeProcessorModule.RouteProcessor;
   }

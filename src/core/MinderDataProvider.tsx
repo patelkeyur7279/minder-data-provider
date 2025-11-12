@@ -255,14 +255,17 @@ export function MinderDataProvider({
           )}
 
           {process.env.NODE_ENV !== "production" &&
+            contextValue.config.debug?.enabled !== false &&
             contextValue.ReactQueryDevtools && (
               <contextValue.ReactQueryDevtools initialIsOpen={false} />
             )}
 
           {/* Custom DevTools */}
-          {contextValue.config.debug?.devTools && (
-            <DevTools config={contextValue.config.debug} />
-          )}
+          {process.env.NODE_ENV !== "production" &&
+            contextValue.config.debug?.enabled !== false &&
+            contextValue.config.debug?.devTools && (
+              <DevTools config={contextValue.config.debug} />
+            )}
         </QueryClientProvider>
       </ReduxProvider>
     </MinderContext.Provider>
