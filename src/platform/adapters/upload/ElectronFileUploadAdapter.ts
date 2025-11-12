@@ -191,7 +191,7 @@ export class ElectronFileUploadAdapter extends FileUploadAdapter {
    * Load Electron module
    */
   private async loadElectron(): Promise<any> {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+     
     const loadElectron = new Function('return require("electron")');
     return loadElectron();
   }
@@ -200,7 +200,7 @@ export class ElectronFileUploadAdapter extends FileUploadAdapter {
    * Load fs module
    */
   private async loadFS(): Promise<any> {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+     
     const loadFS = new Function('return require("fs")');
     return loadFS();
   }
@@ -209,7 +209,7 @@ export class ElectronFileUploadAdapter extends FileUploadAdapter {
    * Load path module
    */
   private async loadPath(): Promise<any> {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+     
     const loadPath = new Function('return require("path")');
     return loadPath();
   }

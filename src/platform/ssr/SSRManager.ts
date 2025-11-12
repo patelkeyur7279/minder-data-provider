@@ -136,7 +136,7 @@ export class SSRManager {
 
     // Import dehydrate dynamically to avoid SSR issues
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
+       
       const { dehydrate } = require('@tanstack/react-query');
       return dehydrate(this.queryClient);
     } catch (error) {
