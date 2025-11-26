@@ -19,6 +19,8 @@ export class WebSocketManager {
   private debugManager?: DebugManager;
   private enableLogs: boolean;
 
+  private offlineQueue: Array<{ type: string; data: unknown }> = [];
+
   constructor(config: WebSocketConfig, authManager: AuthManager, debugManager?: DebugManager, enableLogs: boolean = false) {
     this.config = config;
     this.authManager = authManager;
@@ -59,6 +61,9 @@ export class WebSocketManager {
                 readyState: this.adapter?.getState(),
               });
             }
+
+            // Flush offline queue
+            this.flushOfflineQueue();
 
             resolve();
           },
@@ -137,6 +142,33 @@ export class WebSocketManager {
           type,
           dataSize: JSON.stringify(message).length,
         });
+      }
+    } else {
+      // Queue message if offline
+      this.offlineQueue.push({ type, data });
+
+      if (this.debugManager && this.enableLogs) {
+        this.debugManager.log(DebugLogType.WEBSOCKET, '📥 WS QUEUED (OFFLINE)', {
+          type,
+          queueSize: this.offlineQueue.length,
+        });
+      }
+    }
+  }
+
+  private flushOfflineQueue(): void {
+    if (this.offlineQueue.length > 0) {
+      if (this.debugManager && this.enableLogs) {
+        this.debugManager.log(DebugLogType.WEBSOCKET, '🚀 WS FLUSHING QUEUE', {
+          count: this.offlineQueue.length,
+        });
+      }
+
+      while (this.offlineQueue.length > 0) {
+        const item = this.offlineQueue.shift();
+        if (item) {
+          this.send(item.type, item.data);
+        }
       }
     }
   }
