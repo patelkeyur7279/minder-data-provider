@@ -13,7 +13,17 @@ import type { OfflineConfig } from '../platform/offline/types.js';
 export interface MinderConfig {
   apiBaseUrl: string;
   routes: Record<string, ApiRoute>;
-  dynamic: any;
+  /**
+   * Optional dynamic import function (e.g., Next.js dynamic())
+   * Used for code-splitting React Query Devtools in development
+   * @example
+   * import dynamic from 'next/dynamic';
+   * const config = { dynamic, ... };
+   */
+  dynamic?: (
+    loader: () => Promise<any>,
+    options?: { ssr?: boolean }
+  ) => any;
   auth?: AuthConfig;
   cache?: CacheConfig;
   /**
@@ -118,31 +128,31 @@ export interface CorsHelperConfig {
    * @default false
    */
   enabled?: boolean;
-  
+
   /**
    * Proxy server URL to route requests through
    * Useful when you can't modify the target API's CORS headers
    * @example 'https://your-proxy.com/api'
    */
   proxy?: string;
-  
+
   /**
    * Include credentials (cookies, authorization headers) in requests
    * @default false
    */
   credentials?: boolean;
-  
+
   /**
    * Expected origin(s) - for validation only
    * This does NOT set server CORS headers
    */
   origin?: string | string[];
-  
+
   /**
    * HTTP methods to include in preflight requests
    */
   methods?: HttpMethod[];
-  
+
   /**
    * Headers to include in preflight requests
    */
@@ -168,13 +178,13 @@ export interface RetryConfig {
    * @default 3
    */
   maxRetries?: number;
-  
+
   /**
    * HTTP status codes that should trigger a retry
    * @default [408, 429, 500, 502, 503, 504]
    */
   retryableStatusCodes?: number[];
-  
+
   /**
    * Backoff strategy for retry delays
    * - 'exponential': delay increases exponentially (1s, 2s, 4s, 8s...)
@@ -183,19 +193,19 @@ export interface RetryConfig {
    * @default 'exponential'
    */
   backoff?: 'exponential' | 'linear' | ((attempt: number) => number);
-  
+
   /**
    * Base delay in milliseconds for retry backoff
    * @default 1000
    */
   baseDelay?: number;
-  
+
   /**
    * Maximum delay in milliseconds between retries
    * @default 30000
    */
   maxDelay?: number;
-  
+
   /**
    * Custom function to determine if a request should be retried
    * @param error - The error that occurred
