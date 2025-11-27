@@ -189,7 +189,6 @@ function buildFullConfig(
   // Base configuration
   const baseConfig: Partial<MinderConfig> = {
     apiBaseUrl: config.apiUrl,
-    dynamic: {}, // Required by interface
     autoDetectEnvironment: true,
   };
 
@@ -398,10 +397,10 @@ function applyUserConfig(
 
   // CORS configuration (backward compatibility)
   // Handle both old 'cors' and new 'corsHelper' fields
-  const corsConfig = (userConfig as any).corsHelper !== undefined 
-    ? (userConfig as any).corsHelper 
+  const corsConfig = (userConfig as any).corsHelper !== undefined
+    ? (userConfig as any).corsHelper
     : userConfig.cors;
-  
+
   if (corsConfig !== undefined) {
     // Show deprecation warning if using old 'cors' field
     if (userConfig.cors !== undefined && (userConfig as any).corsHelper === undefined) {
@@ -419,7 +418,7 @@ function applyUserConfig(
         );
       }
     }
-    
+
     if (corsConfig === true) {
       baseConfig.cors = { enabled: true, credentials: true };
       (baseConfig as any).corsHelper = { enabled: true, credentials: true };
@@ -545,25 +544,25 @@ function getEnabledFeatures(config: Partial<MinderConfig>): string[] {
 function validateNextJsConfig(config: UnifiedMinderConfig): void {
   // Check if dynamic property exists and is not empty
   const dynamicConfig = (config as any).dynamic;
-  
+
   if (!dynamicConfig || typeof dynamicConfig !== 'function') {
     const error = new MinderConfigError(
       'Next.js detected: Missing required "dynamic" configuration',
       'dynamic',
       'NEXTJS_DYNAMIC_REQUIRED'
     );
-    
+
     error.addSuggestion({
       message: 'Next.js requires the "dynamic" import to enable code splitting',
       action: 'Add `dynamic: dynamic` to your configuration',
       link: 'https://github.com/patelkeyur7279/minder-data-provider/blob/main/docs/DYNAMIC_IMPORTS.md'
     });
-    
+
     error.addSuggestion({
       message: 'Import the dynamic function from Next.js',
       action: 'Add `import dynamic from "next/dynamic";` at the top of your file'
     });
-    
+
     error.addSuggestion({
       message: 'Example configuration:',
       action: `
@@ -577,7 +576,7 @@ export const config = createMinderConfig({
 });
       `.trim()
     });
-    
+
     throw error;
   }
 }
