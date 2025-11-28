@@ -227,10 +227,21 @@ export class ApiClient {
               // Call refresh endpoint
               // Use axios directly to avoid interceptors loop
               const refreshToken = await this.authManager.getRefreshToken();
+
+              // If using cookies, the refresh token might be HttpOnly and not accessible via JS.
+              // In that case, we send the request anyway, assuming the browser will send the cookie.
+              const isCookieStorage = this.config.auth?.storage === 'cookie'; // Check string value or enum
+
+              if (!refreshToken && !isCookieStorage) {
+                // If not using cookies and no token, we can't refresh
+                throw new Error('No refresh token available');
+              }
+
               const response = await axios.post(
                 `${this.config.apiBaseUrl}${this.config.auth.refreshUrl}`,
-                { refreshToken },
+                refreshToken ? { refreshToken } : {}, // Only send body if we have the token
                 {
+                  withCredentials: true, // Important for cookies
                   headers: {
                     'Content-Type': 'application/json',
                     // Add any other necessary headers

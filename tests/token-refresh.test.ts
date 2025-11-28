@@ -46,7 +46,9 @@ describe('Token Refresh Logic', () => {
     };
 
     authManager = new AuthManager(config.auth);
-    authManager.setToken('expired-token');
+    // Set initial token
+    authManager.setToken('old-token');
+    authManager.setRefreshToken('mock-refresh-token'); // Required for refresh logic
 
     // Create ApiClient
     apiClient = new ApiClient(config, authManager);

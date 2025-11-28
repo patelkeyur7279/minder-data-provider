@@ -79,7 +79,15 @@ export class CSRFTokenManager {
 
     // Store in cookie if configured
     if (typeof document !== 'undefined' && this.cookieName) {
-      document.cookie = `${this.cookieName}=${token}; path=/; SameSite=Strict; Secure`;
+      let secure = '';
+      // We don't have direct access to full config here easily without passing it down, 
+      // but we can default to auto-detect which is safe.
+      // Ideally CSRFTokenManager should accept a config object.
+      // For now, let's use auto-detect as a safe default for development/production parity.
+      // For now, let's use auto-detect as a safe default for development/production parity.
+      secure = (typeof window !== 'undefined' && window.location.protocol === 'https:') ? '; Secure' : '';
+
+      document.cookie = `${this.cookieName}=${token}; path=/; SameSite=Strict${secure}`;
     }
   }
 

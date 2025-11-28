@@ -131,7 +131,17 @@ export function useAuth() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
+    // Initial check
     setIsLoggedIn(authManager.isAuthenticated());
+
+    // Subscribe to changes
+    const unsubscribe = authManager.subscribe(() => {
+      setIsLoggedIn(authManager.isAuthenticated());
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, [authManager]);
 
   return {

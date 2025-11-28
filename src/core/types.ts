@@ -76,6 +76,7 @@ export interface AuthConfig {
   tokenStorage?: StorageType; // For light config
   refreshUrl?: string;
   onAuthError?: () => void;
+  secureCookie?: boolean; // If true, forces Secure flag. If false, forces no Secure. If undefined, auto-detects based on protocol.
 }
 
 export interface CacheConfig {
@@ -255,6 +256,7 @@ export interface SecurityConfig {
     tokenLength?: number;
     headerName?: string;
     cookieName?: string;
+    secureCookie?: boolean;
   };
   rateLimiting?: {
     requests: number;

@@ -42,6 +42,19 @@ export class AuthManager {
     }
   }
 
+  private listeners: Set<() => void> = new Set();
+
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private notify(): void {
+    this.listeners.forEach(listener => listener());
+  }
+
   setToken(token: string): void {
     this.setItem(this.config.tokenKey, token);
 
@@ -52,6 +65,7 @@ export class AuthManager {
         tokenLength: token.length,
       });
     }
+    this.notify();
   }
 
   getToken(): string | null {
@@ -79,6 +93,7 @@ export class AuthManager {
         tokenLength: token.length,
       });
     }
+    // No notify needed for refresh token usually, but good for consistency
   }
 
   getRefreshToken(): string | null {
@@ -106,6 +121,7 @@ export class AuthManager {
         storage: this.config.storage,
       });
     }
+    this.notify();
   }
 
   isAuthenticated(): boolean {
@@ -175,7 +191,16 @@ export class AuthManager {
         break;
       case StorageType.COOKIE:
         if (typeof document !== 'undefined') {
-          document.cookie = `${key}=${value}; path=/; secure; samesite=strict`;
+          let secure = '';
+          if (this.config.secureCookie === true) {
+            secure = '; secure';
+          } else if (this.config.secureCookie === false) {
+            secure = '';
+          } else {
+            // Auto-detect: Use secure if on HTTPS (safe check for window)
+            secure = (typeof window !== 'undefined' && window.location.protocol === 'https:') ? '; secure' : '';
+          }
+          document.cookie = `${key}=${value}; path=/; samesite=strict${secure}`;
         }
         break;
       case StorageType.ASYNC_STORAGE:
