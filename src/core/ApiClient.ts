@@ -536,20 +536,25 @@ export class ApiClient {
     // Execute request with caching for GET
     const startTime = performance.now();
 
-    let requestPromise = this.axiosInstance.request(requestConfig);
+    let requestPromise: Promise<AxiosResponse<T>>;
 
     // Use deduplication if enabled
     if (this.deduplicator && route.method === 'GET') {
       requestPromise = this.deduplicator.deduplicate(cacheKey, () =>
         this.axiosInstance.request(requestConfig)
       );
-    } else if (route.method === 'GET' && this.config.performance?.deduplication) {
-      this.requestCache.set(cacheKey, requestPromise);
+    } else {
+      requestPromise = this.axiosInstance.request(requestConfig);
 
-      // Clean up cache after request completes
-      requestPromise.finally(() => {
-        setTimeout(() => this.requestCache.delete(cacheKey), 1000);
-      });
+      // Simple cache logic (fallback)
+      if (route.method === 'GET' && this.config.performance?.deduplication) {
+        this.requestCache.set(cacheKey, requestPromise);
+
+        // Clean up cache after request completes
+        requestPromise.finally(() => {
+          setTimeout(() => this.requestCache.delete(cacheKey), 1000);
+        });
+      }
     }
 
     const response: AxiosResponse<T> = await requestPromise;
