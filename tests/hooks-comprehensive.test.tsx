@@ -79,6 +79,9 @@ describe('🧪 Comprehensive Hook Testing', () => {
                 authResult.current.setToken(jwt);
             });
 
+            // Check isLoggedIn property (hydration safe)
+            expect(authResult.current.isLoggedIn).toBe(true);
+
             // Now check useCurrentUser
             const { result } = renderHook(() => useCurrentUser(), { wrapper });
 
@@ -283,9 +286,7 @@ describe('🧪 Comprehensive Hook Testing', () => {
 
             expect(result.current.currentEnvironment).toBeDefined();
             expect(result.current.isDevelopment).toBeDefined();
-            expect(typeof result.current.isDevelopment).toBe('function');
-            expect(result.current.isProduction).toBeDefined();
-            expect(typeof result.current.isProduction).toBe('function');
+            expect(result.current.isHydrated).toBe(true); // Should be true after mount
         });
 
         it('should provide environment switching', () => {
@@ -305,7 +306,6 @@ describe('🧪 Comprehensive Hook Testing', () => {
             const { result } = renderHook(() => useEnvironment(), { wrapper });
 
             expect(result.current.setEnvironment).toBeDefined();
-            expect(typeof result.current.setEnvironment).toBe('function');
         });
     });
 

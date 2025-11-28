@@ -128,12 +128,24 @@ export function useOneTouchCrud<T = any>(
 // Authentication hook
 export function useAuth() {
   const { authManager } = useMinderContext();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    setIsLoggedIn(authManager.isAuthenticated());
+  }, [authManager]);
 
   return {
-    setToken: (token: string) => authManager.setToken(token),
+    isLoggedIn, // ✅ Safe for hydration (false initially, updates after mount)
+    setToken: (token: string) => {
+      authManager.setToken(token);
+      setIsLoggedIn(true);
+    },
     getToken: () => authManager.getToken(),
-    clearAuth: () => authManager.clearAuth(),
-    isAuthenticated: () => authManager.isAuthenticated(),
+    clearAuth: () => {
+      authManager.clearAuth();
+      setIsLoggedIn(false);
+    },
+    isAuthenticated: () => authManager.isAuthenticated(), // ⚠️ Warning: unsafe for hydration if called in render
     setRefreshToken: (token: string) => authManager.setRefreshToken(token),
     getRefreshToken: () => authManager.getRefreshToken(),
   };
