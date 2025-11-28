@@ -220,7 +220,7 @@ export class AuthManager {
       case StorageType.COOKIE:
         if (typeof document !== 'undefined') {
           const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${key}=([^;]*)`));
-          return match ? match[1] : null;
+          return match ? match[1] || null : null;
         }
         break;
       case StorageType.ASYNC_STORAGE:
