@@ -237,19 +237,45 @@ export class ApiClient {
                 throw new Error('No refresh token available');
               }
 
+              // Construct URL safely
+              const baseUrl = this.config.apiBaseUrl.replace(/\/$/, '');
+              const refreshUrl = this.config.auth.refreshUrl?.replace(/^\//, '') || '';
+              const fullRefreshUrl = `${baseUrl}/${refreshUrl}`;
+
+              // Prepare headers
+              const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+              };
+
+              // Add Authorization header with expired token if available (some APIs require this)
+              const expiredToken = this.authManager.getToken();
+              if (expiredToken) {
+                headers['Authorization'] = `Bearer ${expiredToken}`;
+              }
+
               const response = await axios.post(
-                `${this.config.apiBaseUrl}${this.config.auth.refreshUrl}`,
+                fullRefreshUrl,
                 refreshToken ? { refreshToken } : {}, // Only send body if we have the token
                 {
                   withCredentials: true, // Important for cookies
-                  headers: {
-                    'Content-Type': 'application/json',
-                    // Add any other necessary headers
-                  }
+                  headers
                 }
               );
 
-              const { token, refreshToken: newRefreshToken } = response.data;
+              // Flexible token extraction
+              let responseData = response.data;
+
+              // Use custom model if configured
+              if (this.config.auth?.refreshModel) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                responseData = new (this.config.auth.refreshModel as any)().fromJSON(response.data);
+              }
+
+              const tokenKey = this.config.auth?.tokenKey || 'accessToken';
+
+              // Try to find token in various common properties
+              const token = responseData.token || responseData.accessToken || responseData[tokenKey];
+              const newRefreshToken = responseData.refreshToken || responseData.refresh_token;
 
               if (token) {
                 this.authManager.setToken(token);
@@ -263,7 +289,7 @@ export class ApiClient {
                 originalRequest.headers['Authorization'] = `Bearer ${token}`;
                 return this.axiosInstance.request(originalRequest);
               } else {
-                throw new Error('No token returned from refresh endpoint');
+                throw new Error(`No token returned from refresh endpoint. Response keys: ${Object.keys(responseData || {}).join(', ')}. Data: ${JSON.stringify(responseData)}`);
               }
             } catch (refreshError) {
               this.processQueue(refreshError, null);
@@ -494,7 +520,7 @@ export class ApiClient {
     }
 
     let url = route.url;
-    // let url = `${this.config.apiBaseUrl}${route.url}`;
+    // let url = `${ this.config.apiBaseUrl }${ route.url }`;
 
     // Replace URL parameters
     if (params) {
@@ -521,7 +547,7 @@ export class ApiClient {
     }
 
     // Request deduplication for GET requests
-    const cacheKey = `${route.method}:${url}:${JSON.stringify(data || {})}`;
+    const cacheKey = `${route.method}: ${url}: ${JSON.stringify(data || {})}`;
     if (route.method === 'GET' && this.config.performance?.deduplication) {
       const cachedRequest = this.requestCache.get(cacheKey);
       if (cachedRequest) {

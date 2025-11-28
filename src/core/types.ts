@@ -75,6 +75,7 @@ export interface AuthConfig {
   storage: StorageType;
   tokenStorage?: StorageType; // For light config
   refreshUrl?: string;
+  refreshModel?: typeof BaseModel; // Optional custom model for refresh response
   onAuthError?: () => void;
   secureCookie?: boolean; // If true, forces Secure flag. If false, forces no Secure. If undefined, auto-detects based on protocol.
 }
