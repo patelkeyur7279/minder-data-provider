@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSelector, useDispatch } from 'react-redux';
 import { useMinderContext } from '../core/MinderDataProvider.js';
@@ -43,16 +44,13 @@ export function useOneTouchCrud<T = any>(
     cacheTime?: number;
   } = {}
 ): CrudOperations<T> {
-  const React = require('react');
-  const { useCallback: useCallbackLocal } = React as typeof import('react');
-  const { useCallback } = require('react');
   const { apiClient, cacheManager } = useMinderContext();
   const queryClient = useQueryClient();
 
   // Fetch data with configurable options
-  const { 
-    data = [], 
-    isLoading: fetchLoading, 
+  const {
+    data = [],
+    isLoading: fetchLoading,
     error: fetchError,
     refetch
   } = useQuery({
@@ -68,7 +66,7 @@ export function useOneTouchCrud<T = any>(
   const createMutation = useMutation({
     mutationFn: (item: Partial<T>) => apiClient.request<T>(routeName, item),
     onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: [routeName] });
+      queryClient.invalidateQueries({ queryKey: [routeName] });
     },
   });
 
@@ -91,23 +89,23 @@ export function useOneTouchCrud<T = any>(
 
   const operations = {
     // Manual fetch function that uses refetch from useQuery
-    fetch: useCallbackLocal(async () => {
+    fetch: useCallback(async () => {
       const result = await refetch();
       return (result.data || []) as T[];  // ✅ Return T[] instead of T
     }, [refetch]),
     // Create new item
-    create: useCallbackLocal((item: Partial<T>) => createMutation.mutateAsync(item), [createMutation]),
+    create: useCallback((item: Partial<T>) => createMutation.mutateAsync(item), [createMutation]),
     // Update existing item
-    update: useCallbackLocal(
+    update: useCallback(
       (id: string | number, item: Partial<T>) => updateMutation.mutateAsync({ id, item }),
       [updateMutation]
     ),
     // Delete item
-    delete: useCallbackLocal((id: string | number) => deleteMutation.mutateAsync(id), [deleteMutation]),
+    delete: useCallback((id: string | number) => deleteMutation.mutateAsync(id), [deleteMutation]),
     // Force refresh data
-    refresh: useCallbackLocal(() => queryClient.invalidateQueries({ queryKey: [routeName] }), [queryClient, routeName]),
+    refresh: useCallback(() => queryClient.invalidateQueries({ queryKey: [routeName] }), [queryClient, routeName]),
     // Clear cached data
-    clear: useCallbackLocal(() => cacheManager.clearCache(routeName), [cacheManager, routeName]),
+    clear: useCallback(() => cacheManager.clearCache(routeName), [cacheManager, routeName]),
   };
 
   return {
@@ -187,10 +185,9 @@ export function useReduxSlice(routeName: string) {
 
 // Current user hook
 export function useCurrentUser() {
-  const React = require('react');
-  const { useState, useEffect } = React as typeof import('react');
-  const { authManager } = useMinderContext();
   const [user, setUser] = useState<any>(null);
+
+  const { authManager } = useMinderContext();
 
   useEffect(() => {
     const token = authManager.getToken();
@@ -202,7 +199,7 @@ export function useCurrentUser() {
           setUser(null);
           return;
         }
-        
+
         // Decode JWT token to get user info
         const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
         setUser(payload);
@@ -224,8 +221,6 @@ export function useCurrentUser() {
 
 // Media upload hook
 export function useMediaUpload(routeName: string) {
-  const React = require('react');
-  const { useState, useCallback } = React as typeof import('react');
   const { apiClient } = useMinderContext();
   const [progress, setProgress] = useState<UploadProgress>({ loaded: 0, total: 0, percentage: 0 });
 
@@ -271,8 +266,6 @@ export function useWebSocket() {
 
 // UI State hook
 export function useUIState() {
-  const React = require('react');
-  const { useState, useCallback } = React as typeof import('react');
   const [uiState, setUIState] = useState({
     modals: {} as Record<string, boolean>,
     notifications: [] as any[],
@@ -328,8 +321,8 @@ export { useConfiguration } from './useConfiguration.js';
 export { useMinder } from './useMinder.js';
 export type { UseMinderOptions, UseMinderReturn } from './useMinder.js';
 export { usePaginatedMinder } from './usePaginatedMinder.js';
-export type { 
-  UsePaginatedMinderOptions, 
+export type {
+  UsePaginatedMinderOptions,
   UsePaginatedMinderReturn,
   PaginationConfig,
   PageData,
