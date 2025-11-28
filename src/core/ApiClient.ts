@@ -4,20 +4,20 @@ import type { MinderConfig, ApiRoute, ApiError } from './types.js';
 import { HttpMethod, DebugLogType } from '../constants/enums.js';
 import { AuthManager } from './AuthManager.js';
 import { ProxyManager } from './ProxyManager.js';
-import { 
-  MinderConfigError, 
-  MinderNetworkError, 
-  MinderTimeoutError, 
+import {
+  MinderConfigError,
+  MinderNetworkError,
+  MinderTimeoutError,
   MinderOfflineError,
   MinderValidationError,
   MinderAuthError,
   MinderAuthorizationError
 } from '../errors/index.js';
-import { 
-  CSRFTokenManager, 
-  XSSSanitizer, 
-  RateLimiter, 
-  getSecurityHeaders 
+import {
+  CSRFTokenManager,
+  XSSSanitizer,
+  RateLimiter,
+  getSecurityHeaders
 } from '../utils/security.js';
 import { CorsManager, handleCorsError } from '../utils/corsManager.js';
 import {
@@ -43,6 +43,11 @@ export class ApiClient {
   private performanceMonitor?: PerformanceMonitor;
   private corsManager?: CorsManager;
 
+  // Token refresh state
+  private isRefreshing = false;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private failedQueue: Array<{ resolve: (token: string) => void; reject: (error: any) => void }> = [];
+
   constructor(config: MinderConfig, authManager: AuthManager, proxyManager?: ProxyManager, debugManager?: DebugManager) {
     this.config = config;
     this.authManager = authManager;
@@ -51,8 +56,8 @@ export class ApiClient {
 
     // Initialize security utilities
     if (config.security?.csrfProtection) {
-      const csrfConfig = typeof config.security.csrfProtection === 'object' 
-        ? config.security.csrfProtection 
+      const csrfConfig = typeof config.security.csrfProtection === 'object'
+        ? config.security.csrfProtection
         : { enabled: true };
       this.csrfManager = new CSRFTokenManager(csrfConfig.cookieName);
     }
@@ -101,6 +106,18 @@ export class ApiClient {
     this.setupInterceptors();
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private processQueue(error: any, token: string | null = null) {
+    this.failedQueue.forEach((prom) => {
+      if (error) {
+        prom.reject(error);
+      } else if (token) {
+        prom.resolve(token);
+      }
+    });
+    this.failedQueue = [];
+  }
+
   private setupInterceptors() {
     // Request interceptor for auth, CORS, and security
     this.axiosInstance.interceptors.request.use(
@@ -129,7 +146,7 @@ export class ApiClient {
           const headerName = csrfConfig.headerName || 'X-CSRF-Token';
           config.headers[headerName] = this.csrfManager.getToken();
         }
-        
+
         // Rate limiting check
         if (this.rateLimiter && this.config.security?.rateLimiting) {
           const key = `${config.method}:${config.url}`;
@@ -158,10 +175,10 @@ export class ApiClient {
       (response) => {
         // Debug logging - API Response Success
         if (this.debugManager && this.config.debug?.networkLogs) {
-          const duration = response.config.headers?.['X-Request-Start-Time'] 
+          const duration = response.config.headers?.['X-Request-Start-Time']
             ? Date.now() - parseInt(response.config.headers['X-Request-Start-Time'] as string)
             : undefined;
-          
+
           this.debugManager.log(DebugLogType.API, `✅ ${response.status} ${response.config.method?.toUpperCase()} ${response.config.url}${duration ? ` (${duration}ms)` : ''}`, {
             status: response.status,
             statusText: response.statusText,
@@ -183,7 +200,78 @@ export class ApiClient {
           });
         }
 
-        if (error.response?.status === 401) {
+        const originalRequest = error.config;
+
+        // Handle 401 Unauthorized
+        if (error.response?.status === 401 && !originalRequest._retry) {
+          // Check if refresh is configured
+          if (this.config.auth?.refreshUrl) {
+            if (this.isRefreshing) {
+              // If already refreshing, queue this request
+              return new Promise((resolve, reject) => {
+                this.failedQueue.push({ resolve, reject });
+              })
+                .then((token) => {
+                  originalRequest.headers['Authorization'] = `Bearer ${token}`;
+                  return this.axiosInstance.request(originalRequest);
+                })
+                .catch((err) => {
+                  return Promise.reject(err);
+                });
+            }
+
+            originalRequest._retry = true;
+            this.isRefreshing = true;
+
+            try {
+              // Call refresh endpoint
+              // Use axios directly to avoid interceptors loop
+              const refreshToken = await this.authManager.getRefreshToken();
+              const response = await axios.post(
+                `${this.config.apiBaseUrl}${this.config.auth.refreshUrl}`,
+                { refreshToken },
+                {
+                  headers: {
+                    'Content-Type': 'application/json',
+                    // Add any other necessary headers
+                  }
+                }
+              );
+
+              const { token, refreshToken: newRefreshToken } = response.data;
+
+              if (token) {
+                this.authManager.setToken(token);
+                if (newRefreshToken) {
+                  this.authManager.setRefreshToken(newRefreshToken);
+                }
+
+                this.processQueue(null, token);
+                this.isRefreshing = false;
+
+                originalRequest.headers['Authorization'] = `Bearer ${token}`;
+                return this.axiosInstance.request(originalRequest);
+              } else {
+                throw new Error('No token returned from refresh endpoint');
+              }
+            } catch (refreshError) {
+              this.processQueue(refreshError, null);
+              this.isRefreshing = false;
+              this.authManager.clearAuth();
+              if (this.config.auth?.onAuthError) {
+                this.config.auth.onAuthError();
+              }
+              return Promise.reject(refreshError);
+            }
+          } else {
+            // No refresh configured, just fail
+            this.authManager.clearAuth();
+            if (this.config.auth?.onAuthError) {
+              this.config.auth.onAuthError();
+            }
+          }
+        } else if (error.response?.status === 401) {
+          // Already retried or failed
           this.authManager.clearAuth();
           if (this.config.auth?.onAuthError) {
             this.config.auth.onAuthError();
@@ -240,14 +328,14 @@ export class ApiClient {
     // Check if it's an AxiosError
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError;
-      
+
       const status = axiosError.response?.status || 0;
       const url = axiosError.config?.url;
       const method = axiosError.config?.method?.toUpperCase();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const responseData = axiosError.response?.data as any;
       const responseHeaders = axiosError.response?.headers as Record<string, string> | undefined;
-      
+
       switch (status) {
         case 400:
           return {
@@ -256,12 +344,12 @@ export class ApiClient {
             code: 'BAD_REQUEST',
             details: responseData,
           };
-        
+
         case 401:
           throw new MinderAuthError(
             responseData?.message || 'Authentication required'
           );
-        
+
         case 403:
           // Check if this is a CORS origin blocked error
           if (responseHeaders?.['access-control-allow-origin'] === 'null') {
@@ -271,12 +359,12 @@ export class ApiClient {
           throw new MinderAuthorizationError(
             responseData?.message || 'Permission denied'
           );
-        
+
         case 404: {
           const notFoundMsg = responseData?.message || `Resource not found: ${method} ${url}`;
           throw new MinderNetworkError(notFoundMsg, 404, responseData, url, method);
         }
-        
+
         case 405: {
           // Check if this is a CORS preflight failed error
           if (method === 'OPTIONS') {
@@ -286,19 +374,19 @@ export class ApiClient {
           const methodMsg = responseData?.message || `Method not allowed: ${method} ${url}`;
           throw new MinderNetworkError(methodMsg, 405, responseData, url, method);
         }
-        
+
         case 422: {
           throw new MinderValidationError(
             responseData?.message || 'Validation failed',
             responseData?.errors
           );
         }
-        
+
         case 429: {
           const rateLimitMsg = responseData?.message || 'Too many requests - rate limit exceeded';
           throw new MinderNetworkError(rateLimitMsg, 429, responseData, url, method);
         }
-        
+
         case 500:
         case 502:
         case 503:
@@ -306,7 +394,7 @@ export class ApiClient {
           const serverMsg = responseData?.message || 'Server error - please try again later';
           throw new MinderNetworkError(serverMsg, status, responseData, url, method);
         }
-        
+
         default:
           throw new MinderNetworkError(
             responseData?.message || axiosError.message || 'API error',
@@ -318,15 +406,15 @@ export class ApiClient {
           );
       }
     }
-    
+
     // Network error (has request but no response)
     if (error && typeof error === 'object' && 'request' in error) {
-      const networkError = error as { 
-        request?: unknown; 
+      const networkError = error as {
+        request?: unknown;
         code?: string;
         config?: { url?: string; method?: string; timeout?: number };
       };
-      
+
       // Check for timeout
       if (networkError.code === 'ECONNABORTED') {
         throw new MinderTimeoutError(
@@ -335,12 +423,12 @@ export class ApiClient {
           networkError.config?.url
         );
       }
-      
+
       // Check for offline
       if (networkError.code === 'ERR_NETWORK' || typeof navigator !== 'undefined' && !navigator.onLine) {
         throw new MinderOfflineError('No network connection', networkError.config?.url);
       }
-      
+
       // Generic network error
       throw new MinderNetworkError(
         'Network error - please check your connection',
@@ -351,12 +439,12 @@ export class ApiClient {
         'NETWORK_ERROR'
       );
     }
-    
+
     // Other errors
-    const errorMessage = error instanceof Error 
-      ? error.message 
+    const errorMessage = error instanceof Error
+      ? error.message
       : 'Unknown error occurred';
-      
+
     return {
       message: errorMessage,
       code: 'UNKNOWN_ERROR',
@@ -396,18 +484,18 @@ export class ApiClient {
 
     let url = route.url;
     // let url = `${this.config.apiBaseUrl}${route.url}`;
-    
+
     // Replace URL parameters
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
         url = url.replace(`:${key}`, String(value));
       });
     }
-    
+
     const requestConfig: AxiosRequestConfig = {
       method: route.method,
       url,
-      headers: { 
+      headers: {
         ...route.headers,
         ...(this.proxyManager?.getProxyHeaders() || {})
       },
@@ -433,7 +521,7 @@ export class ApiClient {
     // Handle different content types with sanitization
     if (data) {
       const sanitizedData = this.sanitizeData(data);
-      
+
       if (sanitizedData instanceof FormData) {
         requestConfig.data = sanitizedData;
         requestConfig.headers!['Content-Type'] = 'multipart/form-data';
@@ -447,31 +535,31 @@ export class ApiClient {
 
     // Execute request with caching for GET
     const startTime = performance.now();
-    
+
     let requestPromise = this.axiosInstance.request(requestConfig);
-    
+
     // Use deduplication if enabled
     if (this.deduplicator && route.method === 'GET') {
-      requestPromise = this.deduplicator.deduplicate(cacheKey, () => 
+      requestPromise = this.deduplicator.deduplicate(cacheKey, () =>
         this.axiosInstance.request(requestConfig)
       );
     } else if (route.method === 'GET' && this.config.performance?.deduplication) {
       this.requestCache.set(cacheKey, requestPromise);
-      
+
       // Clean up cache after request completes
       requestPromise.finally(() => {
         setTimeout(() => this.requestCache.delete(cacheKey), 1000);
       });
     }
-    
+
     const response: AxiosResponse<T> = await requestPromise;
-    
+
     // Record performance metrics
     if (this.performanceMonitor) {
       const duration = performance.now() - startTime;
       this.performanceMonitor.recordLatency(routeName, duration);
     }
-    
+
     // Transform response using model if specified
     if (route.model && response.data) {
       if (Array.isArray(response.data)) {

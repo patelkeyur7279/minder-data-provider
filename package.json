@@ -1,6 +1,6 @@
 {
   "name": "minder-data-provider",
-  "version": "2.1.2-beta.3",
+  "version": "2.1.2-beta.4",
   "description": "Production-ready hybrid Redux + TanStack Query data provider for Next.js with CORS support, WebSocket, and advanced caching",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
