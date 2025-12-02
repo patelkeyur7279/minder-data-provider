@@ -133,9 +133,11 @@ export class ApiClient {
           });
         }
 
-        const token = this.authManager.getToken();
+        const token = this.authManager.getToken(); // Add auth token if available
         if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
+          const authHeader = this.config.auth?.authHeader || 'Authorization';
+          const authPrefix = this.config.auth?.authTokenPrefix !== undefined ? this.config.auth.authTokenPrefix : 'Bearer';
+          config.headers[authHeader] = authPrefix ? `${authPrefix} ${token}` : token;
         }
 
         // CSRF Protection
@@ -212,7 +214,9 @@ export class ApiClient {
                 this.failedQueue.push({ resolve, reject });
               })
                 .then((token) => {
-                  originalRequest.headers['Authorization'] = `Bearer ${token}`;
+                  const authHeader = this.config.auth?.authHeader || 'Authorization';
+                  const authPrefix = this.config.auth?.authTokenPrefix !== undefined ? this.config.auth.authTokenPrefix : 'Bearer';
+                  originalRequest.headers[authHeader] = authPrefix ? `${authPrefix} ${token}` : token;
                   return this.axiosInstance.request(originalRequest);
                 })
                 .catch((err) => {
@@ -248,14 +252,30 @@ export class ApiClient {
               };
 
               // Add Authorization header with expired token if available (some APIs require this)
+              // We default to true to maintain backward compatibility, but allow users to disable it
+              const sendToken = this.config.auth?.sendTokenOnRefresh !== false;
               const expiredToken = this.authManager.getToken();
-              if (expiredToken) {
-                headers['Authorization'] = `Bearer ${expiredToken}`;
+
+              if (sendToken && expiredToken) {
+                const authHeader = this.config.auth?.authHeader || 'Authorization';
+                const authPrefix = this.config.auth?.authTokenPrefix !== undefined ? this.config.auth.authTokenPrefix : 'Bearer';
+                headers[authHeader] = authPrefix ? `${authPrefix} ${expiredToken}` : expiredToken;
+              }
+
+              // Log refresh attempt (since it bypasses interceptors)
+              if (this.debugManager && this.config.debug?.networkLogs) {
+                this.debugManager.log(DebugLogType.API, `🚀 POST ${fullRefreshUrl} (Refresh)`, {
+                  hasRefreshToken: !!refreshToken,
+                  isCookieStorage,
+                  headers
+                });
               }
 
               const response = await axios.post(
                 fullRefreshUrl,
-                refreshToken ? { refreshToken } : {}, // Only send body if we have the token
+                this.config.auth?.getRefreshRequestBody
+                  ? this.config.auth.getRefreshRequestBody(refreshToken)
+                  : (refreshToken ? { refreshToken } : {}),
                 {
                   withCredentials: true, // Important for cookies
                   headers
@@ -286,12 +306,21 @@ export class ApiClient {
                 this.processQueue(null, token);
                 this.isRefreshing = false;
 
-                originalRequest.headers['Authorization'] = `Bearer ${token}`;
+                const authHeader = this.config.auth?.authHeader || 'Authorization';
+                const authPrefix = this.config.auth?.authTokenPrefix !== undefined ? this.config.auth.authTokenPrefix : 'Bearer';
+                originalRequest.headers[authHeader] = authPrefix ? `${authPrefix} ${token}` : token;
                 return this.axiosInstance.request(originalRequest);
               } else {
                 throw new Error(`No token returned from refresh endpoint. Response keys: ${Object.keys(responseData || {}).join(', ')}. Data: ${JSON.stringify(responseData)}`);
               }
             } catch (refreshError) {
+              // Log refresh failure
+              if (this.debugManager && this.config.debug?.networkLogs) {
+                this.debugManager.log(DebugLogType.API, `❌ REFRESH FAILED`, {
+                  error: refreshError instanceof Error ? refreshError.message : refreshError
+                });
+              }
+
               this.processQueue(refreshError, null);
               this.isRefreshing = false;
               this.authManager.clearAuth();

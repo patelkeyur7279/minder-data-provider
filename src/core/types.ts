@@ -78,6 +78,10 @@ export interface AuthConfig {
   refreshModel?: typeof BaseModel; // Optional custom model for refresh response
   onAuthError?: () => void;
   secureCookie?: boolean; // If true, forces Secure flag. If false, forces no Secure. If undefined, auto-detects based on protocol.
+  sendTokenOnRefresh?: boolean; // If true, sends the expired access token in the Authorization header during refresh. Defaults to true.
+  authHeader?: string; // Custom header name (default: 'Authorization')
+  authTokenPrefix?: string; // Custom token prefix (default: 'Bearer')
+  getRefreshRequestBody?: (refreshToken: string | null) => any; // Custom body generator for refresh request
 }
 
 export interface CacheConfig {
