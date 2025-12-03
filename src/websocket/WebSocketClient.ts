@@ -75,6 +75,10 @@ export class WebSocketClient {
   private isManualDisconnect: boolean = false;
 
   constructor(config: WebSocketConfig, debugManager?: DebugManager) {
+    if (!config.url) {
+      throw new Error('WebSocket URL is required');
+    }
+
     this.config = {
       url: config.url,
       protocols: config.protocols || [],
@@ -136,7 +140,7 @@ export class WebSocketClient {
         this.ws.onclose = (event) => {
           this.state = WebSocketState.DISCONNECTED;
           this.stopHeartbeat();
-          
+
           this.log(`WebSocket disconnected (code: ${event.code}, reason: ${event.reason})`);
 
           // Auto-reconnect if enabled and not manual disconnect
@@ -160,7 +164,7 @@ export class WebSocketClient {
     this.isManualDisconnect = true;
     this.state = WebSocketState.DISCONNECTING;
     this.stopHeartbeat();
-    
+
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
@@ -391,8 +395,8 @@ export class WebSocketClient {
    * Check if connected
    */
   isConnected(): boolean {
-    return this.state === WebSocketState.CONNECTED && 
-           this.ws?.readyState === WebSocket.OPEN;
+    return this.state === WebSocketState.CONNECTED &&
+      this.ws?.readyState === WebSocket.OPEN;
   }
 
   /**
@@ -400,7 +404,7 @@ export class WebSocketClient {
    */
   isConnecting(): boolean {
     return this.state === WebSocketState.CONNECTING ||
-           this.state === WebSocketState.RECONNECTING;
+      this.state === WebSocketState.RECONNECTING;
   }
 
   /**

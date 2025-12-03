@@ -38,6 +38,8 @@ export interface MinderConfig {
   performance?: PerformanceConfig;
   debug?: DebugConfig;
   security?: SecurityConfig;
+  analytics?: AnalyticsConfig;
+  telemetry?: TelemetryConfig;
   ssr?: SSRConfig;
   offline?: OfflineConfig;
   environments?: Record<string, EnvironmentOverride>;
@@ -163,10 +165,42 @@ export interface CorsHelperConfig {
    * Headers to include in preflight requests
    */
   headers?: string[];
+  maxAge?: number;
+}
+
+export interface AnalyticsConfig {
+  enabled?: boolean;
+  googleAnalyticsId?: string; // GA Measurement ID (G-XXXXXXXXXX)
+  debug?: boolean; // Log events to console
+  autoTrackPageView?: boolean; // Automatically track page views (if using router integration)
+  autoTrackErrors?: boolean; // Automatically track API errors
+  autoTrackPerformance?: boolean; // Automatically track performance metrics
+  customDimensions?: Record<string, string>; // Custom dimensions to send with every event
+  /**
+   * Security Hook: Sanitize data before sending to GA
+   * Return null to drop the event, or return modified params
+   * @example
+   * beforeSend: (event, params) => {
+   *   // Remove email from error messages
+   *   if (params.message) params.message = params.message.replace(/email/g, '[REDACTED]');
+   *   return params;
+   * }
+   */
+  beforeSend?: (eventName: string, params: Record<string, any>) => Record<string, any> | null;
+}
+
+export interface TelemetryConfig {
+  enabled?: boolean;
+  mode?: 'custom' | 'ga4'; // 'custom' sends to endpoint, 'ga4' sends to Google Analytics
+  endpoint?: string; // URL for custom collector
+  measurementId?: string; // GA4 Measurement ID (required for 'ga4' mode)
+  apiSecret?: string; // GA4 API Secret (optional, for server-side events)
+  debug?: boolean;
+  sampleRate?: number; // 0.0 to 1.0
 }
 
 export interface WebSocketConfig {
-  url: string;
+  url?: string;
   protocols?: string[];
   reconnect?: boolean;
   heartbeat?: number;
@@ -277,6 +311,7 @@ export interface SecurityConfig {
   inputValidation?: boolean;
   httpsOnly?: boolean; // Enforce HTTPS in production
   developmentWarnings?: boolean; // Show security warnings in dev mode
+  strictCSP?: boolean; // If true, removes 'unsafe-inline' from default CSP
 }
 
 export interface SSRConfig {

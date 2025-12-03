@@ -62,7 +62,17 @@ const createWrapper = () => {
 
 describe("useMinder - Standalone Usage (No Provider)", () => {
   beforeEach(() => {
+    // Clear first to ensure clean state
     clearGlobalMinderConfig();
+    // Set default config for all tests in this file
+    setGlobalMinderConfig({
+      apiBaseUrl: "https://api.example.com",
+      routes: {
+        users: { method: HttpMethod.GET, url: "/users" },
+        posts: { method: HttpMethod.GET, url: "/posts" },
+      },
+      dynamic: null,
+    });
   });
 
   it("should work without MinderDataProvider when global config is set", () => {
@@ -500,6 +510,16 @@ describe("Request Cancellation", () => {
 // ============================================================================
 
 describe("Conditional Fetching", () => {
+  beforeEach(() => {
+    setGlobalMinderConfig({
+      apiBaseUrl: "https://api.example.com",
+      routes: {
+        posts: { method: HttpMethod.GET, url: "/posts" },
+      },
+      dynamic: null,
+    });
+  });
+
   it("should not fetch when enabled=false", () => {
     const { result } = renderHook(
       () => useMinder("posts", { enabled: false }),
@@ -534,6 +554,16 @@ describe("Conditional Fetching", () => {
 // ============================================================================
 
 describe("Infinite Queries", () => {
+  beforeEach(() => {
+    setGlobalMinderConfig({
+      apiBaseUrl: "https://api.example.com",
+      routes: {
+        posts: { method: HttpMethod.GET, url: "/posts" },
+      },
+      dynamic: null,
+    });
+  });
+
   it("should support infinite mode", () => {
     const { result } = renderHook(
       () =>

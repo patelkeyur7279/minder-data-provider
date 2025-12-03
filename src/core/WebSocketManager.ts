@@ -31,6 +31,11 @@ export class WebSocketManager {
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
+        if (!this.config.url) {
+          reject(new Error('WebSocket URL is required'));
+          return;
+        }
+
         const token = this.authManager.getToken();
         const url = token ? `${this.config.url}?token=${token}` : this.config.url;
 

@@ -316,15 +316,18 @@ export class InputValidator {
 /**
  * Security Headers Configuration
  */
-export function getSecurityHeaders(config?: SecurityConfig['headers']): Record<string, string> {
+export function getSecurityHeaders(config?: SecurityConfig['headers'], strictCSP: boolean = false): Record<string, string> {
   const headers: Record<string, string> = {};
 
   // Content Security Policy
   if (config?.contentSecurityPolicy) {
     headers['Content-Security-Policy'] = config.contentSecurityPolicy;
   } else {
-    headers['Content-Security-Policy'] =
-      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'";
+    if (strictCSP) {
+      headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self'";
+    } else {
+      headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'";
+    }
   }
 
   // X-Frame-Options

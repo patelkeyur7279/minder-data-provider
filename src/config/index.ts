@@ -164,6 +164,15 @@ export function configureMinder(config: UnifiedMinderConfig): MinderConfig {
     validateNextJsConfig(config);
   }
 
+  // 🛡️ Runtime Safety: Validate required fields
+  if (!config.apiUrl) {
+    throw new MinderConfigError(
+      'Missing required "apiUrl" in configuration',
+      'apiUrl',
+      'CONFIG_MISSING_API_URL'
+    );
+  }
+
   // Generate complete configuration with smart defaults
   const fullConfig = buildFullConfig(config, platform, isDevelopment);
 

@@ -4,6 +4,7 @@ import type { MinderConfig, ApiRoute, ApiError } from './types.js';
 import { HttpMethod, DebugLogType } from '../constants/enums.js';
 import { AuthManager } from './AuthManager.js';
 import { ProxyManager } from './ProxyManager.js';
+import { OfflineManager } from './OfflineManager.js';
 import {
   MinderConfigError,
   MinderNetworkError,
@@ -25,6 +26,8 @@ import {
   RequestDeduplicator,
   PerformanceMonitor,
 } from '../utils/performance.js';
+import { AnalyticsManager } from '../utils/analytics.js';
+import { TelemetryManager } from '../utils/telemetry.js';
 import type { DebugManager } from '../debug/DebugManager.js';
 
 export class ApiClient {
@@ -41,7 +44,10 @@ export class ApiClient {
   private requestBatcher?: RequestBatcher;
   private deduplicator?: RequestDeduplicator;
   private performanceMonitor?: PerformanceMonitor;
+  private analyticsManager?: AnalyticsManager;
+  private telemetryManager?: TelemetryManager;
   private corsManager?: CorsManager;
+  private offlineManager?: OfflineManager;
 
   // Token refresh state
   private isRefreshing = false;
@@ -86,6 +92,67 @@ export class ApiClient {
     // Initialize CORS manager
     if (config.cors?.enabled) {
       this.corsManager = new CorsManager(config.cors);
+
+      // Validate configuration immediately
+      const validation = this.corsManager.validateConfig();
+
+      // Log errors (critical)
+      if (!validation.isValid) {
+        validation.errors.forEach(error => {
+          console.error(`[Minder] CORS Configuration Error: ${error}`);
+        });
+      }
+
+      // Log warnings (development only)
+      if (process.env.NODE_ENV === 'development') {
+        validation.warnings.forEach(warning => {
+          console.warn(`[Minder] CORS Warning: ${warning}`);
+        });
+      }
+    }
+
+    // Initialize Analytics
+    if (config.analytics?.enabled) {
+      this.analyticsManager = new AnalyticsManager(config.analytics);
+
+      // Auto-track performance if enabled
+      if (config.analytics.autoTrackPerformance && this.performanceMonitor) {
+        setInterval(() => {
+          const metrics = this.performanceMonitor?.getMetrics();
+          if (metrics) {
+            this.analyticsManager?.trackPerformance(metrics);
+          }
+        }, 60000); // Send every minute
+      }
+    }
+
+    // Initialize Telemetry (Framework Phone Home)
+    if (config.telemetry?.enabled) {
+      this.telemetryManager = new TelemetryManager(config.telemetry);
+
+      // Send performance stats to HQ
+      if (this.performanceMonitor) {
+        setInterval(() => {
+          const metrics = this.performanceMonitor?.getMetrics();
+          if (metrics) {
+            this.telemetryManager?.trackPerformance(metrics);
+          }
+        }, 300000); // Send every 5 minutes (less frequent than analytics)
+      }
+    }
+
+    // Initialize Offline Manager
+    if (config.offline?.enabled) {
+      this.offlineManager = new OfflineManager(config.offline);
+      this.offlineManager.setProcessQueueCallback(async (request) => {
+        // Replay request
+        await this.axiosInstance.request({
+          method: request.method,
+          url: request.url,
+          data: request.body,
+          headers: request.headers
+        });
+      });
     }
 
     // Use proxy baseURL if enabled, otherwise use original
@@ -99,7 +166,7 @@ export class ApiClient {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        ...getSecurityHeaders(config.security?.headers),
+        ...getSecurityHeaders(config.security?.headers, config.security?.strictCSP),
       },
     });
 
@@ -127,7 +194,7 @@ export class ApiClient {
           this.debugManager.log(DebugLogType.API, `🚀 ${config.method?.toUpperCase()} ${config.url}`, {
             method: config.method,
             url: config.url,
-            headers: config.headers,
+            headers: this.sanitizeHeaders(config.headers),
             data: config.data,
             params: config.params
           });
@@ -185,7 +252,7 @@ export class ApiClient {
             status: response.status,
             statusText: response.statusText,
             data: response.data,
-            headers: response.headers,
+            headers: this.sanitizeHeaders(response.headers),
             duration
           });
         }
@@ -348,7 +415,7 @@ export class ApiClient {
         if (this.corsManager) {
           const corsHandling = await handleCorsError(error, this.corsManager, {
             url: error.config?.url || '',
-            method: error.config?.method as HttpMethod || HttpMethod.GET,
+            method: (error.config?.method as HttpMethod) || HttpMethod.GET,
             headers: error.config?.headers as Record<string, string> || {},
             data: error.config?.data
           });
@@ -381,6 +448,17 @@ export class ApiClient {
         }
 
         const apiError = this.handleError(error);
+
+        // Track error in analytics
+        if (this.analyticsManager) {
+          this.analyticsManager.trackError(apiError, `${error.config?.method?.toUpperCase()} ${error.config?.url}`);
+        }
+
+        // Report error to Framework HQ (Telemetry)
+        if (this.telemetryManager) {
+          this.telemetryManager.trackError(apiError, 'API_REQUEST_FAILURE');
+        }
+
         if (this.config.onError) {
           this.config.onError(apiError);
         }
@@ -492,6 +570,18 @@ export class ApiClient {
 
       // Check for offline
       if (networkError.code === 'ERR_NETWORK' || typeof navigator !== 'undefined' && !navigator.onLine) {
+        // Queue request if offline manager is enabled
+        if (this.offlineManager && networkError.config?.url && networkError.config?.method) {
+          this.offlineManager.queueRequest({
+            url: networkError.config.url,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            method: networkError.config.method as any,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            body: (networkError.config as any).data,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            headers: (networkError.config as any).headers
+          });
+        }
         throw new MinderOfflineError('No network connection', networkError.config?.url);
       }
 
@@ -521,6 +611,19 @@ export class ApiClient {
   private sanitizeData(data: unknown): unknown {
     if (!this.sanitizer) return data;
     return this.sanitizer.sanitize(data);
+  }
+
+  private sanitizeHeaders(headers: any): any {
+    if (!headers) return headers;
+    const sanitized = { ...headers };
+    const sensitiveHeaders = ['Authorization', 'Cookie', 'Set-Cookie', 'X-CSRF-Token', 'x-csrf-token'];
+
+    Object.keys(sanitized).forEach(key => {
+      if (sensitiveHeaders.some(h => h.toLowerCase() === key.toLowerCase())) {
+        sanitized[key] = '[REDACTED]';
+      }
+    });
+    return sanitized;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -558,15 +661,19 @@ export class ApiClient {
       });
     }
 
+    // Extract headers from options to prevent overwriting during spread
+    const { headers: customHeaders, ...otherOptions } = options || {};
+
     const requestConfig: AxiosRequestConfig = {
       method: route.method,
       url,
       headers: {
         ...route.headers,
-        ...(this.proxyManager?.getProxyHeaders() || {})
+        ...(this.proxyManager?.getProxyHeaders() || {}),
+        ...(customHeaders || {})
       },
       timeout: route.timeout || this.proxyManager?.getTimeout() || this.config.performance?.timeout,
-      ...options,
+      ...otherOptions,
     };
 
     // Apply proxy rewriting if enabled
