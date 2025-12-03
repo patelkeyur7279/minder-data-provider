@@ -15,9 +15,8 @@ Use this section to tell people about which versions of your project are current
 We take security issues seriously. If you discover a security vulnerability, please follow these steps:
 
 1.  **Do NOT open a public issue.**
-2.  Email us directly at **security@minder-data-provider.com** (or your private email).
-3.  Include a description of the vulnerability and steps to reproduce it.
-4.  We will acknowledge your report within 48 hours.
+2.  Include a description of the vulnerability and steps to reproduce it.
+3.  We will acknowledge your report within 48 hours.
 
 ---
 
