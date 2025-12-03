@@ -21,13 +21,13 @@ export function generateSecureCSRFToken(length: number = 32): string {
     return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
   } else if (typeof global !== 'undefined' && global.crypto) {
     // Node.js environment
-     
+
     const { randomBytes } = require('crypto');
     return randomBytes(length).toString('hex');
   } else {
     // Fallback (less secure, but better than Math.random())
     logger.warn('Crypto API not available, using fallback CSRF token generation');
-    return Array.from({ length }, () => 
+    return Array.from({ length }, () =>
       Math.floor(Math.random() * 16).toString(16)
     ).join('');
   }
@@ -40,7 +40,7 @@ export class CSRFTokenManager {
   private static TOKEN_KEY = 'minder_csrf_token';
   private token: string | null = null;
 
-  constructor(private cookieName?: string) {}
+  constructor(private cookieName?: string) { }
 
   getToken(): string {
     if (this.token) return this.token;
@@ -79,13 +79,21 @@ export class CSRFTokenManager {
 
     // Store in cookie if configured
     if (typeof document !== 'undefined' && this.cookieName) {
-      document.cookie = `${this.cookieName}=${token}; path=/; SameSite=Strict; Secure`;
+      let secure = '';
+      // We don't have direct access to full config here easily without passing it down, 
+      // but we can default to auto-detect which is safe.
+      // Ideally CSRFTokenManager should accept a config object.
+      // For now, let's use auto-detect as a safe default for development/production parity.
+      // For now, let's use auto-detect as a safe default for development/production parity.
+      secure = (typeof window !== 'undefined' && window.location.protocol === 'https:') ? '; Secure' : '';
+
+      document.cookie = `${this.cookieName}=${token}; path=/; SameSite=Strict${secure}`;
     }
   }
 
   private getTokenFromCookie(): string | null {
     if (typeof document === 'undefined' || !this.cookieName) return null;
-    
+
     const cookies = document.cookie.split(';');
     for (const cookie of cookies) {
       const [name, value] = cookie.trim().split('=');
@@ -135,7 +143,7 @@ export class XSSSanitizer {
       if (typeof window !== 'undefined' && DOMPurify) {
         return DOMPurify.sanitize(dirty, this.config);
       }
-      
+
       // Fallback: basic sanitization for Node.js environments
       return this.basicSanitize(dirty);
     }
@@ -181,7 +189,7 @@ export class RateLimiter {
   check(key: string, maxRequests: number, windowMs: number): boolean {
     const now = Date.now();
     const requests = this.getRequests(key);
-    
+
     // Filter out old requests outside the time window
     const validRequests = requests.filter(time => now - time < windowMs);
 
@@ -192,7 +200,7 @@ export class RateLimiter {
     // Add current request
     validRequests.push(now);
     this.setRequests(key, validRequests);
-    
+
     return true; // Within rate limit
   }
 
@@ -308,15 +316,18 @@ export class InputValidator {
 /**
  * Security Headers Configuration
  */
-export function getSecurityHeaders(config?: SecurityConfig['headers']): Record<string, string> {
+export function getSecurityHeaders(config?: SecurityConfig['headers'], strictCSP: boolean = false): Record<string, string> {
   const headers: Record<string, string> = {};
 
   // Content Security Policy
   if (config?.contentSecurityPolicy) {
     headers['Content-Security-Policy'] = config.contentSecurityPolicy;
   } else {
-    headers['Content-Security-Policy'] = 
-      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'";
+    if (strictCSP) {
+      headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self'";
+    } else {
+      headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'";
+    }
   }
 
   // X-Frame-Options
@@ -342,6 +353,26 @@ export function getSecurityHeaders(config?: SecurityConfig['headers']): Record<s
   headers['X-XSS-Protection'] = '1; mode=block';
   headers['Referrer-Policy'] = 'strict-origin-when-cross-origin';
   headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()';
+
+  // Merge any custom headers from config that weren't handled above
+  if (config) {
+    Object.entries(config).forEach(([key, value]) => {
+      // Skip known configuration keys that are already handled
+      if ([
+        'contentSecurityPolicy',
+        'xFrameOptions',
+        'xContentTypeOptions',
+        'strictTransportSecurity'
+      ].includes(key)) {
+        return;
+      }
+
+      // Add custom header if not already set
+      if (!headers[key] && typeof value === 'string') {
+        headers[key] = value;
+      }
+    });
+  }
 
   return headers;
 }

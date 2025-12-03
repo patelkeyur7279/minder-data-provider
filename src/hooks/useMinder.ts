@@ -80,16 +80,17 @@ import { HttpMethod } from '../constants/enums.js';
 import type { RetryConfig } from '../core/types.js';
 import { getGlobalMinderConfig } from '../core/globalConfig.js';
 import { globalAuthManager } from '../auth/GlobalAuthManager.js';
-import { 
-  subscribeToUploadProgress, 
+import {
+  subscribeToUploadProgress,
   setUploadProgress as setGlobalUploadProgress,
-  getUploadProgress as getGlobalUploadProgress 
+  getUploadProgress as getGlobalUploadProgress
 } from '../upload/uploadProgressStore.js';
 import {
   replaceUrlParams,
   hasUnreplacedParams,
   getRouteSuggestions,
 } from '../utils/routeHelpers.js';
+import { MinderError } from '../errors/MinderError.js';
 
 // ============================================================================
 // TYPES
@@ -122,31 +123,31 @@ export interface UseMinderOptions<TData = any> extends MinderOptions<TData> {
    * @default true
    */
   autoFetch?: boolean;
-  
+
   /**
    * Refetch on window focus
    * @default false
    */
   refetchOnWindowFocus?: boolean;
-  
+
   /**
    * Refetch on reconnect
    * @default true
    */
   refetchOnReconnect?: boolean;
-  
+
   /**
    * Refetch interval in milliseconds
    * @default false (no interval)
    */
   refetchInterval?: number | false;
-  
+
   /**
    * Enable query (allows conditional fetching)
    * @default true
    */
   enabled?: boolean;
-  
+
   /**
    * Optional validation function called before mutations
    * Supports Zod, Yup, or custom validation logic
@@ -181,7 +182,7 @@ export interface UseMinderOptions<TData = any> extends MinderOptions<TData> {
    * ```
    */
   validate?: ValidateFunction<TData>;
-  
+
   /**
    * Enhanced retry configuration
    * 
@@ -218,7 +219,7 @@ export interface UseMinderOptions<TData = any> extends MinderOptions<TData> {
    * ```
    */
   retryConfig?: RetryConfig;
-  
+
   /**
    * 🆕 Custom query key for fine-grained cache control
    * By default, query key is [route, params]
@@ -231,7 +232,7 @@ export interface UseMinderOptions<TData = any> extends MinderOptions<TData> {
    * ```
    */
   queryKey?: any[];
-  
+
   /**
    * 🆕 Cache configuration
    * Controls whether query result should be cached
@@ -239,7 +240,7 @@ export interface UseMinderOptions<TData = any> extends MinderOptions<TData> {
    * @default true
    */
   cache?: boolean;
-  
+
   /**
    * 🆕 Stale time in milliseconds
    * How long data is considered fresh
@@ -247,7 +248,7 @@ export interface UseMinderOptions<TData = any> extends MinderOptions<TData> {
    * @default 5 * 60 * 1000 (5 minutes)
    */
   staleTime?: number;
-  
+
   /**
    * 🆕 Garbage collection time in milliseconds
    * How long inactive data stays in cache
@@ -255,7 +256,7 @@ export interface UseMinderOptions<TData = any> extends MinderOptions<TData> {
    * @default 10 * 60 * 1000 (10 minutes)
    */
   gcTime?: number;
-  
+
   /**
    * 🆕 Enable infinite query mode for pagination
    * When true, uses useInfiniteQuery instead of useQuery
@@ -263,7 +264,7 @@ export interface UseMinderOptions<TData = any> extends MinderOptions<TData> {
    * @default false
    */
   infinite?: boolean;
-  
+
   /**
    * 🆕 Get next page param for infinite queries
    * 
@@ -276,24 +277,24 @@ export interface UseMinderOptions<TData = any> extends MinderOptions<TData> {
    * ```
    */
   getNextPageParam?: (lastPage: any, allPages: any[]) => any;
-  
+
   /**
    * 🆕 Get previous page param for infinite queries
    */
   getPreviousPageParam?: (firstPage: any, allPages: any[]) => any;
-  
+
   /**
    * 🆕 Initial page param for infinite queries
    * 
    * @default undefined
    */
   initialPageParam?: any;
-  
+
   /**
    * TanStack Query options override
    */
   queryOptions?: Omit<UseQueryOptions<MinderResult<TData>>, 'queryKey' | 'queryFn'>;
-  
+
   /**
    * TanStack Mutation options override
    */
@@ -308,37 +309,39 @@ export interface UseMinderReturn<TData = any> {
    * Response data (single item or array)
    */
   data: TData | null;
-  
+
   /**
    * Alias for data when working with collections
    */
   items: TData | null;
-  
+
   /**
    * Loading state (true during fetch or mutation)
    */
   loading: boolean;
-  
+
   /**
    * Error information (null if no error)
    */
   error: any;
-  
+
   /**
    * Success flag
    */
   success: boolean;
-  
+
   /**
    * Refetch data manually
    */
   refetch: () => Promise<MinderResult<TData>>;
-  
+
   /**
    * Mutate data (create/update/delete)
+   * @param data - Data to send
+   * @param options - Dynamic options (params, headers, axiosConfig)
    */
-  mutate: (data?: any) => Promise<MinderResult<TData>>;
-  
+  mutate: (data?: any, options?: { params?: Record<string, any>, headers?: Record<string, string>, axiosConfig?: Record<string, any> }) => Promise<MinderResult<TData>>;
+
   /**
    * CRUD operations (available when within MinderDataProvider)
    */
@@ -350,7 +353,7 @@ export interface UseMinderReturn<TData = any> {
     refresh: () => void;
     clear: () => void;
   };
-  
+
   /**
    * Authentication methods (NEW - integrated from useAuth)
    * 🆕 Now works with or without MinderDataProvider using GlobalAuthManager
@@ -366,7 +369,7 @@ export interface UseMinderReturn<TData = any> {
     logout?: () => Promise<void>;
     getCurrentUser: () => any;
   };
-  
+
   /**
    * Cache control methods (NEW - integrated from useCache)
    */
@@ -377,7 +380,7 @@ export interface UseMinderReturn<TData = any> {
     getStats: () => any[];
     isQueryFresh: (key: string | string[]) => boolean;
   };
-  
+
   /**
    * WebSocket methods (NEW - integrated from useWebSocket)
    */
@@ -388,7 +391,7 @@ export interface UseMinderReturn<TData = any> {
     subscribe: (event: string, callback: (data: any) => void) => (() => void);
     isConnected: () => boolean;
   };
-  
+
   /**
    * File upload methods (NEW - integrated from useMediaUpload)
    * 🆕 Now uses shared upload progress across all hook instances
@@ -399,27 +402,27 @@ export interface UseMinderReturn<TData = any> {
     progress: { loaded: number; total: number; percentage: number };
     isUploading: boolean;
   };
-  
+
   /**
    * Is currently fetching data
    */
   isFetching: boolean;
-  
+
   /**
    * Is data stale (needs refetch)
    */
   isStale: boolean;
-  
+
   /**
    * Is mutation pending
    */
   isMutating: boolean;
-  
+
   /**
    * Invalidate cache for this query
    */
   invalidate: () => Promise<void>;
-  
+
   /**
    * 🆕 Cancel ongoing requests for this query
    * Useful for preventing race conditions and reducing unnecessary network traffic
@@ -440,48 +443,48 @@ export interface UseMinderReturn<TData = any> {
    * };
    */
   cancel: () => Promise<void>;
-  
+
   /**
    * 🆕 Is the current request cancelled
    */
   isCancelled: boolean;
-  
+
   /**
    * 🆕 Fetch next page (infinite queries only)
    * Available when infinite: true option is set
    */
   fetchNextPage?: () => Promise<any>;
-  
+
   /**
    * 🆕 Has more pages to fetch (infinite queries only)
    */
   hasNextPage?: boolean;
-  
+
   /**
    * 🆕 Is fetching next page (infinite queries only)
    */
   isFetchingNextPage?: boolean;
-  
+
   /**
    * 🆕 Fetch previous page (infinite queries only)
    */
   fetchPreviousPage?: () => Promise<any>;
-  
+
   /**
    * 🆕 Has previous pages (infinite queries only)
    */
   hasPreviousPage?: boolean;
-  
+
   /**
    * 🆕 Is fetching previous page (infinite queries only)
    */
   isFetchingPreviousPage?: boolean;
-  
+
   /**
    * Raw TanStack Query object (for advanced use)
    */
   query: any;
-  
+
   /**
    * Raw TanStack Mutation object (for advanced use)
    */
@@ -502,22 +505,22 @@ function createRetryConfig(retryConfig?: RetryConfig) {
   const baseDelay = retryConfig?.baseDelay ?? 1000;
   const maxDelay = retryConfig?.maxDelay ?? 30000;
   const backoffStrategy = retryConfig?.backoff ?? 'exponential';
-  
+
   return {
     retry: (failureCount: number, error: any): boolean => {
       // Check max retries
       if (failureCount >= maxRetries) return false;
-      
+
       // Custom shouldRetry function takes precedence
       if (retryConfig?.shouldRetry) {
         return retryConfig.shouldRetry(error, failureCount);
       }
-      
+
       // Check if status code is retryable
       if (error?.status && !retryableStatusCodes.includes(error.status)) {
         return false;
       }
-      
+
       return true;
     },
     retryDelay: (attemptIndex: number): number => {
@@ -525,17 +528,17 @@ function createRetryConfig(retryConfig?: RetryConfig) {
       if (typeof backoffStrategy === 'function') {
         return Math.min(backoffStrategy(attemptIndex), maxDelay);
       }
-      
+
       // Exponential backoff: baseDelay * 2^attempt
       if (backoffStrategy === 'exponential') {
         return Math.min(baseDelay * Math.pow(2, attemptIndex), maxDelay);
       }
-      
+
       // Linear backoff: baseDelay * (attempt + 1)
       if (backoffStrategy === 'linear') {
         return Math.min(baseDelay * (attemptIndex + 1), maxDelay);
       }
-      
+
       return baseDelay;
     },
   };
@@ -565,21 +568,21 @@ export function useMinder<TData = any>(
 ): UseMinderReturn<TData> {
   // All hooks MUST be at the top level (React Rules of Hooks)
   const queryClient = useQueryClient();
-  
+
   // Upload progress state (local fallback)
   const [localUploadProgress, setLocalUploadProgress] = useState<{ loaded: number; total: number; percentage: number }>({
     loaded: 0,
     total: 0,
     percentage: 0,
   });
-  
+
   // Cancellation state
   const [isCancelled, setIsCancelled] = useState(false);
   const cancelledRef = useRef(false);
-  
+
   // Unique upload ID for shared progress
   const uploadIdRef = useRef(`upload-${route}-${Date.now()}`);
-  
+
   // Try to get context (ApiClient) - gracefully fallback if not available
   let context: any = null;
   let hasContext = false;
@@ -589,7 +592,9 @@ export function useMinder<TData = any>(
   } catch {
     // Not within MinderDataProvider - use global config
   }
-  
+
+
+
   // Get global config if no context
   const globalConfig = useMemo(() => {
     if (!hasContext) {
@@ -597,13 +602,23 @@ export function useMinder<TData = any>(
     }
     return null;
   }, [hasContext]);
-  
+
+  // 🛡️ Runtime Safety: Ensure Minder is configured
+  if (!hasContext && !globalConfig) {
+    throw new Error(
+      '[Minder] Configuration missing! You must either:\n' +
+      '1. Wrap your app in <MinderDataProvider>\n' +
+      '2. Call configureMinder() globally before using hooks'
+    );
+  }
+
   // Validate route and provide suggestions if invalid
   const routeValidation = useMemo(() => {
     const config = context?.config || globalConfig;
     if (config?.routes) {
       const routeNames = Object.keys(config.routes);
       if (!routeNames.includes(route)) {
+        console.log(`[useMinder Debug] Route "${route}" not found in:`, routeNames);
         const suggestions = getRouteSuggestions(route, routeNames, 3);
         return {
           valid: false,
@@ -613,76 +628,158 @@ export function useMinder<TData = any>(
             : `Route "${route}" not found in configuration. Available routes: ${routeNames.slice(0, 5).join(', ')}${routeNames.length > 5 ? '...' : ''}`
         };
       }
-      
+
       // Check for unreplaced parameters
       const routeConfig = config.routes[route];
       if (routeConfig && hasUnreplacedParams(routeConfig.url)) {
         if (!options.params) {
-          return {
-            valid: false,
-            error: `Route "${route}" requires parameters: ${routeConfig.url}. Please provide params option.`
-          };
-        }
-        // Try to replace params
-        const replacedUrl = replaceUrlParams(routeConfig.url, options.params);
-        if (hasUnreplacedParams(replacedUrl)) {
-          return {
-            valid: false,
-            error: `Route "${route}" has unreplaced parameters. URL: ${replacedUrl}`
-          };
+          // If autoFetch is false, we might provide params later in refetch/mutate
+          if (options.autoFetch !== false) {
+            return {
+              valid: false,
+              error: `Route "${route}" requires parameters: ${routeConfig.url}. Please provide params option.`
+            };
+          }
+        } else {
+          // Try to replace params
+          const replacedUrl = replaceUrlParams(routeConfig.url, options.params);
+          if (hasUnreplacedParams(replacedUrl)) {
+            if (options.autoFetch !== false) {
+              return {
+                valid: false,
+                error: `Route "${route}" has unreplaced parameters. URL: ${replacedUrl}`
+              };
+            }
+          }
         }
       }
     }
     return { valid: true };
-  }, [route, context?.config, globalConfig, options.params]);
-  
+  }, [route, context?.config, globalConfig, options.params, options.autoFetch]);
+
   // Stabilize query key to prevent unnecessary refetches on every render
   // Allow custom query key or use [route, params]
   const queryKey = useMemo(
     () => options.queryKey || [route, options.params],
     [options.queryKey, route, JSON.stringify(options.params)]
   );
-  
+
   // Determine if query should be enabled
   const isQueryEnabled = useMemo(
     () => options.enabled !== false && options.autoFetch !== false && routeValidation.valid,
     [options.enabled, options.autoFetch, routeValidation.valid]
   );
-  
+
+
+
+  // ... (inside useMinder)
+
+  // Return validation error if present
+  if (!routeValidation.valid) {
+    const validationError = new MinderError(routeValidation.error || 'Invalid route', 'ROUTE_VALIDATION_ERROR', 400);
+    return {
+      data: null,
+      items: null,
+      loading: false,
+      error: validationError,
+      success: false,
+      refetch: async () => ({
+        data: null,
+        error: validationError,
+        status: 400,
+        success: false,
+        metadata: { method: HttpMethod.GET, url: route, duration: 0, cached: false }
+      }),
+      mutate: async () => ({
+        data: null,
+        error: validationError,
+        status: 400,
+        success: false,
+        metadata: { method: HttpMethod.POST, url: route, duration: 0, cached: false }
+      }),
+      auth: {
+        setToken: async () => { },
+        getToken: () => null,
+        clearAuth: async () => { },
+        isAuthenticated: () => false,
+        setRefreshToken: async () => { },
+        getRefreshToken: () => null,
+        getCurrentUser: () => null,
+      },
+      cache: {
+        invalidate: async () => { },
+        prefetch: async () => { },
+        clear: () => { },
+        getStats: () => [],
+        isQueryFresh: () => false,
+      },
+      websocket: {
+        connect: () => { },
+        disconnect: () => { },
+        send: () => { },
+        subscribe: () => () => { },
+        isConnected: () => false,
+      },
+      upload: {
+        uploadFile: async () => { throw new Error(routeValidation.error); },
+        uploadMultiple: async () => { throw new Error(routeValidation.error); },
+        progress: { loaded: 0, total: 0, percentage: 0 },
+        isUploading: false,
+      },
+      isFetching: false,
+      isStale: false,
+      isMutating: false,
+      invalidate: async () => { },
+      cancel: async () => { },
+      isCancelled: false,
+      query: {},
+      mutation: {},
+    };
+  }
+
   // Create retry configuration
   const retryConfig = useMemo(
     () => createRetryConfig(options.retryConfig),
     [options.retryConfig]
   );
-  
+
   // =========================================================================
   // QUERY (for GET requests)
   // 🆕 Now supports both regular and infinite queries
   // =========================================================================
-  
+
   // Query function factory
   const createQueryFn = (pageParam?: any) => async (): Promise<MinderResult<TData>> => {
     // Check if request was cancelled
     if (cancelledRef.current) {
       throw new Error('Request cancelled');
     }
-    
+
     // Throw validation error if route is invalid
     if (!routeValidation.valid) {
       throw new Error(routeValidation.error);
     }
-    
+
     let result: MinderResult<TData>;
-    
+
     // Merge page param into options if infinite query
-    const requestParams = pageParam !== undefined 
+    const requestParams = pageParam !== undefined
       ? { ...options.params, ...pageParam }
       : options.params;
-    
+
     if (context?.apiClient) {
       // Use ApiClient for parameter replacement (when within MinderDataProvider)
       try {
-        const data = await context.apiClient.request(route, undefined, requestParams);
+        const data = await context.apiClient.request(
+          route,
+          undefined,
+          requestParams,
+          {
+            params: requestParams,
+            headers: options.headers,
+            ...options.axiosConfig
+          } // Pass params as axios config for query string
+        );
         result = {
           data: data as TData,
           error: null,
@@ -710,70 +807,118 @@ export function useMinder<TData = any>(
         };
       }
     } else {
-      // Use core minder function (global config)
-      result = await minder<TData>(route, null, {
-        ...options,
-        method: HttpMethod.GET,
-        params: requestParams,
-      });
+      // Standalone mode - use minder() directly
+      try {
+        const data = await minder(route, {
+          ...options,
+          params: requestParams,
+        });
+        result = {
+          data: data as TData,
+          error: null,
+          status: 200,
+          success: true,
+          metadata: {
+            method: HttpMethod.GET,
+            url: route,
+            duration: 0,
+            cached: false,
+          },
+        };
+      } catch (error: any) {
+        result = {
+          data: null,
+          error,
+          status: error.status || 500,
+          success: false,
+          metadata: {
+            method: HttpMethod.GET,
+            url: route,
+            duration: 0,
+            cached: false,
+          },
+        };
+      }
     }
-    
-    // If error, throw to trigger React Query error state
-    // But still provide structured error to user
-    if (!result.success && result.error) {
-      // Don't actually throw - just return error result
-      // This way we never crash the app
-      return result;
-    }
-    
+
     return result;
   };
-  
+
   // Use infinite query if infinite option is enabled
   const query = options.infinite
     ? useInfiniteQuery({
-        queryKey,
-        queryFn: ({ pageParam }) => createQueryFn(pageParam)(),
-        enabled: isQueryEnabled,
-        staleTime: options.staleTime || options.cacheTTL || 5 * 60 * 1000,
-        gcTime: options.gcTime || 10 * 60 * 1000,
-        refetchOnWindowFocus: options.refetchOnWindowFocus ?? false,
-        refetchOnReconnect: options.refetchOnReconnect ?? true,
-        refetchInterval: options.refetchInterval || false,
-        retry: retryConfig.retry,
-        retryDelay: retryConfig.retryDelay,
-        getNextPageParam: options.getNextPageParam,
-        getPreviousPageParam: options.getPreviousPageParam,
-        initialPageParam: options.initialPageParam,
-        ...options.queryOptions,
-      } as UseInfiniteQueryOptions<MinderResult<TData>>)
+      queryKey,
+      queryFn: ({ pageParam }) => createQueryFn(pageParam)(),
+      enabled: isQueryEnabled,
+      staleTime: options.staleTime || options.cacheTTL || 5 * 60 * 1000,
+      gcTime: options.gcTime || 10 * 60 * 1000,
+      refetchOnWindowFocus: options.refetchOnWindowFocus ?? false,
+      refetchOnReconnect: options.refetchOnReconnect ?? true,
+      refetchInterval: options.refetchInterval || false,
+      retry: retryConfig.retry,
+      retryDelay: retryConfig.retryDelay,
+      getNextPageParam: options.getNextPageParam,
+      getPreviousPageParam: options.getPreviousPageParam,
+      initialPageParam: options.initialPageParam,
+      ...options.queryOptions,
+    } as UseInfiniteQueryOptions<MinderResult<TData>>)
     : useQuery({
-        queryKey,
-        queryFn: createQueryFn(),
-        enabled: isQueryEnabled,
-        staleTime: options.staleTime || options.cacheTTL || 5 * 60 * 1000,
-        gcTime: options.gcTime || 10 * 60 * 1000,
-        refetchOnWindowFocus: options.refetchOnWindowFocus ?? false,
-        refetchOnReconnect: options.refetchOnReconnect ?? true,
-        refetchInterval: options.refetchInterval || false,
-        retry: retryConfig.retry,
-        retryDelay: retryConfig.retryDelay,
-        ...options.queryOptions,
-      });
-  
+      queryKey,
+      queryFn: createQueryFn(),
+      enabled: isQueryEnabled,
+      staleTime: options.staleTime || options.cacheTTL || 5 * 60 * 1000,
+      gcTime: options.gcTime || 10 * 60 * 1000,
+      refetchOnWindowFocus: options.refetchOnWindowFocus ?? false,
+      refetchOnReconnect: options.refetchOnReconnect ?? true,
+      refetchInterval: options.refetchInterval || false,
+      retry: retryConfig.retry,
+      retryDelay: retryConfig.retryDelay,
+      ...options.queryOptions,
+    });
+
   // =========================================================================
   // MUTATION (for POST/PUT/DELETE requests)
   // =========================================================================
-  
-  const mutation = useMutation({
-    mutationFn: async (data?: any): Promise<MinderResult<TData>> => {
-      // Validate data before mutation if validation function provided
+
+  const mutation = useMutation<MinderResult<TData>, any, any>({
+    mutationFn: async (variables: any): Promise<MinderResult<TData>> => {
+      // Check if variables is our internal wrapper
+      const isInternalWrapper = variables && typeof variables === 'object' && '__minder_wrapper' in variables;
+      const data = isInternalWrapper ? variables.data : variables;
+      const runtimeOptions = isInternalWrapper ? variables.options : {};
+
+      // Merge runtime options with hook options
+      const mergedParams = { ...options.params, ...runtimeOptions.params };
+      const mergedHeaders = { ...options.headers, ...runtimeOptions.headers };
+      const mergedAxiosConfig = { ...options.axiosConfig, ...runtimeOptions.axiosConfig };
+
+
+
+      // Check if request was cancelled
+      if (cancelledRef.current) {
+        throw new Error('Request cancelled');
+      }
+
+      // Re-validate route with dynamic params
+      const config = context?.config || globalConfig;
+      if (config?.routes?.[route]) {
+        const routeConfig = config.routes[route];
+        if (hasUnreplacedParams(routeConfig.url)) {
+          const replacedUrl = replaceUrlParams(routeConfig.url, mergedParams);
+          if (hasUnreplacedParams(replacedUrl)) {
+            throw new Error(`Route "${route}" has unreplaced parameters. URL: ${replacedUrl}`);
+          }
+        }
+      } else if (!routeValidation.valid) {
+        throw new Error(routeValidation.error);
+      }
+
+      // Validate data
       let validatedData = data;
-      if (data && options.validate) {
+      if (options.validate) {
         try {
           validatedData = await options.validate(data);
         } catch (validationError: any) {
-          // Return validation error without making API call
           return {
             data: null,
             error: validationError,
@@ -788,13 +933,21 @@ export function useMinder<TData = any>(
           };
         }
       }
-      
+
       let result: MinderResult<TData>;
-      
+
       if (context?.apiClient) {
-        // Use ApiClient for parameter replacement (when within MinderDataProvider)
         try {
-          const responseData = await context.apiClient.request(route, validatedData, options.params);
+          const responseData = await context.apiClient.request(
+            route,
+            validatedData,
+            mergedParams,
+            {
+              params: mergedParams,
+              headers: mergedHeaders,
+              ...mergedAxiosConfig
+            }
+          );
           result = {
             data: responseData as TData,
             error: null,
@@ -822,18 +975,49 @@ export function useMinder<TData = any>(
           };
         }
       } else {
-        // Use core minder function (global config, no parameter replacement)
-        result = await minder<TData>(route, validatedData, options);
+        // Standalone
+        try {
+          const responseData = await minder<TData>(route, validatedData, {
+            ...options,
+            method: options.method || HttpMethod.POST,
+            params: mergedParams,
+            headers: mergedHeaders,
+            ...mergedAxiosConfig
+          });
+          result = {
+            data: responseData as TData,
+            error: null,
+            status: 200,
+            success: true,
+            metadata: {
+              method: options.method || HttpMethod.POST,
+              url: route,
+              duration: 0,
+              cached: false,
+            }
+          };
+        } catch (error: any) {
+          result = {
+            data: null,
+            error,
+            status: error.status || 500,
+            success: false,
+            metadata: {
+              method: options.method || HttpMethod.POST,
+              url: route,
+              duration: 0,
+              cached: false,
+            }
+          };
+        }
       }
-      
-      // Don't throw errors - return structured result
       return result;
     },
     onSuccess: (result) => {
       // Only invalidate if successful
       if (result.success) {
         queryClient.invalidateQueries({ queryKey });
-        
+
         // Call user's success callback
         if (options.onSuccess) {
           options.onSuccess(result.data);
@@ -848,21 +1032,21 @@ export function useMinder<TData = any>(
     },
     ...options.mutationOptions,
   });
-  
+
   // =========================================================================
   // HELPERS
   // =========================================================================
-  
+
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey });
   };
-  
+
   const cancel = async () => {
     cancelledRef.current = true;
     setIsCancelled(true);
     await queryClient.cancelQueries({ queryKey });
   };
-  
+
   const refetchData = async (): Promise<MinderResult<TData>> => {
     // Reset cancellation state
     cancelledRef.current = false;
@@ -870,22 +1054,25 @@ export function useMinder<TData = any>(
     const result = await query.refetch();
     return result.data as MinderResult<TData>;
   };
-  
-  const mutateData = async (data?: any): Promise<MinderResult<TData>> => {
+
+  const mutateData = async (data?: any, options?: { params?: Record<string, any>, headers?: Record<string, string>, axiosConfig?: Record<string, any> }): Promise<MinderResult<TData>> => {
+    if (options) {
+      return mutation.mutateAsync({ __minder_wrapper: true, data, options });
+    }
     return mutation.mutateAsync(data);
   };
-  
+
   // =========================================================================
   // CRUD OPERATIONS (when within MinderDataProvider)
   // =========================================================================
-  
+
   let crudOperations: any = undefined;
   if (context?.apiClient && context?.cacheManager) {
     // Create CRUD operations similar to useOneTouchCrud
     const createMutation = useMutation({
-      mutationFn: async ({ item, params }: { 
-        item: Partial<TData>; 
-        params?: Record<string, any> 
+      mutationFn: async ({ item, params }: {
+        item: Partial<TData>;
+        params?: Record<string, any>
       }) => {
         // Validate before create
         let validatedItem = item;
@@ -899,8 +1086,8 @@ export function useMinder<TData = any>(
     });
 
     const updateMutation = useMutation({
-      mutationFn: async ({ id, item, params }: { 
-        id: string | number; 
+      mutationFn: async ({ id, item, params }: {
+        id: string | number;
         item: Partial<TData>;
         params?: Record<string, any>
       }) => {
@@ -916,7 +1103,7 @@ export function useMinder<TData = any>(
     });
 
     const deleteMutation = useMutation({
-      mutationFn: ({ id, params }: { 
+      mutationFn: ({ id, params }: {
         id: string | number;
         params?: Record<string, any>
       }) => {
@@ -928,11 +1115,11 @@ export function useMinder<TData = any>(
 
     crudOperations = {
       // ✅ Accept params option in all CRUD operations
-      create: (item: Partial<TData>, opts?: { params?: Record<string, any> }) => 
+      create: (item: Partial<TData>, opts?: { params?: Record<string, any> }) =>
         createMutation.mutateAsync({ item, params: opts?.params }),
-      update: (id: string | number, item: Partial<TData>, opts?: { params?: Record<string, any> }) => 
+      update: (id: string | number, item: Partial<TData>, opts?: { params?: Record<string, any> }) =>
         updateMutation.mutateAsync({ id, item, params: opts?.params }),
-      delete: (id: string | number, opts?: { params?: Record<string, any> }) => 
+      delete: (id: string | number, opts?: { params?: Record<string, any> }) =>
         deleteMutation.mutateAsync({ id, params: opts?.params }),
       fetch: async (opts?: { params?: Record<string, any> }) => {
         const result = await query.refetch();
@@ -942,12 +1129,12 @@ export function useMinder<TData = any>(
       clear: () => context.cacheManager.clearCache(route),
     };
   }
-  
+
   // =========================================================================
   // AUTHENTICATION (integrated from useAuth)
   // 🆕 Now uses GlobalAuthManager as fallback when no provider context
   // =========================================================================
-  
+
   const authMethods = {
     setToken: async (token: string) => {
       if (context?.authManager) {
@@ -1004,7 +1191,7 @@ export function useMinder<TData = any>(
             if (parts.length !== 3 || !parts[1]) {
               return null;
             }
-            
+
             // Decode JWT token to get user info
             const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
             return payload;
@@ -1018,11 +1205,11 @@ export function useMinder<TData = any>(
       return globalAuthManager.getCurrentUser();
     },
   };
-  
+
   // =========================================================================
   // CACHE CONTROL (integrated from useCache)
   // =========================================================================
-  
+
   const cacheMethods = {
     invalidate: async (keys?: string | string[]) => {
       if (context?.cacheManager) {
@@ -1064,11 +1251,11 @@ export function useMinder<TData = any>(
       return queryState?.isInvalidated === false;
     },
   };
-  
+
   // =========================================================================
   // WEBSOCKET (integrated from useWebSocket)
   // =========================================================================
-  
+
   const websocketMethods = {
     connect: () => {
       context?.websocketManager?.connect();
@@ -1082,39 +1269,39 @@ export function useMinder<TData = any>(
     subscribe: (event: string, callback: (data: any) => void) => {
       // ✅ Return unsubscribe function for cleanup
       const unsubscribe = context?.websocketManager?.subscribe(event, callback);
-      return unsubscribe || (() => {}); // Return noop if no manager
+      return unsubscribe || (() => { }); // Return noop if no manager
     },
     isConnected: () => {
       return context?.websocketManager?.isConnected() || false;
     },
   };
-  
+
   // =========================================================================
   // FILE UPLOAD (integrated from useMediaUpload)
   // 🆕 Now uses shared upload progress store
   // =========================================================================
-  
+
   // Subscribe to shared upload progress
   const [sharedUploadProgress, setSharedUploadProgress] = useState<{ loaded: number; total: number; percentage: number }>({
     loaded: 0,
     total: 0,
     percentage: 0,
   });
-  
+
   useEffect(() => {
     const unsubscribe = subscribeToUploadProgress(uploadIdRef.current, (progress) => {
       setSharedUploadProgress(progress);
     });
     return unsubscribe;
   }, []);
-  
+
   // Use shared progress if available, otherwise local
   const currentUploadProgress = sharedUploadProgress.percentage > 0 ? sharedUploadProgress : localUploadProgress;
-  
+
   const uploadMethods = {
     uploadFile: async (file: File, customUploadId?: string) => {
       const uploadId = customUploadId || uploadIdRef.current;
-      
+
       if (context?.apiClient) {
         return context.apiClient.uploadFile(route, file, (progress: any) => {
           // Update both local and shared stores
@@ -1135,16 +1322,16 @@ export function useMinder<TData = any>(
     progress: currentUploadProgress,
     isUploading: currentUploadProgress.percentage > 0 && currentUploadProgress.percentage < 100,
   };
-  
+
   // =========================================================================
   // RETURN
   // =========================================================================
-  
+
   // Extract data from MinderResult
   const resultData = query.data?.data ?? null;
   const resultError = query.data?.error ?? mutation.data?.error ?? null;
   const resultSuccess = query.data?.success ?? mutation.data?.success ?? false;
-  
+
   return {
     // Data & states
     data: resultData,
@@ -1152,28 +1339,28 @@ export function useMinder<TData = any>(
     loading: query.isLoading || mutation.isPending,
     error: resultError,
     success: resultSuccess,
-    
+
     // Operations
     refetch: refetchData,
     mutate: mutateData,
     operations: crudOperations,
     invalidate,
     cancel,
-    
+
     // 🔥 NEW: Integrated features
     auth: authMethods,
     cache: cacheMethods,
     websocket: websocketMethods,
     upload: uploadMethods,
-    
+
     // TanStack Query states
     isFetching: query.isFetching,
     isStale: query.isStale,
     isMutating: mutation.isPending,
-    
+
     // 🆕 Cancellation state
     isCancelled: cancelledRef.current || isCancelled,
-    
+
     // 🆕 Infinite query methods (only if infinite mode enabled)
     ...(options.infinite ? {
       fetchNextPage: (query as any).fetchNextPage,
@@ -1183,7 +1370,7 @@ export function useMinder<TData = any>(
       hasPreviousPage: (query as any).hasPreviousPage,
       isFetchingPreviousPage: (query as any).isFetchingPreviousPage,
     } : {}),
-    
+
     // Raw objects for advanced use
     query,
     mutation,

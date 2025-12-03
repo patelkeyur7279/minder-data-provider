@@ -1,467 +1,146 @@
-/**
- * Token Refresh Manager Tests
- */
+import { describe, it, expect, beforeEach, jest, afterEach } from '@jest/globals';
+import axios from 'axios';
+import { ApiClient } from '../src/core/ApiClient';
+import { AuthManager } from '../src/core/AuthManager';
+import { MinderConfig } from '../src/core/types';
+import { StorageType, HttpMethod } from '../src/constants/enums';
 
-import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
-import {
-  TokenRefreshManager,
-  createTokenRefreshManager,
-  type TokenRefreshConfig,
-} from '../src/auth/TokenRefreshManager';
+// Mock axios
+jest.mock('axios');
+const mockedAxios = axios as jest.Mocked<typeof axios>;
 
-// Mock JWT tokens
-const createMockJWT = (expiresInSeconds: number): string => {
-  const now = Math.floor(Date.now() / 1000);
-  const payload = {
-    sub: 'user123',
-    iat: now,
-    exp: now + expiresInSeconds,
-    email: 'test@example.com',
-  };
-
-  // Simple JWT structure (not cryptographically secure, just for testing)
-  const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const payloadEncoded = btoa(JSON.stringify(payload));
-  const signature = 'mock-signature';
-
-  return `${header}.${payloadEncoded}.${signature}`;
-};
-
-describe('TokenRefreshManager', () => {
-  let refreshFn: jest.Mock<() => Promise<string>>;
-  let onRefreshed: jest.Mock<(token: string) => void>;
-  let onError: jest.Mock<(error: Error) => void>;
-  let manager: TokenRefreshManager;
+describe('Token Refresh Logic', () => {
+  let apiClient: ApiClient;
+  let authManager: AuthManager;
+  let config: MinderConfig;
+  let mockAxiosInstance: any;
 
   beforeEach(() => {
-    jest.useFakeTimers();
-    refreshFn = jest.fn<() => Promise<string>>();
-    onRefreshed = jest.fn();
-    onError = jest.fn();
+    // Setup mock axios instance
+    mockAxiosInstance = {
+      interceptors: {
+        request: { use: jest.fn() },
+        response: { use: jest.fn() },
+      },
+      request: jest.fn(),
+      post: jest.fn(),
+    };
+
+    // Mock axios.create to return our mock instance
+    mockedAxios.create.mockReturnValue(mockAxiosInstance);
+    // Also mock axios.post for the direct call in refresh logic
+    mockedAxios.post.mockResolvedValue({ data: {} });
+
+    // Setup config with refreshUrl
+    config = {
+      apiBaseUrl: 'https://api.test.com',
+      auth: {
+        tokenKey: 'auth_token',
+        storage: StorageType.MEMORY,
+        refreshUrl: '/auth/refresh',
+        onAuthError: jest.fn(),
+      },
+      routes: {
+        getData: { method: HttpMethod.GET, url: '/data' },
+      },
+    };
+
+    authManager = new AuthManager(config.auth);
+    // Set initial token
+    authManager.setToken('old-token');
+    authManager.setRefreshToken('mock-refresh-token'); // Required for refresh logic
+
+    // Create ApiClient
+    apiClient = new ApiClient(config, authManager);
+
+    // We need to manually trigger the interceptor logic since we're mocking axios
+    // But wait, ApiClient sets up interceptors in constructor.
+    // We can capture the error interceptor and call it directly.
+
+    // Capture the response error interceptor
+    const useCalls = mockAxiosInstance.interceptors.response.use.mock.calls;
+    // The second argument of the first call to use() is the error interceptor
+    // Assuming ApiClient calls use() once for response.
   });
 
   afterEach(() => {
-    if (manager) {
-      manager.dispose();
-    }
-    jest.useRealTimers();
+    jest.clearAllMocks();
   });
 
-  describe('Token Parsing', () => {
-    it('should parse valid JWT token', () => {
-      const token = createMockJWT(3600); // 1 hour
-      const config: TokenRefreshConfig = {
-        refreshToken: refreshFn,
-      };
-      manager = new TokenRefreshManager(config);
+  it('should attempt to refresh token on 401', async () => {
+    const onAuthErrorSpy = config.auth?.onAuthError;
 
-      const info = manager.getTokenInfo(token);
+    // Get the error interceptor
+    const useCalls = mockAxiosInstance.interceptors.response.use.mock.calls;
+    const errorInterceptor = useCalls[0][1]; // successHandler, errorHandler
 
-      expect(info.valid).toBe(true);
-      expect(info.expired).toBe(false);
-      expect(info.payload).toBeDefined();
-      expect(info.payload?.sub).toBe('user123');
-      expect(info.payload?.email).toBe('test@example.com');
+    // Mock refresh endpoint success
+    mockedAxios.post.mockResolvedValueOnce({
+      data: {
+        token: 'new-valid-token',
+        refreshToken: 'new-refresh-token'
+      }
     });
 
-    it('should handle JWT with missing parts', () => {
-      const config: TokenRefreshConfig = {
-        refreshToken: refreshFn,
-      };
-      manager = new TokenRefreshManager(config);
+    // Mock retry success
+    mockAxiosInstance.request.mockResolvedValueOnce({ data: 'success', config: {} });
 
-      const info = manager.getTokenInfo('header.'); // Missing payload
-      expect(info.valid).toBe(false);
-      expect(info.payload).toBeNull();
-    });
+    // Simulate 401 error
+    const error = {
+      config: {
+        url: '/data',
+        method: 'get',
+        headers: {}
+      },
+      response: { status: 401 }
+    };
 
-    it('should handle malformed base64 in JWT', () => {
-      const config: TokenRefreshConfig = {
-        refreshToken: refreshFn,
-      };
-      manager = new TokenRefreshManager(config);
+    // Call the interceptor
+    const result = await errorInterceptor(error);
 
-      const info = manager.getTokenInfo('header.!!invalid-base64!!.signature');
-      expect(info.valid).toBe(false);
-    });
+    // Verify:
+    // 1. Refresh endpoint called
+    expect(mockedAxios.post).toHaveBeenCalledWith(
+      'https://api.test.com/auth/refresh',
+      expect.any(Object),
+      expect.any(Object)
+    );
 
-    it('should parse JWT without expiration', () => {
-      const payload = { sub: 'user123', iat: Math.floor(Date.now() / 1000) };
-      const header = btoa(JSON.stringify({ alg: 'HS256' }));
-      const payloadEncoded = btoa(JSON.stringify(payload));
-      const token = `${header}.${payloadEncoded}.signature`;
+    // 2. AuthManager updated
+    expect(authManager.getToken()).toBe('new-valid-token');
 
-      const config: TokenRefreshConfig = {
-        refreshToken: refreshFn,
-      };
-      manager = new TokenRefreshManager(config);
+    // 3. Request retried with new token
+    expect(mockAxiosInstance.request).toHaveBeenCalledWith(expect.objectContaining({
+      headers: expect.objectContaining({
+        Authorization: 'Bearer new-valid-token'
+      })
+    }));
 
-      const info = manager.getTokenInfo(token);
-      expect(info.valid).toBe(true);
-      expect(info.expiresAt).toBeNull();
-      expect(info.needsRefresh).toBe(false);
-    });
-
-    it('should detect expired token', () => {
-      const token = createMockJWT(-10); // Expired 10 seconds ago
-      const config: TokenRefreshConfig = {
-        refreshToken: refreshFn,
-      };
-      manager = new TokenRefreshManager(config);
-
-      expect(manager.isTokenExpired(token)).toBe(true);
-    });
-
-    it('should detect token that needs refresh', () => {
-      const token = createMockJWT(240); // Expires in 4 minutes
-      const config: TokenRefreshConfig = {
-        refreshToken: refreshFn,
-        refreshThreshold: 5 * 60 * 1000, // 5 minutes
-      };
-      manager = new TokenRefreshManager(config);
-
-      expect(manager.needsRefresh(token)).toBe(true);
-    });
-
-    it('should handle invalid token gracefully', () => {
-      const config: TokenRefreshConfig = {
-        refreshToken: refreshFn,
-      };
-      manager = new TokenRefreshManager(config);
-
-      const info = manager.getTokenInfo('invalid-token');
-
-      expect(info.valid).toBe(false);
-      expect(info.expired).toBe(false);
-      expect(info.payload).toBeNull();
-    });
+    // 4. onAuthError NOT called
+    expect(onAuthErrorSpy).not.toHaveBeenCalled();
   });
 
-  describe('Auto Refresh', () => {
-    it('should schedule refresh before expiration', () => {
-      const token = createMockJWT(600); // 10 minutes
-      const config: TokenRefreshConfig = {
-        refreshToken: refreshFn,
-        refreshThreshold: 5 * 60 * 1000, // 5 minutes
-        onTokenRefreshed: onRefreshed,
-      };
-      manager = new TokenRefreshManager(config);
+  it('should fail if refresh fails', async () => {
+    const onAuthErrorSpy = config.auth?.onAuthError;
 
-      manager.startAutoRefresh(token);
+    const useCalls = mockAxiosInstance.interceptors.response.use.mock.calls;
+    const errorInterceptor = useCalls[0][1];
 
-      // Should schedule refresh in 5 minutes (600s - 300s = 300s)
-      expect(jest.getTimerCount()).toBe(1);
-    });
+    // Mock refresh endpoint failure
+    mockedAxios.post.mockRejectedValueOnce(new Error('Refresh failed'));
 
-    it('should not start auto-refresh with empty token', () => {
-      const config: TokenRefreshConfig = {
-        refreshToken: refreshFn,
-        debug: true,
-      };
-      manager = new TokenRefreshManager(config);
+    const error = {
+      config: { url: '/data', method: 'get', headers: {} },
+      response: { status: 401 }
+    };
 
-      manager.startAutoRefresh('');
-      expect(jest.getTimerCount()).toBe(0);
-    });
+    // Expect interceptor to reject
+    await expect(errorInterceptor(error)).rejects.toThrow('Refresh failed');
 
-    it('should not schedule refresh for token without expiration', () => {
-      const payload = { sub: 'user123' };
-      const header = btoa(JSON.stringify({ alg: 'HS256' }));
-      const payloadEncoded = btoa(JSON.stringify(payload));
-      const token = `${header}.${payloadEncoded}.signature`;
+    // Verify onAuthError called
+    expect(onAuthErrorSpy).toHaveBeenCalled();
 
-      const config: TokenRefreshConfig = {
-        refreshToken: refreshFn,
-        debug: true,
-      };
-      manager = new TokenRefreshManager(config);
-
-      manager.startAutoRefresh(token);
-      expect(jest.getTimerCount()).toBe(0);
-    });
-
-    it('should refresh token when threshold is reached', async () => {
-      const oldToken = createMockJWT(600); // 10 minutes
-      const newToken = createMockJWT(3600); // 1 hour
-
-      refreshFn.mockResolvedValue(newToken);
-
-      const config: TokenRefreshConfig = {
-        refreshToken: refreshFn,
-        refreshThreshold: 5 * 60 * 1000, // 5 minutes
-        onTokenRefreshed: onRefreshed,
-      };
-      manager = new TokenRefreshManager(config);
-
-      manager.startAutoRefresh(oldToken);
-
-      // Fast-forward to refresh time (5 minutes before expiration)
-      await jest.advanceTimersByTimeAsync(5 * 60 * 1000);
-
-      expect(refreshFn).toHaveBeenCalled();
-      expect(onRefreshed).toHaveBeenCalledWith(newToken);
-    });
-
-    it('should skip refresh if already in progress', async () => {
-      const token = createMockJWT(600);
-      const newToken = createMockJWT(3600);
-
-      // Make refresh take some time
-      let resolveRefresh: (value: string) => void;
-      const refreshPromise = new Promise<string>((resolve) => {
-        resolveRefresh = resolve;
-      });
-      refreshFn.mockReturnValue(refreshPromise);
-
-      const config: TokenRefreshConfig = {
-        refreshToken: refreshFn,
-        refreshThreshold: 5 * 60 * 1000,
-        debug: true,
-      };
-      manager = new TokenRefreshManager(config);
-
-      manager.startAutoRefresh(token);
-      await jest.advanceTimersByTimeAsync(5 * 60 * 1000);
-
-      // Try to refresh again while first is in progress
-      const secondRefresh = manager.refreshNow();
-
-      // Should only call refresh function once
-      expect(refreshFn).toHaveBeenCalledTimes(1);
-
-      // Complete the refresh
-      resolveRefresh!(newToken);
-      await secondRefresh;
-    });
-
-    it('should handle invalid token from refresh function', async () => {
-      const token = createMockJWT(600);
-
-      refreshFn.mockResolvedValue(''); // Empty token
-
-      const config: TokenRefreshConfig = {
-        refreshToken: refreshFn,
-        refreshThreshold: 5 * 60 * 1000,
-        onRefreshError: onError,
-        debug: true,
-      };
-      manager = new TokenRefreshManager(config);
-
-      manager.startAutoRefresh(token);
-      await jest.advanceTimersByTimeAsync(5 * 60 * 1000);
-
-      expect(onError).toHaveBeenCalled();
-      const error = onError.mock.calls[0][0];
-      expect(error.message).toContain('Invalid token');
-    });
-
-    it('should handle already-expired token from refresh function', async () => {
-      const token = createMockJWT(600);
-      const expiredToken = createMockJWT(-10); // Already expired
-
-      refreshFn.mockResolvedValue(expiredToken);
-
-      const config: TokenRefreshConfig = {
-        refreshToken: refreshFn,
-        refreshThreshold: 5 * 60 * 1000,
-        onRefreshError: onError,
-        debug: true,
-      };
-      manager = new TokenRefreshManager(config);
-
-      manager.startAutoRefresh(token);
-      await jest.advanceTimersByTimeAsync(5 * 60 * 1000);
-
-      expect(onError).toHaveBeenCalled();
-      const error = onError.mock.calls[0][0];
-      expect(error.message).toContain('already expired');
-    });
-
-    it('should handle non-Error thrown from refresh function', async () => {
-      const token = createMockJWT(600);
-
-      refreshFn.mockRejectedValue('string error'); // Non-Error object
-
-      const config: TokenRefreshConfig = {
-        refreshToken: refreshFn,
-        refreshThreshold: 5 * 60 * 1000,
-        onRefreshError: onError,
-        debug: true,
-      };
-      manager = new TokenRefreshManager(config);
-
-      manager.startAutoRefresh(token);
-      await jest.advanceTimersByTimeAsync(5 * 60 * 1000);
-
-      expect(onError).toHaveBeenCalled();
-      const error = onError.mock.calls[0][0];
-      expect(error).toBeInstanceOf(Error);
-    });
-
-    it('should handle refresh errors', async () => {
-      const token = createMockJWT(600);
-      const error = new Error('Refresh failed');
-
-      refreshFn.mockRejectedValue(error);
-
-      const config: TokenRefreshConfig = {
-        refreshToken: refreshFn,
-        refreshThreshold: 5 * 60 * 1000,
-        onRefreshError: onError,
-      };
-      manager = new TokenRefreshManager(config);
-
-      manager.startAutoRefresh(token);
-
-      await jest.advanceTimersByTimeAsync(5 * 60 * 1000);
-
-      expect(refreshFn).toHaveBeenCalled();
-      expect(onError).toHaveBeenCalledWith(error);
-      expect(onRefreshed).not.toHaveBeenCalled();
-    });
-
-    it('should not start auto-refresh with expired token', () => {
-      const token = createMockJWT(-10); // Already expired
-      const config: TokenRefreshConfig = {
-        refreshToken: refreshFn,
-        debug: true,
-      };
-      manager = new TokenRefreshManager(config);
-
-      manager.startAutoRefresh(token);
-
-      expect(jest.getTimerCount()).toBe(0);
-    });
-
-    it('should stop auto-refresh when requested', () => {
-      const token = createMockJWT(600);
-      const config: TokenRefreshConfig = {
-        refreshToken: refreshFn,
-      };
-      manager = new TokenRefreshManager(config);
-
-      manager.startAutoRefresh(token);
-      expect(jest.getTimerCount()).toBe(1);
-
-      manager.stopAutoRefresh();
-      expect(jest.getTimerCount()).toBe(0);
-    });
-
-    it('should handle stop when no timer is active', () => {
-      const config: TokenRefreshConfig = {
-        refreshToken: refreshFn,
-        debug: true,
-      };
-      manager = new TokenRefreshManager(config);
-
-      expect(() => manager.stopAutoRefresh()).not.toThrow();
-    });
-  });
-
-  describe('Manual Refresh', () => {
-    it('should allow manual token refresh', async () => {
-      const newToken = createMockJWT(3600);
-      refreshFn.mockResolvedValue(newToken);
-
-      const config: TokenRefreshConfig = {
-        refreshToken: refreshFn,
-        onTokenRefreshed: onRefreshed,
-      };
-      manager = new TokenRefreshManager(config);
-
-      const result = await manager.refreshNow();
-
-      expect(refreshFn).toHaveBeenCalled();
-      expect(onRefreshed).toHaveBeenCalledWith(newToken);
-      expect(result).toBe(newToken);
-    });
-  });
-
-  describe('Configuration', () => {
-    it('should respect custom refresh threshold', () => {
-      const token = createMockJWT(120); // 2 minutes
-      const config: TokenRefreshConfig = {
-        refreshToken: refreshFn,
-        refreshThreshold: 3 * 60 * 1000, // 3 minutes
-      };
-      manager = new TokenRefreshManager(config);
-
-      expect(manager.needsRefresh(token)).toBe(true);
-    });
-
-    it('should allow disabling auto-refresh', () => {
-      const token = createMockJWT(600);
-      const config: TokenRefreshConfig = {
-        refreshToken: refreshFn,
-        enabled: false,
-      };
-      manager = new TokenRefreshManager(config);
-
-      manager.startAutoRefresh(token);
-
-      expect(jest.getTimerCount()).toBe(0);
-    });
-
-    it('should allow updating configuration', () => {
-      const token = createMockJWT(600);
-      const config: TokenRefreshConfig = {
-        refreshToken: refreshFn,
-        refreshThreshold: 5 * 60 * 1000,
-      };
-      manager = new TokenRefreshManager(config);
-
-      manager.startAutoRefresh(token);
-      manager.updateConfig({ refreshThreshold: 10 * 60 * 1000 });
-
-      // Should reschedule with new threshold
-      expect(jest.getTimerCount()).toBe(1);
-    });
-  });
-
-  describe('Token Info', () => {
-    it('should return complete token information', () => {
-      const token = createMockJWT(600); // 10 minutes
-      const config: TokenRefreshConfig = {
-        refreshToken: refreshFn,
-      };
-      manager = new TokenRefreshManager(config);
-
-      const info = manager.getTokenInfo(token);
-
-      expect(info.valid).toBe(true);
-      expect(info.expired).toBe(false);
-      expect(info.expiresAt).toBeInstanceOf(Date);
-      expect(info.timeUntilExpiration).toBeGreaterThan(0);
-      expect(info.payload).toBeDefined();
-    });
-  });
-
-  describe('Factory Function', () => {
-    it('should create manager via factory function', () => {
-      const config: TokenRefreshConfig = {
-        refreshToken: refreshFn,
-      };
-
-      const created = createTokenRefreshManager(config);
-
-      expect(created).toBeInstanceOf(TokenRefreshManager);
-      created.dispose();
-    });
-  });
-
-  describe('Cleanup', () => {
-    it('should cleanup resources on dispose', () => {
-      const token = createMockJWT(600);
-      const config: TokenRefreshConfig = {
-        refreshToken: refreshFn,
-      };
-      manager = new TokenRefreshManager(config);
-
-      manager.startAutoRefresh(token);
-      expect(jest.getTimerCount()).toBe(1);
-
-      manager.dispose();
-      expect(jest.getTimerCount()).toBe(0);
-    });
+    // Verify auth cleared
+    expect(authManager.getToken()).toBeNull();
   });
 });

@@ -12,7 +12,9 @@
 import { describe, it, expect } from '@jest/globals';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useMinder } from '../src/hooks/useMinder.js';
+import { useMinder } from '../src/hooks/useMinder';
+import { setGlobalMinderConfig } from '../src/core/globalConfig';
+import { HttpMethod } from '../src/constants/enums';
 import React from 'react';
 
 // Create a wrapper with QueryClient
@@ -20,6 +22,10 @@ const createWrapper = () => {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
+        retry: false,
+        gcTime: 0,
+      },
+      mutations: {
         retry: false,
       },
     },
@@ -30,6 +36,15 @@ const createWrapper = () => {
 };
 
 describe('Request Cancellation API', () => {
+  beforeAll(() => {
+    setGlobalMinderConfig({
+      apiBaseUrl: 'https://api.example.com',
+      routes: {
+        test: { url: '/test', method: HttpMethod.GET }
+      }
+    });
+  });
+
   it('should expose cancel method', () => {
     const wrapper = createWrapper();
     const { result } = renderHook(() => useMinder('test', { autoFetch: false }), { wrapper });
@@ -85,7 +100,7 @@ describe('Request Cancellation API', () => {
     // All methods should work together
     await result.current.cancel();
     await result.current.invalidate();
-    
+
     expect(result.current.cancel).toBeDefined();
     expect(result.current.invalidate).toBeDefined();
     expect(result.current.refetch).toBeDefined();
@@ -118,7 +133,7 @@ describe('Request Cancellation API', () => {
     // Test that cancel doesn't interfere with other operations
     await result.current.cancel();
     await result.current.invalidate();
-    
+
     expect(result.current.loading).toBe(false);
     expect(result.current.error).toBeNull();
   });
@@ -134,7 +149,7 @@ describe('Request Cancellation API', () => {
     // Both should be callable functions
     expect(typeof firstCancel).toBe('function');
     expect(typeof secondCancel).toBe('function');
-    
+
     // They should both work without errors
     expect(async () => await firstCancel()).not.toThrow();
     expect(async () => await secondCancel()).not.toThrow();

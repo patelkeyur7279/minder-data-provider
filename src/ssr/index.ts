@@ -23,7 +23,7 @@ export function createSSRConfig(config: MinderConfig, options: SSROptions = {}) 
 
 export async function prefetchData(config: MinderConfig, routes: string[]) {
   const data: Record<string, unknown> = {};
-  
+
   for (const routeName of routes) {
     const route = config.routes[routeName];
     if (route && route.method === 'GET') {
@@ -36,7 +36,7 @@ export async function prefetchData(config: MinderConfig, routes: string[]) {
       }
     }
   }
-  
+
   return data;
 }
 
@@ -53,4 +53,23 @@ export function withCSR<T = any>(routeName: string) {
     routeName,
     ssr: false
   };
+}
+
+// Re-export TanStack Query hydration tools
+import { dehydrate, HydrationBoundary, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+export { dehydrate, HydrationBoundary, QueryClient, QueryClientProvider };
+
+/**
+ * Helper to prefetch data and return dehydrated state for SSR
+ * @example
+ * const state = await getDehydratedState([
+ *   queryClient.prefetchQuery({ queryKey: ['users'], queryFn: fetchUsers })
+ * ]);
+ */
+export async function getDehydratedState(
+  queryClient: any,
+  prefetchPromises: Promise<any>[]
+) {
+  await Promise.all(prefetchPromises);
+  return dehydrate(queryClient);
 }

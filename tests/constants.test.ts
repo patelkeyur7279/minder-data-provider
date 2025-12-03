@@ -101,9 +101,9 @@ describe('Constants Module', () => {
       expect(StorageType.ELECTRON_STORE).toBe('electron-store');
     });
 
-    it('should have exactly 7 storage types', () => {
+    it('should have exactly 8 storage types', () => {
       const values = Object.values(StorageType);
-      expect(values.length).toBe(7);
+      expect(values.length).toBe(8); // Added LOCAL_STORAGE
     });
   });
 
@@ -577,8 +577,8 @@ describe('Constants Module', () => {
       });
 
       it('should return false for invalid storage types', () => {
-        expect(isStorageType('MEMORY')).toBe(false);
-        expect(isStorageType('localStorage')).toBe(false);
+        expect(isStorageType('MEMORY')).toBe(false); // Uppercase is invalid
+        expect(isStorageType('invalid')).toBe(false);
         expect(isStorageType('')).toBe(false);
       });
     });
@@ -696,14 +696,14 @@ describe('Constants Module', () => {
 
     it('should support event-based workflows', () => {
       const events: string[] = [];
-      
+
       // Simulate auth flow
       events.push(EVENTS.AUTH_LOGIN);
       expect(events).toContain('minder:auth:login');
-      
+
       events.push(EVENTS.CACHE_INVALIDATE);
       expect(events).toContain('minder:cache:invalidate');
-      
+
       events.push(EVENTS.AUTH_LOGOUT);
       expect(events).toContain('minder:auth:logout');
     });
@@ -711,13 +711,13 @@ describe('Constants Module', () => {
     it('should support storage key building', () => {
       const userId = '123';
       const cacheKey = `${STORAGE_KEYS.CACHE_PREFIX}user_${userId}`;
-      
+
       expect(cacheKey).toBe('minder_cache_user_123');
     });
 
     it('should support MIME type validation', () => {
       const validMimeTypes = Object.values(MIME_TYPES);
-      
+
       expect(validMimeTypes).toContain('application/json');
       expect(validMimeTypes).toContain('multipart/form-data');
       expect(validMimeTypes).not.toContain('invalid/mime');
