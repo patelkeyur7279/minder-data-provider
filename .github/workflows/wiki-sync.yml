@@ -10,10 +10,34 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Sync Wiki
-        uses: spenserblack/actions-wiki-sync@v2
-        with:
-          wiki_folder: docs
-          wiki_commit_message: 'docs: sync from dev'
+        run: |
+          echo "Configuring git..."
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+
+          echo "Cloning wiki repo..."
+          # Clone the wiki repository
+          git clone "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git" wiki_repo
+
+          echo "Syncing files..."
+          # Clean wiki repo (except .git) to ensure deleted files are removed
+          cd wiki_repo
+          find . -maxdepth 1 ! -name '.git' ! -name '.' ! -name '..' -exec rm -rf {} +
+          cd ..
+
+          # Copy docs content to wiki repo
+          cp -a docs/. wiki_repo/
+
+          echo "Committing changes..."
+          cd wiki_repo
+          git add .
+          # Only commit if there are changes
+          if ! git diff-index --quiet HEAD; then
+            git commit -m "docs: sync from dev [skip ci]"
+            git push origin master
+            echo "Wiki updated successfully."
+          else
+            echo "No changes to sync."
+          fi

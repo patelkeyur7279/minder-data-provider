@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - test
     paths-ignore:
       - "**.md"
       - "docs/**"
@@ -14,7 +15,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Changed from 'read' to 'write' to allow tagging and pushing
+      contents: write # Required for tagging
       id-token: write # Required for npm provenance
 
     steps:
@@ -35,13 +36,17 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Version Check & Tagging Logic
       - name: Check if version changed
         id: version_check
         run: |
+          # Fetch published version. Handle 404 if package not found.
           PUBLISHED_VERSION=$(npm view minder-data-provider version 2>/dev/null || echo "0.0.0")
           CURRENT_VERSION=$(node -p "require('./package.json').version")
+          
           echo "published=$PUBLISHED_VERSION" >> $GITHUB_OUTPUT
           echo "current=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          
           if [ "$PUBLISHED_VERSION" = "$CURRENT_VERSION" ]; then
             echo "changed=false" >> $GITHUB_OUTPUT
             echo "Version $CURRENT_VERSION already published"
@@ -51,16 +56,35 @@ jobs:
           fi
 
       - name: Create git tag
-        if: steps.version_check.outputs.changed == 'true'
+        if: steps.version_check.outputs.changed == 'true' && github.ref == 'refs/heads/main'
         run: |
           VERSION=$(node -p "require('./package.json').version")
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "v$VERSION" -m "Release v$VERSION"
-          git push origin "v$VERSION"
+          # Check if tag exists to avoid error
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "Tag v$VERSION already exists"
+          else
+            git tag -a "v$VERSION" -m "Release v$VERSION"
+            git push origin "v$VERSION"
+          fi
 
-      # - name: Publish to npm
-      #   if: steps.version_check.outputs.changed == 'true'
-      #   run: npm publish --provenance --access public
-      #   env:
-      #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Publish - Production (Main Branch)
+      - name: Publish to npm (Production)
+        if: steps.version_check.outputs.changed == 'true' && github.ref == 'refs/heads/main'
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Publish - Beta (Test Branch)
+      - name: Publish to npm (Beta)
+        if: github.ref == 'refs/heads/test'
+        run: |
+          # For beta, we don't necessarily check strict version equality with latest, 
+          # but we should ensure we are publishing a pre-release or distinct version.
+          # Here we strictly follow the instruction to deploy to npm. 
+          # We use --tag beta.
+          # Note: If version is same as 'latest', npm might complain, but --tag beta usually interprets it as a dist-tag.
+          npm publish --tag beta --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
