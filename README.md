@@ -56,10 +56,10 @@ npm install minder-data-provider
 
 ```typescript
 // src/config.ts
-import { setGlobalMinderConfig, HttpMethod } from "minder-data-provider";
+import { configureMinder, HttpMethod } from "minder-data-provider";
 
-setGlobalMinderConfig({
-  apiBaseUrl: "https://api.example.com",
+export const config = configureMinder({
+  apiUrl: "https://api.example.com",
   routes: {
     users: { url: "/users", method: HttpMethod.GET },
     createUser: { url: "/users", method: HttpMethod.POST },
@@ -95,7 +95,8 @@ We have moved our comprehensive documentation to the **GitHub Wiki** for better 
 - **[🏠 Home](https://github.com/patelkeyur7279/minder-data-provider/wiki)**
 - **[🚀 Getting Started](https://github.com/patelkeyur7279/minder-data-provider/wiki/Getting-Started)**
 - **[⚙️ Configuration](https://github.com/patelkeyur7279/minder-data-provider/wiki/Configuration)**
-- **[📘 Usage Guide](https://github.com/patelkeyur7279/minder-data-provider/wiki/Usage-Guide)**
+- **[📘 Usage Guide & Hooks](https://github.com/patelkeyur7279/minder-data-provider/wiki/Usage-Guide)**
+- **[📚 API Reference](https://github.com/patelkeyur7279/minder-data-provider/wiki/API-Reference)**
 - **[🔥 Advanced Features](https://github.com/patelkeyur7279/minder-data-provider/wiki/Advanced-Features)**
 
 <br>
