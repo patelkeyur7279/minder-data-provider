@@ -94,9 +94,10 @@ We have moved our comprehensive documentation to the **GitHub Wiki** for better 
 
 - **[🏠 Home](https://github.com/patelkeyur7279/minder-data-provider/wiki)**
 - **[🚀 Getting Started](https://github.com/patelkeyur7279/minder-data-provider/wiki/Getting-Started)**
-- **[⚙️ Configuration](https://github.com/patelkeyur7279/minder-data-provider/wiki/Configuration)**
-- **[📘 Usage Guide & Hooks](https://github.com/patelkeyur7279/minder-data-provider/wiki/Usage-Guide)**
+- **[⚙️ Configuration](https://github.com/patelkeyur7279/minder-data-provider/wiki/Configuration-Guide)**
+- **[📘 Usage Guide](https://github.com/patelkeyur7279/minder-data-provider/wiki/Usage-Guide)**
 - **[📚 API Reference](https://github.com/patelkeyur7279/minder-data-provider/wiki/API-Reference)**
+- **[🌍 Platform Guide](https://github.com/patelkeyur7279/minder-data-provider/wiki/Platform-Guide)**
 - **[🔥 Advanced Features](https://github.com/patelkeyur7279/minder-data-provider/wiki/Advanced-Features)**
 
 <br>
