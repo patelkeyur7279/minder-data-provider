@@ -1,8 +1,30 @@
+# Security Policy
+
+## Supported Versions
+
+Use this section to tell people about which versions of your project are currently being supported with security updates.
+
+| Version | Supported          |
+| ------- | ------------------ |
+| 2.1.x   | :white_check_mark: |
+| 2.0.x   | :white_check_mark: |
+| 1.x     | :x:                |
+
+## Reporting a Vulnerability
+
+We take security issues seriously. If you discover a security vulnerability, please follow these steps:
+
+1.  **Do NOT open a public issue.**
+2.  Include a description of the vulnerability and steps to reproduce it.
+3.  We will acknowledge your report within 48 hours.
+
+---
+
 # 🔒 Security Features Guide
 
 ## Overview
 
-minder-data-provider includes comprehensive security features to protect your application from common web vulnerabilities including XSS, CSRF, rate limiting attacks, and more.
+`minder-data-provider` includes comprehensive security features to protect your application from common web vulnerabilities including XSS, CSRF, rate limiting attacks, and more.
 
 ## Features
 
@@ -34,17 +56,6 @@ configureMinder({
 - ✅ SessionStorage and Cookie support
 - ✅ Automatic header injection on all requests
 
-**Manual usage:**
-
-```typescript
-import { CSRFTokenManager } from 'minder-data-provider';
-
-const csrfManager = new CSRFTokenManager('my_csrf_cookie');
-const token = csrfManager.getToken(); // Get or generate token
-csrfManager.setToken(customToken);    // Set custom token
-csrfManager.clearToken();             // Clear token
-```
-
 ---
 
 ### 2. XSS Sanitization ✅
@@ -74,33 +85,6 @@ configureMinder({
 - ✅ Configurable whitelist
 - ✅ Automatic sanitization of all request data
 
-**Manual usage:**
-
-```typescript
-import { XSSSanitizer } from 'minder-data-provider';
-
-const sanitizer = new XSSSanitizer({
-  enabled: true,
-  allowedTags: ['b', 'i'],
-});
-
-const clean = sanitizer.sanitize('<script>alert("XSS")</script>Hello');
-// Result: "Hello"
-
-const cleanObject = sanitizer.sanitize({
-  name: '<script>bad</script>John',
-  bio: 'Safe <b>text</b>'
-});
-// Result: { name: 'John', bio: 'Safe <b>text</b>' }
-```
-
-**Protects against:**
-- `<script>` tags
-- `<iframe>` injections
-- `javascript:` protocol
-- Event handlers (`onclick`, `onerror`, etc.)
-- `<embed>` and `<object>` tags
-
 ---
 
 ### 3. Rate Limiting ✅
@@ -128,28 +112,6 @@ configureMinder({
 - ✅ Automatic cleanup of old entries
 - ✅ Customizable limits per route
 
-**Manual usage:**
-
-```typescript
-import { RateLimiter } from 'minder-data-provider';
-
-const limiter = new RateLimiter('localStorage');
-
-if (limiter.check('api/users', 100, 60000)) {
-  // Request allowed
-  makeApiCall();
-} else {
-  // Rate limit exceeded
-  showError('Too many requests');
-}
-
-// Reset specific endpoint
-limiter.reset('api/users');
-
-// Cleanup old entries
-limiter.cleanup();
-```
-
 ---
 
 ### 4. Input Validation ✅
@@ -161,29 +123,16 @@ import { InputValidator } from 'minder-data-provider';
 
 // Email validation
 InputValidator.isValidEmail('user@example.com'); // true
-InputValidator.isValidEmail('invalid'); // false
 
 // URL validation
 InputValidator.isValidURL('https://example.com'); // true
-InputValidator.isValidURL('not-a-url'); // false
 
 // Filename sanitization (prevents path traversal)
 InputValidator.sanitizeFilename('../../../etc/passwd');
 // Result: '.._.._.._.._etc_.._passwd'
 
-// JSON validation
-InputValidator.isValidJSON('{"key": "value"}'); // true
-InputValidator.isValidJSON('{invalid}'); // false
-
 // SQL injection detection
 InputValidator.hasSQLInjectionPattern("' OR '1'='1"); // true
-InputValidator.hasSQLInjectionPattern('Normal text'); // false
-
-// Length validation
-InputValidator.validateLength('hello', 10, 2); // true (2-10 chars)
-
-// Range validation
-InputValidator.validateRange(5, 1, 10); // true
 ```
 
 ---
@@ -213,71 +162,6 @@ configureMinder({
 - `X-Content-Type-Options`: Prevents MIME sniffing
 - `Strict-Transport-Security`: Forces HTTPS
 - `X-XSS-Protection`: Browser XSS filter
-- `Referrer-Policy`: Controls referrer information
-- `Permissions-Policy`: Feature policy control
-
-**Manual usage:**
-
-```typescript
-import { getSecurityHeaders } from 'minder-data-provider';
-
-const headers = getSecurityHeaders({
-  contentSecurityPolicy: "default-src 'none'",
-  xFrameOptions: 'SAMEORIGIN'
-});
-
-// Apply to axios/fetch requests
-fetch(url, { headers });
-```
-
----
-
-## Complete Configuration Example
-
-```typescript
-import { configureMinder } from 'minder-data-provider';
-
-configureMinder({
-  baseURL: 'https://api.example.com',
-  
-  security: {
-    // CSRF Protection
-    csrfProtection: {
-      enabled: true,
-      tokenLength: 32,
-      headerName: 'X-CSRF-Token',
-      cookieName: 'csrf_token'
-    },
-    
-    // XSS Sanitization
-    sanitization: {
-      enabled: true,
-      allowedTags: ['b', 'i', 'em', 'strong', 'a', 'p', 'br'],
-      allowedAttributes: {
-        'a': ['href', 'title', 'target']
-      }
-    },
-    
-    // Rate Limiting
-    rateLimiting: {
-      requests: 100,
-      window: 60000, // 1 minute
-      storage: 'localStorage'
-    },
-    
-    // Security Headers
-    headers: {
-      contentSecurityPolicy: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'",
-      xFrameOptions: 'SAMEORIGIN',
-      xContentTypeOptions: true,
-      strictTransportSecurity: 'max-age=31536000; includeSubDomains; preload'
-    },
-    
-    // Enable input validation warnings
-    inputValidation: true
-  }
-});
-```
 
 ---
 
@@ -287,7 +171,6 @@ configureMinder({
 ```typescript
 configureMinder({
   baseURL: 'https://api.example.com', // ✅ HTTPS
-  // baseURL: 'http://api.example.com', // ❌ HTTP
 });
 ```
 
@@ -302,99 +185,7 @@ security: {
 ```
 
 ### 3. **Validate user input on both client and server**
-```typescript
-import { InputValidator } from 'minder-data-provider';
-
-// Client-side validation
-if (!InputValidator.isValidEmail(email)) {
-  throw new Error('Invalid email');
-}
-
-// Still validate on server!
-```
-
-### 4. **Sanitize all user-generated content**
-```typescript
-import { XSSSanitizer } from 'minder-data-provider';
-
-const sanitizer = new XSSSanitizer();
-const safeContent = sanitizer.sanitize(userInput);
-```
-
-### 5. **Use appropriate rate limits**
-```typescript
-// Public endpoints: stricter limits
-rateLimiting: { requests: 10, window: 60000 }
-
-// Authenticated endpoints: looser limits
-rateLimiting: { requests: 100, window: 60000 }
-```
-
-### 6. **Configure CSP headers carefully**
-```typescript
-// Start restrictive, then add exceptions as needed
-contentSecurityPolicy: "default-src 'self'; script-src 'self'"
-```
-
----
-
-## Testing Security Features
-
-All security features are thoroughly tested. Run tests with:
-
-```bash
-npm test -- tests/security.test.ts
-```
-
-**Test coverage includes:**
-- ✅ CSRF token generation and management
-- ✅ XSS sanitization (scripts, iframes, event handlers)
-- ✅ Rate limiting (sliding window, cleanup)
-- ✅ Input validation (email, URL, SQL injection)
-- ✅ Security headers configuration
-
----
-
-## Migration from Basic to Enhanced Security
-
-**Before (basic security):**
-```typescript
-configureMinder({
-  security: {
-    csrfProtection: true,
-    sanitization: true
-  }
-});
-```
-
-**After (enhanced security):**
-```typescript
-configureMinder({
-  security: {
-    csrfProtection: {
-      enabled: true,
-      tokenLength: 32,
-      headerName: 'X-CSRF-Token'
-    },
-    sanitization: {
-      enabled: true,
-      allowedTags: ['b', 'i', 'strong'],
-      allowedAttributes: { 'a': ['href'] }
-    },
-    rateLimiting: {
-      requests: 100,
-      window: 60000,
-      storage: 'localStorage'
-    },
-    headers: {
-      contentSecurityPolicy: "default-src 'self'",
-      xFrameOptions: 'DENY'
-    }
-  }
-});
-```
-
-✅ **Backward compatible** - boolean values still work!
+Client-side validation is for UX; server-side validation is for security. Always do both.
 
 ---
 
@@ -406,36 +197,3 @@ configureMinder({
 - **Security headers**: No runtime cost (applied once)
 
 All security features are **optimized for production** with minimal overhead.
-
----
-
-## Browser Compatibility
-
-- ✅ Modern browsers (Chrome, Firefox, Safari, Edge)
-- ✅ Node.js environments (SSR support)
-- ✅ React Native (with polyfills)
-
----
-
-## Security Audit
-
-Last security audit: Task #3 Implementation
-Next recommended audit: Every major version
-
-**Protections implemented:**
-- ✅ CSRF (Cross-Site Request Forgery)
-- ✅ XSS (Cross-Site Scripting)
-- ✅ Rate Limiting / DDoS
-- ✅ Path Traversal (filename sanitization)
-- ✅ SQL Injection Detection
-- ✅ Clickjacking (X-Frame-Options)
-- ✅ MIME Sniffing (X-Content-Type-Options)
-- ✅ HTTPS Enforcement (HSTS)
-
----
-
-## Support
-
-For security vulnerabilities, please email: security@minder-data-provider.com
-
-**Do not** open public GitHub issues for security vulnerabilities.

@@ -2,7 +2,7 @@
 
 This guide explains how to configure **minder-data-provider** with examples and all available options.
 
-## � Important: Next.js Users
+## 🚨 Important: Next.js Users
 
 **If you're using Next.js, you MUST provide the `dynamic` field in your configuration.**
 
@@ -10,8 +10,9 @@ See [DYNAMIC_IMPORTS.md](./DYNAMIC_IMPORTS.md) for detailed explanation.
 
 ```typescript
 import dynamic from "next/dynamic"; // Required for Next.js
+import { configureMinder } from "minder-data-provider/config";
 
-export const config = createMinderConfig({
+export const config = configureMinder({
   apiUrl: "https://api.example.com",
   dynamic: dynamic, // ⚠️ REQUIRED for Next.js
   routes: {
@@ -22,7 +23,7 @@ export const config = createMinderConfig({
 
 ---
 
-## �📋 Table of Contents
+## 📋 Table of Contents
 
 1. [Quick Start](#quick-start)
 2. [Configuration Presets](#configuration-presets)
@@ -37,9 +38,9 @@ export const config = createMinderConfig({
 ### Minimal Setup (45KB bundle)
 
 ```typescript
-import { createMinderConfig } from "minder-data-provider/config";
+import { configureMinder } from "minder-data-provider/config";
 
-export const config = createMinderConfig({
+export const config = configureMinder({
   preset: "minimal",
   apiUrl: "https://api.example.com",
   routes: {
@@ -52,7 +53,9 @@ export const config = createMinderConfig({
 ### Standard Setup (90KB bundle) - RECOMMENDED
 
 ```typescript
-export const config = createMinderConfig({
+import { configureMinder } from "minder-data-provider/config";
+
+export const config = configureMinder({
   preset: "standard",
   apiUrl: "https://api.example.com",
   auth: true,
@@ -67,12 +70,14 @@ export const config = createMinderConfig({
 ### Enterprise Setup (150KB bundle)
 
 ```typescript
-export const config = createMinderConfig({
+import { configureMinder } from "minder-data-provider/config";
+
+export const config = configureMinder({
   preset: "enterprise",
   apiUrl: "https://api.example.com",
   auth: true,
   cache: true,
-  websocket: "wss://api.example.com/ws",
+  websocket: { url: "wss://api.example.com/ws" },
   routes: {
     users: "/users",
     products: "/products",
@@ -100,7 +105,7 @@ Choose ONE preset that matches your application:
 - ❌ No offline support
 
 ```typescript
-const config = createMinderConfig({
+const config = configureMinder({
   preset: "minimal",
   apiUrl: "https://api.example.com",
   routes: { users: "/users" },
@@ -126,7 +131,7 @@ const config = createMinderConfig({
 - ❌ No SSR support
 
 ```typescript
-const config = createMinderConfig({
+const config = configureMinder({
   preset: "standard",
   apiUrl: "https://api.example.com",
   auth: { storage: "cookie" },
@@ -155,7 +160,7 @@ const config = createMinderConfig({
 - ❌ No encryption
 
 ```typescript
-const config = createMinderConfig({
+const config = configureMinder({
   preset: "advanced",
   apiUrl: "https://api.example.com",
   auth: true,
@@ -183,12 +188,12 @@ const config = createMinderConfig({
 - ✅ Request signing
 
 ```typescript
-const config = createMinderConfig({
+const config = configureMinder({
   preset: "enterprise",
   apiUrl: "https://api.example.com",
   auth: true,
   cache: true,
-  websocket: "wss://api.example.com/ws",
+  websocket: { url: "wss://api.example.com/ws" },
   routes: { users: "/users" },
 });
 ```
@@ -202,62 +207,55 @@ If presets don't fit your needs, configure manually:
 ### Minimal Manual Config
 
 ```typescript
-const config: MinderConfig = {
-  apiBaseUrl: "https://api.example.com",
+import { configureMinder, HttpMethod } from "minder-data-provider";
 
+const config = configureMinder({
+  apiUrl: "https://api.example.com",
   routes: {
-    users: { method: "GET", url: "/users" },
-    createUser: { method: "POST", url: "/users" },
-    updateUser: { method: "PUT", url: "/users/:id" },
-    deleteUser: { method: "DELETE", url: "/users/:id" },
+    users: { method: HttpMethod.GET, url: "/users" },
+    createUser: { method: HttpMethod.POST, url: "/users" },
+    updateUser: { method: HttpMethod.PUT, url: "/users/:id" },
+    deleteUser: { method: HttpMethod.DELETE, url: "/users/:id" },
   },
-
   cache: {
-    type: "memory",
-    ttl: 5 * 60 * 1000,
-    maxSize: 50,
+    staleTime: 5 * 60 * 1000,
   },
-
   performance: {
     retries: 1,
     timeout: 10000,
   },
-};
+});
 ```
 
 ### Full Manual Config
 
 ```typescript
-const config: MinderConfig = {
+import { configureMinder, HttpMethod, StorageType, LogLevel } from "minder-data-provider";
+
+const config = configureMinder({
   // API Setup
-  apiBaseUrl: "https://api.example.com",
-  apiVersion: "v1",
+  apiUrl: "https://api.example.com",
 
   // Routes
   routes: {
-    users: { method: "GET", url: "/users" },
-    createUser: { method: "POST", url: "/users" },
-    getUserById: { method: "GET", url: "/users/:id" },
-    updateUser: { method: "PUT", url: "/users/:id" },
-    deleteUser: { method: "DELETE", url: "/users/:id" },
+    users: { method: HttpMethod.GET, url: "/users" },
+    createUser: { method: HttpMethod.POST, url: "/users" },
+    getUserById: { method: HttpMethod.GET, url: "/users/:id" },
+    updateUser: { method: HttpMethod.PUT, url: "/users/:id" },
+    deleteUser: { method: HttpMethod.DELETE, url: "/users/:id" },
   },
 
   // Authentication
   auth: {
-    enabled: true,
     tokenKey: "accessToken",
-    storage: "cookie", // Web: 'cookie' | 'sessionStorage' | 'memory'
-    // RN: 'AsyncStorage' | 'SecureStore' (Expo) | 'memory'
+    storage: StorageType.COOKIE, // Web: 'cookie' | 'sessionStorage' | 'memory'
     refreshUrl: "/api/auth/refresh",
-    tokenRefreshThreshold: 5 * 60 * 1000, // Refresh 5 min before expiry
   },
 
   // Caching
   cache: {
-    type: "hybrid", // 'memory' | 'hybrid' | 'persistent'
-    ttl: 15 * 60 * 1000, // 15 minutes
+    staleTime: 15 * 60 * 1000, // 15 minutes
     gcTime: 10 * 60 * 1000, // Garbage collect after 10 min unused
-    maxSize: 200,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
   },
@@ -266,65 +264,40 @@ const config: MinderConfig = {
   security: {
     sanitization: true,
     csrfProtection: true,
-    inputValidation: true,
-    encryption: false,
     rateLimiting: {
-      enabled: true,
       requests: 100,
       window: 60000,
-    },
-    headers: {
-      contentSecurityPolicy: "default-src 'self'",
-      xFrameOptions: "DENY",
-      xContentTypeOptions: true,
-      strictTransportSecurity: "max-age=31536000",
     },
   },
 
   // WebSocket (Optional)
   websocket: {
-    enabled: false,
     url: "wss://api.example.com/ws",
     reconnect: true,
     heartbeat: 30000,
-    maxReconnectAttempts: 5,
   },
 
   // Performance
   performance: {
     deduplication: true,
-    batching: true,
-    batchDelay: 50,
     retries: 3,
-    retryDelay: 1000,
     timeout: 30000,
     compression: true,
-    lazyLoading: true,
-    monitoring: false,
-  },
-
-  // CORS
-  cors: {
-    enabled: true,
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE"],
   },
 
   // Server-Side Rendering
   ssr: {
     enabled: false,
-    hydrate: true,
   },
 
   // Debug
   debug: {
     enabled: process.env.NODE_ENV === "development",
-    logLevel: "warn", // 'error' | 'warn' | 'info' | 'debug'
+    logLevel: LogLevel.WARN, // 'error' | 'warn' | 'info' | 'debug'
     performance: true,
     devTools: true,
-    networkLogs: false,
   },
-};
+});
 ```
 
 ---
@@ -335,8 +308,7 @@ const config: MinderConfig = {
 
 | Option       | Type   | Default    | Description                |
 | ------------ | ------ | ---------- | -------------------------- |
-| `apiBaseUrl` | string | Required   | Base URL for all API calls |
-| `apiVersion` | string | 'v1'       | API version to use         |
+| `apiUrl`     | string | Required   | Base URL for all API calls |
 | `routes`     | object | {}         | Route mappings             |
 | `preset`     | string | 'standard' | Configuration preset       |
 | `dynamic`    | object | {}         | Dynamic config             |
@@ -345,20 +317,18 @@ const config: MinderConfig = {
 
 | Option                       | Type    | Default         | Description            |
 | ---------------------------- | ------- | --------------- | ---------------------- |
-| `auth.enabled`               | boolean | true            | Enable authentication  |
+| `auth`                       | boolean | true            | Enable authentication  |
 | `auth.tokenKey`              | string  | 'token'         | Key to store token     |
-| `auth.storage`               | string  | 'cookie'        | Where to store token   |
+| `auth.storage`               | enum    | COOKIE          | Where to store token   |
 | `auth.refreshUrl`            | string  | '/auth/refresh' | Token refresh endpoint |
-| `auth.tokenRefreshThreshold` | number  | 5min            | Refresh before expiry  |
 
 ### Caching
 
 | Option                       | Type    | Default  | Description                          |
 | ---------------------------- | ------- | -------- | ------------------------------------ |
-| `cache.type`                 | string  | 'hybrid' | Cache type: memory/hybrid/persistent |
-| `cache.ttl`                  | number  | 15min    | Time to live in ms                   |
+| `cache`                      | boolean | true     | Enable caching                       |
+| `cache.staleTime`            | number  | 15min    | Time to live in ms                   |
 | `cache.gcTime`               | number  | 10min    | Garbage collect time                 |
-| `cache.maxSize`              | number  | 200      | Max cached items                     |
 | `cache.refetchOnWindowFocus` | boolean | true     | Refetch when tab focused             |
 | `cache.refetchOnReconnect`   | boolean | true     | Refetch when back online             |
 
@@ -366,10 +336,9 @@ const config: MinderConfig = {
 
 | Option                           | Type    | Default | Description           |
 | -------------------------------- | ------- | ------- | --------------------- |
+| `security`                       | boolean | true    | Enable security       |
 | `security.sanitization`          | boolean | true    | Sanitize HTML output  |
 | `security.csrfProtection`        | boolean | true    | CSRF token handling   |
-| `security.inputValidation`       | boolean | true    | Validate input        |
-| `security.encryption`            | boolean | false   | End-to-end encryption |
 | `security.rateLimiting.requests` | number  | 100     | Requests allowed      |
 | `security.rateLimiting.window`   | number  | 60000   | Time window in ms     |
 
@@ -377,42 +346,37 @@ const config: MinderConfig = {
 
 | Option                           | Type    | Default | Description           |
 | -------------------------------- | ------- | ------- | --------------------- |
-| `websocket.enabled`              | boolean | false   | Enable WebSocket      |
+| `websocket`                      | boolean | false   | Enable WebSocket      |
 | `websocket.url`                  | string  | -       | WebSocket URL         |
 | `websocket.reconnect`            | boolean | true    | Auto-reconnect        |
 | `websocket.heartbeat`            | number  | 30000   | Heartbeat interval ms |
-| `websocket.maxReconnectAttempts` | number  | 5       | Max retries           |
 
 ### Performance
 
 | Option                      | Type    | Default | Description            |
 | --------------------------- | ------- | ------- | ---------------------- |
 | `performance.deduplication` | boolean | true    | Dedupe requests        |
-| `performance.batching`      | boolean | true    | Batch requests         |
-| `performance.batchDelay`    | number  | 50      | Batch delay ms         |
 | `performance.retries`       | number  | 3       | Retry count            |
-| `performance.retryDelay`    | number  | 1000    | Retry delay ms         |
 | `performance.timeout`       | number  | 30000   | Request timeout ms     |
 | `performance.compression`   | boolean | true    | Enable compression     |
-| `performance.lazyLoading`   | boolean | true    | Lazy load              |
-| `performance.monitoring`    | boolean | false   | Performance monitoring |
 
 ### Server-Side Rendering
 
 | Option        | Type    | Default | Description        |
 | ------------- | ------- | ------- | ------------------ |
+| `ssr`         | boolean | false   | Enable SSR support |
 | `ssr.enabled` | boolean | false   | Enable SSR support |
-| `ssr.hydrate` | boolean | true    | Hydrate on client  |
+| `ssr.prefetch`| array   | []      | Routes to prefetch |
 
 ### Debug
 
 | Option              | Type    | Default  | Description      |
 | ------------------- | ------- | -------- | ---------------- |
+| `debug`             | boolean | dev only | Enable debugging |
 | `debug.enabled`     | boolean | dev only | Enable debugging |
-| `debug.logLevel`    | string  | 'warn'   | Log level        |
+| `debug.logLevel`    | enum    | WARN     | Log level        |
 | `debug.performance` | boolean | true     | Log performance  |
 | `debug.devTools`    | boolean | true     | Enable dev tools |
-| `debug.networkLogs` | boolean | false    | Network logs     |
 
 ---
 
@@ -436,11 +400,13 @@ function App() {
 ### Next.js
 
 ```typescript
-import { configureMinder } from "minder-data-provider/platforms/nextjs";
+import { configureMinder } from "minder-data-provider/config";
+import dynamic from 'next/dynamic';
 
 export const config = configureMinder({
   preset: "standard",
   apiUrl: process.env.NEXT_PUBLIC_API_URL,
+  dynamic: dynamic,
   routes: { users: "/users" },
   ssr: { enabled: true },
 });
@@ -449,36 +415,39 @@ export const config = configureMinder({
 ### React Native
 
 ```typescript
-import { configureMinder } from "minder-data-provider/platforms/native";
+import { configureMinder } from "minder-data-provider/config";
+import { StorageType } from "minder-data-provider";
 
 const config = configureMinder({
   preset: "standard",
   apiUrl: process.env.REACT_APP_API_URL,
-  auth: { storage: "memory" }, // No localStorage on native
+  auth: { storage: StorageType.ASYNC_STORAGE },
 });
 ```
 
 ### Electron
 
 ```typescript
-import { configureMinder } from "minder-data-provider/platforms/electron";
+import { configureMinder } from "minder-data-provider/config";
+import { StorageType } from "minder-data-provider";
 
 const config = configureMinder({
   preset: "advanced",
   apiUrl: "http://localhost:3000",
-  cache: { type: "persistent" },
+  // Electron store is auto-detected on Electron platform
 });
 ```
 
 ### Node.js
 
 ```typescript
-import { configureMinder } from "minder-data-provider/platforms/node";
+import { configureMinder } from "minder-data-provider/config";
+import { StorageType } from "minder-data-provider";
 
 const config = configureMinder({
   preset: "standard",
   apiUrl: "https://api.example.com",
-  auth: { storage: "memory" },
+  auth: { storage: StorageType.MEMORY },
 });
 ```
 
