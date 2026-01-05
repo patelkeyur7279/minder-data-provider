@@ -14,6 +14,8 @@ import { describe, it, expect } from '@jest/globals';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useMinder } from '../src/hooks/useMinder.js';
+import { setGlobalMinderConfig } from '../src/core/globalConfig';
+import { HttpMethod } from '../src/constants/enums';
 import React from 'react';
 
 // Create a wrapper with QueryClient
@@ -50,6 +52,14 @@ const createAgeValidator = () => ({
 });
 
 describe('Built-in Validation', () => {
+  beforeAll(() => {
+    setGlobalMinderConfig({
+      apiBaseUrl: 'http://localhost:3000/api',
+      routes: {
+        users: { url: '/users', method: HttpMethod.POST },
+      },
+    });
+  });
   describe('Basic Validation', () => {
     it('should validate data before mutation', async () => {
       const wrapper = createWrapper();
@@ -91,8 +101,10 @@ describe('Built-in Validation', () => {
       // Mutation will fail because no actual API, but validation should pass
       const response = await result.current.mutate({ email: 'valid@example.com' });
 
-      // Validation passed, but API call failed (expected in test environment)
-      expect(response.error?.message).not.toContain('Invalid email');
+      // Validation passed - either succeeded or failed for non-validation reasons
+      if (response.error) {
+        expect(response.error.message).not.toContain('Invalid email');
+      }
     });
 
     it('should work without validation when not provided', async () => {
@@ -106,8 +118,10 @@ describe('Built-in Validation', () => {
       // Should not throw validation error
       const response = await result.current.mutate({ email: 'anything' });
 
-      // No validation error
-      expect(response.error?.message).not.toContain('Invalid email');
+      // No validation error - error might be undefined or from other causes
+      if (response.error) {
+        expect(response.error.message).not.toContain('Invalid email');
+      }
     });
   });
 
@@ -161,8 +175,8 @@ describe('Built-in Validation', () => {
       const emailSchema = createEmailValidator();
 
       const { result } = renderHook(
-        () => useMinder('users', { 
-          autoFetch: false, 
+        () => useMinder('users', {
+          autoFetch: false,
           validate: (data) => emailSchema.parse(data)
         }),
         { wrapper }
@@ -309,8 +323,8 @@ describe('Built-in Validation', () => {
       };
 
       const { result } = renderHook(
-        () => useMinder('users', { 
-          autoFetch: false, 
+        () => useMinder('users', {
+          autoFetch: false,
           validate: validator,
         }),
         { wrapper }
@@ -350,7 +364,7 @@ describe('Built-in Validation', () => {
   describe('TypeScript Integration', () => {
     it('should maintain type safety with validation', async () => {
       const wrapper = createWrapper();
-      
+
       interface User {
         email: string;
         name: string;
@@ -365,18 +379,18 @@ describe('Built-in Validation', () => {
       };
 
       const { result } = renderHook(
-        () => useMinder<User>('users', { 
-          autoFetch: false, 
-          validate: userValidator 
+        () => useMinder<User>('users', {
+          autoFetch: false,
+          validate: userValidator
         }),
         { wrapper }
       );
 
       // TypeScript should ensure correct types
-      await result.current.mutate({ 
-        email: 'test@example.com', 
-        name: 'Test', 
-        age: 30 
+      await result.current.mutate({
+        email: 'test@example.com',
+        name: 'Test',
+        age: 30
       });
     });
   });

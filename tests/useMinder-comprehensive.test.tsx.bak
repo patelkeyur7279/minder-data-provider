@@ -1,0 +1,155 @@
+import React from 'react';
+import { renderHook, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useMinder } from '../src/hooks/useMinder';
+import { ApiClient } from '../src/core/ApiClient';
+import * as MinderDataProviderModule from '../src/core/MinderDataProvider';
+
+// Mock ApiClient
+jest.mock('../src/core/ApiClient');
+
+// Mock useMinderContext
+jest.mock('../src/core/MinderDataProvider', () => ({
+    ...jest.requireActual('../src/core/MinderDataProvider'),
+    useMinderContext: jest.fn(),
+}));
+
+const createWrapper = () => {
+    const queryClient = new QueryClient({
+        defaultOptions: {
+            queries: { retry: false },
+            mutations: { retry: false },
+        },
+    });
+
+    return ({ children }: { children: React.ReactNode }) => (
+        <QueryClientProvider client={queryClient}>
+            {children}
+        </QueryClientProvider>
+    );
+};
+
+describe('useMinder Comprehensive Support', () => {
+    let mockApiClient: jest.Mocked<ApiClient>;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+
+        mockApiClient = {
+            request: jest.fn(),
+        } as unknown as jest.Mocked<ApiClient>;
+
+        // Setup mock context
+        (MinderDataProviderModule.useMinderContext as jest.Mock).mockReturnValue({
+            apiClient: mockApiClient,
+            config: {
+                routes: {
+                    users: { url: '/users', method: 'GET' },
+                    userById: { url: '/users/:id', method: 'GET' },
+                    createUser: { url: '/users', method: 'POST' },
+                    updateUser: { url: '/users/:id', method: 'PUT' },
+                    deleteUser: { url: '/users/:id', method: 'DELETE' },
+                    uploadAvatar: { url: '/users/:id/avatar', method: 'POST' }
+                }
+            }
+        });
+    });
+
+    it('should support POST with JSON body, URL params, and Query params', async () => {
+        mockApiClient.request.mockResolvedValue({ success: true });
+
+        const { result } = renderHook(() => useMinder('createUser', { autoFetch: false }), {
+            wrapper: createWrapper(),
+        });
+
+        const body = { name: 'John Doe', age: 30 };
+        const urlParams = { version: 'v1' }; // Hypothetical URL param if route had it, or just ignored
+        const queryParams = { notify: true, method: 'email' };
+
+        await result.current.mutate(body, {
+            params: { ...urlParams, ...queryParams }
+        });
+
+        // Expectation:
+        // 1. Route: 'createUser'
+        // 2. Data: body object (JSON)
+        // 3. URL Params: passed for path replacement
+        // 4. Config: params (for query string)
+        expect(mockApiClient.request).toHaveBeenCalledWith(
+            'createUser',
+            body,
+            expect.objectContaining({ ...urlParams, ...queryParams }),
+            expect.objectContaining({
+                params: expect.objectContaining(queryParams)
+            })
+        );
+    });
+
+    it('should support File upload (FormData)', async () => {
+        mockApiClient.request.mockResolvedValue({ success: true });
+
+        const { result } = renderHook(() => useMinder('uploadAvatar'), {
+            wrapper: createWrapper(),
+        });
+
+        const file = new File(['(⌐□_□)'], 'chucknorris.png', { type: 'image/png' });
+        const formData = new FormData();
+        formData.append('file', file);
+
+        await result.current.mutate(formData, {
+            params: { id: 123 }
+        });
+
+        expect(mockApiClient.request).toHaveBeenCalledWith(
+            'uploadAvatar',
+            formData,
+            expect.objectContaining({ id: 123 }),
+            expect.objectContaining({
+                params: expect.objectContaining({ id: 123 })
+            })
+        );
+    });
+
+    it('should support DELETE with Query params', async () => {
+        mockApiClient.request.mockResolvedValue({ success: true });
+
+        const { result } = renderHook(() => useMinder('deleteUser', { autoFetch: false }), {
+            wrapper: createWrapper(),
+        });
+
+        const params = { id: 123, soft: true }; // id for path, soft for query
+
+        await result.current.mutate(undefined, { params });
+
+        expect(mockApiClient.request).toHaveBeenCalledWith(
+            'deleteUser',
+            undefined,
+            expect.objectContaining(params),
+            expect.objectContaining({
+                params: expect.objectContaining(params)
+            })
+        );
+    });
+
+    it('should support Raw string body with custom Content-Type', async () => {
+        mockApiClient.request.mockResolvedValue({ success: true });
+
+        const { result } = renderHook(() => useMinder('createUser', { autoFetch: false }), {
+            wrapper: createWrapper(),
+        });
+
+        const rawData = '<user><name>John</name></user>';
+        const headers = { 'Content-Type': 'application/xml' };
+
+        await result.current.mutate(rawData, { headers });
+
+        expect(mockApiClient.request).toHaveBeenCalledWith(
+            'createUser',
+            rawData,
+            {}, // empty object when no params
+            expect.objectContaining({
+                headers: expect.objectContaining(headers)
+            })
+        );
+    });
+});

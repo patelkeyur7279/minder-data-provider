@@ -10,6 +10,12 @@ export interface ProxyConfig {
   rewriteRules?: Record<string, string>;
   headers?: Record<string, string>;
   timeout?: number;
+  cors?: {
+    origin?: string | string[];
+    methods?: string[];
+    headers?: string[];
+    credentials?: boolean;
+  };
 }
 
 export class ProxyManager {
@@ -30,18 +36,12 @@ export class ProxyManager {
     }
 
     // Check if the original URL is already an absolute URL
-  if (originalUrl.startsWith('http://') || originalUrl.startsWith('https://')) {
-    return originalUrl;
-  }
+    if (originalUrl.startsWith('http://') || originalUrl.startsWith('https://')) {
+      return originalUrl;
+    }
 
     // Remove leading slash if present
     const cleanUrl = originalUrl.startsWith('/') ? originalUrl.slice(1) : originalUrl;
-    
-    // Check if the base URL is already included in the original URL
-  // if (originalUrl.startsWith(this.config.baseUrl)) {
-  //   return originalUrl;
-  // }
-
 
     // Rewrite to proxy URL
     return `${this.config.baseUrl}/${cleanUrl}`;
@@ -61,6 +61,14 @@ export class ProxyManager {
 
   // Generate Next.js API route for proxy
   public generateNextJSProxy(): string {
+    const corsOrigin = this.config.cors?.origin
+      ? (Array.isArray(this.config.cors.origin) ? this.config.cors.origin.join(',') : this.config.cors.origin)
+      : '*';
+
+    const corsMethods = this.config.cors?.methods?.join(',') || 'GET,POST,PUT,DELETE,OPTIONS';
+    const corsHeaders = this.config.cors?.headers?.join(',') || 'Content-Type,Authorization';
+    const corsCredentials = this.config.cors?.credentials !== false ? 'true' : 'false';
+
     return `
     // pages/api/minder-proxy/[...path].js
     const corsPath = require.resolve('./corsMiddleware');
@@ -73,10 +81,10 @@ export class ProxyManager {
       await corsMiddleware(req, res);
 
       // CORS headers
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Allow-Origin', '${corsOrigin}');
+      res.setHeader('Access-Control-Allow-Methods', '${corsMethods}');
+      res.setHeader('Access-Control-Allow-Headers', '${corsHeaders}');
+      res.setHeader('Access-Control-Allow-Credentials', '${corsCredentials}');
       
       if (req.method === 'OPTIONS') {
         res.status(200).end();
@@ -102,17 +110,76 @@ export class ProxyManager {
         const data = await response.json();
         res.status(response.status).json(data);
 
-        // Set CORS headers
-        res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
-        
-        const data = await response.json();
-        res.status(response.status).json(data);
       } catch (error) {
         logger.error('Proxy error:', error);
         res.status(500).json({ error: 'Proxy request failed', message: error.message });
       }
     }
   `;
+  }
+
+  // Generate Express/Node.js middleware for proxy
+  public generateExpressProxy(): string {
+    const corsOrigin = this.config.cors?.origin
+      ? (Array.isArray(this.config.cors.origin) ? JSON.stringify(this.config.cors.origin) : `'${this.config.cors.origin}'`)
+      : "'*'";
+
+    const corsMethods = this.config.cors?.methods?.join(',') || 'GET,POST,PUT,DELETE,OPTIONS';
+    const corsHeaders = this.config.cors?.headers?.join(',') || 'Content-Type,Authorization';
+    const corsCredentials = this.config.cors?.credentials !== false ? 'true' : 'false';
+
+    return `
+    const express = require('express');
+    const { createProxyMiddleware } = require('http-proxy-middleware');
+    const router = express.Router();
+
+    // Proxy configuration
+    const proxyOptions = {
+      target: '${this.config.baseUrl}',
+      changeOrigin: true,
+      pathRewrite: {
+        '^/api/minder-proxy': '', // Remove base path
+      },
+      onProxyReq: (proxyReq, req, res) => {
+        // Add custom headers
+        ${Object.entries(this.config.headers || {}).map(([k, v]) => `proxyReq.setHeader('${k}', '${v}');`).join('\n        ')}
+      },
+      onProxyRes: (proxyRes, req, res) => {
+        // Add CORS headers
+        proxyRes.headers['Access-Control-Allow-Origin'] = ${corsOrigin};
+        proxyRes.headers['Access-Control-Allow-Methods'] = '${corsMethods}';
+        proxyRes.headers['Access-Control-Allow-Headers'] = '${corsHeaders}';
+        proxyRes.headers['Access-Control-Allow-Credentials'] = '${corsCredentials}';
+      }
+    };
+
+    // Mount proxy
+    router.use('/api/minder-proxy', createProxyMiddleware(proxyOptions));
+
+    module.exports = router;
+    `;
+  }
+
+  // Generate Vite configuration for proxy
+  public generateViteProxy(): string {
+    return `
+    // vite.config.ts
+    export default defineConfig({
+      server: {
+        proxy: {
+          '/api/minder-proxy': {
+            target: '${this.config.baseUrl}',
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\\/api\\/minder-proxy/, ''),
+            configure: (proxy, _options) => {
+              proxy.on('proxyReq', (proxyReq, req, _res) => {
+                ${Object.entries(this.config.headers || {}).map(([k, v]) => `proxyReq.setHeader('${k}', '${v}');`).join('\n                ')}
+              });
+            }
+          }
+        }
+      }
+    });
+    `;
   }
 }

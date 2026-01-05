@@ -28,7 +28,9 @@ if (process.env.NODE_ENV === 'development') {
 // ============================================================================
 
 // Core universal function
-export { minder, configureMinder } from './core/minder.js';
+// Core universal function
+export { minder } from './core/minder.js';
+export { configureMinder } from './config/index.js';
 export type {
   MinderOptions,
   MinderResult,
@@ -201,59 +203,59 @@ export {
   QueryStatus,
   NetworkState,
   RetryStrategy,
-  
+
   // Logging & Debugging
   LogLevel,
-  
+
   // Storage & Caching
   StorageType,
   CacheType,
   CacheRequirements,
-  
+
   // Security
   SecurityLevel,
   TokenType,
-  
+
   // Platform
   Platform,
   Environment,
-  
+
   // Data & Size
   DataSize,
   PrefetchStrategy,
-  
+
   // Configuration
   ConfigPreset,
-  
+
   // UI & Notifications
   NotificationType,
-  
+
   // WebSocket
   WebSocketState,
-  
+
   // Upload
   UploadState,
-  
+
   // CRUD
   CrudOperation,
-  
+
   // Authentication
   AuthState,
-  
+
   // Sorting & Pagination
   SortOrder,
   PaginationType,
-  
+
   // Errors
   ErrorCode,
-  
+
   // Constants
   DEFAULT_VALUES,
   HTTP_STATUS,
   MIME_TYPES,
   STORAGE_KEYS,
   EVENTS,
-  
+
   // Type Guards
   isHttpMethod,
   isQueryStatus,

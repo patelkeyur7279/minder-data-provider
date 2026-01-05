@@ -46,6 +46,7 @@ export enum LogLevel {
 // ============================================
 export enum StorageType {
   MEMORY = 'memory',
+  LOCAL_STORAGE = 'localStorage',
   SESSION_STORAGE = 'sessionStorage',
   COOKIE = 'cookie',
   INDEXED_DB = 'indexedDB',

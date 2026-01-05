@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-11-11T15:10:06.191Z",
+  "timestamp": "2025-12-31T20:35:50.059Z",
   "presets": {
     "minimal": {
       "name": "Minimal (CRUD Only)",
@@ -8,13 +8,13 @@
         "crud/index"
       ],
       "claimed": "45KB",
-      "actual": "5.06KB",
-      "actualBytes": 5181,
+      "actual": "7.54KB",
+      "actualBytes": 7721,
       "files": [
         {
           "module": "crud/index",
-          "size": "5.06KB",
-          "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/crud/index.mjs"
+          "size": "7.54KB",
+          "path": "/Volumes/MINDER_SSD/MinderTech/minder-data-provider/dist/crud/index.mjs"
         }
       ]
     },
@@ -27,23 +27,23 @@
         "cache/index"
       ],
       "claimed": "90KB",
-      "actual": "25.83KB",
-      "actualBytes": 26450,
+      "actual": "40.59KB",
+      "actualBytes": 41564,
       "files": [
         {
           "module": "crud/index",
-          "size": "5.06KB",
-          "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/crud/index.mjs"
+          "size": "7.54KB",
+          "path": "/Volumes/MINDER_SSD/MinderTech/minder-data-provider/dist/crud/index.mjs"
         },
         {
           "module": "auth/index",
-          "size": "14.35KB",
-          "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/auth/index.mjs"
+          "size": "24.14KB",
+          "path": "/Volumes/MINDER_SSD/MinderTech/minder-data-provider/dist/auth/index.mjs"
         },
         {
           "module": "cache/index",
-          "size": "6.42KB",
-          "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/cache/index.mjs"
+          "size": "8.91KB",
+          "path": "/Volumes/MINDER_SSD/MinderTech/minder-data-provider/dist/cache/index.mjs"
         }
       ]
     },
@@ -58,33 +58,33 @@
         "ssr/index"
       ],
       "claimed": "120KB",
-      "actual": "32.38KB",
-      "actualBytes": 33157,
+      "actual": "54.90KB",
+      "actualBytes": 56218,
       "files": [
         {
           "module": "crud/index",
-          "size": "5.06KB",
-          "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/crud/index.mjs"
+          "size": "7.54KB",
+          "path": "/Volumes/MINDER_SSD/MinderTech/minder-data-provider/dist/crud/index.mjs"
         },
         {
           "module": "auth/index",
-          "size": "14.35KB",
-          "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/auth/index.mjs"
+          "size": "24.14KB",
+          "path": "/Volumes/MINDER_SSD/MinderTech/minder-data-provider/dist/auth/index.mjs"
         },
         {
           "module": "cache/index",
-          "size": "6.42KB",
-          "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/cache/index.mjs"
+          "size": "8.91KB",
+          "path": "/Volumes/MINDER_SSD/MinderTech/minder-data-provider/dist/cache/index.mjs"
         },
         {
           "module": "websocket/index",
-          "size": "4.00KB",
-          "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/websocket/index.mjs"
+          "size": "11.54KB",
+          "path": "/Volumes/MINDER_SSD/MinderTech/minder-data-provider/dist/websocket/index.mjs"
         },
         {
           "module": "ssr/index",
-          "size": "2.55KB",
-          "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/ssr/index.mjs"
+          "size": "2.77KB",
+          "path": "/Volumes/MINDER_SSD/MinderTech/minder-data-provider/dist/ssr/index.mjs"
         }
       ]
     },
@@ -95,13 +95,13 @@
         "index"
       ],
       "claimed": "150KB",
-      "actual": "156.17KB",
-      "actualBytes": 159918,
+      "actual": "212.26KB",
+      "actualBytes": 217354,
       "files": [
         {
           "module": "index",
-          "size": "156.17KB",
-          "path": "/Users/patelkeyur7279/Desktop/ReactCourse/minder-data-provider/dist/index.mjs"
+          "size": "212.26KB",
+          "path": "/Volumes/MINDER_SSD/MinderTech/minder-data-provider/dist/index.mjs"
         }
       ]
     }

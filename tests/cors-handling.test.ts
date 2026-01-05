@@ -8,7 +8,8 @@ describe('CorsManager', () => {
     enabled: true,
     credentials: true,
     methods: [HttpMethod.GET, HttpMethod.POST],
-    headers: ['Content-Type', 'Authorization']
+    headers: ['Content-Type', 'Authorization'],
+    origin: 'http://localhost:3000'
   };
 
   beforeEach(() => {

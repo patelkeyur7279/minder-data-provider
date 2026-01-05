@@ -22,7 +22,7 @@ Comprehensive examples for Minder Data Provider v2.0.
 ### Simple User Management
 
 ```typescript
-import { useOneTouchCrud } from 'minder-data-provider/crud';
+import { useMinder } from 'minder-data-provider';
 
 interface User {
   id: string;
@@ -37,7 +37,7 @@ export function UserManagement() {
     loading, 
     error, 
     operations 
-  } = useOneTouchCrud<User>('users');
+  } = useMinder<User>('users');
 
   const handleCreate = async () => {
     await operations.create({
@@ -59,12 +59,12 @@ export function UserManagement() {
     }
   };
 
-  if (loading.fetch) return <div>Loading users...</div>;
+  if (loading) return <div>Loading users...</div>;
   if (error) return <div>Error: {error.message}</div>;
 
   return (
     <div>
-      <h2>Users ({users.length})</h2>
+      <h2>Users ({users?.length || 0})</h2>
       <button onClick={handleCreate}>Add User</button>
       
       <table>
@@ -77,7 +77,7 @@ export function UserManagement() {
           </tr>
         </thead>
         <tbody>
-          {users.map(user => (
+          {users?.map(user => (
             <tr key={user.id}>
               <td>{user.name}</td>
               <td>{user.email}</td>
@@ -102,11 +102,11 @@ export function UserManagement() {
 ### Optimistic Updates
 
 ```typescript
-import { useOneTouchCrud } from 'minder-data-provider/crud';
+import { useMinder } from 'minder-data-provider';
 import { useDebug } from 'minder-data-provider/debug';
 
 export function OptimisticTodos() {
-  const { data: todos, operations } = useOneTouchCrud('todos', {
+  const { data: todos, operations } = useMinder('todos', {
     optimistic: true,  // Enable optimistic updates
     onSuccess: (todo) => {
       console.log('Todo saved:', todo);
@@ -131,7 +131,7 @@ export function OptimisticTodos() {
 
   return (
     <ul>
-      {todos.map(todo => (
+      {todos?.map(todo => (
         <li key={todo.id}>
           <input
             type="checkbox"

@@ -16,6 +16,8 @@ export interface ErrorSuggestion {
 export class MinderError extends Error {
   public suggestions: ErrorSuggestion[] = [];
 
+  public status: number;
+
   constructor(
     message: string,
     public code: string,
@@ -24,7 +26,8 @@ export class MinderError extends Error {
   ) {
     super(message);
     this.name = 'MinderError';
-    
+    this.status = statusCode || 0;
+
     // Maintains proper stack trace for where our error was thrown (only available on V8)
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, this.constructor);
@@ -73,7 +76,7 @@ export class MinderConfigError extends MinderError {
   ) {
     super(message, code, undefined, { ...context, configPath });
     this.name = 'MinderConfigError';
-    
+
     // Add helpful suggestions
     if (configPath) {
       this.addSuggestion({
@@ -105,14 +108,14 @@ export class MinderNetworkError extends MinderError {
   ) {
     super(message, code, statusCode, { response, url, method });
     this.name = 'MinderNetworkError';
-    
+
     // Add helpful suggestions based on status code
     this.addContextualSuggestions();
   }
 
   private addContextualSuggestions(): void {
     const { statusCode, url, method } = this;
-    
+
     switch (statusCode) {
       case 400:
         this.addSuggestion({
@@ -121,7 +124,7 @@ export class MinderNetworkError extends MinderError {
           link: 'https://github.com/patelkeyur7279/minder-data-provider/blob/main/docs/API_REFERENCE.md'
         });
         break;
-      
+
       case 401:
         this.addSuggestion({
           message: 'Unauthorized - Authentication required or token expired',
@@ -129,28 +132,28 @@ export class MinderNetworkError extends MinderError {
           link: 'https://github.com/patelkeyur7279/minder-data-provider/blob/main/docs/CONFIG_GUIDE.md#authentication'
         });
         break;
-      
+
       case 403:
         this.addSuggestion({
           message: 'Forbidden - You don\'t have permission to access this resource',
           action: 'Verify your user role and permissions',
         });
         break;
-      
+
       case 404:
         this.addSuggestion({
           message: `Resource not found: ${method} ${url}`,
           action: 'Check if the endpoint URL is correct and the resource exists',
         });
         break;
-      
+
       case 422:
         this.addSuggestion({
           message: 'Validation Error - Request data doesn\'t meet server requirements',
           action: 'Check validation errors in response and fix the data',
         });
         break;
-      
+
       case 429:
         this.addSuggestion({
           message: 'Too Many Requests - Rate limit exceeded',
@@ -158,21 +161,21 @@ export class MinderNetworkError extends MinderError {
           link: 'https://github.com/patelkeyur7279/minder-data-provider/blob/main/docs/PERFORMANCE_GUIDE.md#rate-limiting'
         });
         break;
-      
+
       case 500:
         this.addSuggestion({
           message: 'Server Error - Something went wrong on the server',
           action: 'Contact API support or try again later',
         });
         break;
-      
+
       case 503:
         this.addSuggestion({
           message: 'Service Unavailable - Server is temporarily down',
           action: 'Wait a few minutes and retry',
         });
         break;
-      
+
       case 0:
         this.addSuggestion({
           message: 'Network Error - Failed to connect to server',
@@ -199,7 +202,7 @@ export class MinderValidationError extends MinderError {
   ) {
     super(message, code, 400, { fields });
     this.name = 'MinderValidationError';
-    
+
     // Add field-specific suggestions
     if (fields && Object.keys(fields).length > 0) {
       const fieldCount = Object.keys(fields).length;
@@ -208,7 +211,7 @@ export class MinderValidationError extends MinderError {
         message: `${fieldCount} field(s) failed validation: ${fieldNames}`,
         action: 'Fix the validation errors for each field',
       });
-      
+
       // Add specific error details
       Object.entries(fields).forEach(([field, errors]) => {
         errors.forEach(error => {
@@ -228,7 +231,7 @@ export class MinderAuthError extends MinderError {
   constructor(message: string, code: string = 'AUTH_ERROR') {
     super(message, code, 401);
     this.name = 'MinderAuthError';
-    
+
     this.addSuggestion({
       message: 'Authentication failed - User is not logged in or session expired',
       action: 'Redirect user to login page or refresh authentication token',
@@ -244,7 +247,7 @@ export class MinderAuthorizationError extends MinderError {
   constructor(message: string, public requiredPermission?: string, code: string = 'AUTHORIZATION_ERROR') {
     super(message, code, 403, { requiredPermission });
     this.name = 'MinderAuthorizationError';
-    
+
     if (requiredPermission) {
       this.addSuggestion({
         message: `Missing required permission: ${requiredPermission}`,
@@ -296,7 +299,7 @@ export class MinderTimeoutError extends MinderError {
   constructor(message: string = 'Request timeout', public timeout: number, public url?: string) {
     super(message, 'TIMEOUT_ERROR', 408, { timeout, url });
     this.name = 'MinderTimeoutError';
-    
+
     this.addSuggestion({
       message: `Request timed out after ${timeout}ms${url ? ` for ${url}` : ''}`,
       action: 'Increase timeout setting or check server performance',
@@ -312,7 +315,7 @@ export class MinderOfflineError extends MinderError {
   constructor(message: string = 'No network connection', public url?: string) {
     super(message, 'OFFLINE_ERROR', 0, { url });
     this.name = 'MinderOfflineError';
-    
+
     this.addSuggestion({
       message: 'Device appears to be offline',
       action: 'Check internet connection and try again',

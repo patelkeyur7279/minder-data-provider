@@ -25,16 +25,16 @@ export class CorsManager {
   private shouldEnableCors(): boolean {
     // Disable CORS for server-side rendering and native apps
     if (typeof window === 'undefined') return false;
-    
+
     // Check if we're in a native app context
     const win = window as any;
-    if (win.ReactNativeWebView || 
-        win.expo || 
-        win.ExpoModules || 
-        navigator.product === 'ReactNative') {
+    if (win.ReactNativeWebView ||
+      win.expo ||
+      win.ExpoModules ||
+      navigator.product === 'ReactNative') {
       return false;
     }
-    
+
     // Enable CORS for web browsers
     return true;
   }
@@ -150,8 +150,8 @@ export class CorsManager {
 
     const message = error.message || error.toString() || '';
     return message.toLowerCase().includes('cors') ||
-           message.toLowerCase().includes('cross-origin') ||
-           message.toLowerCase().includes('access-control');
+      message.toLowerCase().includes('cross-origin') ||
+      message.toLowerCase().includes('access-control');
   }
 
   /**
@@ -175,10 +175,10 @@ export class CorsManager {
    */
   private simplifyHeaders(headers: Record<string, string>): Record<string, string> {
     const simplified: Record<string, string> = {};
-    
+
     // Keep only essential headers
     const essentialHeaders = ['Content-Type', 'Authorization', 'Accept'];
-    
+
     Object.entries(headers).forEach(([key, value]) => {
       if (essentialHeaders.includes(key) || key.toLowerCase().startsWith('x-')) {
         simplified[key] = value;
@@ -237,15 +237,39 @@ Please contact the website administrator or try again later.
   /**
    * Validate CORS configuration
    */
-  validateConfig(): { isValid: boolean; warnings: string[] } {
+  validateConfig(): { isValid: boolean; warnings: string[]; errors: string[] } {
     const warnings: string[] = [];
+    const errors: string[] = [];
 
-    if (this.config.enabled && this.config.credentials && !this.config.origin) {
-      warnings.push('CORS enabled with credentials but no specific origin configured');
+    if (this.config.enabled) {
+      // Check 1: Credentials with wildcard origin
+      if (this.config.credentials) {
+        const origin = this.config.origin;
+        if (!origin || origin === '*') {
+          errors.push('Security Risk: Cannot use "credentials: true" with wildcard origin "*". Please specify an exact origin (e.g., "http://localhost:3000").');
+        }
+      }
+
+      // Check 2: Proxy configuration
+      if (!this.config.proxy && typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+        warnings.push('Development Warning: "corsHelper" is enabled but no "proxy" URL is configured. The library will default to "/api/minder-proxy", but you must ensure this route exists.');
+      }
+
+      // Check 3: Methods
+      if (this.config.methods && !this.config.methods.includes(HttpMethod.OPTIONS)) {
+        warnings.push('Missing OPTIONS method: CORS preflight requests require the OPTIONS method to be allowed.');
+      }
     }
 
-    return { isValid: true, warnings };
+    return { isValid: errors.length === 0, warnings, errors };
   }
+}
+
+/**
+ * Validate CORS configuration helper
+ */
+export function validateCorsConfig(config: CorsConfig): { isValid: boolean; warnings: string[]; errors: string[] } {
+  return new CorsManager(config).validateConfig();
 }
 
 /**

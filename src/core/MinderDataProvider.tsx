@@ -117,29 +117,39 @@ export function MinderDataProvider({
     if (config.environments) {
       environmentManager = new EnvironmentManager(config);
       finalConfig = environmentManager.getResolvedConfig();
+    }
 
-      // Setup proxy if CORS is enabled
-      if (finalConfig.cors?.enabled && finalConfig.cors?.proxy) {
-        proxyManager = new ProxyManager({
-          enabled: true,
-          baseUrl: finalConfig.cors.proxy,
-          headers: {
-            "X-Environment":
-              environmentManager?.getCurrentEnvironment() || "development",
-            "X-Target-URL": finalConfig.apiBaseUrl,
-          },
-          timeout: 30000,
-        });
+    // Setup proxy if CORS is enabled (checking both corsHelper and deprecated cors)
+    const corsConfig = finalConfig.corsHelper || finalConfig.cors;
+
+    if (corsConfig?.enabled) {
+      // Auto-Proxy: Default to /api/minder-proxy if no proxy URL provided
+      const proxyUrl = corsConfig.proxy || '/api/minder-proxy';
+
+      // Warn in development if using default proxy
+      if (!corsConfig.proxy && process.env.NODE_ENV === 'development') {
+        console.warn(
+          '[Minder] CORS Helper enabled but no proxy URL provided.\n' +
+          `Defaulting to '${proxyUrl}'.\n` +
+          'Make sure you have created this API route handler in your application.'
+        );
       }
-    } else if (config.cors?.enabled && config.cors?.proxy) {
-      // Setup proxy even without environments
+
       proxyManager = new ProxyManager({
         enabled: true,
-        baseUrl: config.cors.proxy,
+        baseUrl: proxyUrl,
         headers: {
-          "X-Target-URL": config.apiBaseUrl,
+          "X-Environment":
+            environmentManager?.getCurrentEnvironment() || "development",
+          "X-Target-URL": finalConfig.apiBaseUrl,
         },
         timeout: 30000,
+        cors: {
+          origin: corsConfig.origin,
+          methods: corsConfig.methods,
+          headers: corsConfig.headers,
+          credentials: corsConfig.credentials,
+        },
       });
     }
 
@@ -183,11 +193,11 @@ export function MinderDataProvider({
     // Create WebSocket Manager if configured
     const websocketManager = finalConfig.websocket
       ? new WebSocketManager(
-          finalConfig.websocket,
-          authManager,
-          debugManager,
-          finalConfig.debug?.websocketLogs
-        )
+        finalConfig.websocket,
+        authManager,
+        debugManager,
+        finalConfig.debug?.websocketLogs
+      )
       : undefined;
 
     // Generate Redux slices for all routes

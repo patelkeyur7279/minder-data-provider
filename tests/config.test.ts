@@ -4,12 +4,12 @@
  */
 
 import { describe, it, expect, beforeEach } from '@jest/globals';
-import { 
-  createConfigFromPreset, 
-  detectPreset, 
+import {
+  createConfigFromPreset,
+  detectPreset,
   getPresetInfo,
   CONFIG_PRESETS,
-  type ConfigPreset 
+  type ConfigPreset
 } from '../src/config/presets';
 import { configureMinder, type UnifiedMinderConfig } from '../src/config/index';
 import { ConfigPreset as ConfigPresetEnum, StorageType, CacheType, HttpMethod } from '../src/constants/enums';
@@ -25,7 +25,7 @@ describe('Configuration Presets', () => {
 
     it('should have minimal preset with basic features only', () => {
       const preset = CONFIG_PRESETS.minimal;
-      
+
       expect(preset.cache).toBeDefined();
       expect(preset.cache?.type).toBe('memory');
       expect(preset.cache?.maxSize).toBe(50);
@@ -37,7 +37,7 @@ describe('Configuration Presets', () => {
 
     it('should have standard preset with auth and security', () => {
       const preset = CONFIG_PRESETS.standard;
-      
+
       expect(preset.auth).toBeDefined();
       expect(preset.auth?.storage).toBe('cookie');
       expect(preset.cache?.type).toBe('hybrid');
@@ -50,7 +50,7 @@ describe('Configuration Presets', () => {
 
     it('should have advanced preset with persistent cache', () => {
       const preset = CONFIG_PRESETS.advanced;
-      
+
       expect(preset.cache?.type).toBe('persistent');
       expect(preset.cache?.maxSize).toBe(1000);
       expect(preset.security?.sanitization).toBeDefined();
@@ -60,7 +60,7 @@ describe('Configuration Presets', () => {
 
     it('should have enterprise preset with all features', () => {
       const preset = CONFIG_PRESETS.enterprise;
-      
+
       expect(preset.websocket).toBeDefined();
       expect(preset.ssr?.enabled).toBe(true);
       expect(preset.cache?.maxSize).toBe(5000);
@@ -79,14 +79,14 @@ describe('Configuration Presets', () => {
   describe('createConfigFromPreset', () => {
     it('should create config from minimal preset', () => {
       const config = createConfigFromPreset(ConfigPresetEnum.MINIMAL);
-      
+
       expect(config.cache?.type).toBe('memory');
       expect(config.performance?.deduplication).toBe(true);
     });
 
     it('should create config from standard preset', () => {
       const config = createConfigFromPreset(ConfigPresetEnum.STANDARD);
-      
+
       expect(config.auth).toBeDefined();
       expect(config.cache?.type).toBe('hybrid');
       expect(config.security).toBeDefined();
@@ -99,7 +99,7 @@ describe('Configuration Presets', () => {
           maxSize: 100,
         },
       });
-      
+
       expect(config.cache?.type).toBe(CacheType.PERSISTENT);
       expect(config.cache?.maxSize).toBe(100);
       // Other preset values preserved
@@ -113,14 +113,14 @@ describe('Configuration Presets', () => {
           // csrfProtection from preset should be preserved
         },
       });
-      
+
       expect(config.security?.sanitization).toBe(false);
       expect(config.security?.csrfProtection).toBe(true); // From preset
     });
 
     it('should handle empty overrides', () => {
       const config = createConfigFromPreset(ConfigPresetEnum.STANDARD, {});
-      
+
       expect(config.auth).toBeDefined();
       expect(config.cache).toBeDefined();
     });
@@ -132,7 +132,7 @@ describe('Configuration Presets', () => {
           users: { method: 'GET', url: '/users' },
         },
       } as any);
-      
+
       expect((config as any).apiBaseUrl).toBe('https://api.example.com');
       expect((config as any).routes).toBeDefined();
     });
@@ -143,7 +143,7 @@ describe('Configuration Presets', () => {
       const config = {
         cache: { type: CacheType.MEMORY, maxSize: 50 },
       };
-      
+
       const detected = detectPreset(config);
       expect(detected).toBe('minimal');
     });
@@ -153,7 +153,7 @@ describe('Configuration Presets', () => {
         auth: { tokenKey: 'token', storage: StorageType.COOKIE },
         cache: { type: CacheType.MEMORY },
       };
-      
+
       const detected = detectPreset(config);
       expect(detected).toBe('standard');
     });
@@ -164,7 +164,7 @@ describe('Configuration Presets', () => {
         ssr: { enabled: true },
         cache: { type: CacheType.PERSISTENT, maxSize: 1000 },
       };
-      
+
       const detected = detectPreset(config);
       expect(detected).toBe('advanced');
     });
@@ -174,7 +174,7 @@ describe('Configuration Presets', () => {
         auth: { tokenKey: 'token', storage: StorageType.COOKIE },
         websocket: { url: 'wss://example.com' },
       };
-      
+
       const detected = detectPreset(config);
       expect(detected).toBe('enterprise');
     });
@@ -188,7 +188,7 @@ describe('Configuration Presets', () => {
           },
         },
       };
-      
+
       const detected = detectPreset(config);
       expect(detected).toBe('enterprise');
     });
@@ -202,7 +202,7 @@ describe('Configuration Presets', () => {
   describe('getPresetInfo', () => {
     it('should return info for minimal preset', () => {
       const info = getPresetInfo(ConfigPresetEnum.MINIMAL);
-      
+
       expect(info.name).toBe('Minimal');
       expect(info.bundleSize).toBe('~45KB');
       expect(info.features).toContain('Basic CRUD');
@@ -211,7 +211,7 @@ describe('Configuration Presets', () => {
 
     it('should return info for standard preset', () => {
       const info = getPresetInfo(ConfigPresetEnum.STANDARD);
-      
+
       expect(info.name).toBe('Standard');
       expect(info.bundleSize).toBe('~90KB');
       expect(info.features).toContain('Auth');
@@ -221,7 +221,7 @@ describe('Configuration Presets', () => {
 
     it('should return info for advanced preset', () => {
       const info = getPresetInfo(ConfigPresetEnum.ADVANCED);
-      
+
       expect(info.name).toBe('Advanced');
       expect(info.bundleSize).toBe('~120KB');
       expect(info.features).toContain('Offline');
@@ -230,7 +230,7 @@ describe('Configuration Presets', () => {
 
     it('should return info for enterprise preset', () => {
       const info = getPresetInfo(ConfigPresetEnum.ENTERPRISE);
-      
+
       expect(info.name).toBe('Enterprise');
       expect(info.bundleSize).toBe('~150KB');
       expect(info.features).toContain('All Features');
@@ -239,7 +239,7 @@ describe('Configuration Presets', () => {
 
     it('should include all required metadata fields', () => {
       const presets: ConfigPreset[] = [ConfigPresetEnum.MINIMAL, ConfigPresetEnum.STANDARD, ConfigPresetEnum.ADVANCED, ConfigPresetEnum.ENTERPRISE];
-      
+
       presets.forEach(preset => {
         const info = getPresetInfo(preset);
         expect(info.name).toBeDefined();
@@ -261,9 +261,9 @@ describe('configureMinder', () => {
         users: '/users',
       },
     };
-    
+
     const config = configureMinder(simple);
-    
+
     expect(config.apiBaseUrl).toBe('https://api.example.com');
     expect(config.routes).toBeDefined();
   });
@@ -275,9 +275,9 @@ describe('configureMinder', () => {
         users: '/users',
       },
     };
-    
+
     const config = configureMinder(simple);
-    
+
     expect(config.routes?.users).toBeDefined();
     expect(config.routes?.users.method).toBe(HttpMethod.GET);
     expect(config.routes?.createUser).toBeDefined();
@@ -295,9 +295,9 @@ describe('configureMinder', () => {
         customRoute: { method: HttpMethod.PATCH, url: '/custom/:id' },
       },
     };
-    
+
     const config = configureMinder(simple);
-    
+
     expect(config.routes?.customRoute.method).toBe(HttpMethod.PATCH);
     expect(config.routes?.customRoute.url).toBe('/custom/:id');
   });
@@ -307,9 +307,9 @@ describe('configureMinder', () => {
       apiUrl: 'https://api.example.com',
       // Note: preset is not part of UnifiedMinderConfig, presets are handled separately
     };
-    
+
     const config = configureMinder(simple);
-    
+
     // Basic config should have platform defaults
     expect(config.apiBaseUrl).toBe('https://api.example.com');
     expect(config.routes).toBeDefined();
@@ -320,9 +320,9 @@ describe('configureMinder', () => {
       apiUrl: 'https://api.example.com',
       auth: true,
     };
-    
+
     const config = configureMinder(simple);
-    
+
     expect(config.auth).toBeDefined();
     expect(config.auth?.tokenKey).toBe('token');
     expect(config.auth?.storage).toBe(StorageType.COOKIE);
@@ -333,9 +333,9 @@ describe('configureMinder', () => {
       apiUrl: 'https://api.example.com',
       auth: { storage: StorageType.ASYNC_STORAGE },
     };
-    
+
     const config = configureMinder(simple);
-    
+
     expect(config.auth?.storage).toBe(StorageType.ASYNC_STORAGE);
   });
 
@@ -344,9 +344,9 @@ describe('configureMinder', () => {
       apiUrl: 'https://api.example.com',
       cache: true,
     };
-    
+
     const config = configureMinder(simple);
-    
+
     expect(config.cache).toBeDefined();
     expect(config.cache?.staleTime).toBeGreaterThan(0);
     expect(config.cache?.gcTime).toBeGreaterThan(0);
@@ -357,9 +357,9 @@ describe('configureMinder', () => {
       apiUrl: 'https://api.example.com',
       cache: { staleTime: 60000 },
     };
-    
+
     const config = configureMinder(simple);
-    
+
     expect(config.cache?.staleTime).toBe(60000);
   });
 
@@ -368,9 +368,9 @@ describe('configureMinder', () => {
       apiUrl: 'https://api.example.com',
       cors: true,
     };
-    
+
     const config = configureMinder(simple);
-    
+
     expect(config.cors).toBeDefined();
     expect(config.cors?.enabled).toBe(true);
   });
@@ -380,9 +380,9 @@ describe('configureMinder', () => {
       apiUrl: 'https://api.example.com',
       websocket: true,
     };
-    
+
     const config = configureMinder(simple);
-    
+
     expect(config.websocket).toBeDefined();
     expect(config.websocket?.url).toContain('wss://'); // https -> wss
     expect(config.websocket?.reconnect).toBe(true);
@@ -393,9 +393,9 @@ describe('configureMinder', () => {
       apiUrl: 'https://api.example.com',
       websocket: { url: 'wss://custom.example.com/ws' },
     };
-    
+
     const config = configureMinder(simple);
-    
+
     expect(config.websocket?.url).toBe('wss://custom.example.com/ws');
   });
 
@@ -404,9 +404,9 @@ describe('configureMinder', () => {
       apiUrl: 'https://api.example.com',
       websocket: true,
     };
-    
+
     const config = configureMinder(simple);
-    
+
     expect(config.websocket?.url).toContain('wss://');
   });
 
@@ -414,9 +414,9 @@ describe('configureMinder', () => {
     const simple: UnifiedMinderConfig = {
       apiUrl: 'https://api.example.com',
     };
-    
+
     const config = configureMinder(simple);
-    
+
     expect(config.performance).toBeDefined();
     expect(config.performance?.deduplication).toBe(true);
   });
@@ -427,9 +427,9 @@ describe('configureMinder', () => {
       auth: { storage: StorageType.SESSION_STORAGE },
       cache: { staleTime: 60000 },
     };
-    
+
     const config = configureMinder(simple);
-    
+
     // User config should override defaults
     expect(config.auth?.storage).toBe(StorageType.SESSION_STORAGE);
     expect(config.cache?.staleTime).toBe(60000);
@@ -439,11 +439,12 @@ describe('configureMinder', () => {
     const simple: UnifiedMinderConfig = {
       apiUrl: 'https://api.example.com',
     };
-    
+
     const config = configureMinder(simple);
-    
+
     expect(config.apiBaseUrl).toBe('https://api.example.com');
-    expect(config.dynamic).toEqual({});
+    // dynamic is now optional - won't be present unless explicitly set
+    expect(config.dynamic).toBeUndefined();
   });
 
   it('should handle multiple routes', () => {
@@ -455,9 +456,9 @@ describe('configureMinder', () => {
         comments: '/comments',
       },
     };
-    
+
     const config = configureMinder(simple);
-    
+
     expect(Object.keys(config.routes || {}).length).toBeGreaterThan(3);
     expect(config.routes?.users).toBeDefined();
     expect(config.routes?.posts).toBeDefined();
@@ -471,9 +472,9 @@ describe('configureMinder', () => {
         user: '/user',
       },
     };
-    
+
     const config = configureMinder(simple);
-    
+
     expect(config.routes?.createUser).toBeDefined();
     expect(config.routes?.updateUser).toBeDefined();
     expect(config.routes?.deleteUser).toBeDefined();
@@ -491,9 +492,9 @@ describe('configureMinder', () => {
         cache: true,
         security: true,
       };
-      
+
       const config = configureMinder(simple);
-      
+
       expect(config.apiBaseUrl).toBe('https://api.production.com');
       expect(config.auth).toBeDefined();
       expect(config.cache).toBeDefined();
@@ -509,9 +510,9 @@ describe('configureMinder', () => {
         security: { csrfProtection: true, sanitization: true },
         ssr: true,
       };
-      
+
       const config = configureMinder(simple);
-      
+
       expect(config.websocket?.url).toBe('wss://ws.example.com');
       expect(config.security?.csrfProtection).toBe(true);
       expect(config.ssr?.enabled).toBe(true);
@@ -523,9 +524,9 @@ describe('configureMinder', () => {
         auth: { storage: StorageType.ASYNC_STORAGE },
         cache: { staleTime: 600000 }, // Longer cache for mobile
       };
-      
+
       const config = configureMinder(simple);
-      
+
       expect(config.auth?.storage).toBe(StorageType.ASYNC_STORAGE);
       expect(config.cache?.staleTime).toBe(600000);
     });

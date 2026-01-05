@@ -4,20 +4,21 @@ import type { MinderConfig, ApiRoute, ApiError } from './types.js';
 import { HttpMethod, DebugLogType } from '../constants/enums.js';
 import { AuthManager } from './AuthManager.js';
 import { ProxyManager } from './ProxyManager.js';
-import { 
-  MinderConfigError, 
-  MinderNetworkError, 
-  MinderTimeoutError, 
+import { OfflineManager } from './OfflineManager.js';
+import {
+  MinderConfigError,
+  MinderNetworkError,
+  MinderTimeoutError,
   MinderOfflineError,
   MinderValidationError,
   MinderAuthError,
   MinderAuthorizationError
 } from '../errors/index.js';
-import { 
-  CSRFTokenManager, 
-  XSSSanitizer, 
-  RateLimiter, 
-  getSecurityHeaders 
+import {
+  CSRFTokenManager,
+  XSSSanitizer,
+  RateLimiter,
+  getSecurityHeaders
 } from '../utils/security.js';
 import { CorsManager, handleCorsError } from '../utils/corsManager.js';
 import {
@@ -25,6 +26,8 @@ import {
   RequestDeduplicator,
   PerformanceMonitor,
 } from '../utils/performance.js';
+import { AnalyticsManager } from '../utils/analytics.js';
+import { TelemetryManager } from '../utils/telemetry.js';
 import type { DebugManager } from '../debug/DebugManager.js';
 
 export class ApiClient {
@@ -41,7 +44,15 @@ export class ApiClient {
   private requestBatcher?: RequestBatcher;
   private deduplicator?: RequestDeduplicator;
   private performanceMonitor?: PerformanceMonitor;
+  private analyticsManager?: AnalyticsManager;
+  private telemetryManager?: TelemetryManager;
   private corsManager?: CorsManager;
+  private offlineManager?: OfflineManager;
+
+  // Token refresh state
+  private isRefreshing = false;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private failedQueue: Array<{ resolve: (token: string) => void; reject: (error: any) => void }> = [];
 
   constructor(config: MinderConfig, authManager: AuthManager, proxyManager?: ProxyManager, debugManager?: DebugManager) {
     this.config = config;
@@ -51,8 +62,8 @@ export class ApiClient {
 
     // Initialize security utilities
     if (config.security?.csrfProtection) {
-      const csrfConfig = typeof config.security.csrfProtection === 'object' 
-        ? config.security.csrfProtection 
+      const csrfConfig = typeof config.security.csrfProtection === 'object'
+        ? config.security.csrfProtection
         : { enabled: true };
       this.csrfManager = new CSRFTokenManager(csrfConfig.cookieName);
     }
@@ -81,6 +92,67 @@ export class ApiClient {
     // Initialize CORS manager
     if (config.cors?.enabled) {
       this.corsManager = new CorsManager(config.cors);
+
+      // Validate configuration immediately
+      const validation = this.corsManager.validateConfig();
+
+      // Log errors (critical)
+      if (!validation.isValid) {
+        validation.errors.forEach(error => {
+          console.error(`[Minder] CORS Configuration Error: ${error}`);
+        });
+      }
+
+      // Log warnings (development only)
+      if (process.env.NODE_ENV === 'development') {
+        validation.warnings.forEach(warning => {
+          console.warn(`[Minder] CORS Warning: ${warning}`);
+        });
+      }
+    }
+
+    // Initialize Analytics
+    if (config.analytics?.enabled) {
+      this.analyticsManager = new AnalyticsManager(config.analytics);
+
+      // Auto-track performance if enabled
+      if (config.analytics.autoTrackPerformance && this.performanceMonitor) {
+        setInterval(() => {
+          const metrics = this.performanceMonitor?.getMetrics();
+          if (metrics) {
+            this.analyticsManager?.trackPerformance(metrics);
+          }
+        }, 60000); // Send every minute
+      }
+    }
+
+    // Initialize Telemetry (Framework Phone Home)
+    if (config.telemetry?.enabled) {
+      this.telemetryManager = new TelemetryManager(config.telemetry);
+
+      // Send performance stats to HQ
+      if (this.performanceMonitor) {
+        setInterval(() => {
+          const metrics = this.performanceMonitor?.getMetrics();
+          if (metrics) {
+            this.telemetryManager?.trackPerformance(metrics);
+          }
+        }, 300000); // Send every 5 minutes (less frequent than analytics)
+      }
+    }
+
+    // Initialize Offline Manager
+    if (config.offline?.enabled) {
+      this.offlineManager = new OfflineManager(config.offline);
+      this.offlineManager.setProcessQueueCallback(async (request) => {
+        // Replay request
+        await this.axiosInstance.request({
+          method: request.method,
+          url: request.url,
+          data: request.body,
+          headers: request.headers
+        });
+      });
     }
 
     // Use proxy baseURL if enabled, otherwise use original
@@ -94,11 +166,23 @@ export class ApiClient {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        ...getSecurityHeaders(config.security?.headers),
+        ...getSecurityHeaders(config.security?.headers, config.security?.strictCSP),
       },
     });
 
     this.setupInterceptors();
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private processQueue(error: any, token: string | null = null) {
+    this.failedQueue.forEach((prom) => {
+      if (error) {
+        prom.reject(error);
+      } else if (token) {
+        prom.resolve(token);
+      }
+    });
+    this.failedQueue = [];
   }
 
   private setupInterceptors() {
@@ -110,15 +194,17 @@ export class ApiClient {
           this.debugManager.log(DebugLogType.API, `🚀 ${config.method?.toUpperCase()} ${config.url}`, {
             method: config.method,
             url: config.url,
-            headers: config.headers,
+            headers: this.sanitizeHeaders(config.headers),
             data: config.data,
             params: config.params
           });
         }
 
-        const token = this.authManager.getToken();
+        const token = this.authManager.getToken(); // Add auth token if available
         if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
+          const authHeader = this.config.auth?.authHeader || 'Authorization';
+          const authPrefix = this.config.auth?.authTokenPrefix !== undefined ? this.config.auth.authTokenPrefix : 'Bearer';
+          config.headers[authHeader] = authPrefix ? `${authPrefix} ${token}` : token;
         }
 
         // CSRF Protection
@@ -129,7 +215,7 @@ export class ApiClient {
           const headerName = csrfConfig.headerName || 'X-CSRF-Token';
           config.headers[headerName] = this.csrfManager.getToken();
         }
-        
+
         // Rate limiting check
         if (this.rateLimiter && this.config.security?.rateLimiting) {
           const key = `${config.method}:${config.url}`;
@@ -158,15 +244,15 @@ export class ApiClient {
       (response) => {
         // Debug logging - API Response Success
         if (this.debugManager && this.config.debug?.networkLogs) {
-          const duration = response.config.headers?.['X-Request-Start-Time'] 
+          const duration = response.config.headers?.['X-Request-Start-Time']
             ? Date.now() - parseInt(response.config.headers['X-Request-Start-Time'] as string)
             : undefined;
-          
+
           this.debugManager.log(DebugLogType.API, `✅ ${response.status} ${response.config.method?.toUpperCase()} ${response.config.url}${duration ? ` (${duration}ms)` : ''}`, {
             status: response.status,
             statusText: response.statusText,
             data: response.data,
-            headers: response.headers,
+            headers: this.sanitizeHeaders(response.headers),
             duration
           });
         }
@@ -183,7 +269,142 @@ export class ApiClient {
           });
         }
 
-        if (error.response?.status === 401) {
+        const originalRequest = error.config;
+
+        // Handle 401 Unauthorized
+        if (error.response?.status === 401 && !originalRequest._retry) {
+          // Check if refresh is configured
+          if (this.config.auth?.refreshUrl) {
+            if (this.isRefreshing) {
+              // If already refreshing, queue this request
+              return new Promise((resolve, reject) => {
+                this.failedQueue.push({ resolve, reject });
+              })
+                .then((token) => {
+                  const authHeader = this.config.auth?.authHeader || 'Authorization';
+                  const authPrefix = this.config.auth?.authTokenPrefix !== undefined ? this.config.auth.authTokenPrefix : 'Bearer';
+                  originalRequest.headers[authHeader] = authPrefix ? `${authPrefix} ${token}` : token;
+                  return this.axiosInstance.request(originalRequest);
+                })
+                .catch((err) => {
+                  return Promise.reject(err);
+                });
+            }
+
+            originalRequest._retry = true;
+            this.isRefreshing = true;
+
+            try {
+              // Call refresh endpoint
+              // Use axios directly to avoid interceptors loop
+              const refreshToken = await this.authManager.getRefreshToken();
+
+              // If using cookies, the refresh token might be HttpOnly and not accessible via JS.
+              // In that case, we send the request anyway, assuming the browser will send the cookie.
+              const isCookieStorage = this.config.auth?.storage === 'cookie'; // Check string value or enum
+
+              if (!refreshToken && !isCookieStorage) {
+                // If not using cookies and no token, we can't refresh
+                throw new Error('No refresh token available');
+              }
+
+              // Construct URL safely
+              const baseUrl = this.config.apiBaseUrl.replace(/\/$/, '');
+              const refreshUrl = this.config.auth.refreshUrl?.replace(/^\//, '') || '';
+              const fullRefreshUrl = `${baseUrl}/${refreshUrl}`;
+
+              // Prepare headers
+              const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+              };
+
+              // Add Authorization header with expired token if available (some APIs require this)
+              // We default to true to maintain backward compatibility, but allow users to disable it
+              const sendToken = this.config.auth?.sendTokenOnRefresh !== false;
+              const expiredToken = this.authManager.getToken();
+
+              if (sendToken && expiredToken) {
+                const authHeader = this.config.auth?.authHeader || 'Authorization';
+                const authPrefix = this.config.auth?.authTokenPrefix !== undefined ? this.config.auth.authTokenPrefix : 'Bearer';
+                headers[authHeader] = authPrefix ? `${authPrefix} ${expiredToken}` : expiredToken;
+              }
+
+              // Log refresh attempt (since it bypasses interceptors)
+              if (this.debugManager && this.config.debug?.networkLogs) {
+                this.debugManager.log(DebugLogType.API, `🚀 POST ${fullRefreshUrl} (Refresh)`, {
+                  hasRefreshToken: !!refreshToken,
+                  isCookieStorage,
+                  headers
+                });
+              }
+
+              const response = await axios.post(
+                fullRefreshUrl,
+                this.config.auth?.getRefreshRequestBody
+                  ? this.config.auth.getRefreshRequestBody(refreshToken)
+                  : (refreshToken ? { refreshToken } : {}),
+                {
+                  withCredentials: true, // Important for cookies
+                  headers
+                }
+              );
+
+              // Flexible token extraction
+              let responseData = response.data;
+
+              // Use custom model if configured
+              if (this.config.auth?.refreshModel) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                responseData = new (this.config.auth.refreshModel as any)().fromJSON(response.data);
+              }
+
+              const tokenKey = this.config.auth?.tokenKey || 'accessToken';
+
+              // Try to find token in various common properties
+              const token = responseData.token || responseData.accessToken || responseData[tokenKey];
+              const newRefreshToken = responseData.refreshToken || responseData.refresh_token;
+
+              if (token) {
+                this.authManager.setToken(token);
+                if (newRefreshToken) {
+                  this.authManager.setRefreshToken(newRefreshToken);
+                }
+
+                this.processQueue(null, token);
+                this.isRefreshing = false;
+
+                const authHeader = this.config.auth?.authHeader || 'Authorization';
+                const authPrefix = this.config.auth?.authTokenPrefix !== undefined ? this.config.auth.authTokenPrefix : 'Bearer';
+                originalRequest.headers[authHeader] = authPrefix ? `${authPrefix} ${token}` : token;
+                return this.axiosInstance.request(originalRequest);
+              } else {
+                throw new Error(`No token returned from refresh endpoint. Response keys: ${Object.keys(responseData || {}).join(', ')}. Data: ${JSON.stringify(responseData)}`);
+              }
+            } catch (refreshError) {
+              // Log refresh failure
+              if (this.debugManager && this.config.debug?.networkLogs) {
+                this.debugManager.log(DebugLogType.API, `❌ REFRESH FAILED`, {
+                  error: refreshError instanceof Error ? refreshError.message : refreshError
+                });
+              }
+
+              this.processQueue(refreshError, null);
+              this.isRefreshing = false;
+              this.authManager.clearAuth();
+              if (this.config.auth?.onAuthError) {
+                this.config.auth.onAuthError();
+              }
+              return Promise.reject(refreshError);
+            }
+          } else {
+            // No refresh configured, just fail
+            this.authManager.clearAuth();
+            if (this.config.auth?.onAuthError) {
+              this.config.auth.onAuthError();
+            }
+          }
+        } else if (error.response?.status === 401) {
+          // Already retried or failed
           this.authManager.clearAuth();
           if (this.config.auth?.onAuthError) {
             this.config.auth.onAuthError();
@@ -194,7 +415,7 @@ export class ApiClient {
         if (this.corsManager) {
           const corsHandling = await handleCorsError(error, this.corsManager, {
             url: error.config?.url || '',
-            method: error.config?.method as HttpMethod || HttpMethod.GET,
+            method: (error.config?.method as HttpMethod) || HttpMethod.GET,
             headers: error.config?.headers as Record<string, string> || {},
             data: error.config?.data
           });
@@ -227,6 +448,17 @@ export class ApiClient {
         }
 
         const apiError = this.handleError(error);
+
+        // Track error in analytics
+        if (this.analyticsManager) {
+          this.analyticsManager.trackError(apiError, `${error.config?.method?.toUpperCase()} ${error.config?.url}`);
+        }
+
+        // Report error to Framework HQ (Telemetry)
+        if (this.telemetryManager) {
+          this.telemetryManager.trackError(apiError, 'API_REQUEST_FAILURE');
+        }
+
         if (this.config.onError) {
           this.config.onError(apiError);
         }
@@ -240,14 +472,14 @@ export class ApiClient {
     // Check if it's an AxiosError
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError;
-      
+
       const status = axiosError.response?.status || 0;
       const url = axiosError.config?.url;
       const method = axiosError.config?.method?.toUpperCase();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const responseData = axiosError.response?.data as any;
       const responseHeaders = axiosError.response?.headers as Record<string, string> | undefined;
-      
+
       switch (status) {
         case 400:
           return {
@@ -256,12 +488,12 @@ export class ApiClient {
             code: 'BAD_REQUEST',
             details: responseData,
           };
-        
+
         case 401:
           throw new MinderAuthError(
             responseData?.message || 'Authentication required'
           );
-        
+
         case 403:
           // Check if this is a CORS origin blocked error
           if (responseHeaders?.['access-control-allow-origin'] === 'null') {
@@ -271,12 +503,12 @@ export class ApiClient {
           throw new MinderAuthorizationError(
             responseData?.message || 'Permission denied'
           );
-        
+
         case 404: {
           const notFoundMsg = responseData?.message || `Resource not found: ${method} ${url}`;
           throw new MinderNetworkError(notFoundMsg, 404, responseData, url, method);
         }
-        
+
         case 405: {
           // Check if this is a CORS preflight failed error
           if (method === 'OPTIONS') {
@@ -286,19 +518,19 @@ export class ApiClient {
           const methodMsg = responseData?.message || `Method not allowed: ${method} ${url}`;
           throw new MinderNetworkError(methodMsg, 405, responseData, url, method);
         }
-        
+
         case 422: {
           throw new MinderValidationError(
             responseData?.message || 'Validation failed',
             responseData?.errors
           );
         }
-        
+
         case 429: {
           const rateLimitMsg = responseData?.message || 'Too many requests - rate limit exceeded';
           throw new MinderNetworkError(rateLimitMsg, 429, responseData, url, method);
         }
-        
+
         case 500:
         case 502:
         case 503:
@@ -306,7 +538,7 @@ export class ApiClient {
           const serverMsg = responseData?.message || 'Server error - please try again later';
           throw new MinderNetworkError(serverMsg, status, responseData, url, method);
         }
-        
+
         default:
           throw new MinderNetworkError(
             responseData?.message || axiosError.message || 'API error',
@@ -318,15 +550,15 @@ export class ApiClient {
           );
       }
     }
-    
+
     // Network error (has request but no response)
     if (error && typeof error === 'object' && 'request' in error) {
-      const networkError = error as { 
-        request?: unknown; 
+      const networkError = error as {
+        request?: unknown;
         code?: string;
         config?: { url?: string; method?: string; timeout?: number };
       };
-      
+
       // Check for timeout
       if (networkError.code === 'ECONNABORTED') {
         throw new MinderTimeoutError(
@@ -335,12 +567,24 @@ export class ApiClient {
           networkError.config?.url
         );
       }
-      
+
       // Check for offline
       if (networkError.code === 'ERR_NETWORK' || typeof navigator !== 'undefined' && !navigator.onLine) {
+        // Queue request if offline manager is enabled
+        if (this.offlineManager && networkError.config?.url && networkError.config?.method) {
+          this.offlineManager.queueRequest({
+            url: networkError.config.url,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            method: networkError.config.method as any,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            body: (networkError.config as any).data,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            headers: (networkError.config as any).headers
+          });
+        }
         throw new MinderOfflineError('No network connection', networkError.config?.url);
       }
-      
+
       // Generic network error
       throw new MinderNetworkError(
         'Network error - please check your connection',
@@ -351,12 +595,12 @@ export class ApiClient {
         'NETWORK_ERROR'
       );
     }
-    
+
     // Other errors
-    const errorMessage = error instanceof Error 
-      ? error.message 
+    const errorMessage = error instanceof Error
+      ? error.message
       : 'Unknown error occurred';
-      
+
     return {
       message: errorMessage,
       code: 'UNKNOWN_ERROR',
@@ -367,6 +611,19 @@ export class ApiClient {
   private sanitizeData(data: unknown): unknown {
     if (!this.sanitizer) return data;
     return this.sanitizer.sanitize(data);
+  }
+
+  private sanitizeHeaders(headers: any): any {
+    if (!headers) return headers;
+    const sanitized = { ...headers };
+    const sensitiveHeaders = ['Authorization', 'Cookie', 'Set-Cookie', 'X-CSRF-Token', 'x-csrf-token'];
+
+    Object.keys(sanitized).forEach(key => {
+      if (sensitiveHeaders.some(h => h.toLowerCase() === key.toLowerCase())) {
+        sanitized[key] = '[REDACTED]';
+      }
+    });
+    return sanitized;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -395,24 +652,28 @@ export class ApiClient {
     }
 
     let url = route.url;
-    // let url = `${this.config.apiBaseUrl}${route.url}`;
-    
+    // let url = `${ this.config.apiBaseUrl }${ route.url }`;
+
     // Replace URL parameters
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
         url = url.replace(`:${key}`, String(value));
       });
     }
-    
+
+    // Extract headers from options to prevent overwriting during spread
+    const { headers: customHeaders, ...otherOptions } = options || {};
+
     const requestConfig: AxiosRequestConfig = {
       method: route.method,
       url,
-      headers: { 
+      headers: {
         ...route.headers,
-        ...(this.proxyManager?.getProxyHeaders() || {})
+        ...(this.proxyManager?.getProxyHeaders() || {}),
+        ...(customHeaders || {})
       },
       timeout: route.timeout || this.proxyManager?.getTimeout() || this.config.performance?.timeout,
-      ...options,
+      ...otherOptions,
     };
 
     // Apply proxy rewriting if enabled
@@ -422,7 +683,7 @@ export class ApiClient {
     }
 
     // Request deduplication for GET requests
-    const cacheKey = `${route.method}:${url}:${JSON.stringify(data || {})}`;
+    const cacheKey = `${route.method}: ${url}: ${JSON.stringify(data || {})}`;
     if (route.method === 'GET' && this.config.performance?.deduplication) {
       const cachedRequest = this.requestCache.get(cacheKey);
       if (cachedRequest) {
@@ -433,7 +694,7 @@ export class ApiClient {
     // Handle different content types with sanitization
     if (data) {
       const sanitizedData = this.sanitizeData(data);
-      
+
       if (sanitizedData instanceof FormData) {
         requestConfig.data = sanitizedData;
         requestConfig.headers!['Content-Type'] = 'multipart/form-data';
@@ -447,31 +708,36 @@ export class ApiClient {
 
     // Execute request with caching for GET
     const startTime = performance.now();
-    
-    let requestPromise = this.axiosInstance.request(requestConfig);
-    
+
+    let requestPromise: Promise<AxiosResponse<T>>;
+
     // Use deduplication if enabled
     if (this.deduplicator && route.method === 'GET') {
-      requestPromise = this.deduplicator.deduplicate(cacheKey, () => 
+      requestPromise = this.deduplicator.deduplicate(cacheKey, () =>
         this.axiosInstance.request(requestConfig)
       );
-    } else if (route.method === 'GET' && this.config.performance?.deduplication) {
-      this.requestCache.set(cacheKey, requestPromise);
-      
-      // Clean up cache after request completes
-      requestPromise.finally(() => {
-        setTimeout(() => this.requestCache.delete(cacheKey), 1000);
-      });
+    } else {
+      requestPromise = this.axiosInstance.request(requestConfig);
+
+      // Simple cache logic (fallback)
+      if (route.method === 'GET' && this.config.performance?.deduplication) {
+        this.requestCache.set(cacheKey, requestPromise);
+
+        // Clean up cache after request completes
+        requestPromise.finally(() => {
+          setTimeout(() => this.requestCache.delete(cacheKey), 1000);
+        });
+      }
     }
-    
+
     const response: AxiosResponse<T> = await requestPromise;
-    
+
     // Record performance metrics
     if (this.performanceMonitor) {
       const duration = performance.now() - startTime;
       this.performanceMonitor.recordLatency(routeName, duration);
     }
-    
+
     // Transform response using model if specified
     if (route.model && response.data) {
       if (Array.isArray(response.data)) {

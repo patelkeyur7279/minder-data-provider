@@ -172,7 +172,7 @@ export function validateConfig(
       warnings.push('WebSocket protocols are recommended for versioning');
     }
 
-    if (!isValidUrl(config.websocket.url, true)) {
+    if (!isValidUrl(config.websocket.url || '', true)) {
       errors.push('WebSocket URL must be valid and use ws:// or wss:// protocol');
     }
   }

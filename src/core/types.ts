@@ -13,7 +13,17 @@ import type { OfflineConfig } from '../platform/offline/types.js';
 export interface MinderConfig {
   apiBaseUrl: string;
   routes: Record<string, ApiRoute>;
-  dynamic: any;
+  /**
+   * Optional dynamic import function (e.g., Next.js dynamic())
+   * Used for code-splitting React Query Devtools in development
+   * @example
+   * import dynamic from 'next/dynamic';
+   * const config = { dynamic, ... };
+   */
+  dynamic?: (
+    loader: () => Promise<any>,
+    options?: { ssr?: boolean }
+  ) => any;
   auth?: AuthConfig;
   cache?: CacheConfig;
   /**
@@ -28,6 +38,8 @@ export interface MinderConfig {
   performance?: PerformanceConfig;
   debug?: DebugConfig;
   security?: SecurityConfig;
+  analytics?: AnalyticsConfig;
+  telemetry?: TelemetryConfig;
   ssr?: SSRConfig;
   offline?: OfflineConfig;
   environments?: Record<string, EnvironmentOverride>;
@@ -65,7 +77,13 @@ export interface AuthConfig {
   storage: StorageType;
   tokenStorage?: StorageType; // For light config
   refreshUrl?: string;
+  refreshModel?: typeof BaseModel; // Optional custom model for refresh response
   onAuthError?: () => void;
+  secureCookie?: boolean; // If true, forces Secure flag. If false, forces no Secure. If undefined, auto-detects based on protocol.
+  sendTokenOnRefresh?: boolean; // If true, sends the expired access token in the Authorization header during refresh. Defaults to true.
+  authHeader?: string; // Custom header name (default: 'Authorization')
+  authTokenPrefix?: string; // Custom token prefix (default: 'Bearer')
+  getRefreshRequestBody?: (refreshToken: string | null) => any; // Custom body generator for refresh request
 }
 
 export interface CacheConfig {
@@ -118,39 +136,71 @@ export interface CorsHelperConfig {
    * @default false
    */
   enabled?: boolean;
-  
+
   /**
    * Proxy server URL to route requests through
    * Useful when you can't modify the target API's CORS headers
    * @example 'https://your-proxy.com/api'
    */
   proxy?: string;
-  
+
   /**
    * Include credentials (cookies, authorization headers) in requests
    * @default false
    */
   credentials?: boolean;
-  
+
   /**
    * Expected origin(s) - for validation only
    * This does NOT set server CORS headers
    */
   origin?: string | string[];
-  
+
   /**
    * HTTP methods to include in preflight requests
    */
   methods?: HttpMethod[];
-  
+
   /**
    * Headers to include in preflight requests
    */
   headers?: string[];
+  maxAge?: number;
+}
+
+export interface AnalyticsConfig {
+  enabled?: boolean;
+  googleAnalyticsId?: string; // GA Measurement ID (G-XXXXXXXXXX)
+  debug?: boolean; // Log events to console
+  autoTrackPageView?: boolean; // Automatically track page views (if using router integration)
+  autoTrackErrors?: boolean; // Automatically track API errors
+  autoTrackPerformance?: boolean; // Automatically track performance metrics
+  customDimensions?: Record<string, string>; // Custom dimensions to send with every event
+  /**
+   * Security Hook: Sanitize data before sending to GA
+   * Return null to drop the event, or return modified params
+   * @example
+   * beforeSend: (event, params) => {
+   *   // Remove email from error messages
+   *   if (params.message) params.message = params.message.replace(/email/g, '[REDACTED]');
+   *   return params;
+   * }
+   */
+  beforeSend?: (eventName: string, params: Record<string, any>) => Record<string, any> | null;
+}
+
+export interface TelemetryConfig {
+  enabled?: boolean;
+  mode?: 'custom' | 'ga4'; // 'custom' sends to endpoint, 'ga4' sends to Google Analytics
+  endpoint?: string; // URL for custom collector
+  measurementId?: string; // GA4 Measurement ID (required for 'ga4' mode)
+  apiSecret?: string; // GA4 API Secret (optional, for server-side events)
+  debug?: boolean;
+  sampleRate?: number; // 0.0 to 1.0
 }
 
 export interface WebSocketConfig {
-  url: string;
+  url?: string;
   protocols?: string[];
   reconnect?: boolean;
   heartbeat?: number;
@@ -168,13 +218,13 @@ export interface RetryConfig {
    * @default 3
    */
   maxRetries?: number;
-  
+
   /**
    * HTTP status codes that should trigger a retry
    * @default [408, 429, 500, 502, 503, 504]
    */
   retryableStatusCodes?: number[];
-  
+
   /**
    * Backoff strategy for retry delays
    * - 'exponential': delay increases exponentially (1s, 2s, 4s, 8s...)
@@ -183,19 +233,19 @@ export interface RetryConfig {
    * @default 'exponential'
    */
   backoff?: 'exponential' | 'linear' | ((attempt: number) => number);
-  
+
   /**
    * Base delay in milliseconds for retry backoff
    * @default 1000
    */
   baseDelay?: number;
-  
+
   /**
    * Maximum delay in milliseconds between retries
    * @default 30000
    */
   maxDelay?: number;
-  
+
   /**
    * Custom function to determine if a request should be retried
    * @param error - The error that occurred
@@ -245,6 +295,7 @@ export interface SecurityConfig {
     tokenLength?: number;
     headerName?: string;
     cookieName?: string;
+    secureCookie?: boolean;
   };
   rateLimiting?: {
     requests: number;
@@ -260,6 +311,7 @@ export interface SecurityConfig {
   inputValidation?: boolean;
   httpsOnly?: boolean; // Enforce HTTPS in production
   developmentWarnings?: boolean; // Show security warnings in dev mode
+  strictCSP?: boolean; // If true, removes 'unsafe-inline' from default CSP
 }
 
 export interface SSRConfig {

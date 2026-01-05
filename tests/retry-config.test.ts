@@ -6,6 +6,8 @@
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useMinder } from '../src/hooks/useMinder';
+import { setGlobalMinderConfig } from '../src/core/globalConfig';
+import { HttpMethod } from '../src/constants/enums';
 import React from 'react';
 
 const createWrapper = () => {
@@ -15,16 +17,26 @@ const createWrapper = () => {
       mutations: { retry: false },
     },
   });
-  
+
   return ({ children }: { children: React.ReactNode }) =>
     React.createElement(QueryClientProvider, { client: queryClient }, children);
 };
 
 describe('Enhanced Retry Configuration', () => {
+  beforeAll(() => {
+    setGlobalMinderConfig({
+      apiBaseUrl: 'http://localhost:3000/api',
+      routes: {
+        test: { url: '/test', method: HttpMethod.GET },
+        posts: { url: '/posts', method: HttpMethod.GET },
+        'api/data': { url: '/data', method: HttpMethod.GET },
+      },
+    });
+  });
   describe('RetryConfig Interface', () => {
     it('should accept valid retryConfig options', () => {
       const wrapper = createWrapper();
-      
+
       const { result } = renderHook(
         () => useMinder('test', {
           autoFetch: false,
@@ -46,7 +58,7 @@ describe('Enhanced Retry Configuration', () => {
     it('should accept custom shouldRetry function', () => {
       const wrapper = createWrapper();
       const shouldRetry = jest.fn((error: any, attempt: number) => attempt < 3);
-      
+
       const { result } = renderHook(
         () => useMinder('test', {
           autoFetch: false,
@@ -64,7 +76,7 @@ describe('Enhanced Retry Configuration', () => {
     it('should accept custom backoff function', () => {
       const wrapper = createWrapper();
       const backoffFn = (attempt: number) => Math.pow(2, attempt) * 1000;
-      
+
       const { result } = renderHook(
         () => useMinder('test', {
           autoFetch: false,
@@ -80,7 +92,7 @@ describe('Enhanced Retry Configuration', () => {
 
     it('should accept linear backoff strategy', () => {
       const wrapper = createWrapper();
-      
+
       const { result } = renderHook(
         () => useMinder('test', {
           autoFetch: false,
@@ -96,7 +108,7 @@ describe('Enhanced Retry Configuration', () => {
 
     it('should accept exponential backoff strategy', () => {
       const wrapper = createWrapper();
-      
+
       const { result } = renderHook(
         () => useMinder('test', {
           autoFetch: false,
@@ -114,7 +126,7 @@ describe('Enhanced Retry Configuration', () => {
   describe('Default Values', () => {
     it('should work without retryConfig', () => {
       const wrapper = createWrapper();
-      
+
       const { result } = renderHook(
         () => useMinder('test', { autoFetch: false }),
         { wrapper }
@@ -126,7 +138,7 @@ describe('Enhanced Retry Configuration', () => {
 
     it('should work with partial retryConfig', () => {
       const wrapper = createWrapper();
-      
+
       const { result } = renderHook(
         () => useMinder('test', {
           autoFetch: false,
@@ -145,7 +157,7 @@ describe('Enhanced Retry Configuration', () => {
   describe('Type Safety', () => {
     it('should provide type-safe configuration', () => {
       const wrapper = createWrapper();
-      
+
       // This should compile without TypeScript errors
       const config = {
         autoFetch: false,
@@ -171,7 +183,7 @@ describe('Enhanced Retry Configuration', () => {
 
     it('should allow custom backoff function with correct signature', () => {
       const wrapper = createWrapper();
-      
+
       const customBackoff = (attempt: number): number => {
         return Math.min(1000 * Math.pow(2, attempt), 30000);
       };
@@ -193,7 +205,7 @@ describe('Enhanced Retry Configuration', () => {
   describe('Configuration Examples', () => {
     it('should handle common retry scenario - network errors', () => {
       const wrapper = createWrapper();
-      
+
       const { result } = renderHook(
         () => useMinder('api/data', {
           autoFetch: false,
@@ -212,7 +224,7 @@ describe('Enhanced Retry Configuration', () => {
 
     it('should handle rate limiting scenario', () => {
       const wrapper = createWrapper();
-      
+
       const { result } = renderHook(
         () => useMinder('api/data', {
           autoFetch: false,
@@ -231,7 +243,7 @@ describe('Enhanced Retry Configuration', () => {
 
     it('should handle custom retry logic', () => {
       const wrapper = createWrapper();
-      
+
       const { result } = renderHook(
         () => useMinder('api/data', {
           autoFetch: false,
@@ -261,7 +273,7 @@ describe('Enhanced Retry Configuration', () => {
   describe('Documentation Examples', () => {
     it('example 1: custom retry count', () => {
       const wrapper = createWrapper();
-      
+
       const { result } = renderHook(
         () => useMinder('posts', {
           autoFetch: false,
@@ -275,7 +287,7 @@ describe('Enhanced Retry Configuration', () => {
 
     it('example 2: custom retry logic', () => {
       const wrapper = createWrapper();
-      
+
       const { result } = renderHook(
         () => useMinder('posts', {
           autoFetch: false,
@@ -298,7 +310,7 @@ describe('Enhanced Retry Configuration', () => {
 
     it('example 3: custom backoff strategy', () => {
       const wrapper = createWrapper();
-      
+
       const { result } = renderHook(
         () => useMinder('posts', {
           autoFetch: false,
@@ -316,7 +328,7 @@ describe('Enhanced Retry Configuration', () => {
   describe('Backward Compatibility', () => {
     it('should not break existing code without retryConfig', () => {
       const wrapper = createWrapper();
-      
+
       const { result } = renderHook(
         () => useMinder('test', { autoFetch: false }),
         { wrapper }
@@ -330,7 +342,7 @@ describe('Enhanced Retry Configuration', () => {
 
     it('should work alongside other options', () => {
       const wrapper = createWrapper();
-      
+
       const { result } = renderHook(
         () => useMinder('test', {
           autoFetch: false,

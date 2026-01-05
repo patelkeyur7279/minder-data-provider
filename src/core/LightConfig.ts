@@ -53,7 +53,7 @@ export function createLightConfig(config: LightConfig): MinderConfig & { validat
   const minderConfig: MinderConfig = {
     apiBaseUrl: config.apiBaseUrl,
     routes,
-    dynamic: isDevelopment(),
+    // dynamic is optional - only needed for Next.js code-splitting
     auth: config.features?.auth ? {
       storage: StorageType.MEMORY, // Secure default (was localStorage)
       tokenKey: 'auth_token',

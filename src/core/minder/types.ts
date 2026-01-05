@@ -29,7 +29,7 @@ export interface MinderOptions<TModel = any> {
    * If not specified, auto-detected based on data
    */
   method?: HttpMethod;
-  
+
   /**
    * Model class for encode/decode
    * Your custom model class extending BaseModel
@@ -37,76 +37,82 @@ export interface MinderOptions<TModel = any> {
    * model: UserModel
    */
   model?: new (...args: any[]) => TModel;
-  
+
   /**
    * Upload progress callback
    * Called during file uploads
    */
   onProgress?: (progress: UploadProgress) => void;
-  
+
   /**
    * Request headers
    */
   headers?: Record<string, string>;
-  
+
+  /**
+   * Custom Axios configuration
+   * Allows passing any axios config options (e.g. responseType, transformRequest)
+   */
+  axiosConfig?: Record<string, any>;
+
   /**
    * Query parameters
    */
   params?: Record<string, unknown>;
-  
+
   /**
    * Request timeout in milliseconds
    * @default 30000
    */
   timeout?: number;
-  
+
   /**
    * Enable caching
    * @default true
    */
   cache?: boolean;
-  
+
   /**
    * Cache time to live in milliseconds
    * @default 300000 (5 minutes)
    */
   cacheTTL?: number;
-  
+
   /**
    * Enable realtime updates via WebSocket
    * @default false
    */
   realtime?: boolean;
-  
+
   /**
    * Enable optimistic updates
    * @default false
    */
   optimistic?: boolean;
-  
+
   /**
    * Retry failed requests
    * @default 3
    */
   retries?: number;
-  
+
   /**
    * Base URL override
    * If not provided, uses global config
    */
   baseURL?: string;
-  
+
   /**
    * Authentication token
    * If not provided, uses stored token
    */
   token?: string;
-  
+
   /**
    * Success callback
    */
   onSuccess?: (data: any) => void;
-  
+
   /**
    * Error callback
    */
@@ -122,27 +128,27 @@ export interface MinderResult<TData = any> {
    * Response data (null if error occurred)
    */
   data: TData | null;
-  
+
   /**
    * Error information (null if successful)
    */
   error: MinderError | null;
-  
+
   /**
    * HTTP status code
    */
   status: number;
-  
+
   /**
    * Success flag
    */
   success: boolean;
-  
+
   /**
    * Response headers
    */
   headers?: Record<string, string>;
-  
+
   /**
    * Request metadata
    */
@@ -162,22 +168,22 @@ export interface MinderError {
    * Error message (user-friendly)
    */
   message: string;
-  
+
   /**
    * Error code
    */
   code: string;
-  
+
   /**
    * HTTP status code
    */
   status: number;
-  
+
   /**
    * Original error details
    */
   details?: any;
-  
+
   /**
    * Suggested solution
    */
