@@ -80,11 +80,15 @@ jobs:
       - name: Publish to npm (Beta)
         if: github.ref == 'refs/heads/test'
         run: |
-          # For beta, we don't necessarily check strict version equality with latest, 
-          # but we should ensure we are publishing a pre-release or distinct version.
-          # Here we strictly follow the instruction to deploy to npm. 
-          # We use --tag beta.
-          # Note: If version is same as 'latest', npm might complain, but --tag beta usually interprets it as a dist-tag.
-          npm publish --tag beta --provenance --access public
+          VERSION=$(node -p "require('./package.json').version")
+          if [[ "$VERSION" == *"-beta"* ]]; then
+             echo "✅ Beta version detected: $VERSION. Publishing..."
+             npm publish --tag beta --provenance --access public
+          else
+             echo "⚠️  Skipping publish: Version '$VERSION' is not a beta version."
+             echo "ℹ️  To publish from 'test' branch, package.json version must contain '-beta' (e.g., 2.1.2-beta.0)"
+             # We exit successfully so the workflow doesn't fail, but we don't publish.
+             exit 0
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
