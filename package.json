@@ -12,7 +12,8 @@
     "dist/**/*.d.mts",
     "!dist/**/*.map",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "scripts"
   ],
   "exports": {
     ".": {
