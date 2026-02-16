@@ -189,7 +189,20 @@ export class ApiClient {
     // Request interceptor for auth, CORS, and security
     this.axiosInstance.interceptors.request.use(
       async (config) => {
-        // Debug logging - API Request
+        // Automatically handle FormData Content-Type
+        if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+          if (config.headers) {
+            delete config.headers['Content-Type'];
+            delete config.headers['content-type'];
+            // Also explicitly delete from common/post/put defaults which axios might merge
+            const headers = config.headers as any;
+            if (headers.common) delete headers.common['Content-Type'];
+            if (headers.post) delete headers.post['Content-Type'];
+            if (headers.put) delete headers.put['Content-Type'];
+          }
+        }
+
+        // Debug logging - API Request (moved below header manipulations)
         if (this.debugManager && this.config.debug?.networkLogs) {
           this.debugManager.log(DebugLogType.API, `🚀 ${config.method?.toUpperCase()} ${config.url}`, {
             method: config.method,
@@ -610,6 +623,12 @@ export class ApiClient {
 
   private sanitizeData(data: unknown): unknown {
     if (!this.sanitizer) return data;
+
+    // Skip sanitization for binary types and FormData
+    if (typeof FormData !== 'undefined' && data instanceof FormData) return data;
+    if (typeof Blob !== 'undefined' && data instanceof Blob) return data;
+    if (typeof File !== 'undefined' && data instanceof File) return data;
+
     return this.sanitizer.sanitize(data);
   }
 
@@ -695,9 +714,16 @@ export class ApiClient {
     if (data) {
       const sanitizedData = this.sanitizeData(data);
 
-      if (sanitizedData instanceof FormData) {
+      if (typeof FormData !== 'undefined' && sanitizedData instanceof FormData) {
         requestConfig.data = sanitizedData;
-        requestConfig.headers!['Content-Type'] = 'multipart/form-data';
+        // Remove Content-Type to let browser/axios set it with boundary
+        // We set it to undefined to ensure it's not merged with defaults
+        if (requestConfig.headers) {
+          delete requestConfig.headers['Content-Type'];
+          delete requestConfig.headers['content-type'];
+          // Also set to undefined in case some parts of the system re-add it
+          (requestConfig.headers as any)['Content-Type'] = undefined;
+        }
       } else if (typeof sanitizedData === 'string' && sanitizedData.startsWith('<?xml')) {
         requestConfig.data = sanitizedData;
         requestConfig.headers!['Content-Type'] = 'application/xml';

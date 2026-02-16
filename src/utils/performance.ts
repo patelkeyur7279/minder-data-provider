@@ -4,7 +4,7 @@
  */
 
 import { Logger, LogLevel } from './Logger.js';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { DependencyList } from 'react';
 import type { BatchedRequest, PendingRequest, PerformanceMetrics } from './performance/types.js';
 
@@ -67,7 +67,7 @@ export class RequestBatcher {
 
     try {
       const result = await executor();
-      
+
       // Resolve all pending requests with the same result
       requests.forEach(req => req.resolve(result));
     } catch (error) {
@@ -328,7 +328,7 @@ export function usePerformanceMonitor(componentName: string) {
   useEffect(() => {
     const endTime = performance.now();
     const duration = endTime - startTime.current;
-    
+
     renderCount.current++;
     renderTimes.current.push(duration);
 
@@ -339,7 +339,7 @@ export function usePerformanceMonitor(componentName: string) {
 
     if (process.env.NODE_ENV === 'development') {
       const avgRenderTime = renderTimes.current.reduce((sum, time) => sum + time, 0) / renderTimes.current.length;
-      
+
       if (avgRenderTime > 16) { // More than one frame (60fps)
         logger.warn(
           `[Performance] ${componentName} is rendering slowly (${avgRenderTime.toFixed(2)}ms avg). ` +

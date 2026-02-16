@@ -141,7 +141,7 @@ export class RouteScanner {
       // If package.json exists but no known frameworks, don't do file-based detection
       return null;
 
-    } catch (error) {
+    } catch {
       // Package.json not found or invalid, try file-based detection
     }
 
@@ -298,7 +298,7 @@ export class RouteScanner {
   private static async extractNestJsRoutes(
     filePath: string,
     content: string,
-    relativePath: string
+    _relativePath: string
   ): Promise<RouteInfo[]> {
     const routes: RouteInfo[] = [];
 
@@ -409,12 +409,13 @@ export class RouteScanner {
       const files = await this.scanDirectory(baseDir, config);
       return files.some(file => this.matchesFilePattern(path.relative(baseDir, file), config));
     } catch {
+      // Ignore directory read errors
       return false;
     }
   }
 
-  private static generateRouteName(relativePath: string, framework: string): string {
-    return relativePath
+  private static generateRouteName(_relativePath: string, framework: string): string {
+    return _relativePath
       .replace(/\.(ts|js|tsx|jsx)$/, '')
       .replace(/\[([^\]]+)\]/g, '$1') // Convert Next.js dynamic routes
       .replace(/\\/g, '/')
