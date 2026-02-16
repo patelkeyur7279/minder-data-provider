@@ -5,6 +5,15 @@ All notable changes to Minder Data Provider will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.5-beta.0] - 2026-02-16
+
+### 🚀 Beta Release Enhancements
+
+- **Stability Improvements** - Refined internal error handling and cache management
+- **Platform Sync** - Updated platform-specific adapters for better Next.js 15 and React 19 compatibility
+- **Dependency Updates** - Bumped `@reduxjs/toolkit` to 2.9.2 and other core dependencies
+- **Infrastructure** - Enhanced build verification scripts for more robust releases
+
 ## [2.1.0] - 2025-11-12
 
 ### 🚀 Major useMinder() Hook Enhancements (70 new tests)

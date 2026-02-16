@@ -42,6 +42,38 @@ export class AuthManager {
     }
   }
 
+  /**
+   * Initializes the AuthManager, hydrating tokens from async storage if necessary.
+   * This should be called at app startup if using AsyncStorage or SecureStore.
+   */
+  async initialize(): Promise<void> {
+    if (this.config.storage === StorageType.ASYNC_STORAGE || this.config.storage === StorageType.SECURE_STORE) {
+      try {
+        // Load tokens into memory
+        const token = await this.getTokenAsync();
+        const refreshToken = await this.getRefreshTokenAsync();
+
+        if (token) {
+          this.memoryStorage.set(this.config.tokenKey, token);
+        }
+
+        if (refreshToken) {
+          this.memoryStorage.set(`${this.config.tokenKey}_refresh`, refreshToken);
+        }
+
+        if (this.debugManager && this.enableLogs) {
+          this.debugManager.log(DebugLogType.AUTH, '🚀 AUTH INITIALIZED', {
+            storage: this.config.storage,
+            hasToken: !!token,
+            hasRefreshToken: !!refreshToken
+          });
+        }
+      } catch (error) {
+        console.error('[AuthManager] Failed to initialize auth storage:', error);
+      }
+    }
+  }
+
   private listeners: Set<() => void> = new Set();
 
   subscribe(listener: () => void): () => void {

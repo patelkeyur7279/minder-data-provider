@@ -65,11 +65,30 @@ export class OfflineManager {
         }
     }
 
+    private isSerializable(data: any): boolean {
+        if (!data) return true;
+
+        // Check for non-serializable types
+        if (typeof FormData !== 'undefined' && data instanceof FormData) return false;
+        if (typeof Blob !== 'undefined' && data instanceof Blob) return false;
+        if (typeof File !== 'undefined' && data instanceof File) return false;
+
+        return true;
+    }
+
     private saveQueue() {
         if (!this.storage) return;
 
         try {
-            this.storage.setItem(this.config.storageKey!, JSON.stringify(this.queue));
+            // Filter out requests with non-serializable bodies (like FormData)
+            // primarily to avoid "Converting circular structure to JSON" or losing data
+            const serializableQueue = this.queue.filter(req => this.isSerializable(req.body));
+
+            if (serializableQueue.length !== this.queue.length) {
+                logger.debug(`Not persisting ${this.queue.length - serializableQueue.length} non-serializable requests to storage`);
+            }
+
+            this.storage.setItem(this.config.storageKey!, JSON.stringify(serializableQueue));
         } catch (error) {
             logger.error('Failed to save offline queue:', error);
         }
@@ -132,6 +151,12 @@ export class OfflineManager {
         };
 
         this.queue.push(queuedRequest);
+
+        // Log warning if non-serializable
+        if (!this.isSerializable(request.body)) {
+            logger.warn(`Queued non-serializable request (${method} ${request.url}). This request will be lost if the app is restarted while offline.`);
+        }
+
         this.saveQueue();
         logger.info(`Queued request: ${method} ${request.url}`);
     }

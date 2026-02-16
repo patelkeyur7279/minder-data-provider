@@ -48,7 +48,7 @@ export function withSSR<T = any>(routeName: string, fallback?: T) {
   };
 }
 
-export function withCSR<T = any>(routeName: string) {
+export function withCSR(routeName: string) {
   return {
     routeName,
     ssr: false
@@ -69,7 +69,7 @@ export { dehydrate, HydrationBoundary, QueryClient, QueryClientProvider };
 export async function getDehydratedState(
   queryClient: any,
   prefetchPromises: Promise<any>[]
-) {
+): Promise<Record<string, any>> {
   await Promise.all(prefetchPromises);
   return dehydrate(queryClient);
 }

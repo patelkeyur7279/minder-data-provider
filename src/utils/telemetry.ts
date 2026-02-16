@@ -67,7 +67,7 @@ export class TelemetryManager {
                     keepalive: true
                 });
             }
-        } catch (e) {
+        } catch {
             // Silently fail
         }
     }
@@ -127,7 +127,7 @@ export class TelemetryManager {
                     keepalive: true
                 });
             }
-        } catch (e) {
+        } catch {
             // Silently fail
         }
     }

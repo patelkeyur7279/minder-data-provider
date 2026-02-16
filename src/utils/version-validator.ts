@@ -35,7 +35,7 @@ export function checkReactVersionAtRuntime(): void {
     // Check if React is available in browser environment
     if (typeof window !== 'undefined' && window.React) {
       const reactVersions: Set<string> = new Set();
-      
+
       const currentReactVersion = window.React.version;
       reactVersions.add(currentReactVersion);
 
@@ -67,12 +67,12 @@ export function checkReactVersionAtRuntime(): void {
       try {
         const React = require('react');
         const ReactDOM = require('react-dom');
-        
+
         if (React.version && ReactDOM.version && React.version !== ReactDOM.version) {
           logger.warn(`⚠️ React (${React.version}) and ReactDOM (${ReactDOM.version}) version mismatch!`);
           logger.warn('This may cause unexpected issues. Please ensure versions match.');
         }
-      } catch (e) {
+      } catch {
         // SSR or module not available, skip check
       }
     }
