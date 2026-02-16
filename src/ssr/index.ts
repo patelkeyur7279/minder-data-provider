@@ -66,7 +66,7 @@ export { dehydrate, HydrationBoundary, QueryClient, QueryClientProvider };
  *   queryClient.prefetchQuery({ queryKey: ['users'], queryFn: fetchUsers })
  * ]);
  */
-export async function getSSRCache(
+export async function getDehydratedState(
   queryClient: any,
   prefetchPromises: Promise<any>[]
 ): Promise<Record<string, any>> {
