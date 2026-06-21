@@ -53,6 +53,7 @@ export default defineConfig({
     'react',
     'react-dom',
     'react/jsx-runtime',
+    '@tanstack/query-core',
     '@tanstack/react-query',
     '@tanstack/react-query-devtools',
     '@reduxjs/toolkit',
