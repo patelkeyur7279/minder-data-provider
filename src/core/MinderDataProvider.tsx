@@ -6,6 +6,7 @@
 import React, {
   createContext,
   useContext,
+  useEffect,
   useMemo,
   useState,
   Suspense,
@@ -249,6 +250,15 @@ export function MinderDataProvider({
   useMemo(() => {
     setGlobalMinderConfig(contextValue.config);
   }, [contextValue.config]);
+
+  // Tear down the ApiClient (background timers, request cache, offline listeners)
+  // when the provider unmounts or the resolved client changes, to avoid leaks.
+  useEffect(() => {
+    const { apiClient } = contextValue;
+    return () => {
+      apiClient.destroy();
+    };
+  }, [contextValue]);
 
   return (
     <MinderContext.Provider value={contextValue}>

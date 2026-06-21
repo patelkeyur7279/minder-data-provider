@@ -3,6 +3,8 @@
 - [⚙️ **Configuration**](Configuration-Guide)
 - [📘 **Usage Guide**](Usage-Guide)
 - [📚 **API Reference**](API-Reference)
+- [✨ **Features & Capabilities**](Features)
+- [🔐 **Security Guide**](Security-Guide)
 - [🌍 **Platform Guide**](Platform-Guide)
 - [🔥 **Advanced Features**](Advanced-Features)
 - [💡 **Examples**](Examples)

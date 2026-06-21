@@ -5,6 +5,7 @@ import { createConfigFromPreset, type ConfigPreset, getPresetInfo } from './pres
 import { HttpMethod, StorageType, Platform, LogLevel } from '../constants/enums.js';
 import { PlatformDetector } from '../platform/PlatformDetector.js';
 import { MinderConfigError } from '../errors/MinderError.js';
+import { assertNoExposedSecrets } from '../security/secrets.js';
 
 const logger = new Logger('Config', { level: LoggerLogLevel.DEBUG });
 
@@ -172,6 +173,10 @@ export function configureMinder(config: UnifiedMinderConfig): MinderConfig {
       'CONFIG_MISSING_API_URL'
     );
   }
+
+  // 🛡️ Security: refuse to run if a raw secret value is present in client config
+  // (would be shipped in the browser bundle). No-op on the server.
+  assertNoExposedSecrets(config);
 
   // Generate complete configuration with smart defaults
   const fullConfig = buildFullConfig(config, platform, isDevelopment);

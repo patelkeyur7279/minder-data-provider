@@ -473,3 +473,125 @@ REACT_APP_DEBUG=false
 - ✅ Use **persistent cache** for offline apps
 - ✅ Enable **rate limiting** to prevent abuse
 - ✅ Enable **debug mode** during development only
+
+
+## Plugins & Secrets in Configuration (v2.2)
+
+Starting in v2.2, your `minder.config.ts` can wire up integrations (crash reporting, analytics, third-party auth) through **plugins**, and safely reference server-side secrets through `secret()` while keeping public values inline with `env()`.
+
+### Registering plugins: per-instance vs. global
+
+There are two ways to register plugins, and they cover different needs:
+
+- **Per-instance — `config.plugins`**: attach plugins to a specific Minder configuration. This is the recommended default. Plugins live alongside the rest of your config and are scoped to that instance.
+- **Global — `registerPlugins(...)`**: register plugins on the global singleton `pluginManager`. Use this when you can't (or don't want to) thread config through, e.g. registering a crash reporter from an app bootstrap file before any config is built.
+
+```ts
+// Per-instance: declared inside the config object
+configureMinder({
+  apiUrl: env('NEXT_PUBLIC_API_URL'),
+  routes: { /* ... */ },
+  plugins: [myPlugin, anotherPlugin],
+});
+
+// Global: registered on the singleton, applies everywhere
+import { registerPlugins } from 'minder-data-provider';
+
+registerPlugins(crashReporter, analytics);
+```
+
+Either way, plugin hooks fire on **every request** — both through `<MinderDataProvider>` and through standalone `minder()` calls.
+
+### A complete `minder.config.ts`
+
+This example wires three plugins — a crash reporter, an analytics tracker, and an auth-provider that supplies tokens via `provideToken()`. Note how public values use `env()` (safe to inline in the client bundle) while real secrets use `secret()` (resolved server-side only):
+
+```ts
+// minder.config.ts
+import { configureMinder, env, secret } from 'minder-data-provider';
+import * as Sentry from '@sentry/browser';
+import { track } from '@/lib/analytics';
+import { auth } from '@/lib/firebase';
+
+configureMinder({
+  // Public, publishable values — safe to inline via env()
+  apiUrl: env('NEXT_PUBLIC_API_URL'),
+
+  routes: {
+    users: '/users',
+    posts: '/posts',
+  },
+
+  auth: {
+    // A real secret: carries no value in the browser bundle,
+    // resolves from process.env on the server.
+    tokenSigningKey: secret('AUTH_TOKEN_SIGNING_KEY'),
+  },
+
+  plugins: [
+    // 1. Crash reporting — forward every error to Sentry.
+    {
+      name: 'sentry',
+      manifest: { name: 'sentry', capabilities: ['crash-reporting'], runtime: 'client' },
+      onError: (e) => {
+        Sentry.captureException(new Error(e.message), { extra: e });
+      },
+    },
+
+    // 2. Analytics — track each response's URL and duration.
+    {
+      name: 'analytics',
+      manifest: { name: 'analytics', capabilities: ['analytics'], runtime: 'client' },
+      onResponse: (r) => {
+        track('api', { url: r.url, status: r.status, ms: r.duration });
+      },
+    },
+
+    // 3. Auth provider — supply the token when the auth manager has none.
+    //    provideToken() may return a string, null, or a Promise of either.
+    {
+      name: 'firebase-auth',
+      manifest: { name: 'firebase-auth', capabilities: ['auth-provider'], runtime: 'client' },
+      provideToken: () => auth.currentUser?.getIdToken() ?? null,
+      onAuthRefresh: (tokens) => {
+        // fired on token rotation
+      },
+    },
+  ],
+});
+```
+
+The `manifest` field is optional but recommended — it declares each plugin's `capabilities` (`'crash-reporting'`, `'analytics'`, `'auth-provider'`, `'payments'`, `'storage'`, `'upload'`, `'transport'`) and `runtime` (`'client'`, `'server'`, or `'isomorphic'`).
+
+### Lifecycle & isolation
+
+Plugin hooks are **optional** — implement only the ones you need. Across a request's lifecycle the relevant hooks fire in order: `onInit` → `onRequest` → `onResponse` (or `onError`), plus `onCacheHit`/`onCacheMiss`, `provideToken`, `onAuthRefresh`, `onUpload`, `onSync`, and `onConnectivityChange` where applicable, and `onDestroy` on teardown.
+
+Crucially, **each plugin runs in its own `try/catch`**. If a plugin hook throws, Minder logs a warning and continues — a failing plugin **never breaks a request** and never blocks the other plugins. This isolation is what makes it safe to drop in third-party integrations like Sentry or an analytics SDK.
+
+### Secrets: the config refuses to run with an exposed secret client-side
+
+`configureMinder()` calls `assertNoExposedSecrets(config)` on your configuration. **In the browser, this throws** a `MinderConfigError` with code `CONFIG_EXPOSED_SECRET` if it finds a raw, secret-shaped value anywhere in the config:
+
+```ts
+// THROWS in the browser — raw Stripe secret key detected in client config
+configureMinder({
+  apiUrl: env('NEXT_PUBLIC_API_URL'),
+  payments: { stripeKey: 'sk_live_abc123...' }, // MinderConfigError: CONFIG_EXPOSED_SECRET
+});
+
+// Safe — the secret is referenced, not inlined
+configureMinder({
+  apiUrl: env('NEXT_PUBLIC_API_URL'),
+  payments: { stripeKey: secret('STRIPE_SECRET_KEY') }, // resolved server-side only
+});
+```
+
+The detector flags common secret shapes — Stripe `sk_live`/`sk_test` and `rk_` keys, AWS `AKIA…` access keys, PEM private keys, GitHub (`ghp_`/`github_pat_`), Slack (`xox…`), SendGrid (`SG.…`), and any string of 8+ characters sitting under a key like `secret`, `password`, `privateKey`, `clientSecret`, or `apiSecret`. Values wrapped in a `SecretRef` (via `secret()`) are **never** flagged.
+
+The rule of thumb:
+
+- **Publishable keys and base URLs** (Stripe `pk_`, a Sentry DSN, your API URL) → `env()`. Safe to inline.
+- **Real secrets** (signing keys, `sk_` keys, DB passwords) → `secret()`, paired with a server route or `resolveSecret()` from `minder-data-provider/server`.
+
+This way your `minder.config.ts` stays identical across client and server — public values are inlined, secrets stay as references, and the client build refuses to ship a raw secret.

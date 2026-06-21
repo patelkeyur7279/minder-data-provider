@@ -6,6 +6,7 @@ import axios from 'axios';
 import { ApiClient } from '../src/core/ApiClient';
 import { AuthManager } from '../src/core/AuthManager';
 import { ProxyManager } from '../src/core/ProxyManager';
+import { HttpMethod } from '../src/constants/enums';
 import type { MinderConfig } from '../src/core/types';
 
 // Mock axios
@@ -30,7 +31,7 @@ jest.mock('../src/utils/security', () => ({
 jest.mock('../src/utils/performance', () => ({
   RequestBatcher: jest.fn().mockImplementation(() => ({})),
   RequestDeduplicator: jest.fn().mockImplementation(() => ({
-    deduplicate: jest.fn((key, fn) => fn()),
+    deduplicate: jest.fn((key, fn: any) => fn()),
   })),
   PerformanceMonitor: jest.fn().mockImplementation(() => ({
     recordLatency: jest.fn(),
@@ -61,7 +62,7 @@ describe('ApiClient', () => {
       },
     };
 
-    mockedAxios.create = jest.fn().mockReturnValue(mockAxiosInstance);
+    mockedAxios.create = jest.fn().mockReturnValue(mockAxiosInstance) as any;
 
     // Mock AuthManager
     mockAuthManager = {
@@ -71,11 +72,11 @@ describe('ApiClient', () => {
 
     // Mock ProxyManager
     mockProxyManager = {
-      isEnabled: jest.fn().mockReturnValue(false),
+      isEnabled: jest.fn().mockReturnValue(false) as any,
       config: { baseUrl: 'http://proxy.example.com' },
-      getProxyHeaders: jest.fn().mockReturnValue({}),
-      getTimeout: jest.fn().mockReturnValue(30000),
-      rewriteUrl: jest.fn((url) => url),
+      getProxyHeaders: jest.fn().mockReturnValue({}) as any,
+      getTimeout: jest.fn().mockReturnValue(30000) as any,
+      rewriteUrl: jest.fn((url) => url) as any,
     } as any;
 
     // Base config
@@ -84,15 +85,15 @@ describe('ApiClient', () => {
       routes: {
         getUser: {
           url: '/users/:id',
-          method: 'GET',
+          method: HttpMethod.GET,
         },
         createUser: {
           url: '/users',
-          method: 'POST',
+          method: HttpMethod.POST,
         },
         uploadFile: {
           url: '/upload',
-          method: 'POST',
+          method: HttpMethod.POST,
         },
       },
     };
@@ -114,7 +115,7 @@ describe('ApiClient', () => {
     });
 
     it('should use proxy baseURL when proxy is enabled', () => {
-      mockProxyManager.isEnabled = jest.fn().mockReturnValue(true);
+      mockProxyManager.isEnabled = jest.fn().mockReturnValue(true) as any;
 
       new ApiClient(config, mockAuthManager, mockProxyManager);
 
@@ -228,11 +229,11 @@ describe('ApiClient', () => {
       expect(mockAxiosInstance.request).toHaveBeenCalledWith(
         expect.objectContaining({
           data: formData,
-          headers: expect.objectContaining({
-            'Content-Type': 'multipart/form-data',
-          }),
         })
       );
+
+      const calledHeaders = mockAxiosInstance.request.mock.calls[0][0].headers;
+      expect(calledHeaders['Content-Type']).toBeUndefined();
     });
 
     it('should handle XML data', async () => {
@@ -253,9 +254,9 @@ describe('ApiClient', () => {
     });
 
     it('should use proxy URL when proxy is enabled', async () => {
-      mockProxyManager.isEnabled = jest.fn().mockReturnValue(true);
-      mockProxyManager.rewriteUrl = jest.fn().mockReturnValue('/proxy/users/1');
-      
+      mockProxyManager.isEnabled = jest.fn().mockReturnValue(true) as any;
+      mockProxyManager.rewriteUrl = jest.fn().mockReturnValue('/proxy/users/1') as any;
+
       const apiClient = new ApiClient(config, mockAuthManager, mockProxyManager);
       mockAxiosInstance.request.mockResolvedValueOnce({ data: {} });
 
@@ -271,11 +272,11 @@ describe('ApiClient', () => {
     });
 
     it('should include proxy headers when proxy is enabled', async () => {
-      mockProxyManager.isEnabled = jest.fn().mockReturnValue(true);
+      mockProxyManager.isEnabled = jest.fn().mockReturnValue(true) as any;
       mockProxyManager.getProxyHeaders = jest.fn().mockReturnValue({
         'X-Proxy-Header': 'value',
-      });
-      
+      }) as any;
+
       const apiClient = new ApiClient(config, mockAuthManager, mockProxyManager);
       mockAxiosInstance.request.mockResolvedValueOnce({ data: {} });
 
@@ -313,7 +314,7 @@ describe('ApiClient', () => {
       const file = new File(['content'], 'test.txt');
       const onProgress = jest.fn();
 
-      mockAxiosInstance.request.mockImplementationOnce((config) => {
+      mockAxiosInstance.request.mockImplementationOnce((config: any) => {
         // Simulate progress
         if (config.onUploadProgress) {
           config.onUploadProgress({ loaded: 50, total: 100 });
@@ -340,7 +341,7 @@ describe('ApiClient', () => {
   describe('WebSocket', () => {
     it('should create WebSocket with authentication token', () => {
       const apiClient = new ApiClient(config, mockAuthManager);
-      
+
       // Mock WebSocket
       (global as any).WebSocket = jest.fn().mockImplementation((url) => ({ url }));
 
@@ -353,9 +354,9 @@ describe('ApiClient', () => {
     });
 
     it('should create WebSocket without token when not authenticated', () => {
-      mockAuthManager.getToken = jest.fn().mockReturnValue(null);
+      mockAuthManager.getToken = jest.fn().mockReturnValue(null) as any;
       const apiClient = new ApiClient(config, mockAuthManager);
-      
+
       (global as any).WebSocket = jest.fn().mockImplementation((url) => ({ url }));
 
       apiClient.createWebSocket('ws://example.com/socket');
@@ -368,7 +369,7 @@ describe('ApiClient', () => {
 
     it('should create WebSocket with protocols', () => {
       const apiClient = new ApiClient(config, mockAuthManager);
-      
+
       (global as any).WebSocket = jest.fn().mockImplementation((url, protocols) => ({ url, protocols }));
 
       apiClient.createWebSocket('ws://example.com/socket', ['protocol1', 'protocol2']);
@@ -386,7 +387,7 @@ describe('ApiClient', () => {
         ...config,
         performance: { monitoring: true },
       };
-      
+
       const apiClient = new ApiClient(performanceConfig, mockAuthManager);
       mockAxiosInstance.request.mockResolvedValueOnce({ data: {} });
 
@@ -402,7 +403,7 @@ describe('ApiClient', () => {
         ...config,
         performance: { monitoring: true },
       };
-      
+
       const apiClient = new ApiClient(performanceConfig, mockAuthManager);
       const metrics = apiClient.getPerformanceMetrics();
 
@@ -414,7 +415,7 @@ describe('ApiClient', () => {
         ...config,
         performance: { monitoring: true },
       };
-      
+
       const apiClient = new ApiClient(performanceConfig, mockAuthManager);
       apiClient.resetPerformanceMetrics();
 
@@ -473,7 +474,7 @@ describe('ApiClient', () => {
         ...config,
         performance: { deduplication: true },
       };
-      
+
       const apiClient = new ApiClient(deduplicationConfig, mockAuthManager);
 
       // Deduplicator should be initialized
@@ -498,14 +499,14 @@ describe('ApiClient', () => {
   describe('Error Handling', () => {
     it('should handle network errors gracefully', async () => {
       const apiClient = new ApiClient(config, mockAuthManager);
-      
+
       // The error needs to be thrown after going through interceptors
       const networkError = {
         request: {},
         code: 'ERR_NETWORK',
         config: { url: '/users/1', method: 'GET' },
       };
-      
+
       mockAxiosInstance.request.mockRejectedValueOnce(networkError);
 
       try {
@@ -519,13 +520,13 @@ describe('ApiClient', () => {
 
     it('should handle timeout errors gracefully', async () => {
       const apiClient = new ApiClient(config, mockAuthManager);
-      
+
       const timeoutError = {
         request: {},
         code: 'ECONNABORTED',
         config: { timeout: 30000, url: '/users/1', method: 'GET' },
       };
-      
+
       mockAxiosInstance.request.mockRejectedValueOnce(timeoutError);
 
       try {
@@ -538,7 +539,7 @@ describe('ApiClient', () => {
 
     it('should handle 401 errors', async () => {
       const apiClient = new ApiClient(config, mockAuthManager);
-      
+
       const authError = {
         response: {
           status: 401,
@@ -546,7 +547,7 @@ describe('ApiClient', () => {
         },
         config: { url: '/users/1', method: 'GET' },
       };
-      
+
       mockAxiosInstance.request.mockRejectedValueOnce(authError);
 
       try {
@@ -559,7 +560,7 @@ describe('ApiClient', () => {
 
     it('should handle 403 errors', async () => {
       const apiClient = new ApiClient(config, mockAuthManager);
-      
+
       const forbiddenError = {
         response: {
           status: 403,
@@ -567,7 +568,7 @@ describe('ApiClient', () => {
         },
         config: { url: '/users/1', method: 'GET' },
       };
-      
+
       mockAxiosInstance.request.mockRejectedValueOnce(forbiddenError);
 
       try {
@@ -580,7 +581,7 @@ describe('ApiClient', () => {
 
     it('should handle 404 errors', async () => {
       const apiClient = new ApiClient(config, mockAuthManager);
-      
+
       const notFoundError = {
         response: {
           status: 404,
@@ -588,7 +589,7 @@ describe('ApiClient', () => {
         },
         config: { url: '/users/1', method: 'GET' },
       };
-      
+
       mockAxiosInstance.request.mockRejectedValueOnce(notFoundError);
 
       try {
@@ -601,7 +602,7 @@ describe('ApiClient', () => {
 
     it('should handle 422 validation errors', async () => {
       const apiClient = new ApiClient(config, mockAuthManager);
-      
+
       const validationError = {
         response: {
           status: 422,
@@ -612,7 +613,7 @@ describe('ApiClient', () => {
         },
         config: { url: '/users', method: 'POST' },
       };
-      
+
       mockAxiosInstance.request.mockRejectedValueOnce(validationError);
 
       try {
@@ -625,7 +626,7 @@ describe('ApiClient', () => {
 
     it('should handle 429 rate limit errors', async () => {
       const apiClient = new ApiClient(config, mockAuthManager);
-      
+
       const rateLimitError = {
         response: {
           status: 429,
@@ -633,7 +634,7 @@ describe('ApiClient', () => {
         },
         config: { url: '/users/1', method: 'GET' },
       };
-      
+
       mockAxiosInstance.request.mockRejectedValueOnce(rateLimitError);
 
       try {
@@ -646,7 +647,7 @@ describe('ApiClient', () => {
 
     it('should handle 500 server errors', async () => {
       const apiClient = new ApiClient(config, mockAuthManager);
-      
+
       const serverError = {
         response: {
           status: 500,
@@ -654,7 +655,7 @@ describe('ApiClient', () => {
         },
         config: { url: '/users/1', method: 'GET' },
       };
-      
+
       mockAxiosInstance.request.mockRejectedValueOnce(serverError);
 
       try {

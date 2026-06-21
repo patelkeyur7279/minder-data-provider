@@ -127,13 +127,13 @@ export class MediaUploadManager {
     options: UploadOptions = {}
   ): Promise<MediaUploadResult> {
     const uploadId = this.generateUploadId(file);
-    
+
     try {
       this.log(`Starting upload: ${file.name} (${this.formatBytes(file.size)})`);
 
       // Check if chunked upload is needed
-      const shouldUseChunked = options.chunked?.enabled && 
-                               file.size > (options.chunked.chunkSize || 1024 * 1024);
+      const shouldUseChunked = options.chunked?.enabled &&
+        file.size > (options.chunked.chunkSize || 1024 * 1024);
 
       if (shouldUseChunked) {
         return await this.uploadChunked(file, options, uploadId);
@@ -250,7 +250,7 @@ export class MediaUploadManager {
       if (options.retry && options.retry.attempts && options.retry.attempts > 0) {
         this.log(`Retrying upload (${options.retry.attempts} attempts left)...`);
         await this.delay(options.retry.delay || 1000);
-        
+
         return this.uploadDirect(file, {
           ...options,
           retry: {
@@ -306,7 +306,7 @@ export class MediaUploadManager {
         initUrl,
         initFormData,
         controller,
-        () => {}, // No progress for init
+        () => { }, // No progress for init
         options.headers
       );
 
@@ -362,7 +362,7 @@ export class MediaUploadManager {
         finalizeUrl,
         finalizeFormData,
         controller,
-        () => {}, // No progress for finalize
+        () => { }, // No progress for finalize
         options.headers
       );
 

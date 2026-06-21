@@ -126,6 +126,20 @@ export { MinderErrorBoundary, useErrorHandler } from './components/index.js';
 export type { ErrorBoundaryProps } from './components/index.js';
 
 // ============================================================================
+// SECRET-KEY SAFETY — keep secret keys out of the client bundle
+// ============================================================================
+export {
+  secret,
+  env,
+  SecretRef,
+  isSecretRef,
+  redactSecrets,
+  findExposedSecrets,
+  assertNoExposedSecrets,
+} from './security/secrets.js';
+export type { ExposedSecret } from './security/secrets.js';
+
+// ============================================================================
 // PLATFORM SUPPORT (v2.1)
 // ============================================================================
 

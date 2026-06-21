@@ -56,6 +56,24 @@ export interface MinderOptions<TModel = any> {
   axiosConfig?: Record<string, any>;
 
   /**
+   * Transport to use for the request.
+   * - `'axios'` (default): full-featured and predictable — honors withCredentials,
+   *   axiosConfig, and produces consistent error shapes.
+   * - `'fetch'`: faster native-fetch fast-path for simple GET/POST requests. Does
+   *   not apply axiosConfig or credentials handling — opt in only when you want
+   *   the minimal-overhead path.
+   * @default 'axios'
+   */
+  transport?: 'auto' | 'axios' | 'fetch';
+
+  /**
+   * Throw on error instead of returning a structured error result. By default
+   * `minder()` never throws; set this to opt into try/catch-style error handling.
+   * @default false
+   */
+  throwOnError?: boolean;
+
+  /**
    * Query parameters
    */
   params?: Record<string, unknown>;

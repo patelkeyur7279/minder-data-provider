@@ -8,6 +8,7 @@ import {
   NotificationType
 } from '../constants/enums.js';
 import type { OfflineConfig } from '../platform/offline/types.js';
+import type { MinderPlugin } from '../plugins/PluginSystem.js';
 
 // Core configuration types
 export interface MinderConfig {
@@ -42,6 +43,12 @@ export interface MinderConfig {
   telemetry?: TelemetryConfig;
   ssr?: SSRConfig;
   offline?: OfflineConfig;
+  /**
+   * Plugins to register on this client. Each plugin can observe the request
+   * lifecycle (onRequest/onResponse/onError) — the basis for drop-in
+   * integrations (crash reporting, analytics, payments, etc.).
+   */
+  plugins?: MinderPlugin[];
   environments?: Record<string, EnvironmentOverride>;
   defaultEnvironment?: string;
   autoDetectEnvironment?: boolean;
@@ -245,6 +252,12 @@ export interface RetryConfig {
    * @default 30000
    */
   maxDelay?: number;
+
+  /**
+   * Exponential backoff factor
+   * @default 2
+   */
+  factor?: number;
 
   /**
    * Custom function to determine if a request should be retried

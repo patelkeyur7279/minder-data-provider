@@ -1,6 +1,7 @@
 import { Logger, LogLevel } from '../utils/Logger.js';
 import { StorageType } from '../constants/enums.js';
 import type { OfflineConfig, QueuedRequest } from '../platform/offline/types.js';
+import { IndexedDBStorage } from '../utils/IndexedDB.js';
 
 const logger = new Logger('OfflineManager', { level: LogLevel.DEBUG });
 
@@ -8,7 +9,7 @@ export class OfflineManager {
     private config: OfflineConfig;
     private queue: QueuedRequest[] = [];
     private isOnline: boolean = true;
-    private storage: Storage | null = null;
+    private storage: IndexedDBStorage | null = null;
     private processQueueCallback?: (request: QueuedRequest) => Promise<void>;
 
     constructor(config: OfflineConfig) {
@@ -28,48 +29,88 @@ export class OfflineManager {
     }
 
     private initStorage() {
-        // Default to localStorage if not specified
-        // Note: OfflineConfig in types.ts doesn't have storageType enum, it uses StorageAdapter
-        // For this core implementation, we'll stick to simple localStorage/sessionStorage detection
-        // or use the provided storage adapter if available (not implemented here yet)
-
         if (typeof window !== 'undefined') {
-            this.storage = window.localStorage;
+            this.storage = new IndexedDBStorage('MinderOfflineDB', 'requests');
         }
     }
 
-    private setupListeners() {
-        window.addEventListener('online', () => {
-            logger.info('Network connection restored');
-            this.isOnline = true;
-            this.processQueue();
-        });
+    // Stable handler refs so they can be removed in destroy() (anonymous
+    // listeners can never be unregistered and leak on every provider remount).
+    private handleOnline = () => {
+        logger.info('Network connection restored');
+        this.isOnline = true;
+        this.processQueue();
+    };
 
-        window.addEventListener('offline', () => {
-            logger.warn('Network connection lost');
-            this.isOnline = false;
-        });
+    private handleOffline = () => {
+        logger.warn('Network connection lost');
+        this.isOnline = false;
+    };
+
+    private setupListeners() {
+        window.addEventListener('online', this.handleOnline);
+        window.addEventListener('offline', this.handleOffline);
     }
 
-    private loadQueue() {
+    /**
+     * Release resources held by this manager (network listeners). Invoked by
+     * ApiClient.destroy() when the owning provider unmounts.
+     */
+    public destroy(): void {
+        if (typeof window !== 'undefined') {
+            window.removeEventListener('online', this.handleOnline);
+            window.removeEventListener('offline', this.handleOffline);
+        }
+    }
+
+    private async loadQueue() {
         if (!this.storage) return;
 
         try {
-            const stored = this.storage.getItem(this.config.storageKey!);
-            if (stored) {
-                this.queue = JSON.parse(stored);
-                logger.debug(`Loaded ${this.queue.length} requests from offline queue`);
+            const stored = await this.storage.get<QueuedRequest[]>(this.config.storageKey!);
+            if (stored && Array.isArray(stored)) {
+                this.queue = stored;
+                logger.debug(`Loaded ${this.queue.length} requests from offline queue (IndexedDB)`);
+            }
+            
+            // Register Background Sync if available
+            if ('serviceWorker' in navigator && 'SyncManager' in window) {
+                const registration = await navigator.serviceWorker.ready;
+                try {
+                    await (registration as any).sync.register('minder-sync');
+                    logger.debug('Background Sync registered successfully');
+                } catch (e) {
+                    logger.warn('Background Sync registration failed', e);
+                }
             }
         } catch (error) {
             logger.error('Failed to load offline queue:', error);
         }
     }
 
-    private saveQueue() {
+    private isSerializable(data: any): boolean {
+        if (!data) return true;
+
+        // Check for non-serializable types
+        if (typeof FormData !== 'undefined' && data instanceof FormData) return false;
+        if (typeof Blob !== 'undefined' && data instanceof Blob) return false;
+        if (typeof File !== 'undefined' && data instanceof File) return false;
+
+        return true;
+    }
+
+    private async saveQueue() {
         if (!this.storage) return;
 
         try {
-            this.storage.setItem(this.config.storageKey!, JSON.stringify(this.queue));
+            // Filter out requests with non-serializable bodies
+            const serializableQueue = this.queue.filter(req => this.isSerializable(req.body));
+
+            if (serializableQueue.length !== this.queue.length) {
+                logger.debug(`Not persisting ${this.queue.length - serializableQueue.length} non-serializable requests to storage`);
+            }
+
+            await this.storage.set(this.config.storageKey!, serializableQueue);
         } catch (error) {
             logger.error('Failed to save offline queue:', error);
         }
@@ -87,7 +128,7 @@ export class OfflineManager {
         // Process sequentially to maintain order
         const queueCopy = [...this.queue];
         this.queue = []; // Clear queue temporarily, failed items will be re-added
-        this.saveQueue();
+        await this.saveQueue();
 
         for (const request of queueCopy) {
             try {
@@ -106,7 +147,7 @@ export class OfflineManager {
             }
         }
 
-        this.saveQueue();
+        await this.saveQueue();
     }
 
     public queueRequest(request: Omit<QueuedRequest, 'id' | 'queuedAt' | 'retries'>) {
@@ -132,7 +173,13 @@ export class OfflineManager {
         };
 
         this.queue.push(queuedRequest);
-        this.saveQueue();
+
+        // Log warning if non-serializable
+        if (!this.isSerializable(request.body)) {
+            logger.warn(`Queued non-serializable request (${method} ${request.url}). This request will be lost if the app is restarted while offline.`);
+        }
+
+        this.saveQueue().catch(e => logger.error('Async save error', e));
         logger.info(`Queued request: ${method} ${request.url}`);
     }
 
@@ -142,6 +189,6 @@ export class OfflineManager {
 
     public clearQueue() {
         this.queue = [];
-        this.saveQueue();
+        this.saveQueue().catch(e => logger.error('Async save error', e));
     }
 }

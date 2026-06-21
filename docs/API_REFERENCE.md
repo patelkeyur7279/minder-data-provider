@@ -159,3 +159,223 @@ defaultLogger.info("Category", "Message");
 ### Security
 - `RateLimiter` class
 - `XSSSanitizer` class
+
+
+## v2.2 — New & Updated API
+
+This release adds two new package subpath entry points, opt-in request fields, new
+`useMinder` options, a full plugin system, and a server-only secret-key toolkit.
+
+### New entry points
+
+Two narrowed subpaths ship alongside the existing exports (`/web`, `/nextjs`,
+`/native`, `/expo`, `/electron`, `/node`, `/crud`, `/auth`, `/cache`, `/websocket`,
+`/upload`, `/debug`, `/config`, `/ssr`, `/logger`, `/hook`).
+
+#### `minder-data-provider/core`
+
+Minimal surface for smaller bundles.
+
+| Export | Kind |
+| --- | --- |
+| `minder` | function |
+| `useMinder` | React hook |
+| `configureMinder` | function |
+| `MinderDataProvider` | component |
+| `useMinderContext` | React hook |
+| `MinderError` | error class |
+| `MinderConfigError` | error class |
+| `MinderNetworkError` | error class |
+| `MinderValidationError` | error class |
+| `MinderAuthError` | error class |
+| `MinderTimeoutError` | error class |
+| `isMinderError` | type guard |
+| `getErrorMessage` | function |
+| `getErrorCode` | function |
+| core types | type exports |
+
+#### `minder-data-provider/server`
+
+**Server-only.** Throws if imported in a browser.
+
+| Export | Kind |
+| --- | --- |
+| `resolveSecret` | function |
+| `secret` | function |
+| `env` | function |
+| `SecretRef` | class |
+| `isSecretRef` | type guard |
+| `redactSecrets` | function |
+| `findExposedSecrets` | function |
+
+### New `MinderOptions` fields
+
+```ts
+transport?: 'auto' | 'axios' | 'fetch'   // default: 'axios'
+throwOnError?: boolean                    // default: false
+```
+
+- `transport` — selects the request engine. `'fetch'` opts into a faster native-fetch
+  fast-path for simple requests; it does **not** handle `axiosConfig` or credentials, so
+  use it only for plain requests.
+- `throwOnError` — when `true`, `minder()` **throws** the `MinderError` instead of
+  returning it inside the structured `MinderResult`. Defaults to `false` (never throws).
+
+### New `useMinder` options
+
+```ts
+throwOnError?: boolean   // default: false
+rawUrl?: boolean         // default: false
+```
+
+- `throwOnError` — surfaces errors via `try`/`catch`, TanStack Query error states, and
+  React error boundaries instead of the returned `error` field. Defaults to `false`.
+- `rawUrl` — treats `route` as an arbitrary URL and bypasses the route registry.
+- Absolute `http(s)` URLs bypass the route registry automatically (no `rawUrl` needed).
+- The `auth`, `cache`, `websocket`, and `upload` sub-objects returned by `useMinder` now
+  have **stable identity** across re-renders (memoized) — they are safe to use in
+  dependency arrays.
+
+### Plugins
+
+The integration system. Register per-instance via `config.plugins = [plugin, ...]` or
+globally via `registerPlugins(plugin, ...)`. Hooks fire on **every** request — both
+through `<MinderDataProvider>` and standalone `minder()`. Each plugin runs in its own
+`try`/`catch`: a failing hook logs a warning and never breaks the request.
+
+#### Exports
+
+```ts
+pluginManager                          // singleton
+createPlugin(p: MinderPlugin): MinderPlugin
+registerPlugins(...plugins: MinderPlugin[]): void
+```
+
+Built-ins:
+
+```ts
+createLoggerPlugin(/* options */)        LoggerPlugin
+AnalyticsPlugin
+RetryPlugin
+CacheWarmupPlugin
+createPerformanceMonitorPlugin(/* options */)   PerformanceMonitorPlugin
+```
+
+#### `MinderPlugin`
+
+Every hook is optional except `name`.
+
+```ts
+interface MinderPlugin {
+  name: string;                                    // required
+  version?: string;
+  manifest?: PluginManifest;
+
+  onInit?(ctx): void | Promise<void>;
+  onRequest?(req: PluginRequest): void | Promise<void>;
+  onResponse?(res: PluginResponse): void | Promise<void>;
+  onError?(err: PluginError): void | Promise<void>;
+  onCacheHit?(e): void | Promise<void>;
+  onCacheMiss?(key: string): void | Promise<void>;
+  onDestroy?(): void | Promise<void>;
+
+  provideToken?(): string | null | Promise<string | null>;   // supplies auth token when the auth manager has none (Firebase/Auth0/Clerk)
+  onAuthRefresh?(tokens): void | Promise<void>;              // fired on token rotation
+
+  onUpload?(event: UploadLifecycleEvent): void | Promise<void>;   // media pipeline
+  onSync?(event: SyncLifecycleEvent): void | Promise<void>;       // offline-sync
+  onConnectivityChange?(online: boolean): void | Promise<void>;
+}
+```
+
+#### `PluginManifest`
+
+```ts
+interface PluginManifest {
+  name: string;
+  version?: string;
+  capabilities?: MinderCapability[];
+  runtime?: 'client' | 'server' | 'isomorphic';
+  peerDependencies?: string[];
+}
+```
+
+#### `MinderCapability`
+
+```ts
+type MinderCapability =
+  | 'crash-reporting'
+  | 'analytics'
+  | 'payments'
+  | 'auth-provider'
+  | 'storage'
+  | 'upload'
+  | 'transport';
+```
+
+#### Event payloads
+
+```ts
+interface PluginRequest  { method: string; url: string; headers?: Record<string, string>; body?: unknown; timestamp: number; }
+interface PluginResponse { status: number; data: unknown; headers?: Record<string, string>; duration: number; timestamp: number; }
+interface PluginError    { message: string; code?: string; stack?: string; request?: PluginRequest; timestamp: number; }
+interface UploadLifecycleEvent { phase: 'start' | 'progress' | 'complete' | 'error'; uploadId: string; url?: string; file?: unknown; progress?: number; error?: unknown; timestamp: number; }
+interface SyncLifecycleEvent   { phase: string; pending?: number; processed?: number; error?: unknown; timestamp: number; }
+```
+
+#### Example
+
+```ts
+configureMinder({
+  apiUrl: env('NEXT_PUBLIC_API_URL'),
+  routes: { /* ... */ },
+  plugins: [
+    { name: 'firebase-auth', provideToken: () => auth.currentUser?.getIdToken() ?? null },
+    { name: 'sentry', onError: (e) => Sentry.captureException(new Error(e.message), { extra: e }) },
+    { name: 'analytics', onResponse: (r) => track('api', { url: r.url, ms: r.duration }) },
+  ],
+});
+```
+
+### Secret-key safety
+
+Helpers for keeping real secrets out of client bundles. `secret`, `env`, `SecretRef`,
+`isSecretRef`, `redactSecrets`, `findExposedSecrets`, and `assertNoExposedSecrets` are
+available from the main surface; `resolveSecret` is **server-only**
+(`minder-data-provider/server`).
+
+```ts
+secret(name: string, value?: string): SecretRef
+// On the server resolves from process.env[name] (or explicit value);
+// on the client carries no value (name marker only).
+
+env(name: string, fallback?: string): string   // fallback defaults to ''
+// Plain string for NON-secret values (publishable keys, base URLs). Safe to inline.
+
+class SecretRef {
+  hasValue(): boolean;
+  reveal(): string;        // server only; throws if no value
+  toString(): string;      // '[SECRET:NAME]'
+  toJSON(): string;        // '[SECRET:NAME]'
+}
+
+isSecretRef(x: unknown): x is SecretRef
+
+redactSecrets(obj: unknown): unknown
+// Masks SecretRefs and secret-shaped strings for safe logging.
+
+findExposedSecrets(config: unknown): { path: string; reason: string }[]
+
+assertNoExposedSecrets(config: unknown): void
+// Throws in the browser (MinderConfigError, code 'CONFIG_EXPOSED_SECRET')
+// if a raw secret-shaped value is found. Called automatically by configureMinder.
+
+// from 'minder-data-provider/server' — SERVER-ONLY
+resolveSecret(ref: SecretRef | string): string
+// Returns the value; throws in the browser or if missing.
+```
+
+> **Rule:** publishable keys (Stripe `pk_`, Sentry DSN) and base URLs → `env()`; real
+> secrets → `secret()` plus a server route / `resolveSecret`. Never put a raw secret in
+> client config — `configureMinder` throws (`MinderConfigError`,
+> `'CONFIG_EXPOSED_SECRET'`) in the browser.

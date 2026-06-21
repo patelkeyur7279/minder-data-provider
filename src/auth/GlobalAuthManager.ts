@@ -12,6 +12,8 @@
  * - Refresh token support
  */
 
+import { parseJWT as decodeJwt } from '../utils/jwt.js';
+
 interface GlobalAuthConfig {
   storage?: 'localStorage' | 'sessionStorage' | 'memory';
   tokenKey?: string;
@@ -63,20 +65,7 @@ class GlobalAuthManager {
   }
 
   private parseJWT(token: string): any {
-    try {
-      const base64Url = token.split('.')[1];
-      if (!base64Url) return null;
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(
-        atob(base64)
-          .split('')
-          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-          .join('')
-      );
-      return JSON.parse(jsonPayload);
-    } catch (error) {
-      return null;
-    }
+    return decodeJwt(token);
   }
 
   async setToken(token: string): Promise<void> {
