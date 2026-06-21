@@ -12,6 +12,8 @@
  * - Refresh token support
  */
 
+import { parseJWT as decodeJwt } from '../utils/jwt.js';
+
 interface GlobalAuthConfig {
   storage?: 'localStorage' | 'sessionStorage' | 'memory';
   tokenKey?: string;
@@ -63,25 +65,7 @@ class GlobalAuthManager {
   }
 
   private parseJWT(token: string): any {
-    try {
-      // Validate JWT structure: must be header.payload.signature (exactly 3 parts).
-      // Without this guard a malformed token (e.g. "abc" or "a.b") reaches atob/
-      // JSON.parse and throws, crashing token restoration.
-      const parts = token.split('.');
-      if (parts.length !== 3) return null;
-      const base64Url = parts[1];
-      if (!base64Url) return null;
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(
-        atob(base64)
-          .split('')
-          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-          .join('')
-      );
-      return JSON.parse(jsonPayload);
-    } catch (error) {
-      return null;
-    }
+    return decodeJwt(token);
   }
 
   async setToken(token: string): Promise<void> {

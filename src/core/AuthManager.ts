@@ -1,4 +1,5 @@
 import type { AuthConfig } from './types.js';
+import { parseJWT as decodeJwt } from '../utils/jwt.js';
 import type { DebugManager } from '../debug/DebugManager.js';
 import { StorageType, DebugLogType } from '../constants/enums.js';
 
@@ -167,9 +168,8 @@ export class AuthManager {
 
     // Check if token is expired (if it's a JWT)
     try {
-      // Validate JWT has 3 parts (header.payload.signature)
-      const parts = token.split('.');
-      if (parts.length !== 3 || !parts[1]) {
+      const payload = decodeJwt(token);
+      if (!payload) {
         // Not a valid JWT format, assume it's valid
         if (this.debugManager && this.enableLogs) {
           this.debugManager.log(DebugLogType.AUTH, '✅ AUTH CHECK: Non-JWT token', {});
@@ -177,7 +177,6 @@ export class AuthManager {
         return true;
       }
 
-      const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
       const now = Date.now() / 1000;
 
       // Bug #4 fix: Use typeof to properly handle exp=0

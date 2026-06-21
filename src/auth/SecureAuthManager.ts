@@ -15,6 +15,7 @@
  */
 
 import { AuthManager } from '../core/AuthManager.js';
+import { parseJWT as decodeJwt } from '../utils/jwt.js';
 import type { AuthConfig } from '../core/types.js';
 import type { DebugManager } from '../debug/DebugManager.js';
 import { StorageType } from '../constants/enums.js';
@@ -236,18 +237,7 @@ export class SecureAuthManager extends AuthManager {
    * Parse JWT token payload
    */
   private parseJWT(token: string): JWTPayload | null {
-    try {
-      // Validate JWT has 3 parts (header.payload.signature)
-      const parts = token.split('.');
-      if (parts.length !== 3 || !parts[1]) {
-        return null;
-      }
-      
-      const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-      return payload as JWTPayload;
-    } catch {
-      return null;
-    }
+    return decodeJwt<JWTPayload>(token);
   }
   
   /**

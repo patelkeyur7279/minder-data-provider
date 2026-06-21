@@ -91,6 +91,7 @@ import {
   getRouteSuggestions,
 } from '../utils/routeHelpers.js';
 import { MinderError } from '../errors/MinderError.js';
+import { parseJWT as decodeJwt } from '../utils/jwt.js';
 
 // ============================================================================
 // TYPES
@@ -1192,22 +1193,7 @@ export function useMinder<TData = any>(
     getCurrentUser: () => {
       if (context?.authManager) {
         const token = context.authManager.getToken();
-        if (token) {
-          try {
-            // Validate JWT has 3 parts (header.payload.signature)
-            const parts = token.split('.');
-            if (parts.length !== 3 || !parts[1]) {
-              return null;
-            }
-
-            // Decode JWT token to get user info
-            const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-            return payload;
-          } catch {
-            return null;
-          }
-        }
-        return null;
+        return token ? decodeJwt(token) : null;
       }
       // Use global auth manager as fallback
       return globalAuthManager.getCurrentUser();

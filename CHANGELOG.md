@@ -61,6 +61,13 @@ public APIs were removed.
 
 - CI lint is now blocking (`lint:check`, no longer swallowed).
 
+### 🧹 Internal / maintainability
+
+- **One `useMinder`** — the `./hook` subpath previously shipped a separate, older copy of the hook;
+  it now re-exports the canonical implementation, so every fix reaches `/hook` users too.
+- **One JWT parser** — six divergent `split('.') + atob + JSON.parse` implementations across the auth
+  managers and hooks are consolidated into a single, tested `parseJWT` utility (never throws).
+
 ## [2.1.5-beta.0] - 2026-02-16
 
 ### 🚀 Beta Release Enhancements

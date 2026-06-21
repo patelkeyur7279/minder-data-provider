@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
+import { parseJWT as decodeJwt } from '../utils/jwt.js';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSelector, useDispatch } from 'react-redux';
 import { useMinderContext } from '../core/MinderDataProvider.js';
@@ -213,24 +214,7 @@ export function useCurrentUser() {
 
   useEffect(() => {
     const token = authManager.getToken();
-    if (token) {
-      try {
-        // Validate JWT has 3 parts (header.payload.signature)
-        const parts = token.split('.');
-        if (parts.length !== 3 || !parts[1]) {
-          setUser(null);
-          return;
-        }
-
-        // Decode JWT token to get user info
-        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-        setUser(payload);
-      } catch {
-        setUser(null);
-      }
-    } else {
-      setUser(null);
-    }
+    setUser(token ? decodeJwt(token) : null);
   }, [authManager]);
 
   return {
