@@ -64,7 +64,12 @@ class GlobalAuthManager {
 
   private parseJWT(token: string): any {
     try {
-      const base64Url = token.split('.')[1];
+      // Validate JWT structure: must be header.payload.signature (exactly 3 parts).
+      // Without this guard a malformed token (e.g. "abc" or "a.b") reaches atob/
+      // JSON.parse and throws, crashing token restoration.
+      const parts = token.split('.');
+      if (parts.length !== 3) return null;
+      const base64Url = parts[1];
       if (!base64Url) return null;
       const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
       const jsonPayload = decodeURIComponent(

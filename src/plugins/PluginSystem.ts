@@ -5,10 +5,37 @@
 
 import { Logger, LogLevel } from '../utils/Logger.js';
 
+/**
+ * Capabilities a plugin can declare (used for introspection + lazy loading).
+ */
+export type MinderCapability =
+  | 'crash-reporting'
+  | 'analytics'
+  | 'payments'
+  | 'auth-provider'
+  | 'storage'
+  | 'upload'
+  | 'transport';
+
+/**
+ * Optional declarative metadata for a plugin (additive — never required).
+ */
+export interface PluginManifest {
+  name: string;
+  version?: string;
+  capabilities?: MinderCapability[];
+  /** Where this plugin may run. Server-only plugins must not be bundled client-side. */
+  runtime?: 'client' | 'server' | 'isomorphic';
+  /** npm peers the adapter lazy-loads (surfaced in DX errors). */
+  peerDependencies?: string[];
+}
+
 export interface MinderPlugin {
   name: string;
   version?: string;
-  
+  /** Optional declarative metadata (capabilities, runtime, peer deps). */
+  manifest?: PluginManifest;
+
   // Lifecycle hooks
   onInit?: (config: any) => void | Promise<void>;
   onRequest?: (request: PluginRequest) => void | Promise<void>;
@@ -17,6 +44,18 @@ export interface MinderPlugin {
   onCacheHit?: (cacheEntry: CacheHitEvent) => void | Promise<void>;
   onCacheMiss?: (cacheKey: string) => void | Promise<void>;
   onDestroy?: () => void | Promise<void>;
+
+  // Capability hooks — all optional, fired only when present.
+  /** Supply an auth token (auth-provider plugins: Firebase, Auth0, Clerk…). */
+  provideToken?: () => string | null | Promise<string | null>;
+  /** Notified when the client rotates its tokens. */
+  onAuthRefresh?: (tokens: { accessToken?: string; refreshToken?: string }) => void | Promise<void>;
+  /** Notified of media-upload lifecycle (fired by the upload pipeline). */
+  onUpload?: (event: UploadLifecycleEvent) => void | Promise<void>;
+  /** Notified of offline-sync lifecycle (fired by the sync engine). */
+  onSync?: (event: SyncLifecycleEvent) => void | Promise<void>;
+  /** Notified when connectivity changes. */
+  onConnectivityChange?: (online: boolean) => void | Promise<void>;
 }
 
 export interface PluginRequest {
@@ -47,6 +86,24 @@ export interface CacheHitEvent {
   key: string;
   value: any;
   age: number;
+  timestamp: number;
+}
+
+export interface UploadLifecycleEvent {
+  phase: 'start' | 'progress' | 'complete' | 'error';
+  uploadId: string;
+  url?: string;
+  file?: { name: string; size: number; type: string };
+  progress?: { loaded: number; total: number; percentage: number };
+  error?: { message: string; code?: string };
+  timestamp: number;
+}
+
+export interface SyncLifecycleEvent {
+  phase: 'start' | 'progress' | 'complete' | 'error';
+  pending?: number;
+  processed?: number;
+  error?: { message: string; code?: string };
   timestamp: number;
 }
 
@@ -176,6 +233,82 @@ export class PluginManager {
         this.logger.error(`Plugin "${name}" cache miss hook failed:`, error);
       }
     }
+  }
+
+  /**
+   * Number of registered plugins (cheap check for hot paths).
+   */
+  get size(): number {
+    return this.plugins.size;
+  }
+
+  /**
+   * Execute auth-refresh hooks (after the client rotates its tokens).
+   */
+  async executeAuthRefreshHooks(tokens: { accessToken?: string; refreshToken?: string }): Promise<void> {
+    for (const [name, plugin] of this.plugins) {
+      try {
+        await plugin.onAuthRefresh?.(tokens);
+      } catch (error) {
+        this.logger.error(`Plugin "${name}" auth-refresh hook failed:`, error);
+      }
+    }
+  }
+
+  /**
+   * Execute upload-lifecycle hooks (fired by the media pipeline).
+   */
+  async executeUploadHooks(event: UploadLifecycleEvent): Promise<void> {
+    for (const [name, plugin] of this.plugins) {
+      try {
+        await plugin.onUpload?.(event);
+      } catch (error) {
+        this.logger.error(`Plugin "${name}" upload hook failed:`, error);
+      }
+    }
+  }
+
+  /**
+   * Execute sync-lifecycle hooks (fired by the offline-sync engine).
+   */
+  async executeSyncHooks(event: SyncLifecycleEvent): Promise<void> {
+    for (const [name, plugin] of this.plugins) {
+      try {
+        await plugin.onSync?.(event);
+      } catch (error) {
+        this.logger.error(`Plugin "${name}" sync hook failed:`, error);
+      }
+    }
+  }
+
+  /**
+   * Execute connectivity-change hooks.
+   */
+  async executeConnectivityHooks(online: boolean): Promise<void> {
+    for (const [name, plugin] of this.plugins) {
+      try {
+        await plugin.onConnectivityChange?.(online);
+      } catch (error) {
+        this.logger.error(`Plugin "${name}" connectivity hook failed:`, error);
+      }
+    }
+  }
+
+  /**
+   * Ask auth-provider plugins for a token. Returns the first non-empty token,
+   * or null if none provide one.
+   */
+  async collectToken(): Promise<string | null> {
+    for (const [name, plugin] of this.plugins) {
+      if (!plugin.provideToken) continue;
+      try {
+        const token = await plugin.provideToken();
+        if (token) return token;
+      } catch (error) {
+        this.logger.error(`Plugin "${name}" provideToken failed:`, error);
+      }
+    }
+    return null;
   }
 
   /**

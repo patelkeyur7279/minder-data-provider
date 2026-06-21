@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useMinderContext } from '../core/MinderDataProvider.js';
 import type { MinderConfig } from '../core/types.js';
 import { SmartConfigManager } from '../core/SmartConfig.js';
+import { telemetry } from '../utils/TelemetryTracker.js';
 
 export interface ConfigurationOptions {
   /** Monitor performance metrics */
@@ -127,31 +128,25 @@ function calculateApiLatency(): number {
 }
 
 function calculateCacheHitRate(): number {
-  // Implement cache hit rate calculation
-  return 0;
+  return telemetry.getCacheHitRate();
 }
 
 function calculateBundleSize(): number {
-  // Implement bundle size calculation
-  return 0;
+  return telemetry.getBundleSize();
 }
 
 function calculateMemoryUsage(): number {
-  // Implement memory usage calculation
-  return 0;
+  return telemetry.getMemoryUsage();
 }
 
 function getFailedAuthAttempts(): number {
-  // Implement failed auth attempts tracking
-  return 0;
+  return telemetry.getFailedAuthAttempts();
 }
 
 function getRateLimitHits(): number {
-  // Implement rate limit hits tracking
-  return 0;
+  return telemetry.getRateLimitHits();
 }
 
 function getSuspiciousRequests(): number {
-  // Implement suspicious requests tracking
-  return 0;
+  return telemetry.getSuspiciousRequests();
 }

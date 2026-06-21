@@ -93,6 +93,9 @@ export function configureMinder(config: Partial<MinderConfig>): void {
   globalConfig = { ...globalConfig, ...config };
 }
 
+import { StreamClient, type StreamOptions } from './StreamClient.js';
+import { pluginManager } from '../plugins/PluginSystem.js';
+
 // ============================================================================
 // CORE MINDER FUNCTION
 // ============================================================================
@@ -174,14 +177,106 @@ export async function minder<TData = any>(
     }
     
     // 6. Execute request
-    const response = await axios(config);
+    let responseData: any;
+    let responseStatus: number;
+    let responseHeaders: Record<string, string> = {};
+
+    // Fire plugin request hooks (global plugins; non-blocking observability)
+    if (pluginManager.size > 0) {
+      void pluginManager.executeRequestHooks({
+        method,
+        url: route,
+        headers: config.headers as Record<string, string> | undefined,
+        body: data,
+        timestamp: startTime,
+      });
+    }
+
+    // Transport selection:
+    // - Complex requests (file uploads / progress) always use axios.
+    // - Otherwise default to axios for predictable, feature-complete behavior
+    //   (withCredentials/cookies, axiosConfig, consistent error shapes). The
+    //   faster native-fetch fast-path is OPT-IN via `transport: 'fetch'` so it
+    //   can never silently change request semantics for existing callers.
+    const isComplexRequest = isFileUpload(data) || options?.onProgress || config.onUploadProgress;
+    const useFetch = options?.transport === 'fetch' && !isComplexRequest;
+
+    if (!useFetch) {
+      const response = await axios(config);
+      responseData = response.data;
+      responseStatus = response.status;
+      responseHeaders = response.headers as Record<string, string>;
+    } else {
+      // Super-fast native fetch path
+      let fullUrl = (config.baseURL || '') + (config.url || '');
+      
+      // Handle query parameters
+      if (config.params) {
+        const queryParams = new URLSearchParams();
+        Object.entries(config.params).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            queryParams.append(key, String(value));
+          }
+        });
+        const queryString = queryParams.toString();
+        if (queryString) {
+          fullUrl += (fullUrl.includes('?') ? '&' : '?') + queryString;
+        }
+      }
+
+      const fetchOptions: RequestInit = {
+        method: config.method,
+        headers: config.headers as Record<string, string>,
+        body: (config.method !== 'GET' && config.method !== 'HEAD' && config.data) 
+          ? (typeof config.data === 'string' ? config.data : JSON.stringify(config.data)) 
+          : undefined,
+      };
+      
+      const controller = new AbortController();
+      const timeoutId = config.timeout ? setTimeout(() => controller.abort(), config.timeout) : null;
+      fetchOptions.signal = controller.signal;
+      
+      const response = await fetch(fullUrl, fetchOptions);
+      if (timeoutId) clearTimeout(timeoutId);
+      
+      responseStatus = response.status;
+      response.headers.forEach((value, key) => {
+        responseHeaders[key] = value;
+      });
+      
+      if (!response.ok) {
+         // Create axios-like error for compatibility with handleError
+         const error: any = new Error(response.statusText);
+         error.response = { status: responseStatus, data: await response.text().catch(() => ''), headers: responseHeaders };
+         error.isAxiosError = true;
+         throw error;
+      }
+      
+      const contentType = response.headers.get('content-type');
+      if (contentType?.includes('application/json')) {
+        responseData = await response.json().catch(() => null);
+      } else {
+        responseData = await response.text().catch(() => '');
+      }
+    }
     
     // 7. Decode response with model if provided
-    const decodedData = decodeWithModel<TData>(response.data, options?.model);
+    const decodedData = decodeWithModel<TData>(responseData, options?.model);
     
     // 8. Calculate duration
     const duration = Date.now() - startTime;
-    
+
+    // Fire plugin response hooks (non-blocking)
+    if (pluginManager.size > 0) {
+      void pluginManager.executeResponseHooks({
+        status: responseStatus,
+        data: responseData,
+        headers: responseHeaders,
+        duration,
+        timestamp: Date.now(),
+      });
+    }
+
     // 9. Success callback
     if (options?.onSuccess) {
       options.onSuccess(decodedData);
@@ -191,9 +286,9 @@ export async function minder<TData = any>(
     return {
       data: decodedData,
       error: null,
-      status: response.status,
+      status: responseStatus,
       success: true,
-      headers: response.headers as Record<string, string>,
+      headers: responseHeaders,
       metadata: {
         method,
         url: route,
@@ -205,12 +300,33 @@ export async function minder<TData = any>(
   } catch (error: unknown) {
     // Handle error - NEVER throw
     const minderError = handleError(error);
-    
+
+    // Fire plugin error hooks (non-blocking)
+    if (pluginManager.size > 0) {
+      void pluginManager.executeErrorHooks({
+        message: minderError.message,
+        code: minderError.code,
+        timestamp: Date.now(),
+      });
+    }
+
     // Error callback
     if (options?.onError) {
       options.onError(minderError);
     }
-    
+
+    // Opt-in: throw instead of returning a structured error result.
+    if (options?.throwOnError) {
+      const err = new Error(minderError.message);
+      Object.assign(err, {
+        code: minderError.code,
+        status: minderError.status,
+        details: minderError.details,
+        minderError,
+      });
+      throw err;
+    }
+
     // Return error result
     return {
       data: null,
@@ -235,6 +351,14 @@ export async function minder<TData = any>(
  * Attach config method to minder function
  */
 (minder as any).config = configureMinder;
+
+/**
+ * Attach Server-Sent Events stream capability
+ */
+(minder as any).stream = async (url: string, options: StreamOptions) => {
+  const streamClient = new StreamClient(globalConfig as any);
+  return streamClient.stream(url, options);
+};
 
 /**
  * Export configured minder as default

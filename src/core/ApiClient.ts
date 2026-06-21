@@ -27,8 +27,10 @@ import {
   PerformanceMonitor,
 } from '../utils/performance.js';
 import { AnalyticsManager } from '../utils/analytics.js';
+import { telemetry } from '../utils/TelemetryTracker.js';
 import { TelemetryManager } from '../utils/telemetry.js';
 import type { DebugManager } from '../debug/DebugManager.js';
+import { PluginManager, pluginManager as globalPluginManager } from '../plugins/PluginSystem.js';
 
 export class ApiClient {
   private axiosInstance: AxiosInstance;
@@ -48,6 +50,17 @@ export class ApiClient {
   private telemetryManager?: TelemetryManager;
   private corsManager?: CorsManager;
   private offlineManager?: OfflineManager;
+
+  // Background timers — stored so destroy() can clear them (otherwise they leak
+  // and keep firing after the owning provider unmounts / on HMR).
+  private analyticsTimer?: ReturnType<typeof setInterval>;
+  private telemetryTimer?: ReturnType<typeof setInterval>;
+
+  // Plugin bus. Per-instance when `config.plugins` is supplied, else the global
+  // singleton (so `registerPlugins(...)` keeps working). `ownsPluginManager`
+  // means destroy() should tear it down.
+  private pluginManager: PluginManager;
+  private ownsPluginManager = false;
 
   // Token refresh state
   private isRefreshing = false;
@@ -117,7 +130,7 @@ export class ApiClient {
 
       // Auto-track performance if enabled
       if (config.analytics.autoTrackPerformance && this.performanceMonitor) {
-        setInterval(() => {
+        this.analyticsTimer = setInterval(() => {
           const metrics = this.performanceMonitor?.getMetrics();
           if (metrics) {
             this.analyticsManager?.trackPerformance(metrics);
@@ -132,7 +145,7 @@ export class ApiClient {
 
       // Send performance stats to HQ
       if (this.performanceMonitor) {
-        setInterval(() => {
+        this.telemetryTimer = setInterval(() => {
           const metrics = this.performanceMonitor?.getMetrics();
           if (metrics) {
             this.telemetryManager?.trackPerformance(metrics);
@@ -155,6 +168,20 @@ export class ApiClient {
       });
     }
 
+    // Initialize plugin bus — per-instance if plugins are supplied, else the
+    // shared global manager (so registerPlugins(...) keeps working).
+    if (config.plugins && config.plugins.length > 0) {
+      this.pluginManager = new PluginManager({ debug: config.debug?.enabled });
+      this.ownsPluginManager = true;
+      config.plugins.forEach((p) => this.pluginManager.register(p));
+    } else {
+      this.pluginManager = globalPluginManager;
+    }
+    if (this.pluginManager.size > 0) {
+      // onInit is isolated per-plugin inside the manager; don't block construction.
+      void this.pluginManager.init(config).catch(() => { /* isolated */ });
+    }
+
     // Use proxy baseURL if enabled, otherwise use original
     const baseURL = proxyManager?.isEnabled() ? proxyManager.config.baseUrl : config.apiBaseUrl;
 
@@ -171,6 +198,78 @@ export class ApiClient {
     });
 
     this.setupInterceptors();
+  }
+
+  /**
+   * Release all resources held by this client.
+   *
+   * Clears the background analytics/telemetry timers, drops the in-flight
+   * request cache and any queued refresh waiters, and tears down the offline
+   * manager if it exposes a destroy(). Call this when the owning provider
+   * unmounts so intervals/listeners don't leak (especially under HMR or when
+   * multiple clients are created).
+   */
+  public destroy(): void {
+    if (this.analyticsTimer) {
+      clearInterval(this.analyticsTimer);
+      this.analyticsTimer = undefined;
+    }
+    if (this.telemetryTimer) {
+      clearInterval(this.telemetryTimer);
+      this.telemetryTimer = undefined;
+    }
+    this.requestCache.clear();
+    this.failedQueue = [];
+    if (this.ownsPluginManager) {
+      void this.pluginManager.destroy();
+    }
+    // OfflineManager (core) registers window listeners; release them if it can.
+    (this.offlineManager as unknown as { destroy?: () => void })?.destroy?.();
+  }
+
+  // ── Plugin bus emitters (observability; fire-and-forget, never block I/O) ──
+
+  private emitPluginRequest(config: AxiosRequestConfig): void {
+    if (this.pluginManager.size === 0) return;
+    void this.pluginManager.executeRequestHooks({
+      method: (config.method || 'GET').toUpperCase(),
+      url: config.url || '',
+      headers: config.headers as Record<string, string> | undefined,
+      body: config.data,
+      timestamp: Date.now(),
+    });
+  }
+
+  private emitPluginResponse(response: AxiosResponse): void {
+    if (this.pluginManager.size === 0) return;
+    const start = (response.config as { __minderStart?: number }).__minderStart;
+    void this.pluginManager.executeResponseHooks({
+      status: response.status,
+      data: response.data,
+      headers: response.headers as Record<string, string> | undefined,
+      duration: start ? Date.now() - start : 0,
+      timestamp: Date.now(),
+    });
+  }
+
+  private emitPluginError(error: AxiosError): void {
+    if (this.pluginManager.size === 0) return;
+    const cfg = error.config as (AxiosRequestConfig & { __minderStart?: number }) | undefined;
+    void this.pluginManager.executeErrorHooks({
+      message: error.message || 'Request error',
+      code: error.code || (error.response ? String(error.response.status) : undefined),
+      stack: error.stack,
+      request: cfg
+        ? {
+            method: (cfg.method || 'GET').toUpperCase(),
+            url: cfg.url || '',
+            headers: cfg.headers as Record<string, string> | undefined,
+            body: cfg.data,
+            timestamp: cfg.__minderStart || Date.now(),
+          }
+        : undefined,
+      timestamp: Date.now(),
+    });
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -213,7 +312,11 @@ export class ApiClient {
           });
         }
 
-        const token = this.authManager.getToken(); // Add auth token if available
+        let token = this.authManager.getToken(); // Add auth token if available
+        if (!token && this.pluginManager.size > 0) {
+          // Auth-provider plugins (Firebase/Auth0/Clerk…) can supply the token.
+          token = await this.pluginManager.collectToken();
+        }
         if (token) {
           const authHeader = this.config.auth?.authHeader || 'Authorization';
           const authPrefix = this.config.auth?.authTokenPrefix !== undefined ? this.config.auth.authTokenPrefix : 'Bearer';
@@ -234,6 +337,7 @@ export class ApiClient {
           const key = `${config.method}:${config.url}`;
           const { requests, window } = this.config.security.rateLimiting;
           if (!this.rateLimiter.check(key, requests, window)) {
+            telemetry.recordRateLimitHit();
             throw new MinderNetworkError('Rate limit exceeded. Please try again later.', 429, undefined, 'RATE_LIMIT_EXCEEDED');
           }
         }
@@ -246,6 +350,10 @@ export class ApiClient {
           );
           Object.assign(config.headers, corsHeaders);
         }
+
+        // Stamp start time + fire plugin request hooks (non-blocking observability)
+        (config as { __minderStart?: number }).__minderStart = Date.now();
+        this.emitPluginRequest(config);
 
         return config;
       },
@@ -269,6 +377,7 @@ export class ApiClient {
             duration
           });
         }
+        this.emitPluginResponse(response);
         return response;
       },
       async (error) => {
@@ -282,10 +391,50 @@ export class ApiClient {
           });
         }
 
+        this.emitPluginError(error as AxiosError);
+
         const originalRequest = error.config;
+
+        // --- Exponential Backoff Retry Logic ---
+        const retries = this.config.performance?.retries ?? 0;
+        const currentRetryCount = originalRequest._retryCount || 0;
+        
+        // Retry on Network errors (no response), 5XX server errors, or 429 Too Many Requests
+        const isRetryableError = !error.response || 
+                               (error.response.status >= 500 && error.response.status < 600) || 
+                               error.response.status === 429;
+        
+        // Allow custom shouldRetry function
+        const customShouldRetry = this.config.performance?.retryConfig?.shouldRetry;
+        const shouldRetry = customShouldRetry 
+          ? customShouldRetry(error, currentRetryCount) 
+          : isRetryableError;
+
+        if (shouldRetry && currentRetryCount < retries) {
+          originalRequest._retryCount = currentRetryCount + 1;
+          
+          const baseDelay = this.config.performance?.retryDelay ?? 1000;
+          const factor = this.config.performance?.retryConfig?.factor ?? 2;
+          const maxDelay = this.config.performance?.retryConfig?.maxDelay ?? 30000;
+          
+          // Calculate delay with exponential backoff and jitter
+          const exponentialDelay = Math.min(baseDelay * Math.pow(factor, currentRetryCount), maxDelay);
+          const jitter = Math.random() * 200; // Add up to 200ms jitter
+          const delay = exponentialDelay + jitter;
+          
+          if (this.debugManager && this.config.debug?.networkLogs) {
+            this.debugManager.log(DebugLogType.API, `⚠️ Retrying request (${originalRequest._retryCount}/${retries}) in ${Math.round(delay)}ms: ${originalRequest.method?.toUpperCase()} ${originalRequest.url}`);
+          }
+          
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return this.axiosInstance.request(originalRequest);
+        }
+        // --- End Retry Logic ---
 
         // Handle 401 Unauthorized
         if (error.response?.status === 401 && !originalRequest._retry) {
+          telemetry.recordAuthFailure();
+          originalRequest._retry = true;
           // Check if refresh is configured
           if (this.config.auth?.refreshUrl) {
             if (this.isRefreshing) {
@@ -381,6 +530,14 @@ export class ApiClient {
                 this.authManager.setToken(token);
                 if (newRefreshToken) {
                   this.authManager.setRefreshToken(newRefreshToken);
+                }
+
+                // Notify plugins of the token rotation (non-blocking)
+                if (this.pluginManager.size > 0) {
+                  void this.pluginManager.executeAuthRefreshHooks({
+                    accessToken: token,
+                    refreshToken: newRefreshToken,
+                  });
                 }
 
                 this.processQueue(null, token);
@@ -503,6 +660,7 @@ export class ApiClient {
           };
 
         case 401:
+          telemetry.recordAuthFailure();
           throw new MinderAuthError(
             responseData?.message || 'Authentication required'
           );
@@ -540,6 +698,7 @@ export class ApiClient {
         }
 
         case 429: {
+          telemetry.recordRateLimitHit();
           const rateLimitMsg = responseData?.message || 'Too many requests - rate limit exceeded';
           throw new MinderNetworkError(rateLimitMsg, 429, responseData, url, method);
         }

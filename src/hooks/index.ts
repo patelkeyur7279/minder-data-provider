@@ -290,7 +290,7 @@ export function useWebSocket() {
 export function useUIState() {
   const [uiState, setUIState] = useState({
     modals: {} as Record<string, boolean>,
-    notifications: [] as any[],
+    notifications: [] as unknown[],
     loading: {} as Record<string, boolean>,
   });
 

@@ -149,6 +149,22 @@ export interface UseMinderOptions<TData = any> extends MinderOptions<TData> {
   enabled?: boolean;
 
   /**
+   * Throw errors instead of returning them in `error`. Lets you use
+   * try/catch, TanStack Query's native error states, and React error
+   * boundaries instead of the structured-result model.
+   * @default false
+   */
+  throwOnError?: boolean;
+
+  /**
+   * Treat `route` as a raw/arbitrary URL and bypass the route registry, so you
+   * can call ad-hoc or third-party endpoints without pre-registering them.
+   * Absolute URLs (http/https) bypass the registry automatically.
+   * @default false
+   */
+  rawUrl?: boolean;
+
+  /**
    * Optional validation function called before mutations
    * Supports Zod, Yup, or custom validation logic
    * Validation errors prevent API calls
@@ -229,9 +245,9 @@ export interface UseMinderOptions<TData = any> extends MinderOptions<TData> {
    * const { data } = useMinder('posts', {
    *   queryKey: ['posts', 'featured', filters]
    * });
-   * ```
    */
-  queryKey?: any[];
+  /** Additional keys for React Query caching */
+  queryKey?: unknown[];
 
   /**
    * 🆕 Cache configuration
@@ -276,12 +292,10 @@ export interface UseMinderOptions<TData = any> extends MinderOptions<TData> {
    * });
    * ```
    */
-  getNextPageParam?: (lastPage: any, allPages: any[]) => any;
-
-  /**
-   * 🆕 Get previous page param for infinite queries
-   */
-  getPreviousPageParam?: (firstPage: any, allPages: any[]) => any;
+  getNextPageParam?: (lastPage: unknown, allPages: unknown[]) => unknown;
+  
+  /** Function to compute previous page parameter for infinite queries */
+  getPreviousPageParam?: (firstPage: unknown, allPages: unknown[]) => unknown;
 
   /**
    * 🆕 Initial page param for infinite queries
@@ -377,7 +391,8 @@ export interface UseMinderReturn<TData = any> {
     invalidate: (keys?: string | string[]) => Promise<void>;
     prefetch: (queryFn: () => Promise<any>, options?: any) => Promise<void>;
     clear: (key?: string | string[]) => void;
-    getStats: () => any[];
+    /** Get cache statistics */
+    getStats: () => unknown[];
     isQueryFresh: (key: string | string[]) => boolean;
   };
 
@@ -398,7 +413,8 @@ export interface UseMinderReturn<TData = any> {
    */
   upload: {
     uploadFile: (file: File, uploadId?: string) => Promise<any>;
-    uploadMultiple: (files: File[]) => Promise<any[]>;
+    /** Upload multiple files with progress tracking */
+    uploadMultiple: (files: File[]) => Promise<unknown[]>;
     progress: { loaded: number; total: number; percentage: number };
     isUploading: boolean;
   };
@@ -614,6 +630,11 @@ export function useMinder<TData = any>(
 
   // Validate route and provide suggestions if invalid
   const routeValidation = useMemo(() => {
+    // Ad-hoc / third-party calls: an absolute URL (or the `rawUrl` opt-in) bypasses
+    // the route registry entirely — call any endpoint without pre-registering it.
+    if (/^https?:\/\//i.test(route) || options.rawUrl) {
+      return { valid: true };
+    }
     const config = context?.config || globalConfig;
     if (config?.routes) {
       const routeNames = Object.keys(config.routes);
@@ -655,7 +676,7 @@ export function useMinder<TData = any>(
       }
     }
     return { valid: true };
-  }, [route, context?.config, globalConfig, options.params, options.autoFetch]);
+  }, [route, context?.config, globalConfig, options.params, options.autoFetch, options.rawUrl]);
 
   // Stabilize query key to prevent unnecessary refetches on every render
   // Allow custom query key or use [route, params]
@@ -841,6 +862,12 @@ export function useMinder<TData = any>(
       }
     }
 
+    // Opt-in: surface errors through TanStack Query / error boundaries instead of
+    // the structured result object (lets you use try/catch, <ErrorBoundary>, etc.).
+    if (options.throwOnError && !result.success && result.error) {
+      throw result.error;
+    }
+
     return result;
   };
 
@@ -857,6 +884,7 @@ export function useMinder<TData = any>(
       refetchInterval: options.refetchInterval || false,
       retry: retryConfig.retry,
       retryDelay: retryConfig.retryDelay,
+      throwOnError: options.throwOnError ?? false,
       getNextPageParam: options.getNextPageParam,
       getPreviousPageParam: options.getPreviousPageParam,
       initialPageParam: options.initialPageParam,
@@ -873,6 +901,7 @@ export function useMinder<TData = any>(
       refetchInterval: options.refetchInterval || false,
       retry: retryConfig.retry,
       retryDelay: retryConfig.retryDelay,
+      throwOnError: options.throwOnError ?? false,
       ...options.queryOptions,
     });
 
@@ -1135,7 +1164,7 @@ export function useMinder<TData = any>(
   // 🆕 Now uses GlobalAuthManager as fallback when no provider context
   // =========================================================================
 
-  const authMethods = {
+  const authMethods = useMemo(() => ({
     setToken: async (token: string) => {
       if (context?.authManager) {
         await context.authManager.setToken(token);
@@ -1204,13 +1233,13 @@ export function useMinder<TData = any>(
       // Use global auth manager as fallback
       return globalAuthManager.getCurrentUser();
     },
-  };
+  }), [context]);
 
   // =========================================================================
   // CACHE CONTROL (integrated from useCache)
   // =========================================================================
 
-  const cacheMethods = {
+  const cacheMethods = useMemo(() => ({
     invalidate: async (keys?: string | string[]) => {
       if (context?.cacheManager) {
         await context.cacheManager.invalidateQueries(keys);
@@ -1250,13 +1279,13 @@ export function useMinder<TData = any>(
       const queryState = queryClient.getQueryState(Array.isArray(key) ? key : [key]);
       return queryState?.isInvalidated === false;
     },
-  };
+  }), [context, queryClient, queryKey]);
 
   // =========================================================================
   // WEBSOCKET (integrated from useWebSocket)
   // =========================================================================
 
-  const websocketMethods = {
+  const websocketMethods = useMemo(() => ({
     connect: () => {
       context?.websocketManager?.connect();
     },
@@ -1274,7 +1303,7 @@ export function useMinder<TData = any>(
     isConnected: () => {
       return context?.websocketManager?.isConnected() || false;
     },
-  };
+  }), [context]);
 
   // =========================================================================
   // FILE UPLOAD (integrated from useMediaUpload)
@@ -1298,8 +1327,8 @@ export function useMinder<TData = any>(
   // Use shared progress if available, otherwise local
   const currentUploadProgress = sharedUploadProgress.percentage > 0 ? sharedUploadProgress : localUploadProgress;
 
-  const uploadMethods = {
-    uploadFile: async (file: File, customUploadId?: string) => {
+  const uploadMethods = useMemo(() => {
+    const uploadFile = async (file: File, customUploadId?: string) => {
       const uploadId = customUploadId || uploadIdRef.current;
 
       if (context?.apiClient) {
@@ -1310,18 +1339,22 @@ export function useMinder<TData = any>(
         });
       }
       throw new Error('Upload requires MinderDataProvider context');
-    },
-    uploadMultiple: async (files: File[]) => {
+    };
+    const uploadMultiple = async (files: File[]) => {
       const results = [];
       for (const file of files) {
-        const result = await uploadMethods.uploadFile(file);
-        results.push(result);
+        results.push(await uploadFile(file));
       }
       return results;
-    },
-    progress: currentUploadProgress,
-    isUploading: currentUploadProgress.percentage > 0 && currentUploadProgress.percentage < 100,
-  };
+    };
+    return {
+      uploadFile,
+      uploadMultiple,
+      progress: currentUploadProgress,
+      isUploading: currentUploadProgress.percentage > 0 && currentUploadProgress.percentage < 100,
+    };
+    // setLocalUploadProgress / setGlobalUploadProgress / uploadIdRef are stable refs.
+  }, [context, route, currentUploadProgress]);
 
   // =========================================================================
   // RETURN

@@ -8,7 +8,7 @@
 [![Bundle Size](https://img.shields.io/bundlephobia/minzip/minder-data-provider?style=flat-square)](https://bundlephobia.com/package/minder-data-provider)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](./LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-100%25-blue.svg?style=flat-square)](http://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/Tests-1516%20Passing-success?style=flat-square)](./tests)
+[![Tests](https://img.shields.io/badge/Tests-1561%20Passing-success?style=flat-square)](./tests)
 
 <br>
 
@@ -41,6 +41,20 @@ Built for **React**, **Next.js**, **React Native**, and **Electron**.
 | 🛡️ **Security** | Strict CSP support, log sanitization, and secure defaults. |
 | 🌐 **Proxy Support** | Built-in proxy manager to handle CORS issues seamlessly. |
 | 📄 **Pagination** | Infinite scroll and cursor-based pagination out of the box. |
+
+<br>
+
+## 🆕 What's New in 2.2 (beta)
+
+Reliability + extensibility, all **backward-compatible**:
+
+- 🧩 **Plugins & integrations** — register plugins (`config.plugins` / `registerPlugins`) that hook `onRequest`/`onResponse`/`onError`; drop in crash reporting, analytics, payments, or an auth provider (`provideToken`) with no client code.
+- 🔐 **Secret-key safety** — `secret()` / `env()` keep secret keys out of the client bundle; `configureMinder` refuses to run if a raw secret is found in client config. Server-side resolution via `minder-data-provider/server`.
+- 🎛️ **Escape hatches** — `throwOnError` (use try/catch & error boundaries) and ad-hoc absolute URLs (`rawUrl`) that bypass the route registry.
+- ⚡ **Faster & lighter** — memoized hook (no re-render cascades), a minimal `minder-data-provider/core` entry, and an opt-in `transport: 'fetch'` fast path.
+- 🛡️ **Reliability fixes** — JWT crash guard, timer/listener leak cleanup (`destroy()`), offline-persistence fallback, safe stream errors.
+
+See the [CHANGELOG](./CHANGELOG.md) for the full list.
 
 <br>
 

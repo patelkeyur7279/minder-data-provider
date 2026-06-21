@@ -5,6 +5,60 @@ All notable changes to Minder Data Provider will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0-beta.0] - 2026-06-21
+
+A reliability + extensibility release. Everything here is **additive and backward-compatible** — no
+public APIs were removed.
+
+### 🛡️ Reliability fixes
+
+- **JWT crash fixed** — `GlobalAuthManager.parseJWT` now validates the 3-part token structure, so a
+  malformed/corrupted token returns `null` instead of crashing token restoration.
+- **Timer leak fixed** — `ApiClient` now stores and clears its analytics/telemetry intervals via a
+  new `ApiClient.destroy()`, called automatically when `MinderDataProvider` unmounts.
+- **Listener leak fixed** — the offline manager removes its `online`/`offline` listeners on destroy.
+- **Offline persistence** — `IndexedDBStorage` falls back to `localStorage` when IndexedDB is
+  unavailable (SSR/jsdom/locked-down browsers) instead of silently no-op'ing.
+- **Streaming** — `StreamClient` now routes async errors to `onError` instead of leaking unhandled
+  rejections.
+
+### ⚡ Performance / DX
+
+- **No more re-render cascades** — `useMinder`'s `auth`/`cache`/`websocket`/`upload` objects are now
+  memoized with stable identities.
+- **New `minder-data-provider/core` entry** — a minimal import surface (`minder`, `useMinder`,
+  `configureMinder`, provider, errors) for smaller bundles.
+- **`transport` option on `minder()`** — defaults to axios (predictable); opt into the faster native
+  `fetch` fast-path with `transport: 'fetch'` (previously this path could silently change semantics).
+
+### 🧩 Plugins & integrations
+
+- **The plugin bus is live** — `PluginManager` hooks (`onRequest`/`onResponse`/`onError`) now fire on
+  every request (via `config.plugins` or `registerPlugins()`), through both the provider and the
+  standalone `minder()` paths. Plugins are isolated (a failing plugin never breaks a request).
+- **Extended plugin contract** — `PluginManifest`/`MinderCapability` plus optional `provideToken`
+  (auth-provider plugins like Firebase/Auth0/Clerk), `onAuthRefresh`, `onUpload`, `onSync`,
+  `onConnectivityChange`.
+
+### 🔐 Secret-key safety
+
+- **`secret()` / `env()` + `SecretRef`** — keep secret keys out of the client bundle. `SecretRef` is
+  non-stringifiable (`[SECRET:NAME]`); `assertNoExposedSecrets()` (wired into `configureMinder`)
+  **throws in the browser** if a raw secret-shaped value is found in config.
+- **New `minder-data-provider/server` entry** — `resolveSecret()` resolves secrets server-side and
+  throws if called in the browser.
+
+### 🎛️ Developer freedom (escape hatches)
+
+- **`throwOnError`** on `minder()` and `useMinder()` — opt into throwing for try/catch, TanStack
+  Query error states, and React error boundaries (the never-throws result model remains the default).
+- **Ad-hoc URLs** — absolute `http(s)` URLs (or the `rawUrl` option) bypass the route registry, so
+  you can call any/third-party endpoint without pre-registering it.
+
+### 🔧 Tooling
+
+- CI lint is now blocking (`lint:check`, no longer swallowed).
+
 ## [2.1.5-beta.0] - 2026-02-16
 
 ### 🚀 Beta Release Enhancements

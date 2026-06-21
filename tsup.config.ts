@@ -4,7 +4,13 @@ export default defineConfig({
   entry: {
     // Main entry (universal)
     index: 'src/index.ts',
-    
+
+    // Minimal core entry (smallest bundle — minder + useMinder + provider)
+    core: 'src/core.ts',
+
+    // Server-only entry (secret resolution — never import in the browser)
+    server: 'src/server.ts',
+
     // Hook-only entry (smaller bundle)
     hook: 'src/hook/index.ts',
     
