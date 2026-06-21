@@ -72,7 +72,18 @@ jobs:
       # Publish - Production (Main Branch)
       - name: Publish to npm (Production)
         if: steps.version_check.outputs.changed == 'true' && github.ref == 'refs/heads/main'
-        run: npm publish --provenance --access public
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [[ "$VERSION" == *"-"* ]]; then
+            # Pre-release (e.g. 2.2.0-beta.0) merged to main: publish under its
+            # pre-release dist-tag so it NEVER becomes the default `latest`.
+            PRE_TAG="${VERSION#*-}"; PRE_TAG="${PRE_TAG%%.*}"   # 2.2.0-beta.0 -> beta
+            echo "Pre-release $VERSION -> publishing with --tag $PRE_TAG (not latest)"
+            npm publish --tag "$PRE_TAG" --provenance --access public
+          else
+            echo "Stable $VERSION -> publishing to latest"
+            npm publish --provenance --access public
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
