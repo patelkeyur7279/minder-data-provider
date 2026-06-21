@@ -21,6 +21,8 @@ public APIs were removed.
   unavailable (SSR/jsdom/locked-down browsers) instead of silently no-op'ing.
 - **Streaming** — `StreamClient` now routes async errors to `onError` instead of leaking unhandled
   rejections.
+- **Standalone error handling** — `useMinder` in no-provider mode now surfaces real request errors
+  (and honors `throwOnError`) instead of mis-calling `minder()` and always reporting success.
 
 ### ⚡ Performance / DX
 

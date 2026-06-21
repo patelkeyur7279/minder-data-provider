@@ -828,38 +828,17 @@ export function useMinder<TData = any>(
         };
       }
     } else {
-      // Standalone mode - use minder() directly
-      try {
-        const data = await minder(route, {
-          ...options,
-          params: requestParams,
-        });
-        result = {
-          data: data as TData,
-          error: null,
-          status: 200,
-          success: true,
-          metadata: {
-            method: HttpMethod.GET,
-            url: route,
-            duration: 0,
-            cached: false,
-          },
-        };
-      } catch (error: any) {
-        result = {
-          data: null,
-          error,
-          status: error.status || 500,
-          success: false,
-          metadata: {
-            method: HttpMethod.GET,
-            url: route,
-            duration: 0,
-            cached: false,
-          },
-        };
-      }
+      // Standalone mode — call minder() directly. minder() takes the request body
+      // as its SECOND arg and request options as its THIRD; for a query there's no
+      // body, so pass `undefined` then the options. It returns a structured
+      // MinderResult and never throws by default, so use it as-is (this surfaces
+      // real success/error instead of always reporting success). Hook-level
+      // `throwOnError` is applied below, so force minder() to return here.
+      result = await minder<TData>(route, undefined, {
+        ...options,
+        params: requestParams,
+        throwOnError: false,
+      });
     }
 
     // Opt-in: surface errors through TanStack Query / error boundaries instead of
