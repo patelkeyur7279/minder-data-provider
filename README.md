@@ -54,7 +54,7 @@ Reliability + extensibility, all **backward-compatible**:
 - ⚡ **Faster & lighter** — memoized hook (no re-render cascades), a minimal `minder-data-provider/core` entry, and an opt-in `transport: 'fetch'` fast path.
 - 🛡️ **Reliability fixes** — JWT crash guard, timer/listener leak cleanup (`destroy()`), offline-persistence fallback, safe stream errors.
 
-See the [CHANGELOG](./CHANGELOG.md) for the full list.
+📖 **[Features & Capabilities](./docs/FEATURES.md)** — the complete reference for everything below. See the [CHANGELOG](./CHANGELOG.md) for the version history.
 
 <br>
 
