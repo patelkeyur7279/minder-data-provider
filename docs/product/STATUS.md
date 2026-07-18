@@ -16,9 +16,22 @@ previously-unknown Authorization-header leak in the refresh path), event-driven 
 Evidence: jest --coverage exit 0 (91 suites / 1636 tests / 0 failed), tsc clean, lint 0 errors
 with rules-of-hooks=error, build OK, offline tests stress-run 8× stable.
 
-**Wave 3 (dispatched):** M0-04 memoize returns (opus), M0-05 rawUrl + config unification (opus),
-M0-06 packaging (sonnet). Orchestration lesson recorded: a Wave-2 agent used git stash despite
-rules — future waves get worktree isolation for any agent whose task overlaps shared files.
+**Wave 3 VERIFIED — ALL TEN M0 TASKS COMPLETE** (commits edaad9d M0-04, 19df1c1 M0-05,
+1fab2ed M0-06, 75250e8 changelog). Final gate: jest --coverage exit 0 (93 suites / 1653 tests /
+0 failed), tsc clean, lint 0 errors (rules-of-hooks enforced), build OK. Packaging: packed size
+928kB → 252kB (-73%), core.mjs 4K — M0's <80KB core gate passed. Orchestrator-applied
+integrations: infrastructure.test.ts flipped to assert peerDeps; rawUrl/method threaded through
+useMinder's two request call sites.
+
+**M0 milestone gate status:** all gates pass EXCEPT "before/after latency demo" (M0-01
+acceptance) — still owed; needs a browser-based preflight measurement. Coverage regenerated and
+CI-gated ✅. Remaining before M0 is declared CLOSED: latency demo + owner decisions (SEC-01 branch
+disposition — note branch now carries all M0 work too — and R-01 evolve-in-place confirmation).
+
+**Next:** M1 planning (zero-config calls, SecretRef boundary enforcement, mutating plugin
+middleware, provider manifest + certification tooling, testing harness, Next.js example app).
+Orchestration lesson recorded: shared-tree parallel agents worked but two incidents (git stash,
+npm install churn) — use worktree isolation for overlapping-file waves in M1.
 
 ## Completed, with evidence
 

@@ -42,17 +42,20 @@ tasks:
   - id: M0-04
     title: Memoize useMinder returns; decouple upload identity
     type: implementation
-    status: ready
+    status: verified
+    evidence: "Wave3 2026-07-18: orchestrator-verified — jest --coverage exit 0, 93 suites/1653 tests/0 failed, tsc clean, lint 0 errors, build OK; pack 928kB->252kB; core.mjs 4K"
     acceptance: "Return object + callbacks referentially stable across unrelated renders; upload progress re-renders only subscribers; render-count test"
   - id: M0-05
     title: Fix rawUrl escape hatch in provider mode; unify dual global configs
     type: bug
-    status: ready
+    status: verified
+    evidence: "Wave3 2026-07-18: orchestrator-verified — jest --coverage exit 0, 93 suites/1653 tests/0 failed, tsc clean, lint 0 errors, build OK; pack 928kB->252kB; core.mjs 4K"
     acceptance: "useMinder('https://x/y') and rawUrl work with provider; one configureMinder; standalone resolves routes registry"
   - id: M0-06
     title: Packaging - peerDeps move, dead exports, sideEffects, code splitting, single lockfile
     type: implementation
-    status: ready
+    status: verified
+    evidence: "Wave3 2026-07-18: orchestrator-verified — jest --coverage exit 0, 93 suites/1653 tests/0 failed, tsc clean, lint 0 errors, build OK; pack 928kB->252kB; core.mjs 4K"
     acceptance: "React-context libs are peers; no dead export paths; npm pack dry-run reviewed; core bundle <80KB"
     evidence_basis: "Packaging audit (2026-07-18)"
     risks: "3.0-worthy? No - peer move is fixing a defect; changelog-flagged"
