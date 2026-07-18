@@ -390,14 +390,14 @@ describe('generate-catalog', () => {
       expect(Array.isArray(CERTIFIED)).toBe(true);
     });
 
-    it('should have PLANNED with 4 providers', () => {
+    it('should have PLANNED with 3 providers', () => {
       expect(Array.isArray(PLANNED)).toBe(true);
-      expect(PLANNED.length).toBe(4);
-      // Supabase (S-03) and Stripe (T-03) graduated to CERTIFIED and are no
-      // longer planned.
+      expect(PLANNED.length).toBe(3);
+      // Supabase (S-03), Stripe (T-03), and Clerk (D-03) graduated to CERTIFIED
+      // and are no longer planned.
       expect(PLANNED.map((p) => p.name)).not.toContain('Supabase');
       expect(PLANNED.map((p) => p.name)).not.toContain('Stripe');
-      expect(PLANNED.map((p) => p.name)).toContain('Clerk');
+      expect(PLANNED.map((p) => p.name)).not.toContain('Clerk');
       expect(PLANNED.map((p) => p.name)).toContain('Firebase');
       expect(PLANNED.map((p) => p.name)).toContain('Razorpay');
       expect(PLANNED.map((p) => p.name)).toContain('Sentry');

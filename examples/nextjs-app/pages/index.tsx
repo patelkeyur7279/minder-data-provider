@@ -30,6 +30,9 @@ export default function Home() {
       <p>
         <Link href="/stripe">See the Stripe provider demo (mock mode, zero keys) &rarr;</Link>
       </p>
+      <p>
+        <Link href="/clerk">See the Clerk provider demo (mock mode, zero keys) &rarr;</Link>
+      </p>
       <ul>
         {users.map((user) => (
           <li key={user.id}>

@@ -28,11 +28,10 @@ const path = require('path');
 const REPO_ROOT = path.join(__dirname, '..');
 
 // Certified provider names (manifest "name" field)
-const CERTIFIED = ['@minder/provider-supabase', '@minder/provider-stripe'];
+const CERTIFIED = ['@minder/provider-supabase', '@minder/provider-stripe', '@minder/provider-clerk'];
 
 // Planned providers with roadmap info
 const PLANNED = [
-  { name: 'Clerk' },
   { name: 'Firebase' },
   { name: 'Razorpay' },
   { name: 'Sentry' },
