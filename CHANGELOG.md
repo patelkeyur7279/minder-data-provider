@@ -109,6 +109,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   progress ticks no longer re-render every hook instance (progress reads are
   getter-based). Memoized children and effect deps now behave.
 
+### Added — Certified provider: Stripe
+
+- **`minder-data-provider/providers/stripe`** — payments via the secure server
+  boundary. `createCheckoutHandler` creates Checkout sessions server-side with
+  a zero-dependency `fetch` (secret key resolved per-request, masked from every
+  response and log — sentinel-tested); `createStripeWebhookHandler` verifies the
+  `t=,v1=` signature on the WebCrypto HMAC primitive. **Certified** (10/10),
+  mock-parity + secret-sentinel tests, browser-verified mock checkout.
+- **`minder add stripe`** scaffolds real, visible Next.js route files (checkout
+  + webhook) that call the library handlers — the hybrid model in action.
+- The webhook primitive gained a backward-compatible `parseSignatureHeader`
+  option (default path byte-identical).
+
 ### Added — 🎉 First certified provider: Supabase
 
 - **`minder-data-provider/providers/supabase`** — auth, storage, and realtime

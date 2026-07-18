@@ -40,7 +40,8 @@
 | Provider | Status |
 |---|---|
 | **Supabase** (auth, database, storage) — frameworks: react, nextjs, vite | **Certified** — mock-mode example in CI; live-service E2E requires real credentials (not in CI). 10/10 certification (`node scripts/certify-provider.js providers/supabase`); catalog entry: docs/providers/CATALOG.md. |
-| **All other third-party providers** (Firebase, Auth0, Clerk, Appwrite, Stripe, S3, Cloudinary, email/SMS/push, analytics, AI, CMS, search, flags) | **Proposed** — zero provider code exists today [Confirmed by audit]. Build order per ROADMAP.md: Supabase done (auth+db+storage in one SDK, now Certified) → Stripe next (server-boundary showcase) → expand only after passing the certification checklist (RISKS_AND_THREAT_MODEL.md §Provider certification). |
+| **Stripe** (payments — hosted checkout, webhooks) — frameworks: react, nextjs, vite | **Certified** — mock-mode example + guarded keyless server route in CI; live checkout + webhooks require real credentials (not in CI). 10/10 certification (`node scripts/certify-provider.js providers/stripe`); catalog entry: docs/providers/CATALOG.md. |
+| **All other third-party providers** (Firebase, Auth0, Clerk, Appwrite, S3, Cloudinary, email/SMS/push, analytics, AI, CMS, search, flags) | **Proposed** — zero provider code exists today [Confirmed by audit]. Build order per ROADMAP.md: Supabase done (auth+db+storage in one SDK, now Certified) → Stripe done (server-boundary showcase, now Certified) → expand only after passing the certification checklist (RISKS_AND_THREAT_MODEL.md §Provider certification). |
 
 ## Package managers / tooling
 

@@ -27,6 +27,9 @@ export default function Home() {
       <p>
         <Link href="/supabase">See the Supabase provider demo (mock mode, zero keys) &rarr;</Link>
       </p>
+      <p>
+        <Link href="/stripe">See the Stripe provider demo (mock mode, zero keys) &rarr;</Link>
+      </p>
       <ul>
         {users.map((user) => (
           <li key={user.id}>

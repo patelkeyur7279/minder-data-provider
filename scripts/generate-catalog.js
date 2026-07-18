@@ -10,7 +10,7 @@
  * Validates each minimally (name + displayName + categories present; skip invalid with warning).
  *
  * A CERTIFIED constant array determines the Certified table; others go in Community.
- * A PLANNED constant with 6 providers is rendered in a Planned table.
+ * A PLANNED constant with 4 providers is rendered in a Planned table.
  *
  * Output docs/providers/CATALOG.md: deterministic (sorted by name), three tables,
  * per-provider columns: displayName, categories, runtimes, frameworks.
@@ -28,11 +28,10 @@ const path = require('path');
 const REPO_ROOT = path.join(__dirname, '..');
 
 // Certified provider names (manifest "name" field)
-const CERTIFIED = ['@minder/provider-supabase'];
+const CERTIFIED = ['@minder/provider-supabase', '@minder/provider-stripe'];
 
 // Planned providers with roadmap info
 const PLANNED = [
-  { name: 'Stripe' },
   { name: 'Clerk' },
   { name: 'Firebase' },
   { name: 'Razorpay' },
