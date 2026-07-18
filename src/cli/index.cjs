@@ -26,17 +26,59 @@ const path = require('path');
 const CATALOG_DOC = 'docs/providers/CATALOG.md';
 
 /**
- * Static key-source registry — where to get API keys for each PLANNED
- * provider. Nothing here is certified/installable yet (see `cmdAdd`); this
- * is purely a convenience pointer printed by `minder init`.
+ * Static key-source registry — where to get API keys for each provider.
+ * Most are still PLANNED (nothing to install yet); Supabase has graduated to
+ * `status: 'experimental'` now that `minder add supabase` (see `PROVIDERS`
+ * below) actually scaffolds something. This registry is purely a
+ * convenience pointer printed by `minder init`.
  */
 const KEY_SOURCE_REGISTRY = [
-  { name: 'Supabase', keysUrl: 'https://supabase.com/dashboard/project/_/settings/api' },
-  { name: 'Stripe', keysUrl: 'https://dashboard.stripe.com/apikeys' },
-  { name: 'Clerk', keysUrl: 'https://dashboard.clerk.com' },
-  { name: 'Firebase', keysUrl: 'https://console.firebase.google.com' },
-  { name: 'Razorpay', keysUrl: 'https://dashboard.razorpay.com/app/website-app-settings/api-keys' },
-  { name: 'Sentry', keysUrl: 'https://sentry.io/settings/' },
+  {
+    name: 'Supabase',
+    keysUrl: 'https://supabase.com/dashboard/project/_/settings/api',
+    status: 'experimental — minder add supabase',
+  },
+  { name: 'Stripe', keysUrl: 'https://dashboard.stripe.com/apikeys', status: 'planned' },
+  { name: 'Clerk', keysUrl: 'https://dashboard.clerk.com', status: 'planned' },
+  { name: 'Firebase', keysUrl: 'https://console.firebase.google.com', status: 'planned' },
+  {
+    name: 'Razorpay',
+    keysUrl: 'https://dashboard.razorpay.com/app/website-app-settings/api-keys',
+    status: 'planned',
+  },
+  { name: 'Sentry', keysUrl: 'https://sentry.io/settings/', status: 'planned' },
+];
+
+/**
+ * Registry of providers `minder add <provider>` actually knows how to
+ * scaffold. Everything not listed here falls through to the generic
+ * "no certified providers" catalog message in `cmdAdd`. Entries here are
+ * honestly labeled by `status` — `'experimental'` means "installable, but
+ * not yet certified" (see docs/providers/CATALOG.md), never "production
+ * ready".
+ */
+const SUPABASE_CONFIG_SNIPPET = `// Add this to your minder.config.ts "providers" object:
+//
+// import { secret } from 'minder-data-provider/server';
+//
+// providers: {
+//   supabase: {
+//     url: process.env.NEXT_PUBLIC_SUPABASE_URL!,
+//     anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+//     serviceRoleKey: secret('SUPABASE_SERVICE_ROLE_KEY'),
+//     mock: true, // flip to false once you've added real Supabase keys
+//   },
+// }
+`;
+
+const PROVIDERS = [
+  {
+    name: 'supabase',
+    status: 'experimental',
+    envVars: ['SUPABASE_SERVICE_ROLE_KEY'],
+    configSnippet: SUPABASE_CONFIG_SNIPPET,
+    keysUrl: 'https://supabase.com/dashboard/project/_/settings/api',
+  },
 ];
 
 const ENV_EXAMPLE_SECTION_MARKER = '# minder providers';
@@ -68,10 +110,10 @@ Commands:
                              certified yet — see ${CATALOG_DOC}).
                              Idempotent: skips existing files unless --force.
 
-  add <provider>             Scaffold a provider integration. No certified
-                             providers are available yet — see
-                             ${CATALOG_DOC}. Exits 1 until the first
-                             provider wave ships.
+  add <provider>             Scaffold a provider integration. Currently
+                             supports "supabase" (EXPERIMENTAL — not yet
+                             certified). Every other provider name exits 1 —
+                             see ${CATALOG_DOC}.
 
   doctor [--config <path>]  Check that provider credentials referenced by
                              your config are present in the environment.
@@ -154,17 +196,20 @@ function buildEnvExampleSection() {
 }
 
 /**
- * Create-or-append the "# minder providers" section in .env.example.
- * Unlike `writeScaffold` (whole-file, no-clobber), this file may already
- * exist with unrelated content (e.g. from `npm run generate:env-example`),
- * so we append rather than overwrite — and only skip when our section is
- * already present.
+ * Create-or-append a marker-delimited section in .env.example. Unlike
+ * `writeScaffold` (whole-file, no-clobber), this file may already exist
+ * with unrelated content (e.g. from `npm run generate:env-example`), so we
+ * append rather than overwrite — and only skip when a section with this
+ * exact `marker` is already present. Shared by `writeEnvExampleSection`
+ * (minder init's provider key-source pointer block) and
+ * `writeProviderEnvVars` (minder add's per-provider env var block) — same
+ * idempotent-append / --force-replace semantics, different marker + body.
  */
-function writeEnvExampleSection(cwd, force) {
+function appendEnvExampleSection(cwd, marker, body, force) {
   const envPath = path.resolve(cwd, '.env.example');
   const exists = fs.existsSync(envPath);
   const current = exists ? fs.readFileSync(envPath, 'utf8') : null;
-  const hasSection = current !== null && current.includes(ENV_EXAMPLE_SECTION_MARKER);
+  const hasSection = current !== null && current.includes(marker);
 
   if (hasSection && !force) {
     return { written: false };
@@ -175,22 +220,58 @@ function writeEnvExampleSection(cwd, force) {
     base = '# .env.example\n';
   } else if (hasSection) {
     // --force: strip the previous section before appending a fresh copy.
-    const idx = base.indexOf(ENV_EXAMPLE_SECTION_MARKER);
+    const idx = base.indexOf(marker);
     base = base.slice(0, idx).replace(/\s+$/, '') + '\n';
   }
 
-  const next = (base.endsWith('\n') ? base : base + '\n') + buildEnvExampleSection();
+  const next = (base.endsWith('\n') ? base : base + '\n') + body;
   fs.mkdirSync(path.dirname(envPath), { recursive: true });
   fs.writeFileSync(envPath, next, 'utf8');
   return { written: true };
 }
 
+function writeEnvExampleSection(cwd, force) {
+  return appendEnvExampleSection(cwd, ENV_EXAMPLE_SECTION_MARKER, buildEnvExampleSection(), force);
+}
+
+/**
+ * Build the per-provider ".env.example" section for `minder add <provider>`
+ * — a distinct marker from `ENV_EXAMPLE_SECTION_MARKER` so it can coexist
+ * with (and doesn't get clobbered by) `minder init`'s section, and so
+ * `minder add`-ing a second provider later doesn't strip this one. Emits
+ * real, uncommented `NAME=` lines (not just comments) so `minder doctor`'s
+ * .env.example fallback scan picks them up.
+ */
+function buildProviderEnvSection(provider) {
+  const marker = `# minder provider: ${provider.name}`;
+  const lines = [
+    marker,
+    '#',
+    `# ${provider.name} — status: ${provider.status} (not yet certified). See ${CATALOG_DOC}.`,
+  ];
+  for (const envVar of provider.envVars) {
+    lines.push(`${envVar}=`);
+  }
+  lines.push('');
+  return { marker, body: lines.join('\n') + '\n' };
+}
+
+function writeProviderEnvVars(cwd, provider, force) {
+  const { marker, body } = buildProviderEnvSection(provider);
+  return appendEnvExampleSection(cwd, marker, body, force);
+}
+
 function printKeySourceTable(stdout) {
-  stdout.write('\nKey sources (planned — not yet installable; see docs/providers/CATALOG.md):\n');
+  stdout.write('\nKey sources (see docs/providers/CATALOG.md for full status):\n');
   const nameWidth = KEY_SOURCE_REGISTRY.reduce((w, e) => Math.max(w, e.name.length), 'Provider'.length);
-  stdout.write(`  ${'Provider'.padEnd(nameWidth)}  Keys URL\n`);
+  const statusWidth = KEY_SOURCE_REGISTRY.reduce(
+    (w, e) => Math.max(w, (e.status || 'planned').length),
+    'Status'.length
+  );
+  stdout.write(`  ${'Provider'.padEnd(nameWidth)}  ${'Status'.padEnd(statusWidth)}  Keys URL\n`);
   for (const entry of KEY_SOURCE_REGISTRY) {
-    stdout.write(`  ${entry.name.padEnd(nameWidth)}  ${entry.keysUrl}\n`);
+    const status = entry.status || 'planned';
+    stdout.write(`  ${entry.name.padEnd(nameWidth)}  ${status.padEnd(statusWidth)}  ${entry.keysUrl}\n`);
   }
   stdout.write('\n');
 }
@@ -234,14 +315,37 @@ function cmdInit(argv, ctx) {
 
 // ── `minder add` ────────────────────────────────────────────────────────────
 
+/**
+ * Scaffold a registered provider (currently just Supabase — see
+ * `PROVIDERS`). Unknown provider names (everything not yet in `PROVIDERS`,
+ * i.e. everything still `status: 'planned'` in `KEY_SOURCE_REGISTRY`) fall
+ * through to the same "no certified providers" catalog message as before —
+ * that message is deliberately unchanged so it still reads correctly for
+ * the providers it still applies to.
+ *
+ * For a registered provider this does NOT write minder.config.ts (the user
+ * pastes the printed snippet in themselves) and writes no routes/adapters —
+ * only `.env.example` gains the provider's env vars. It prints the config
+ * snippet plus an explicit "not yet certified" notice so nobody mistakes
+ * "installable" for "production ready".
+ */
 function cmdAdd(argv, ctx) {
-  const { stderr } = ctx;
-  // `argv[0]` (the requested provider name) is intentionally unused for now:
-  // no provider is certified yet, so every `add` call fails the same way.
-  // The scaffolding machinery (`writeScaffold`) it will call once providers
-  // exist is implemented and unit-tested above.
-  stderr.write(`No certified providers are available yet — see ${CATALOG_DOC}\n`);
-  return 1;
+  const { cwd, stdout, stderr } = ctx;
+  const name = argv[0];
+  const force = argv.includes('--force');
+
+  const provider = PROVIDERS.find((p) => p.name === name);
+  if (!provider) {
+    stderr.write(`No certified providers are available yet — see ${CATALOG_DOC}\n`);
+    return 1;
+  }
+
+  writeProviderEnvVars(cwd, provider, force);
+
+  stdout.write(`\n${provider.configSnippet}\n`);
+  stdout.write(`status: EXPERIMENTAL — not yet certified; flip mock:false when you add real keys\n`);
+  stdout.write(`Get your ${provider.name} keys: ${provider.keysUrl}\n`);
+  return 0;
 }
 
 // ── `minder doctor` ─────────────────────────────────────────────────────────
@@ -467,6 +571,7 @@ module.exports = {
   cmdHelp,
   writeScaffold,
   KEY_SOURCE_REGISTRY,
+  PROVIDERS,
   CONFIG_TEMPLATE,
   ENV_EXAMPLE_SECTION_MARKER,
   maskLabel,

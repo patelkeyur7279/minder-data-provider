@@ -118,13 +118,44 @@ describe('minder init', () => {
 });
 
 describe('minder add', () => {
-  it('exits 1 and points at the provider catalog', () => {
+  it('exits 1 and points at the provider catalog for an unknown provider', () => {
     const result = run(['add', 'stripe'], { cwd: tmpDir });
 
     expect(result.status).toBe(1);
     const combined = result.stdout + result.stderr;
     expect(combined).toContain('No certified providers are available yet');
     expect(combined).toContain('docs/providers/CATALOG.md');
+  });
+
+  it('unknown provider name still exits 1 (unaffected by the supabase registration)', () => {
+    const result = run(['add', 'not-a-real-provider'], { cwd: tmpDir });
+
+    expect(result.status).toBe(1);
+    const combined = result.stdout + result.stderr;
+    expect(combined).toContain('No certified providers are available yet');
+    expect(combined).toContain('docs/providers/CATALOG.md');
+  });
+
+  it('add supabase scaffolds the experimental config snippet and env var, exit 0', () => {
+    const supabase = cli.PROVIDERS.find((p: { name: string }) => p.name === 'supabase');
+    expect(supabase).toBeDefined();
+
+    const result = run(['add', 'supabase'], { cwd: tmpDir });
+
+    expect(result.status).toBe(0);
+
+    // .env.example gains the provider's env var(s).
+    const envExamplePath = path.join(tmpDir, '.env.example');
+    expect(fs.existsSync(envExamplePath)).toBe(true);
+    const envExample = fs.readFileSync(envExamplePath, 'utf8');
+    expect(envExample).toContain('SUPABASE_SERVICE_ROLE_KEY');
+
+    // stdout carries the config snippet, an explicit EXPERIMENTAL notice,
+    // and the keys URL.
+    expect(result.stdout).toContain(supabase.configSnippet.trim());
+    expect(result.stdout.toUpperCase()).toContain('EXPERIMENTAL');
+    expect(result.stdout).toContain('not yet certified');
+    expect(result.stdout).toContain(supabase.keysUrl);
   });
 });
 

@@ -25,7 +25,13 @@ export default defineConfig({
     'platforms/expo': 'src/platforms/expo.ts',
     'platforms/electron': 'src/platforms/electron.ts',
     'platforms/node': 'src/platforms/node.ts',
-    
+
+    // Provider packages (self-contained, certifiable dirs under providers/**)
+    // Same single-file mapping as the 'platforms/*' entries above: the entry
+    // key IS the dist-relative output path, so this lands at
+    // dist/providers/supabase.{js,mjs,d.ts}.
+    'providers/supabase': 'providers/supabase/src/index.ts',
+
     // Feature modules (for tree-shaking)
     'crud/index': 'src/crud/index.ts',
     'auth/index': 'src/auth/index.ts',
@@ -65,6 +71,8 @@ export default defineConfig({
     'axios',
     'immer',
     'dompurify',
+    // Optional provider peer deps — lazy-loaded by their adapters, never bundled.
+    '@supabase/supabase-js',
     // Node.js built-ins that should not be in browser bundles
     'fs',
     'path',

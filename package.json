@@ -120,6 +120,11 @@
       "types": "./dist/testing.d.ts",
       "import": "./dist/testing.mjs",
       "require": "./dist/testing.js"
+    },
+    "./providers/supabase": {
+      "types": "./dist/providers/supabase.d.ts",
+      "import": "./dist/providers/supabase.mjs",
+      "require": "./dist/providers/supabase.js"
     }
   },
   "scripts": {
@@ -211,6 +216,7 @@
   },
   "peerDependencies": {
     "@reduxjs/toolkit": "^2.9.2",
+    "@supabase/supabase-js": "^2.0.0",
     "@tanstack/query-core": "^5.90.6",
     "@tanstack/react-query": "^5.90.6",
     "@tanstack/react-query-devtools": "^5.90.2",
@@ -220,6 +226,9 @@
   },
   "peerDependenciesMeta": {
     "@reduxjs/toolkit": {
+      "optional": true
+    },
+    "@supabase/supabase-js": {
       "optional": true
     },
     "@tanstack/react-query-devtools": {

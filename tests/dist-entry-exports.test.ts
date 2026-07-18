@@ -32,40 +32,63 @@ import path from 'path';
 
 const distDir = path.resolve(__dirname, '../dist');
 
+// What a given entry is expected to export, and therefore which assertion
+// applies to it. 'HttpMethod' is the original dist-interop regression this
+// file guards (see header comment); 'registerSupabaseProvider' is the
+// providers/supabase entry's public export — it doesn't export HttpMethod
+// at all, so it gets its own probe/assertion instead.
+type ExpectKind = 'HttpMethod' | 'registerSupabaseProvider';
+
 // Public entries the Next.js example (and typical consumers) import from.
 // Each is asserted in both module systems.
-const entries: Array<{ name: string; cjs: string; esm: string }> = [
+const entries: Array<{ name: string; cjs: string; esm: string; expect: ExpectKind }> = [
   {
     name: 'root (minder-data-provider)',
     cjs: path.join(distDir, 'index.js'),
     esm: path.join(distDir, 'index.mjs'),
+    expect: 'HttpMethod',
   },
   {
     name: 'nextjs (minder-data-provider/nextjs)',
     cjs: path.join(distDir, 'platforms/nextjs.js'),
     esm: path.join(distDir, 'platforms/nextjs.mjs'),
+    expect: 'HttpMethod',
   },
   {
     name: 'web (minder-data-provider/web)',
     cjs: path.join(distDir, 'platforms/web.js'),
     esm: path.join(distDir, 'platforms/web.mjs'),
+    expect: 'HttpMethod',
+  },
+  {
+    name: 'providers/supabase (minder-data-provider/providers/supabase)',
+    cjs: path.join(distDir, 'providers/supabase.js'),
+    esm: path.join(distDir, 'providers/supabase.mjs'),
+    expect: 'registerSupabaseProvider',
   },
 ];
 
 const distBuilt = fs.existsSync(path.join(distDir, 'index.js'));
 
 /** Probe a built entry through a fresh Node process using the given module system. */
-function probeEntry(kind: 'cjs' | 'esm', file: string): {
+function probeEntry(
+  kind: 'cjs' | 'esm',
+  file: string,
+  expectKind: ExpectKind
+): {
   httpGet: unknown;
   provider: string;
   hook: string;
+  registerSupabaseProvider: string;
 } {
   const jsonFor = (accessor: string) =>
-    `JSON.stringify({` +
-    `httpGet:(${accessor}.HttpMethod||{}).GET,` +
-    `provider:typeof ${accessor}.MinderDataProvider,` +
-    `hook:typeof ${accessor}.useMinder` +
-    `})`;
+    expectKind === 'HttpMethod'
+      ? `JSON.stringify({` +
+        `httpGet:(${accessor}.HttpMethod||{}).GET,` +
+        `provider:typeof ${accessor}.MinderDataProvider,` +
+        `hook:typeof ${accessor}.useMinder` +
+        `})`
+      : `JSON.stringify({registerSupabaseProvider:typeof ${accessor}.registerSupabaseProvider})`;
 
   let stdout: string;
   if (kind === 'cjs') {
@@ -93,7 +116,7 @@ function probeEntry(kind: 'cjs' | 'esm', file: string): {
  * (webpack, esbuild) reproduces the bug — so this probe bundles a tiny entry
  * with esbuild (available transitively via tsup) and runs the output.
  */
-function probeBundled(esmFile: string): unknown {
+function probeBundled(esmFile: string, expectKind: ExpectKind): unknown {
   // esbuild's in-process JS API cannot run under jest's jsdom environment
   // (Buffer/Uint8Array realm mismatch), so invoke its CLI in a child process.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -102,11 +125,13 @@ function probeBundled(esmFile: string): unknown {
   try {
     const entry = path.join(tmp, 'probe.mjs');
     const out = path.join(tmp, 'bundle.cjs');
-    fs.writeFileSync(
-      entry,
-      `import { HttpMethod } from ${JSON.stringify(esmFile)};` +
-        `process.stdout.write(JSON.stringify({ httpGet: (HttpMethod || {}).GET }));`
-    );
+    const entrySource =
+      expectKind === 'HttpMethod'
+        ? `import { HttpMethod } from ${JSON.stringify(esmFile)};` +
+          `process.stdout.write(JSON.stringify({ httpGet: (HttpMethod || {}).GET }));`
+        : `import { registerSupabaseProvider } from ${JSON.stringify(esmFile)};` +
+          `process.stdout.write(JSON.stringify({ registerSupabaseProvider: typeof registerSupabaseProvider }));`;
+    fs.writeFileSync(entry, entrySource);
     const esbuildBin = require.resolve('esbuild/bin/esbuild');
     execFileSync(
       process.execPath,
@@ -115,7 +140,8 @@ function probeBundled(esmFile: string): unknown {
       { encoding: 'utf8' }
     );
     const stdout = execFileSync(process.execPath, [out], { encoding: 'utf8' });
-    return (JSON.parse(stdout) as { httpGet: unknown }).httpGet;
+    const parsed = JSON.parse(stdout) as { httpGet?: unknown; registerSupabaseProvider?: unknown };
+    return expectKind === 'HttpMethod' ? parsed.httpGet : parsed.registerSupabaseProvider;
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
@@ -138,24 +164,37 @@ maybe('built dist entry exports (dist interop regression guard)', () => {
           const fileExists = fs.existsSync(file);
           const t = fileExists ? test : test.skip;
 
-          t('HttpMethod.GET is defined and equals "GET"', () => {
-            const r = probeEntry(kind, file);
-            expect(r.httpGet).toBe('GET');
-          });
+          if (entry.expect === 'HttpMethod') {
+            t('HttpMethod.GET is defined and equals "GET"', () => {
+              const r = probeEntry(kind, file, entry.expect);
+              expect(r.httpGet).toBe('GET');
+            });
 
-          t('MinderDataProvider and useMinder are defined', () => {
-            const r = probeEntry(kind, file);
-            expect(r.provider).not.toBe('undefined');
-            expect(r.hook).not.toBe('undefined');
-          });
+            t('MinderDataProvider and useMinder are defined', () => {
+              const r = probeEntry(kind, file, entry.expect);
+              expect(r.provider).not.toBe('undefined');
+              expect(r.hook).not.toBe('undefined');
+            });
+          } else {
+            t('registerSupabaseProvider is a function', () => {
+              const r = probeEntry(kind, file, entry.expect);
+              expect(r.registerSupabaseProvider).toBe('function');
+            });
+          }
         });
       }
 
       const esmExists = fs.existsSync(entry.esm);
       const tb = esmExists ? test : test.skip;
-      tb('BUNDLED (esbuild, tree-shaking): HttpMethod.GET survives', () => {
-        expect(probeBundled(entry.esm)).toBe('GET');
-      });
+      if (entry.expect === 'HttpMethod') {
+        tb('BUNDLED (esbuild, tree-shaking): HttpMethod.GET survives', () => {
+          expect(probeBundled(entry.esm, entry.expect)).toBe('GET');
+        });
+      } else {
+        tb('BUNDLED (esbuild, tree-shaking): registerSupabaseProvider survives', () => {
+          expect(probeBundled(entry.esm, entry.expect)).toBe('function');
+        });
+      }
     });
   }
 });
