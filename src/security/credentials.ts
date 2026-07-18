@@ -31,9 +31,12 @@
  *
  * ── Edge-safety ─────────────────────────────────────────────────────────
  * This module has no top-level Node-only imports. The `fs` module is only
- * ever brought in via a dynamic `import('node:fs')` INSIDE
- * `resolveCredential`, and only on the `file`/`path` branch — so the module
- * stays importable (unexecuted paths aside) in edge bundles.
+ * ever brought in via a dynamic `import()` INSIDE `resolveCredential`, and
+ * only on the `file`/`path` branch — so the module stays importable
+ * (unexecuted paths aside) in edge bundles. The `node:fs` specifier is loaded
+ * through a runtime variable + `webpackIgnore` so browser bundlers neither
+ * emit a "Can't resolve 'fs'" warning nor pull it into the client graph
+ * (M2-05).
  *
  * ── No-leak invariant ───────────────────────────────────────────────────
  * No error thrown by `resolveCredential` may ever include the resolved
@@ -197,17 +200,20 @@ export async function resolveCredential(
       return parsed;
     }
 
-    // source === 'path' — Node only. Dynamic import keeps this module
-    // importable (unexecuted) in edge bundles that never take this branch.
-    // Some CJS test runners (Jest without --experimental-vm-modules) can't
-    // execute a dynamic `import()` of a builtin at all — same limitation
-    // and same fallback already used by `platforms/node.ts`'s
-    // `generateConfigFromApiRoutes()`.
+    // source === 'path' — Node only. The `node:fs` specifier is loaded through
+    // a runtime-computed variable so bundlers targeting the browser (webpack in
+    // the Next.js example) neither statically resolve it — which produced a
+    // spurious "Can't resolve 'fs'" warning — nor descend into it: this branch
+    // is unreachable in a browser (resolveCredential throws first). The
+    // webpackIgnore hint keeps the dynamic import out of the client graph
+    // entirely; the require fallback covers CJS test runners that can't execute
+    // a dynamic import() of a builtin.
+    const fsSpecifier = 'node:fs';
     let readFileSync: (path: string, encoding: 'utf8') => string;
     try {
-      readFileSync = (await import('node:fs')).readFileSync;
+      readFileSync = (await import(/* webpackIgnore: true */ fsSpecifier)).readFileSync;
     } catch {
-      readFileSync = require('node:fs').readFileSync;
+      readFileSync = require(fsSpecifier).readFileSync;
     }
 
     let contents: string;

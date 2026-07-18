@@ -160,7 +160,8 @@ tasks:
   - id: M2-05
     title: "Investigate example-build warning: Can't resolve 'fs' from root index.mjs chunk (non-fatal; strict bundlers may hard-fail)"
     type: bug
-    status: ready
+    status: verified
+    evidence: "2026-07-19: fixed — node:fs loaded via runtime specifier + webpackIgnore; example build no longer emits Can\'t-resolve-fs warning; credentials+firebase+edge-safety tests green. Remaining critical-dependency warnings are architectural (optional-peer dynamic imports), not actionable."
     evidence_basis: "S-03 fresh-consumer build log"
   - id: M2-02
     title: Stripe provider (checkout session handler + webhook verification)
