@@ -1,4 +1,15 @@
-# Project Status — updated 2026-07-18 (evening)
+# Project Status — updated 2026-07-19
+
+**PROVIDER PLATFORM FOUNDATION (Plan A) COMPLETE** — spec docs/superpowers/specs/2026-07-18-provider-platform-design.md,
+plan docs/superpowers/plans/2026-07-18-provider-foundation-plan.md, all 7 tasks verified across 2
+waves (commits d96b9fe F-01, 158257f F-02, b6f171e F-03, 40cea67 F-06, 188e6bd F-04, dc32f75 F-05,
+ea8c5c8 F-07). Final gate: 109 suites / 1909 tests / 0 failed with coverage, tsc clean, lint 0
+errors, build OK, edge-safety + dist-interop guards green, webhook crypto spot-reviewed
+(crypto.subtle.verify only). Known gap tracked as F-08 (providers config propagation) — required
+before wave ② Supabase. Next: F-08 + Plan B (Supabase provider) against the certification gate.
+STILL PENDING OWNER: GitHub secret-scanning unblock click, then push dev (~30 waiting commits).
+
+
 
 **Current milestone:** M0 in progress — **Wave 1 of 3 verified** (M0-01, M0-02, M0-09, M0-10).
 Subagent execution per docs/superpowers/plans/2026-07-18-m0-execution-plan.md
