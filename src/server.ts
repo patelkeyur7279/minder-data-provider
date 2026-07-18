@@ -40,6 +40,16 @@ export function resolveSecret(ref: SecretRef | string): string {
 
 export { secret, env, SecretRef, isSecretRef, redactSecrets, findExposedSecrets } from './security/secrets.js';
 
+// ── Typed credential model (G-06) — server-only resolution ──────────────────
+// `CredentialInput`/`isCredentialInput`/`describeCredential` mirror the root
+// entry point's exports (see src/index.ts), but `resolveCredential` belongs
+// HERE ONLY: it touches process.env/fs and throws immediately if called in
+// the browser, so it must never be reachable from the root entry point. Every
+// certified provider's server handler (e.g. createClerkSessionHandler) and
+// createWebhookHandler resolve their CredentialInput via this function.
+export { resolveCredential, describeCredential, isCredentialInput } from './security/credentials.js';
+export type { CredentialInput } from './security/credentials.js';
+
 // ── Web-standard server handler core (F-02) ─────────────────────────────────
 // Edge-safe handler types + JSON helper, HMAC webhook verification, and the
 // Node mount adapter. `toNodeHandler` is re-exported by name (its `http`

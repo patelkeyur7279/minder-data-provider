@@ -170,6 +170,8 @@ function generateCatalogContent(certified, community) {
     '',
     'Minder plugins are published providers — integrations with databases, auth, storage, payments, and more. The catalog is organized in three tiers:',
     '',
+    "Don't see your SDK below? Any service — known or unknown to us — can be integrated directly in your app with the same public API; see the [custom-provider authoring guide](./CUSTOM.md).",
+    '',
     '### Certified',
     'Badged providers that have completed the certification process. Each includes a runnable example, comprehensive tests, and meets the 10-point certification checklist. Certified providers are production-ready and supported by the Minder team.',
     '',

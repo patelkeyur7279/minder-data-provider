@@ -240,6 +240,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Runnable Next.js example app** (`examples/nextjs-app`) consuming the
   packed tarball, with a CI workflow building it on PRs.
 
+### Added (custom-provider public API)
+
+- **Custom providers can now be built entirely from the published package.**
+  `registerClientSafeProviderKeys`, `isCredentialInput`, `describeCredential`,
+  and the `CredentialInput` type are exported from `minder-data-provider`
+  (and `/web`, `/nextjs`); `resolveCredential` is exported from
+  `minder-data-provider/server` **only** (server-side resolution — the root
+  entry deliberately does not export it, enforced by an absence test).
+  `docs/providers/CUSTOM.md` + a runnable reference example
+  (`examples/custom-provider/`) show the full pattern; the example's
+  secret-leak sentinel test runs in the repo's own CI gate.
+
 ### Fixed (configureMinder presets)
 
 - **`configureMinder()` presets no longer override the M0 flagship defaults.**

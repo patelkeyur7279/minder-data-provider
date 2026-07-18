@@ -12,6 +12,7 @@ export * from './web.js';
 export { useAuth, useCheckout, useStorage, useLive } from '../hooks/contracts.js';
 export { registerCapabilityProvider } from '../contracts/registry.js';
 export { registerMockProvider, getProviderConfig } from '../contracts/mockRegistry.js';
+export { registerClientSafeProviderKeys } from '../config/validateConfig.js';
 
 // SSR-specific features
 export * from '../ssr/index.js';

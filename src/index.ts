@@ -153,6 +153,25 @@ export {
 export type { ExposedSecret } from './security/secrets.js';
 
 // ============================================================================
+// CUSTOM PROVIDER PLATFORM API (G-06)
+// ============================================================================
+// The same public functions every certified provider (providers/clerk,
+// providers/stripe, providers/supabase, providers/firebase,
+// providers/razorpay, providers/sentry) uses, so an app can build an
+// equivalent custom provider from this published package alone — see
+// docs/providers/CUSTOM.md.
+//
+// Client-config-time: declare which of a provider's config keys are safe to
+// appear inline in CLIENT config (see src/config/validateConfig.ts).
+export { registerClientSafeProviderKeys } from './config/validateConfig.js';
+// Credential helpers safe to call ANYWHERE (never resolve a value; never
+// touch process.env/fs). `resolveCredential` is SERVER-ONLY — it throws if
+// called in the browser — and is therefore intentionally NOT exported here;
+// import it from 'minder-data-provider/server' instead.
+export { isCredentialInput, describeCredential } from './security/credentials.js';
+export type { CredentialInput } from './security/credentials.js';
+
+// ============================================================================
 // PLATFORM SUPPORT (v2.1)
 // ============================================================================
 

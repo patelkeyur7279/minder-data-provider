@@ -14,6 +14,7 @@ export { useMinder } from '../hooks/useMinder.js';
 export { useAuth, useCheckout, useStorage, useLive } from '../hooks/contracts.js';
 export { registerCapabilityProvider } from '../contracts/registry.js';
 export { registerMockProvider, getProviderConfig } from '../contracts/mockRegistry.js';
+export { registerClientSafeProviderKeys } from '../config/validateConfig.js';
 
 // Enums (re-exported directly so platform-entry consumers don't need to
 // reach into `constants/enums.js` themselves). Uses a concrete value binding
