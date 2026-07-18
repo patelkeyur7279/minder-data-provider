@@ -168,6 +168,10 @@ any secret-shaped string elsewhere in browser-reachable config — throws at
 - `throwOnError: true` — opt into throwing (try/catch, error boundaries) instead of the
   default never-throws result object.
 
+**Local-first data** — persist a query's last successful result to on-device storage and
+serve it back when the network fails: `useMinder(route, { source: 'local-first' })`. Full
+guide: [**Local-first Guide**](./docs/LOCAL_FIRST.md).
+
 ## Platform Support
 
 | Environment | Status |

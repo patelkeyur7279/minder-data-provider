@@ -42,6 +42,9 @@ export default function Home() {
       <p>
         <Link href="/sentry">See the Sentry provider demo (mock mode, zero keys) &rarr;</Link>
       </p>
+      <p>
+        <Link href="/local-first">See the local-first data demo (offline fallback via LocalStore) &rarr;</Link>
+      </p>
       <ul>
         {users.map((user) => (
           <li key={user.id}>
