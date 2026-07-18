@@ -152,7 +152,8 @@ tasks:
   - id: F-08
     title: "configureMinder must propagate providers config into the stored global MinderConfig (buildFullConfig has no providers handling)"
     type: bug
-    status: ready
+    status: verified
+    evidence: "committed 4a9b38a; 3 propagation tests pass"
     evidence_basis: "Found by F-04: getProviderConfig global fallback works only via direct setGlobalMinderConfig; wave-2 Supabase needs the round-trip"
     acceptance: "configureMinder({providers}) round-trips through getGlobalMinderConfig; getProviderConfig reads it; tests"
 
@@ -209,7 +210,8 @@ tasks:
   - id: G-04
     title: "docs/development/ staleness pass: LOCAL_TESTING_GUIDE references deleted demo/ + test-local-package.sh; ADVANCED_FEATURES_TESTING_GUIDE demo step; jest testPathIgnorePatterns lists /demo/"
     type: documentation
-    status: ready
+    status: verified
+    evidence: "2026-07-19: owner-approved full deletion of docs/development (52 files) + wiki-sync exclusion of internal dirs + dead /demo/ jest pattern removed; gate 2112/0"
     evidence_basis: "G-01 Stage-3 review asides (inert, pre-existing)"
 
   - id: G-08
