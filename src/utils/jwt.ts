@@ -29,6 +29,18 @@ export function parseJWT<T = JWTPayload>(token: string | null | undefined): T | 
   }
 }
 
+/**
+ * True iff the token has the structural shape of a JWT (three dot-separated
+ * segments with non-empty header and payload). Says nothing about validity —
+ * use it to decide whether JWT semantics (expiry checks) apply at all, vs.
+ * an opaque bearer token that cannot be inspected client-side.
+ */
+export function isJwtShaped(token: string | null | undefined): boolean {
+  if (!token || typeof token !== 'string') return false;
+  const parts = token.split('.');
+  return parts.length === 3 && !!parts[0] && !!parts[1];
+}
+
 function decodeBase64Url(base64: string): string {
   if (typeof atob === 'function') {
     const binary = atob(base64);
