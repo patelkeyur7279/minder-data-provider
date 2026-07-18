@@ -880,11 +880,120 @@ function renderEnvironmentChecks(stdout, checks) {
   stdout.write('\n');
 }
 
+// ---------------------------------------------------------------------------
+// Peer version compatibility — does the project's installed react /
+// react-query / etc. meet the minimums minder declares? Beginners hit cryptic
+// runtime errors when a peer is too old; this turns that into a precise,
+// actionable message ("you have X, need >= Y — run npm i ..."). The minimums
+// are read from minder's OWN package.json peerDependencies (single source of
+// truth) so they can never drift from what npm actually enforces at install.
+// ---------------------------------------------------------------------------
+
+/** Lowest concrete version mentioned in a semver range, e.g. "^18.0.0 || ^19.0.0" -> "18.0.0". */
+function minVersionFromRange(range) {
+  const found = String(range).match(/\d+\.\d+\.\d+/g);
+  if (!found || found.length === 0) return null;
+  return found
+    .map((v) => v.split('.').map(Number))
+    .sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2])[0]
+    .join('.');
+}
+
+/** Numeric [major, minor, patch] from a version string (ignores prerelease/build). */
+function parseVersion(v) {
+  const m = String(v).match(/(\d+)\.(\d+)\.(\d+)/);
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+}
+
+/** installed >= minimum ? Returns true when either side is unparseable (don't cry wolf). */
+function versionGte(installed, minimum) {
+  const a = parseVersion(installed);
+  const b = parseVersion(minimum);
+  if (!a || !b) return true;
+  for (let i = 0; i < 3; i++) {
+    if (a[i] > b[i]) return true;
+    if (a[i] < b[i]) return false;
+  }
+  return true;
+}
+
+/** Installed version of a package in the target project, or null if absent. */
+function installedVersion(cwd, pkg) {
+  try {
+    const pj = path.join(cwd, 'node_modules', ...pkg.split('/'), 'package.json');
+    if (!fs.existsSync(pj)) return null;
+    return JSON.parse(fs.readFileSync(pj, 'utf8')).version || null;
+  } catch {
+    return null;
+  }
+}
+
+/** minder's declared peer minimums, from its own package.json. */
+function minderPeerMinimums() {
+  try {
+    // package.json ships in every npm tarball; from src/cli it is ../../package.json.
+    // eslint-disable-next-line global-require
+    const pkg = require(path.join(__dirname, '..', '..', 'package.json'));
+    const peers = pkg.peerDependencies || {};
+    const meta = pkg.peerDependenciesMeta || {};
+    return Object.keys(peers).map((name) => ({
+      name,
+      min: minVersionFromRange(peers[name]),
+      optional: !!(meta[name] && meta[name].optional),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Check installed peer versions against minder's declared minimums.
+ * Required peers are always checked; optional peers (provider SDKs) only when
+ * the user has actually installed them.
+ */
+function checkPeerVersions(cwd, peers) {
+  const list = peers || minderPeerMinimums();
+  const checks = [];
+  for (const { name, min, optional } of list) {
+    const have = installedVersion(cwd, name);
+    if (!have) {
+      if (optional) continue; // optional + absent -> nothing to verify
+      checks.push({
+        label: `${name} installed (required peer)`,
+        ok: false,
+        fix: min ? `npm install ${name}@^${min}` : `npm install ${name}`,
+      });
+      continue;
+    }
+    if (!min) continue;
+    const ok = versionGte(have, min);
+    checks.push({
+      label: `${name} ${have} (needs >= ${min})`,
+      ok,
+      fix: `npm install ${name}@^${min}`,
+    });
+  }
+  return checks;
+}
+
+function renderPeerVersionChecks(stdout, checks) {
+  if (!checks || checks.length === 0) return;
+  stdout.write('minder doctor: dependency versions\n');
+  for (const c of checks) {
+    stdout.write(`  ${c.ok ? '✓' : '✗'} ${c.label}\n`);
+    if (!c.ok) stdout.write(`      fix: ${c.fix}\n`);
+  }
+  stdout.write('\n');
+}
+
 function cmdDoctor(argv, ctx) {
   const { cwd, stdout, stderr } = ctx;
 
   // Beginner environment checks first (non-fatal — informational).
   renderEnvironmentChecks(stdout, checkEnvironment(cwd));
+
+  // Then: are the installed peer versions new enough for this minder?
+  renderPeerVersionChecks(stdout, checkPeerVersions(cwd));
 
   const configFlagIdx = argv.indexOf('--config');
   const configPath = configFlagIdx !== -1 ? argv[configFlagIdx + 1] : null;
@@ -990,6 +1099,10 @@ module.exports = {
   cmdAdd,
   cmdDoctor,
   cmdHelp,
+  checkPeerVersions,
+  minVersionFromRange,
+  versionGte,
+  minderPeerMinimums,
   writeScaffold,
   KEY_SOURCE_REGISTRY,
   PROVIDERS,

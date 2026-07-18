@@ -829,3 +829,60 @@ describe('npm pack --dry-run ships the CLI', () => {
     expect(files).toContain('scripts/generate-catalog.js');
   });
 });
+
+describe('minder doctor — peer version compatibility (M2 version UX)', () => {
+  it('minVersionFromRange picks the lowest concrete version in a range', () => {
+    expect(cli.minVersionFromRange('^18.0.0 || ^19.0.0')).toBe('18.0.0');
+    expect(cli.minVersionFromRange('^5.90.6')).toBe('5.90.6');
+    expect(cli.minVersionFromRange('>=20.0.0')).toBe('20.0.0');
+    expect(cli.minVersionFromRange('workspace:*')).toBeNull();
+  });
+
+  it('versionGte compares major.minor.patch correctly', () => {
+    expect(cli.versionGte('19.0.0', '18.0.0')).toBe(true);
+    expect(cli.versionGte('5.90.6', '5.90.6')).toBe(true);
+    expect(cli.versionGte('5.5.0', '5.90.6')).toBe(false);
+    expect(cli.versionGte('5.90.5', '5.90.6')).toBe(false);
+    expect(cli.versionGte('18.3.1', '18.0.0')).toBe(true);
+    // Unparseable -> don't cry wolf.
+    expect(cli.versionGte('next', '18.0.0')).toBe(true);
+  });
+
+  it('minderPeerMinimums reads real minimums from minder package.json', () => {
+    const mins = cli.minderPeerMinimums();
+    const rq = mins.find((m: { name: string }) => m.name === '@tanstack/react-query');
+    const react = mins.find((m: { name: string }) => m.name === 'react');
+    expect(rq).toBeTruthy();
+    expect(cli.versionGte('5.90.6', rq.min)).toBe(true);
+    expect(react.min).toBe('18.0.0');
+    // provider SDKs must be optional so absent ones aren't flagged
+    const stripe = mins.find((m: { name: string }) => m.name === 'stripe');
+    expect(stripe?.optional).toBe(true);
+  });
+
+  it('checkPeerVersions flags an outdated required peer with a fix, skips absent optionals', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'minder-ver-'));
+    const stub = (pkg: string, version: string) => {
+      const d = path.join(dir, 'node_modules', ...pkg.split('/'));
+      fs.mkdirSync(d, { recursive: true });
+      fs.writeFileSync(path.join(d, 'package.json'), JSON.stringify({ name: pkg, version }));
+    };
+    stub('react', '17.0.2'); // too old
+    stub('react-dom', '19.0.0'); // ok
+    stub('@tanstack/react-query', '5.5.0'); // too old
+    stub('@tanstack/query-core', '5.90.6'); // ok
+    try {
+      const checks = cli.checkPeerVersions(dir);
+      const byName = (n: string) => checks.find((c: { label: string }) => c.label.startsWith(n));
+      expect(byName('react ').ok).toBe(false);
+      expect(byName('react ').fix).toBe('npm install react@^18.0.0');
+      expect(byName('react-dom').ok).toBe(true);
+      expect(byName('@tanstack/react-query ').ok).toBe(false);
+      expect(byName('@tanstack/react-query ').fix).toBe('npm install @tanstack/react-query@^5.90.6');
+      // stripe (optional) is not installed -> must NOT appear
+      expect(checks.some((c: { label: string }) => c.label.includes('stripe'))).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

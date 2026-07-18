@@ -424,3 +424,40 @@ tasks:
       minder USES react-query as a peer, not competes), channels plan (Show HN / Reddit / dev.to /
       X), a readiness checklist cross-referenced to SUPPORT_MATRIX + BACKLOG, and success metrics.
       It is a PLAN (research deliverable); actual launch EXECUTION (posting, publishing) is owner-gated.
+
+  # ---- Version UX + examples hygiene (added + done 2026-07-19) ----
+  - id: VER-01
+    title: Version-compatibility UX - doctor version-satisfies check, examples-freshness CI guard, compatibility matrix
+    type: implementation
+    status: verified
+    evidence: >-
+      2026-07-19: (1) `minder doctor` now reads installed react/react-dom/@tanstack/react-query
+      versions and compares to minder's OWN peerDependencies minimums (single source of truth),
+      printing "have X, needs >= Y" + an exact `npm install ...@^Y` fix; optional provider SDKs
+      only checked if installed. src/cli/index.cjs + 4 tests in tests/cli-minder.test.ts (42/42).
+      (2) tests/examples-current.test.ts fails CI if examples/nextjs-app drifts below minder's
+      peer minimums (guards against stale examples recurring). (3) docs/COMPATIBILITY.md matrix
+      (Node>=20, React 18/19, RQ>=5.90.6, frameworks, optional SDKs, how future majors work),
+      linked from README. Answers user Qs: minimums declared+enforced; doctor detects+warns with
+      fix; latest-within-major supported (future majors need a range bump — documented).
+  - id: EXA-01
+    title: Examples de-duplication + legacy marking (conservative)
+    type: documentation
+    status: verified
+    evidence: >-
+      2026-07-19: removed 10 stale scratch/status .md files (ANALYSIS_COMPLETE, EXAMPLES_COMPLETE,
+      FIXES_COMPLETE, PROGRESS, VERIFICATION_REPORT, COMPLETE_SETUP_SUMMARY, COMPLETE_PLATFORM_GUIDE,
+      MOBILE_PLATFORMS, RUNNING_EXAMPLES, web/e-commerce/IMPLEMENTATION_SUMMARY) + the duplicate
+      old examples/nextjs/blog (React18/Next14, superseded by CI-tested examples/nextjs-app,
+      React19/Next15). Fixed stale docs/DYNAMIC_IMPORTS.md link. Added current-vs-legacy banner to
+      examples/README.md (nextjs-app canonical; web/electron/expo/nodejs/react-native marked
+      legacy-pending-refresh). Validated first: .next/node_modules were already gitignored.
+  - id: EXA-02
+    title: Refresh legacy platform examples (web/electron/expo/nodejs/react-native) to current versions/APIs
+    type: documentation
+    status: backlog
+    dependencies: [EXA-01]
+    notes: >-
+      The Nov-2025 platform examples pin React 18 / RQ 5.8 and predate the provider refactor.
+      Marked legacy in examples/README.md (EXA-01). Refresh to React 19 / RQ 5.90+ and current
+      APIs; mobile/desktop need the toolchain to runtime-verify (same class as H-05).
