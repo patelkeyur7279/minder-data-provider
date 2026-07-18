@@ -132,6 +132,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   honest Certified / Community / Planned tiers generated from manifests, with
   per-provider runtime/framework claims.
 
+### Added (provider platform foundation — wave 2)
+
+- **Mock mode**: `registerMockProvider(capability, impl)` — build complete UI
+  flows (e.g. `useAuth()`) with zero credentials and zero provider accounts;
+  mocks are flagged `isMock` and integrate with the manifest-based testing
+  harness.
+- **`minder` CLI** (`npx minder`): `init` (config + `.env.example` scaffold +
+  a where-to-get-your-keys table), `add <provider>` (honest "no certified
+  providers yet" until wave ② ships; scaffolding machinery ready underneath),
+  `doctor` (masked credential health check — never prints values).
+- **Edge-safety regression guard**: the server handler core and contracts are
+  provably bundleable for edge runtimes (esbuild `platform=neutral` in CI,
+  with a discrimination proof that seeded Node APIs fail the guard).
+
 ### Added (M1 — integration foundation)
 
 - **Zero-config calls.** `useMinder('https://api.example.com/users')` works with
