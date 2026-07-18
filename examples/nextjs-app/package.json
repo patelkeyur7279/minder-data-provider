@@ -1,0 +1,19 @@
+{
+  "name": "minder-nextjs-example",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start -p 3123"
+  },
+  "dependencies": {
+    "minder-data-provider": "file:../../minder-data-provider-2.2.0-beta.0.tgz",
+    "@tanstack/react-query": "^5.90.6",
+    "next": "^15.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "@reduxjs/toolkit": "^2.9.2",
+    "react-redux": "^9.2.0"
+  }
+}
