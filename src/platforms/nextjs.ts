@@ -11,6 +11,7 @@ export * from './web.js';
 // via `export * from './web.js'` above; restated explicitly per the cross-task export contract.
 export { useAuth, useCheckout, useStorage, useLive } from '../hooks/contracts.js';
 export { registerCapabilityProvider } from '../contracts/registry.js';
+export { registerMockProvider, getProviderConfig } from '../contracts/mockRegistry.js';
 
 // SSR-specific features
 export * from '../ssr/index.js';

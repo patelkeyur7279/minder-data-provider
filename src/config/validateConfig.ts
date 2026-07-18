@@ -218,6 +218,39 @@ function findSuspiciousProviderKeyViolations(cfg: Record<string, unknown>): Conf
   return errors;
 }
 
+/**
+ * `providers.<name>.mock` must be a boolean when present (task F-04 mock-mode plumbing — see
+ * `../contracts/mockRegistry.ts`'s `getProviderConfig`). Runs in every environment (not gated
+ * behind `typeof window !== 'undefined'` like the security-focused walkers above) since this is
+ * a plain schema constraint, not a secret-exposure check — `minder doctor` (server-side CLI)
+ * needs it just as much as browser-side `configureMinder` does.
+ */
+function findProviderMockFlagViolations(cfg: Record<string, unknown>): ConfigError[] {
+  const errors: ConfigError[] = [];
+
+  const providers = cfg.providers;
+  if (providers == null || typeof providers !== 'object' || Array.isArray(providers)) {
+    return errors;
+  }
+
+  for (const [name, entry] of Object.entries(providers as Record<string, unknown>)) {
+    if (entry == null || typeof entry !== 'object' || Array.isArray(entry)) continue;
+
+    const mock = (entry as Record<string, unknown>).mock;
+    if (mock !== undefined && typeof mock !== 'boolean') {
+      const dotPath = `providers.${name}.mock`;
+      errors.push({
+        key: dotPath,
+        message: `"${dotPath}" must be a boolean when present (got ${JSON.stringify(mock)}).`,
+        fix: 'set mock: true or remove the flag',
+        level: 'error',
+      });
+    }
+  }
+
+  return errors;
+}
+
 // ── Main entry point ────────────────────────────────────────────────────────
 
 /**
@@ -299,6 +332,9 @@ export function validateMinderConfig(config: unknown): ValidateConfigResult {
     const err = validateNonNegativeNumber(cfg.retries, 'retries');
     if (err) errors.push(err);
   }
+
+  // 3b. providers.<name>.mock must be a boolean when present — every environment.
+  errors.push(...findProviderMockFlagViolations(cfg));
 
   // 4. Unknown top-level keys -> warning, with nearest-known-key suggestion.
   for (const key of Object.keys(cfg)) {

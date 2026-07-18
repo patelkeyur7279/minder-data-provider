@@ -13,3 +13,6 @@ export {
 } from './registry.js';
 
 export type { AuthContract, PaymentsContract, StorageContract, LiveContract } from './types.js';
+
+// Mock-mode plumbing (task F-04) — see ./mockRegistry.ts.
+export { registerMockProvider, getProviderConfig } from './mockRegistry.js';

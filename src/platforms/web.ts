@@ -13,6 +13,7 @@ export { useMinder } from '../hooks/useMinder.js';
 // exported from the root entry point only — see src/index.ts.
 export { useAuth, useCheckout, useStorage, useLive } from '../hooks/contracts.js';
 export { registerCapabilityProvider } from '../contracts/registry.js';
+export { registerMockProvider, getProviderConfig } from '../contracts/mockRegistry.js';
 
 // Enums (re-exported directly so platform-entry consumers don't need to
 // reach into `constants/enums.js` themselves). Uses a concrete value binding
