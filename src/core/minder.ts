@@ -71,6 +71,14 @@ export type {
 // GLOBAL CONFIGURATION
 // ============================================================================
 
+import { getGlobalMinderConfig } from './globalConfig.js';
+
+// minder()'s URL-resolution bag (baseURL/headers/timeout/token). Together with
+// the routes-aware registry (getGlobalMinderConfig) this forms ONE unified
+// config: the registry supplies url/method/headers/timeout for registered route
+// NAMES, and this bag supplies the baseURL/headers/token used to actually
+// dispatch the request. `configureMinder()` from `src/config` is the single
+// source of truth that writes both stores.
 let globalConfig: MinderConfig = {
   baseURL: '',
   timeout: 30000,
@@ -80,9 +88,34 @@ let globalConfig: MinderConfig = {
 };
 
 /**
- * Configure minder globally
- * Call this once in your app initialization
- * 
+ * Internal: write minder()'s URL-resolution config (baseURL/headers/timeout/
+ * token). Used by the unified `configureMinder()` (src/config) so both global
+ * stores stay in sync. Does NOT emit a deprecation warning.
+ * @internal
+ */
+export function setMinderGlobalConfig(config: Partial<MinderConfig>): void {
+  globalConfig = { ...globalConfig, ...config };
+}
+
+/**
+ * Internal: read minder()'s current URL-resolution config (for tests/tools).
+ * @internal
+ */
+export function getMinderGlobalConfig(): MinderConfig {
+  return globalConfig;
+}
+
+let deprecationWarned = false;
+
+/**
+ * Configure minder globally.
+ *
+ * @deprecated Use `configureMinder` from `minder-data-provider` (or
+ * `minder-data-provider/config`) instead — it is the single source of truth and
+ * also registers your routes. This baseURL/headers-only configurator is kept as
+ * a deprecated alias (exposed as `minder.config()`) that writes the same
+ * underlying store.
+ *
  * @example
  * minder.config({
  *   baseURL: 'https://api.example.com',
@@ -90,7 +123,14 @@ let globalConfig: MinderConfig = {
  * });
  */
 export function configureMinder(config: Partial<MinderConfig>): void {
-  globalConfig = { ...globalConfig, ...config };
+  if (!deprecationWarned) {
+    deprecationWarned = true;
+    console.warn(
+      '[Minder] `minder.config()` / `configureMinder` from core is deprecated. ' +
+      'Use `configureMinder` from "minder-data-provider" instead (it also registers routes).'
+    );
+  }
+  setMinderGlobalConfig(config);
 }
 
 import { StreamClient, type StreamOptions } from './StreamClient.js';
@@ -114,17 +154,42 @@ export async function minder<TData = any>(
   const startTime = Date.now();
   
   try {
-    // 1. Detect HTTP method
-    const method = detectMethod(route, data, options);
-    
+    // 0. Consult the unified route registry: when `route` is a registered NAME,
+    //    resolve its url/method/headers/timeout from the registry entry (with
+    //    trivial `:param` substitution). When `route` is a URL/path, behavior is
+    //    unchanged — it is used verbatim.
+    const registry = getGlobalMinderConfig();
+    const registryRoute = registry?.routes?.[route];
+
+    let url = route;
+    if (registryRoute) {
+      url = registryRoute.url;
+      if (options?.params) {
+        Object.entries(options.params).forEach(([key, value]) => {
+          url = url.replace(`:${key}`, String(value));
+        });
+      }
+    }
+
+    // 1. Detect HTTP method (explicit option > registry entry > auto-detect)
+    let method = detectMethod(route, data, options);
+    if (registryRoute && !options?.method) {
+      method = registryRoute.method as unknown as HttpMethod;
+    }
+
     // 2. Build request config
     const config: AxiosRequestConfig = {
-      baseURL: options?.baseURL || globalConfig.baseURL,
-      url: route,
+      baseURL:
+        options?.baseURL ||
+        globalConfig.baseURL ||
+        (registryRoute ? registry?.apiBaseUrl : undefined) ||
+        '',
+      url,
       method,
-      timeout: options?.timeout || globalConfig.timeout,
+      timeout: options?.timeout || registryRoute?.timeout || globalConfig.timeout,
       headers: {
         ...globalConfig.headers,
+        ...registryRoute?.headers,
         ...options?.headers,
       },
       params: options?.params,

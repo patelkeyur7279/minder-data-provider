@@ -826,10 +826,31 @@ export class ApiClient {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     data?: any,
     params?: Record<string, unknown>,
-    options?: AxiosRequestConfig
+    // `rawUrl` is a Minder-only escape-hatch flag (not an axios option); it is
+    // stripped before the config reaches axios.
+    options?: AxiosRequestConfig & { rawUrl?: boolean }
   ): Promise<T> {
+    // ── Ad-hoc / third-party escape hatch (mirrors useMinder's route-validation
+    //    exemption and minder()'s standalone behavior) ─────────────────────────
+    // An absolute URL or an explicit `rawUrl:true` option skips the registry
+    // entirely and builds the request directly. Auth/interceptors/plugins still
+    // apply because we go through the shared axiosInstance.
+    const isAbsoluteUrl = /^https?:\/\//i.test(routeName);
+    if (isAbsoluteUrl || options?.rawUrl === true) {
+      return this.requestRaw<T>(routeName, data, params, options, isAbsoluteUrl);
+    }
+
     const route = this.config.routes?.[routeName];
     if (!route) {
+      // An ad-hoc relative PATH (leading "/") that is not a registered route
+      // NAME is treated as a raw path resolved against baseURL. This lets
+      // provider-mode `useMinder('/ad-hoc')` work without the hook having to
+      // thread the rawUrl flag. BARE unknown names (no leading slash) still
+      // throw the helpful ROUTE_NOT_FOUND below.
+      if (routeName.startsWith('/')) {
+        return this.requestRaw<T>(routeName, data, params, options, false);
+      }
+
       const availableRoutes = Object.keys(this.config.routes || {});
       const error = new MinderConfigError(
         `Route '${routeName}' not found in configuration`,
@@ -950,6 +971,85 @@ export class ApiClient {
       }
     }
 
+    return response.data;
+  }
+
+  /**
+   * Build and dispatch a request for an ad-hoc URL that bypasses the route
+   * registry — either an absolute `https?://` URL or a `rawUrl`/leading-slash
+   * path. Goes through the shared axiosInstance so auth, interceptors and
+   * plugins apply exactly as they do for registered routes.
+   *
+   * Method resolution: an explicit `options.method` wins; otherwise a request
+   * carrying a body defaults to POST and a bodyless one to GET.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async requestRaw<T = any>(
+    routeName: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data: any,
+    params: Record<string, unknown> | undefined,
+    options: (AxiosRequestConfig & { rawUrl?: boolean }) | undefined,
+    isAbsoluteUrl: boolean
+  ): Promise<T> {
+    // Strip the Minder-only `rawUrl` flag so it never leaks into axios config.
+    const {
+      headers: customHeaders,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      rawUrl: _rawUrl,
+      method: optionMethod,
+      ...otherOptions
+    } = (options || {}) as AxiosRequestConfig & { rawUrl?: boolean };
+
+    // Resolve the URL: absolute is used verbatim; relative resolves against the
+    // instance baseURL. Support trivial `:param` substitution for parity with
+    // registered routes.
+    let url = routeName;
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        url = url.replace(`:${key}`, String(value));
+      });
+    }
+
+    const method = optionMethod || (data === null || data === undefined ? HttpMethod.GET : HttpMethod.POST);
+
+    const requestConfig: AxiosRequestConfig = {
+      method,
+      url,
+      headers: {
+        ...(this.proxyManager?.getProxyHeaders() || {}),
+        ...(customHeaders || {})
+      },
+      timeout: this.proxyManager?.getTimeout() || this.config.performance?.timeout,
+      ...otherOptions,
+    };
+
+    // Absolute URLs are used verbatim: clear baseURL so the instance's
+    // apiBaseUrl is never prefixed.
+    if (isAbsoluteUrl) {
+      requestConfig.baseURL = '';
+    }
+
+    // Body handling with sanitization, mirroring the registered-route path.
+    if (data) {
+      const sanitizedData = this.sanitizeData(data);
+
+      if (typeof FormData !== 'undefined' && sanitizedData instanceof FormData) {
+        requestConfig.data = sanitizedData;
+        if (requestConfig.headers) {
+          delete (requestConfig.headers as Record<string, unknown>)['Content-Type'];
+          delete (requestConfig.headers as Record<string, unknown>)['content-type'];
+          (requestConfig.headers as Record<string, unknown>)['Content-Type'] = undefined;
+        }
+      } else if (typeof sanitizedData === 'string' && sanitizedData.startsWith('<?xml')) {
+        requestConfig.data = sanitizedData;
+        requestConfig.headers!['Content-Type'] = 'application/xml';
+      } else {
+        requestConfig.data = sanitizedData;
+      }
+    }
+
+    const response: AxiosResponse<T> = await this.axiosInstance.request(requestConfig);
     return response.data;
   }
 

@@ -6,6 +6,8 @@ import { HttpMethod, StorageType, Platform, LogLevel } from '../constants/enums.
 import { PlatformDetector } from '../platform/PlatformDetector.js';
 import { MinderConfigError } from '../errors/MinderError.js';
 import { assertNoExposedSecrets } from '../security/secrets.js';
+import { setGlobalMinderConfig } from '../core/globalConfig.js';
+import { setMinderGlobalConfig } from '../core/minder.js';
 
 const logger = new Logger('Config', { level: LoggerLogLevel.DEBUG });
 
@@ -180,6 +182,14 @@ export function configureMinder(config: UnifiedMinderConfig): MinderConfig {
 
   // Generate complete configuration with smart defaults
   const fullConfig = buildFullConfig(config, platform, isDevelopment);
+
+  // 🔗 Unify the two global stores so standalone usage sees ONE source of truth:
+  //  - the routes-aware registry that useMinder reads for VALIDATION and that
+  //    minder() now consults for route-NAME resolution, and
+  //  - minder()'s baseURL bag used for URL RESOLUTION.
+  // (MinderDataProvider still sets the registry too when a provider is used.)
+  setGlobalMinderConfig(fullConfig);
+  setMinderGlobalConfig({ baseURL: fullConfig.apiBaseUrl });
 
   logger.debug('Minder configured', {
     platform,
