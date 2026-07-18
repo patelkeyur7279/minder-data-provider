@@ -1,4 +1,6 @@
-import { minder, configureMinder } from 'minder-data-provider';
+// Pure-Node app: import from the React-free `/node` entry so nothing pulls in
+// React (the main entry re-exports the hooks, which require React as a peer).
+import { minder, configureMinder } from 'minder-data-provider/node';
 
 /**
  * API Configuration
@@ -31,6 +33,16 @@ const getApiBaseUrl = () => {
 /**
  * Configure Minder with default options
  */
+// The `/node` entry's configureMinder is the minimal, React-free URL-resolution
+// configurator: MinderConfig = { baseURL, timeout, headers }. (The main entry's
+// configureMinder takes the fuller UnifiedMinderConfig with `apiUrl` + routes,
+// but the main entry re-exports the hooks and therefore requires React — not
+// something a pure-Node API server should need.)
+//
+// Known gap (tracked as EXA-GAP-1): this core configurator logs a deprecation
+// notice pointing at the main `configureMinder`, yet that one isn't available
+// React-free. Until the framework exposes the unified config React-free from
+// `/node`, this is the correct React-free choice for a Node server.
 configureMinder({
   baseURL: getApiBaseUrl(),
   timeout: 10000, // 10 seconds
