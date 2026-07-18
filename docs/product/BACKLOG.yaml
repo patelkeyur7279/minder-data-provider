@@ -24,6 +24,7 @@ tasks:
     evidence: "Wave1 2026-07-18: orchestrator-verified — jest --coverage exit 0, 88 suites/1611 tests, tsc clean, lint 0 errors, build OK"
     acceptance: "No non-safelisted default request headers; withCredentials only when configured; before/after latency demo recorded"
     evidence_basis: "Hot-path audit item 1 (ApiClient.ts:192-197)"
+    latency_demo: "2026-07-18 browser demo: 60 cross-origin GETs/mode; OLD defaults median 0.8ms p90 1.2ms (every GET paired with OPTIONS 204 preflight, verified in network log); NEW defaults median 0.4ms p90 0.6ms, zero preflights. Ratio 2.00x on localhost; real networks add a full RTT per request."
     risks: "Consumers relying on credentialed default; migration note required"
   - id: M0-02
     title: Retry default 3 -> 1; document override

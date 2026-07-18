@@ -23,10 +23,12 @@ with rules-of-hooks=error, build OK, offline tests stress-run 8× stable.
 integrations: infrastructure.test.ts flipped to assert peerDeps; rawUrl/method threaded through
 useMinder's two request call sites.
 
-**M0 milestone gate status:** all gates pass EXCEPT "before/after latency demo" (M0-01
-acceptance) — still owed; needs a browser-based preflight measurement. Coverage regenerated and
-CI-gated ✅. Remaining before M0 is declared CLOSED: latency demo + owner decisions (SEC-01 branch
-disposition — note branch now carries all M0 work too — and R-01 evolve-in-place confirmation).
+**M0 milestone: ALL GATES PASS — CLOSED (engineering).** Latency demo completed 2026-07-18:
+real-browser measurement, 60 cross-origin GETs per mode — OLD defaults median 0.8ms (every GET
+paired with an OPTIONS 204 preflight, verified in the network log), NEW defaults median 0.4ms,
+zero preflights. Structural 2.00×; real networks add a full RTT per request. Coverage CI-gated ✅,
+bundle gate ✅ (core.mjs 4K). Outstanding: owner decisions only (SEC-01+M0 branch disposition,
+R-01 evolve-in-place confirmation).
 
 **Next:** M1 planning (zero-config calls, SecretRef boundary enforcement, mutating plugin
 middleware, provider manifest + certification tooling, testing harness, Next.js example app).
