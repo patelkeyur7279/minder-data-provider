@@ -43,6 +43,12 @@ export interface UnifiedMinderConfig {
   routes?: Record<string, string | ApiRoute>;
 
   /**
+   * Provider platform config (per-provider sections; secrets only as
+   * secret('ENV_NAME') refs — raw secret-shaped strings hard-fail in browsers).
+   */
+  providers?: Record<string, unknown>;
+
+  /**
    * Next.js dynamic import function - Required for Next.js apps
    * @example
    * import dynamic from 'next/dynamic';
@@ -413,6 +419,12 @@ function applyUserConfig(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   platform: Platform
 ): void {
+  // Provider platform sections pass through verbatim (validated separately
+  // by validateMinderConfig; consumed via getProviderConfig).
+  if (userConfig.providers !== undefined) {
+    baseConfig.providers = userConfig.providers;
+  }
+
   // Auth configuration
   if (userConfig.auth !== undefined) {
     if (userConfig.auth === true) {

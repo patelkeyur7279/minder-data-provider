@@ -14,6 +14,8 @@ import type { MinderPlugin } from '../plugins/PluginSystem.js';
 export interface MinderConfig {
   apiBaseUrl: string;
   routes: Record<string, ApiRoute>;
+  /** Provider platform config sections (see contracts/mockRegistry getProviderConfig). */
+  providers?: Record<string, unknown>;
   /**
    * Optional dynamic import function (e.g., Next.js dynamic())
    * Used for code-splitting React Query Devtools in development
