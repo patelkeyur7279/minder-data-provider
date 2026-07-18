@@ -88,13 +88,15 @@ tasks:
   - id: M1-01
     title: Zero-config calls (registry optional) + error.raw + axios escape hatch
     type: implementation
-    status: backlog
+    status: verified
+    evidence: "M1-Wave1 2026-07-18: orchestrator-verified — jest --coverage exit 0, 98 suites/1730 tests/0 failed, tsc clean, lint 0 errors, build OK; example app rebuilt green from fresh pack of final source"
     dependencies: [M0-03, M0-05]
     acceptance: "GET in 2 lines without provider/registry; raw AxiosError reachable; docs updated"
   - id: M1-02
     title: Config validation + env schema + SecretRef boundary enforcement + .env.example generation
     type: implementation
-    status: backlog
+    status: verified
+    evidence: "M1-Wave1 2026-07-18: orchestrator-verified — jest --coverage exit 0, 98 suites/1730 tests/0 failed, tsc clean, lint 0 errors, build OK; example app rebuilt green from fresh pack of final source"
     acceptance: "serverOnly key routed to client entry = hard fail with guidance; schema errors name the exact key"
   - id: M1-03
     title: Mutating plugin middleware + emit onUpload/onSync/onConnectivityChange
@@ -104,7 +106,8 @@ tasks:
   - id: M1-04
     title: Provider manifest format + certification checklist automation
     type: design
-    status: backlog
+    status: verified
+    evidence: "M1-Wave1 2026-07-18: orchestrator-verified — jest --coverage exit 0, 98 suites/1730 tests/0 failed, tsc clean, lint 0 errors, build OK; example app rebuilt green from fresh pack of final source"
     acceptance: "Manifest schema published; lint command validates a provider package against the 10-point checklist"
   - id: M1-05
     title: Testing harness - provider mocks, contract tests, secret-leak helpers
@@ -113,7 +116,16 @@ tasks:
   - id: M1-06
     title: Next.js runnable example app in CI (promotes Next.js to Confirmed)
     type: documentation
-    status: backlog
+    status: verified
+    note: "Support-matrix promotion to Confirmed only after the CI workflow's first green run on GitHub"
+    evidence: "M1-Wave1 2026-07-18: orchestrator-verified — jest --coverage exit 0, 98 suites/1730 tests/0 failed, tsc clean, lint 0 errors, build OK; example app rebuilt green from fresh pack of final source"
+
+  - id: M1-07
+    title: Make Redux truly optional (lazy provider store) + re-export HttpMethod from /nextjs and /web subpaths
+    type: bug
+    status: ready
+    evidence_basis: "M1-06 example app: MinderDataProvider imports react-redux/@reduxjs/toolkit unconditionally while peerDependenciesMeta marks them optional — consumers without them get module-not-found; HttpMethod missing from platform subpath exports"
+    acceptance: "Example app builds WITHOUT react-redux/@reduxjs/toolkit installed; store constructed only when redux is present/configured; deprecated useReduxSlice/useStore degrade with clear error; HttpMethod importable from /nextjs and /web"
 
   # ---- M2: First providers ----
   - id: M2-01
