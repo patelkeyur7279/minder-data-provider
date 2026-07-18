@@ -1,4 +1,13 @@
 /**
+ * @jest-environment node
+ *
+ * Runs in Jest's `node` environment (not the repo-default jsdom): this is a
+ * Node-side bundling test with no DOM, and esbuild's JS API refuses to run
+ * under jsdom — jsdom swaps in its own `Uint8Array`, so esbuild's startup
+ * invariant `Buffer.from("") instanceof Uint8Array` is cross-realm false and
+ * it throws "your JavaScript environment is broken". Real Node globals here
+ * satisfy the invariant.
+ *
  * Regression guard: edge-safety bundling (platform=neutral, no Node APIs).
  *
  * Context — the constraint this guards against:
@@ -15,7 +24,6 @@
  * test verifies the guard catches violations when a bad import is added.
  */
 
-import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -24,37 +32,30 @@ const projectRoot = path.resolve(__dirname, '..');
 /**
  * Bundle a TypeScript entry point with esbuild (platform=neutral).
  * Returns the bundled output as a string.
+ *
+ * Uses esbuild's JS API (`buildSync`) rather than spawning its CLI. The old
+ * approach ran `node require.resolve('esbuild/bin/esbuild')`, but on Linux that
+ * resolved path IS the native Go binary (an ELF executable) — so Node tried to
+ * parse machine code as JavaScript and threw "SyntaxError: Invalid or
+ * unexpected token". It only passed on macOS, where `bin/esbuild` is a JS
+ * launcher shim. The buildSync API is platform-agnostic (same options as the
+ * old CLI flags: bundle, esm, neutral, module/main fields, externals) — it just
+ * requires the `node` test environment (see the `@jest-environment` pragma
+ * above), which the CLI subprocess used to provide implicitly.
  */
 function bundleEdgeModule(entryPath: string, externals: string[] = []): string {
-  const os = require('os') as typeof import('os');
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'edge-safety-'));
-  try {
-    const outFile = path.join(tmp, 'bundle.mjs');
-    const esbuildBin = require.resolve('esbuild/bin/esbuild');
-
-    // Build external args: --external:pattern for each external module.
-    const externalArgs = externals.flatMap((ext) => [`--external:${ext}`]);
-
-    execFileSync(
-      process.execPath,
-      [
-        esbuildBin,
-        entryPath,
-        '--bundle',
-        '--format=esm',
-        '--platform=neutral',
-        '--main-fields=module,main',
-        ...externalArgs,
-        `--outfile=${outFile}`,
-        '--log-level=silent',
-      ],
-      { encoding: 'utf8' }
-    );
-
-    return fs.readFileSync(outFile, 'utf8');
-  } finally {
-    fs.rmSync(tmp, { recursive: true, force: true });
-  }
+  const esbuild = require('esbuild') as typeof import('esbuild');
+  const result = esbuild.buildSync({
+    entryPoints: [entryPath],
+    bundle: true,
+    format: 'esm',
+    platform: 'neutral',
+    mainFields: ['module', 'main'],
+    external: externals,
+    write: false,
+    logLevel: 'silent',
+  });
+  return result.outputFiles[0].text;
 }
 
 /**
