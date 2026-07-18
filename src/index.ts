@@ -31,6 +31,9 @@ if (process.env.NODE_ENV === 'development') {
 // Core universal function
 export { minder } from './core/minder.js';
 export { configureMinder } from './config/index.js';
+// Wave K — enterprise config composition: merge separate per-team/feature
+// config modules into one before configureMinder.
+export { mergeMinderConfig } from './config/mergeConfig.js';
 export type {
   MinderOptions,
   MinderResult,

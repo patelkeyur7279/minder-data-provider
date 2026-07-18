@@ -240,6 +240,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Runnable Next.js example app** (`examples/nextjs-app`) consuming the
   packed tarball, with a CI workflow building it on PRs.
 
+### Added (enterprise config composition)
+
+- **`mergeMinderConfig(...modules)`** — compose several partial config modules
+  (e.g. one per team/feature) into one config for `configureMinder`. Record
+  fields (`routes`, `providers`, `environments`) union-merge (later key wins on
+  conflict); scalars take the last non-`undefined` value. Inputs are not
+  mutated.
+
 ### Added (local-first data)
 
 - **`useMinder(route, { source })`** — read data from local persistent storage,
