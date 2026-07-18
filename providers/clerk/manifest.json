@@ -1,0 +1,36 @@
+{
+  "name": "@minder/provider-clerk",
+  "version": "0.1.0",
+  "displayName": "Clerk",
+  "categories": ["auth"],
+  "capabilities": ["auth", "session-verification"],
+  "config": {
+    "clientSafe": ["publishableKey", "mock"],
+    "serverOnly": ["secretKey"]
+  },
+  "scopes": [
+    {
+      "scope": "auth:session",
+      "why": "Read the current Clerk session (session/user) to expose the signed-in user via useAuth()."
+    },
+    {
+      "scope": "auth:signout",
+      "why": "Sign the user out (clerk.signOut) when the app calls useAuth().signOut()."
+    },
+    {
+      "scope": "session:verify",
+      "why": "Verify a Clerk session token server-side (POST to Clerk's session-verify API with the secret key) so protected server routes trust the caller; the secret key is resolved per-request and never reaches the browser."
+    }
+  ],
+  "runtimes": ["web", "node", "edge"],
+  "frameworks": ["react", "nextjs", "vite"],
+  "peerDependencies": {
+    "@clerk/clerk-js": "^5.0.0"
+  },
+  "docs": {
+    "setup": "./README.md",
+    "example": "./example.ts",
+    "security": "./README.md"
+  },
+  "license": "MIT"
+}

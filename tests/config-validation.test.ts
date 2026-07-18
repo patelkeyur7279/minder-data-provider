@@ -337,6 +337,54 @@ describe('registerClientSafeProviderKeys — Stripe certified provider', () => {
   });
 });
 
+describe('registerClientSafeProviderKeys — Clerk certified provider', () => {
+  // Default jest env here is jsdom, so `window` is defined and the browser-only
+  // suspicious-key walker runs. Reset the module-level registry after each test.
+  afterEach(() => {
+    __resetClientSafeProviderKeys();
+  });
+
+  it('a raw secretKey under providers.clerk hard-fails once clerk registers its clientSafe keys', () => {
+    // Register clerk's client-safe allowlist (as providers/clerk/src/index.ts does
+    // at module scope): publishableKey + mock are exempt, marking clerk "certified"
+    // so any other credential-shaped key must be a secret().
+    registerClientSafeProviderKeys('clerk', ['publishableKey', 'mock']);
+
+    const result = validateMinderConfig({
+      apiUrl: 'https://api.example.com',
+      providers: { clerk: { secretKey: 'sk_raw_value_leaking_into_the_bundle' } },
+    });
+
+    expect(result.valid).toBe(false);
+    const err = result.errors.find((e) => e.key === 'providers.clerk.secretKey');
+    expect(err).toBeDefined();
+    expect(err!.level).toBe('error');
+    expect(err!.fix).toMatch(/secret\(/);
+  });
+
+  it('a raw publishableKey (public by design) passes because it is registered client-safe', () => {
+    registerClientSafeProviderKeys('clerk', ['publishableKey', 'mock']);
+
+    const result = validateMinderConfig({
+      apiUrl: 'https://api.example.com',
+      providers: { clerk: { publishableKey: 'pk_test_public_key' } },
+    });
+
+    expect(result.errors.find((e) => e.key === 'providers.clerk.publishableKey')).toBeUndefined();
+    expect(result.valid).toBe(true);
+  });
+
+  it('secretKey wrapped in secret() passes even for the certified clerk provider', () => {
+    registerClientSafeProviderKeys('clerk', ['publishableKey', 'mock']);
+    const result = validateMinderConfig({
+      apiUrl: 'https://api.example.com',
+      providers: { clerk: { secretKey: secret('CLERK_SECRET_KEY') } },
+    });
+    expect(result.errors.find((e) => e.key === 'providers.clerk.secretKey')).toBeUndefined();
+    expect(result.valid).toBe(true);
+  });
+});
+
 describe('configureMinder — wired validation', () => {
   it('still throws the original message when apiUrl is entirely missing (existing behavior preserved)', () => {
     // @ts-expect-error - intentionally invalid for the runtime check
