@@ -886,3 +886,55 @@ describe('minder doctor — peer version compatibility (M2 version UX)', () => {
     }
   });
 });
+
+describe('minder doctor --fix (A1)', () => {
+  const collect = () => {
+    const chunks: string[] = [];
+    return { stdout: { write: (s: string) => (chunks.push(s), true) }, out: () => chunks.join('') };
+  };
+
+  it('nothing to fix when all peers pass', () => {
+    const c = collect();
+    const r = cli.applyPeerFixes(c.stdout, [{ label: 'react 19', ok: true }], { cwd: '/x' });
+    expect(r.ran).toBe(false);
+    expect(r.specs).toEqual([]);
+    expect(c.out()).toMatch(/nothing to fix/);
+  });
+
+  it('--dry-run prints the install command but does NOT run it', () => {
+    const c = collect();
+    let ran = false;
+    const r = cli.applyPeerFixes(
+      c.stdout,
+      [
+        { label: 'react 17.0.2 (needs >= 18.0.0)', ok: false, fix: 'npm install react@^18.0.0' },
+        { label: '@tanstack/react-query 5.5.0', ok: false, fix: 'npm install @tanstack/react-query@^5.90.6' },
+      ],
+      { cwd: '/x', dryRun: true, exec: () => { ran = true; } }
+    );
+    expect(ran).toBe(false);
+    expect(r.ran).toBe(false);
+    expect(r.specs).toEqual(['react@^18.0.0', '@tanstack/react-query@^5.90.6']);
+    expect(c.out()).toContain('npm install react@^18.0.0 @tanstack/react-query@^5.90.6');
+    expect(c.out()).toMatch(/dry-run/);
+  });
+
+  it('--fix runs the injected installer with the exact specs', () => {
+    const c = collect();
+    const calls: Array<[string[], string]> = [];
+    const r = cli.applyPeerFixes(
+      c.stdout,
+      [{ label: 'react 17.0.2 (needs >= 18.0.0)', ok: false, fix: 'npm install react@^18.0.0' }],
+      { cwd: '/proj', exec: (specs: string[], cwd: string) => calls.push([specs, cwd]) }
+    );
+    expect(r.ran).toBe(true);
+    expect(calls).toEqual([[['react@^18.0.0'], '/proj']]);
+    expect(c.out()).toMatch(/done/);
+  });
+
+  it('plain doctor (no --fix) never mutates: applyPeerFixes is only called under --fix', () => {
+    // Guard the contract: cmdDoctor only calls applyPeerFixes when argv includes --fix.
+    const src = require('fs').readFileSync(require('path').resolve(__dirname, '../src/cli/index.cjs'), 'utf8');
+    expect(src).toMatch(/argv\.includes\('--fix'\)[\s\S]*applyPeerFixes/);
+  });
+});

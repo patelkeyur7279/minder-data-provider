@@ -22,6 +22,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 
 /**
  * Single source of truth for "is this provider certified?" — the exact
@@ -420,8 +421,14 @@ Commands:
                              provider name exits 1 with the list of
                              registered providers.
 
-  doctor [--config <path>]  Check that provider credentials referenced by
-                             your config are present in the environment.
+  doctor [--fix] [--config <path>]
+                             Check the environment, that installed peer
+                             versions (react, react-query, …) meet minder's
+                             minimums, and that provider credentials referenced
+                             by your config are present.
+                             --fix installs the exact versions needed to satisfy
+                             any outdated/missing peers (add --dry-run to preview
+                             the command without installing).
                              Reads an optional plain JSON config file
                              (--config path/to/file.json) or falls back to
                              scanning .env.example for variable names.
@@ -986,6 +993,41 @@ function renderPeerVersionChecks(stdout, checks) {
   stdout.write('\n');
 }
 
+/** Default installer used by `--fix` (isolated so tests can inject a fake). */
+function defaultNpmInstall(specs, cwd) {
+  execFileSync('npm', ['install', ...specs], { cwd, stdio: 'inherit' });
+}
+
+/**
+ * `minder doctor --fix`: install the exact versions needed to satisfy the failing
+ * peer checks. Running only happens because the user passed `--fix` (explicit
+ * consent); `--dry-run` prints the command without running it. Returns a summary
+ * so it is unit-testable without touching the network.
+ */
+function applyPeerFixes(stdout, checks, opts) {
+  const { cwd, dryRun, exec } = opts || {};
+  const failing = (checks || []).filter((c) => !c.ok && c.fix);
+  if (failing.length === 0) {
+    stdout.write('minder doctor --fix: nothing to fix — all checked peers meet the minimums.\n\n');
+    return { specs: [], ran: false };
+  }
+  const specs = failing.map((c) => c.fix.replace(/^npm install /, '').trim());
+  stdout.write("minder doctor --fix: to satisfy minder's minimums, run:\n");
+  stdout.write('  npm install ' + specs.join(' ') + '\n');
+  if (dryRun) {
+    stdout.write('  (--dry-run: not installing)\n\n');
+    return { specs, ran: false };
+  }
+  try {
+    (exec || defaultNpmInstall)(specs, cwd);
+    stdout.write('  ✓ done. Re-run `minder doctor` to confirm.\n\n');
+    return { specs, ran: true };
+  } catch (e) {
+    stdout.write('  ✗ install failed: ' + (e && e.message ? e.message : String(e)) + '\n\n');
+    return { specs, ran: true, error: true };
+  }
+}
+
 function cmdDoctor(argv, ctx) {
   const { cwd, stdout, stderr } = ctx;
 
@@ -993,7 +1035,18 @@ function cmdDoctor(argv, ctx) {
   renderEnvironmentChecks(stdout, checkEnvironment(cwd));
 
   // Then: are the installed peer versions new enough for this minder?
-  renderPeerVersionChecks(stdout, checkPeerVersions(cwd));
+  const versionChecks = checkPeerVersions(cwd);
+  renderPeerVersionChecks(stdout, versionChecks);
+
+  // `--fix` installs the exact versions needed (explicit user consent).
+  // `--fix --dry-run` prints the command without running it.
+  if (argv.includes('--fix')) {
+    applyPeerFixes(stdout, versionChecks, {
+      cwd,
+      dryRun: argv.includes('--dry-run'),
+      exec: ctx.exec,
+    });
+  }
 
   const configFlagIdx = argv.indexOf('--config');
   const configPath = configFlagIdx !== -1 ? argv[configFlagIdx + 1] : null;
@@ -1100,6 +1153,7 @@ module.exports = {
   cmdDoctor,
   cmdHelp,
   checkPeerVersions,
+  applyPeerFixes,
   minVersionFromRange,
   versionGte,
   minderPeerMinimums,
