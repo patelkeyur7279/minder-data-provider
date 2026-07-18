@@ -66,6 +66,15 @@ Proof: controlled experiment (guard fails on broken build, 15/15 on fixed) + rea
 of the example app with zero console errors. Debug agent was killed mid-task by a session limit;
 orchestrator completed the validation half inline.
 
+**WAVE G COMPLETE (2026-07-19) — first full six-stage-pipeline wave.** Cleanup + docs + the
+bugs the pipeline itself surfaced: README golden-path rewrite, migration guide, custom-provider
+public API (server-only boundary proven at source/dist/runtime), configureMinder preset-override
+fix, CLI certification honesty (tarball-verified), Express-proxy + residual CORS credential
+hardening (SEC-01 class). 4 bounces caught pre-commit. Gate: 2112 tests / 0 failed. Session
+limits killed two agents mid-wave; orchestrator completed their work inline with the same
+evidence bar. NEXT: Wave H (platform certification — Expo + Electron examples). Still owner-only:
+GitHub unblock click (~85 local commits waiting), publish approval.
+
 **VISION REFINEMENT (owner, 2026-07-19):** Core identity = the data layer between UI and ANY
 source (backend / local db / server / anything): one-API-call demo → enterprise, every React
 platform (web/mobile/desktop), usable by low-experience developers. Pillars: Performance,
