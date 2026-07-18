@@ -388,7 +388,7 @@ export default corsMiddleware;
 ## Verification checklist (before claiming done)
 
 - [x] All 4 tasks committed on `fix/fail-closed-auth-and-cors-default`
-- [x] Full jest suite passes (record count) — 85 suites / 1631 passed, 5 skipped (pre-existing)
+- [x] Full jest suite passes — 86 suites passed / 1 suite skipped; 1592 tests passed, 31 skipped (pre-existing skips), 0 failures
 - [x] `npm run type-check` clean
 - [x] `npm run lint:check` clean (pre-existing warnings only, 0 errors)
 - [x] `npm run build` succeeds
