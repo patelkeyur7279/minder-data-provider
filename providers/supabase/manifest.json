@@ -1,0 +1,44 @@
+{
+  "name": "@minder/provider-supabase",
+  "version": "0.1.0",
+  "displayName": "Supabase",
+  "categories": ["auth", "database", "storage"],
+  "capabilities": ["auth", "storage", "live", "row-level-security", "realtime-subscriptions"],
+  "config": {
+    "clientSafe": ["url", "anonKey", "mock"],
+    "serverOnly": ["serviceRoleKey"]
+  },
+  "scopes": [
+    {
+      "scope": "auth:session",
+      "why": "Read the current Supabase auth session (getSession) to expose the signed-in user via useAuth() and attach the session JWT to requests."
+    },
+    {
+      "scope": "auth:signout",
+      "why": "Sign the user out (auth.signOut) when the app calls useAuth().signOut()."
+    },
+    {
+      "scope": "storage:object:write",
+      "why": "Upload objects to a Storage bucket on behalf of the signed-in user when the app calls useStorage().upload()."
+    },
+    {
+      "scope": "storage:object:delete",
+      "why": "Remove objects from a Storage bucket when the app calls useStorage().remove()."
+    },
+    {
+      "scope": "realtime:subscribe",
+      "why": "Open a Realtime broadcast channel (channel/subscribe) so useLive() receives events; closed via removeChannel on unsubscribe."
+    }
+  ],
+  "runtimes": ["web", "node", "edge"],
+  "frameworks": ["react", "nextjs", "vite"],
+  "peerDependencies": {
+    "@supabase/supabase-js": "^2.0.0"
+  },
+  "docs": {
+    "setup": "./README.md",
+    "example": "./example.ts",
+    "security": "./README.md"
+  },
+  "license": "MIT"
+}

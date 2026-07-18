@@ -14,6 +14,8 @@ import {
   validateMinderConfig,
   serverOnlyKeys,
   KNOWN_TOP_LEVEL_KEYS,
+  registerClientSafeProviderKeys,
+  __resetClientSafeProviderKeys,
 } from '../src/config/validateConfig';
 import { configureMinder } from '../src/config/index';
 import { secret } from '../src/security/secrets';
@@ -191,6 +193,98 @@ describe('validateMinderConfig — serverOnly key enforcement', () => {
       (global as any).window = (global as any).__savedWindow;
       delete (global as any).__savedWindow;
     }
+  });
+});
+
+describe('registerClientSafeProviderKeys — certified-provider clientSafe allowlist (browser-only)', () => {
+  // Default jest env here is jsdom, so `window` is defined and the browser-only
+  // suspicious-key walker runs. The registry is module-level state — reset it
+  // after each test so registrations don't bleed across tests.
+  afterEach(() => {
+    __resetClientSafeProviderKeys();
+  });
+
+  it('a raw serviceRoleKey under providers.supabase hard-fails ONLY once supabase registers its clientSafe keys', () => {
+    // serviceRoleKey does not match SUSPICIOUS_KEY by name, so before the provider
+    // declares its client-safe surface there is nothing marking it as a secret.
+    const before = validateMinderConfig({
+      apiUrl: 'https://api.example.com',
+      providers: { supabase: { serviceRoleKey: 'raw-service-role-string' } },
+    });
+    expect(before.errors.find((e) => e.key === 'providers.supabase.serviceRoleKey')).toBeUndefined();
+
+    // Registering the client-safe allowlist marks supabase "certified": any other
+    // credential-shaped key (e.g. serviceRoleKey) must be a secret() or hard-fails.
+    registerClientSafeProviderKeys('supabase', ['url', 'anonKey']);
+
+    const after = validateMinderConfig({
+      apiUrl: 'https://api.example.com',
+      providers: { supabase: { serviceRoleKey: 'raw-service-role-string' } },
+    });
+    expect(after.valid).toBe(false);
+    const err = after.errors.find((e) => e.key === 'providers.supabase.serviceRoleKey');
+    expect(err).toBeDefined();
+    expect(err!.level).toBe('error');
+    expect(err!.message).toContain('providers.supabase.serviceRoleKey');
+    expect(err!.fix).toMatch(/secret\(/);
+  });
+
+  it('anonKey (public by design) passes ONLY after it is registered clientSafe', () => {
+    // Registered clientSafe WITHOUT anonKey: the credential-shaped `…Key` name is
+    // flagged for the now-certified provider.
+    registerClientSafeProviderKeys('supabase', ['url']);
+    const cfg = {
+      apiUrl: 'https://api.example.com',
+      providers: { supabase: { anonKey: 'public-anon-key' } },
+    };
+    expect(validateMinderConfig(cfg).errors.find((e) => e.key === 'providers.supabase.anonKey')).toBeDefined();
+
+    // Add anonKey to the allowlist -> exempt -> passes.
+    registerClientSafeProviderKeys('supabase', ['anonKey']);
+    expect(validateMinderConfig(cfg).errors.find((e) => e.key === 'providers.supabase.anonKey')).toBeUndefined();
+    expect(validateMinderConfig(cfg).valid).toBe(true);
+  });
+
+  it('serviceRoleKey wrapped in secret() passes even for a certified provider', () => {
+    registerClientSafeProviderKeys('supabase', ['url', 'anonKey']);
+    const result = validateMinderConfig({
+      apiUrl: 'https://api.example.com',
+      providers: { supabase: { serviceRoleKey: secret('SUPABASE_SERVICE_ROLE_KEY') } },
+    });
+    expect(result.errors.find((e) => e.key === 'providers.supabase.serviceRoleKey')).toBeUndefined();
+    expect(result.valid).toBe(true);
+  });
+
+  it('client-safe keys (url, anonKey) hold raw strings without error once registered', () => {
+    registerClientSafeProviderKeys('supabase', ['url', 'anonKey']);
+    const result = validateMinderConfig({
+      apiUrl: 'https://api.example.com',
+      providers: { supabase: { url: 'https://proj.supabase.co', anonKey: 'public-anon-key' } },
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it('other providers are unaffected: an unregistered provider keeps SUSPICIOUS_KEY-only behavior', () => {
+    registerClientSafeProviderKeys('supabase', ['url', 'anonKey']);
+    const result = validateMinderConfig({
+      apiUrl: 'https://api.example.com',
+      providers: { stripe: { publishableKey: 'pk_live_public', secretKey: 'raw-secret' } },
+    });
+    // publishableKey is credential-shaped but stripe is not certified -> not flagged.
+    expect(result.errors.find((e) => e.key === 'providers.stripe.publishableKey')).toBeUndefined();
+    // secretKey matches SUSPICIOUS_KEY regardless of certification -> still flagged.
+    expect(result.errors.find((e) => e.key === 'providers.stripe.secretKey')).toBeDefined();
+  });
+
+  it('registration is additive / idempotent', () => {
+    registerClientSafeProviderKeys('supabase', ['url']);
+    registerClientSafeProviderKeys('supabase', ['anonKey']);
+    registerClientSafeProviderKeys('supabase', ['url']); // duplicate is a no-op
+    const result = validateMinderConfig({
+      apiUrl: 'https://api.example.com',
+      providers: { supabase: { url: 'u', anonKey: 'a' } },
+    });
+    expect(result.valid).toBe(true);
   });
 });
 

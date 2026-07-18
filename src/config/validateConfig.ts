@@ -79,6 +79,61 @@ export const KNOWN_TOP_LEVEL_KEYS = [
  */
 export const serverOnlyKeys: string[] = ['providers.*.serverOnly'];
 
+// ── Client-safe provider-key allowlist registry ─────────────────────────────
+//
+// A provider adapter (e.g. `providers/supabase/src/index.ts`) declares, at module
+// scope, exactly which of its config keys are safe to appear inline in client
+// config via `registerClientSafeProviderKeys(provider, keys)`. This exists to
+// resolve a specific false-positive/false-negative pair the name-only
+// `SUSPICIOUS_KEY` heuristic cannot:
+//
+//   - Supabase's `anonKey` is intentionally PUBLIC (it is the browser key, gated
+//     by row-level security), yet it is credential-shaped (`…Key`). Registering it
+//     as client-safe EXEMPTS it from the credential-key check below.
+//   - Supabase's `serviceRoleKey` is a real secret that must NEVER ship to the
+//     client. It is *not* matched by `SUSPICIOUS_KEY` (no "secret"/"token"/…
+//     token in its name), so absent this registry a raw `serviceRoleKey` string
+//     would slip through. Once a provider registers its client-safe allowlist it
+//     is treated as "certified": any credential-shaped key NOT on the allowlist
+//     (and not already a `secret()`/`CredentialInput`) hard-fails.
+//
+// Keys accumulate (additive/idempotent) so an adapter may register in pieces. The
+// registry is module-level state; `__resetClientSafeProviderKeys` clears it for
+// test isolation (there is no production reason to unregister a provider's
+// declared safe surface at runtime).
+const clientSafeProviderKeys = new Map<string, Set<string>>();
+
+/**
+ * Register the config keys that are safe to appear inline in CLIENT config for
+ * `provider` (e.g. `registerClientSafeProviderKeys('supabase', ['url', 'anonKey'])`).
+ * Additive and idempotent. Once any keys are registered for a provider, that
+ * provider is treated as "certified" by `findSuspiciousProviderKeyViolations`:
+ * a credential-shaped key under `providers.<provider>` that is NOT on this
+ * allowlist (and is a raw string, not a `secret()`/`CredentialInput`) hard-fails
+ * in browser-like environments.
+ */
+export function registerClientSafeProviderKeys(provider: string, keys: string[]): void {
+  let set = clientSafeProviderKeys.get(provider);
+  if (!set) {
+    set = new Set<string>();
+    clientSafeProviderKeys.set(provider, set);
+  }
+  for (const key of keys) set.add(key);
+}
+
+/** Test-only: clear the client-safe provider-key registry between tests. */
+export function __resetClientSafeProviderKeys(): void {
+  clientSafeProviderKeys.clear();
+}
+
+/**
+ * Credential-shaped key-name suffixes enforced for a CERTIFIED provider (one that
+ * has registered a client-safe allowlist). Deliberately narrower in scope than a
+ * global heuristic: it only fires for registered providers, so a non-certified
+ * provider's `publishableKey` (Stripe's public key) is never touched by it.
+ */
+const CERTIFIED_PROVIDER_CREDENTIAL_KEY = /(secret|token|password|passphrase|credential|key)$/i;
+
 // ── URL validation ──────────────────────────────────────────────────────────
 
 function isValidUrl(value: string): boolean {
@@ -197,17 +252,32 @@ function findSuspiciousProviderKeyViolations(cfg: Record<string, unknown>): Conf
 
       if (isCredentialInput(child)) continue; // secret()/serverConfig/file refs are safe — never descend into them
 
-      if (typeof child === 'string' && SUSPICIOUS_KEY.test(key)) {
-        const dotPath = childPath.join('.');
-        errors.push({
-          key: dotPath,
-          message:
-            `"${dotPath}" looks like a secret (its key name is "${key}") but holds a raw string in a ` +
-            `browser-like environment (it would ship in the client bundle).`,
-          fix: `wrap it with secret('ENV_NAME') or move it to server-side config`,
-          level: 'error',
-        });
-        continue;
+      if (typeof child === 'string') {
+        // `childPath` is `['providers', <provider>, …, key]`, so `childPath[1]` is
+        // the provider name whose client-safe allowlist governs this key.
+        const providerName = childPath[1];
+        const allowlist = providerName ? clientSafeProviderKeys.get(providerName) : undefined;
+
+        // Explicitly declared client-safe → exempt (e.g. Supabase's public anonKey).
+        if (allowlist?.has(key)) continue;
+
+        const isCertifiedProvider = allowlist !== undefined && allowlist.size > 0;
+        const suspicious =
+          SUSPICIOUS_KEY.test(key) ||
+          (isCertifiedProvider && CERTIFIED_PROVIDER_CREDENTIAL_KEY.test(key));
+
+        if (suspicious) {
+          const dotPath = childPath.join('.');
+          errors.push({
+            key: dotPath,
+            message:
+              `"${dotPath}" looks like a secret (its key name is "${key}") but holds a raw string in a ` +
+              `browser-like environment (it would ship in the client bundle).`,
+            fix: `wrap it with secret('ENV_NAME') or move it to server-side config`,
+            level: 'error',
+          });
+          continue;
+        }
       }
 
       walk(child, childPath);
