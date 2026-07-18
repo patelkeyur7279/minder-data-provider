@@ -1,6 +1,17 @@
-# Project Status — updated 2026-07-18
+# Project Status — updated 2026-07-18 (evening)
 
-**Current milestone:** Pre-M0 (foundation planning complete; M0 execution not started)
+**Current milestone:** M0 in progress — **Wave 1 of 3 verified** (M0-01, M0-02, M0-09, M0-10).
+Subagent execution per docs/superpowers/plans/2026-07-18-m0-execution-plan.md
+(model-tiered: haiku/sonnet/opus; orchestrator validates every diff + re-runs verification).
+
+**Wave 1 evidence:** jest --coverage exit 0 (88 suites / 1611 tests, 0 failed), tsc clean, lint
+0 errors, build OK, CI YAML valid. Commits f2a3bdd (M0-01), f1e626b (M0-02), 1cf2570 (M0-09),
+39c1d87 (M0-10). Preflight tax is GONE: default request headers are Content-Type+Accept only,
+withCredentials opt-in; retry default 1.
+
+**Wave 2 (dispatched):** M0-03 Rules-of-Hooks (opus), M0-07 log redaction + httpOnly claim
+(sonnet), M0-08 event-driven useOffline (sonnet). Wave 3 after: M0-04 (opus, after M0-03),
+M0-05 (opus), M0-06 (sonnet).
 
 ## Completed, with evidence
 

@@ -20,14 +20,16 @@ tasks:
   - id: M0-01
     title: Remove security request headers + withCredentials opt-in (preflight tax)
     type: implementation
-    status: ready
+    status: verified
+    evidence: "Wave1 2026-07-18: orchestrator-verified — jest --coverage exit 0, 88 suites/1611 tests, tsc clean, lint 0 errors, build OK"
     acceptance: "No non-safelisted default request headers; withCredentials only when configured; before/after latency demo recorded"
     evidence_basis: "Hot-path audit item 1 (ApiClient.ts:192-197)"
     risks: "Consumers relying on credentialed default; migration note required"
   - id: M0-02
     title: Retry default 3 -> 1; document override
     type: implementation
-    status: ready
+    status: verified
+    evidence: "Wave1 2026-07-18: orchestrator-verified — jest --coverage exit 0, 88 suites/1611 tests, tsc clean, lint 0 errors, build OK"
     acceptance: "Default retry=1; per-call override tested"
   - id: M0-03
     title: Fix Rules-of-Hooks violations in useMinder
@@ -66,12 +68,14 @@ tasks:
   - id: M0-09
     title: Regenerate coverage + gate in CI; typecheck on dev workflow
     type: test
-    status: ready
+    status: verified
+    evidence: "Wave1 2026-07-18: orchestrator-verified — jest --coverage exit 0, 88 suites/1611 tests, tsc clean, lint 0 errors, build OK"
     acceptance: "Fresh coverage in CI with enforced threshold (initial 55%, ratchet up); tsc on all CI paths"
   - id: M0-10
     title: Repo hygiene - delete scratch artifacts, .gitignore, fix README apiUrl, SECURITY.md contact + 2.2.x row, CODE_OF_CONDUCT
     type: documentation
-    status: ready
+    status: verified
+    evidence: "Wave1 2026-07-18: orchestrator-verified — jest --coverage exit 0, 88 suites/1611 tests, tsc clean, lint 0 errors, build OK"
     acceptance: "Root has no scratch files; documented quickstart compiles; security contact exists"
 
   # ---- M1: Secure integration foundation ----
