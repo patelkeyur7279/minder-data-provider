@@ -8,6 +8,11 @@ meta:
   owner: Keyur (maintainer) / Claude (execution agent)
 
 tasks:
+  - id: ORCH-LESSON-1
+    title: "Orchestration lesson: never commit a provider dir while its authoring agent may still be writing"
+    type: note
+    status: complete
+    evidence: "Stripe T-01: premature commit 1a1b05d captured an incomplete snapshot; the Opus agent's spec-compliance finalization landed after and had to be reconciled+recommitted (f6fc77f). Fix: gate provider-dir commits on the authoring agent's completion notification, not a mid-wave tree read."
   # ---- Done (evidence recorded) ----
   - id: SEC-01
     title: Fail-closed isAuthenticated + safe CORS defaults
@@ -160,9 +165,8 @@ tasks:
   - id: M2-02
     title: Stripe provider (checkout session handler + webhook verification)
     type: implementation
-    status: backlog
-    dependencies: [M1-02, M1-04, M1-05]
-    risks: "Payment secrets - server-only enforcement is the showcase; PCI-scope documentation"
+    status: verified
+    evidence: "2026-07-19: CERTIFIED — plan 2026-07-19-stripe-provider-plan.md, commits 1a1b05d/b1cbfc8/f6fc77f/4c6f925/2c43849; certification 10/10; browser-verified mock checkout (session_1); secret masked from all outputs (sentinel); gate 112 suites/1971 tests/0 failed"
   - id: M2-03
     title: Monorepo split (npm workspaces) + migration codemod
     type: implementation
