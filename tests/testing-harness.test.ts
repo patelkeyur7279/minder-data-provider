@@ -206,7 +206,9 @@ describe('expectNoSecretLeak', () => {
   it('throws when fn logs an apiKey-shaped (Stripe secret key) string', async () => {
     await expect(
       expectNoSecretLeak(() => {
-        console.error('using key', 'sk_live_51H8xJ2eZvKYlo2C0FQ5uXjKabcdefgh');
+        // Constructed at runtime so the repository never contains a literal
+        // that matches GitHub secret-scanning's Stripe live-key pattern.
+        console.error('using key', 'sk_live_' + '51H8xJ2eZvKYlo2C0FQ5uXjKabcdefgh');
       })
     ).rejects.toThrow(/Stripe secret key/);
   });
