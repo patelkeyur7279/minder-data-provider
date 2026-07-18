@@ -61,15 +61,10 @@
       "import": "./dist/platforms/node.mjs",
       "require": "./dist/platforms/node.js"
     },
-    "./core/*": {
-      "types": "./dist/core/*.d.ts",
-      "import": "./dist/core/*.mjs",
-      "require": "./dist/core/*.js"
-    },
-    "./hooks/*": {
-      "types": "./dist/hooks/*.d.ts",
-      "import": "./dist/hooks/*.mjs",
-      "require": "./dist/hooks/*.js"
+    "./hook": {
+      "types": "./dist/hook.d.ts",
+      "import": "./dist/hook.mjs",
+      "require": "./dist/hook.js"
     },
     "./crud": {
       "types": "./dist/crud/index.d.ts",
@@ -160,20 +155,21 @@
   ],
   "author": "Minder Data Provider Team",
   "license": "MIT",
+  "sideEffects": false,
+  "packageManager": "npm@11.6.2",
   "dependencies": {
-    "@reduxjs/toolkit": "2.9.2",
-    "@tanstack/query-core": "5.90.6",
-    "@tanstack/react-query": "5.90.6",
-    "@tanstack/react-query-devtools": "5.90.2",
     "axios": "1.13.1",
     "dompurify": "3.3.0",
-    "immer": "10.2.0",
-    "react-redux": "9.2.0"
+    "immer": "10.2.0"
   },
   "devDependencies": {
     "@babel/core": "^7.28.5",
     "@babel/plugin-transform-class-static-block": "^7.28.3",
     "@eslint/js": "^9.39.1",
+    "@reduxjs/toolkit": "^2.9.2",
+    "@tanstack/query-core": "^5.90.6",
+    "@tanstack/react-query": "^5.90.6",
+    "@tanstack/react-query-devtools": "^5.90.2",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.1.5",
     "@testing-library/react": "^16.3.0",
@@ -194,14 +190,31 @@
     "jiti": "^2.6.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-redux": "^9.2.0",
     "ts-jest": "^29.1.2",
     "tsup": "^8.0.2",
     "typescript": "^5.4.3",
     "webpack-bundle-analyzer": "^4.10.2"
   },
   "peerDependencies": {
+    "@reduxjs/toolkit": "^2.9.2",
+    "@tanstack/query-core": "^5.90.6",
+    "@tanstack/react-query": "^5.90.6",
+    "@tanstack/react-query-devtools": "^5.90.2",
     "react": "^18.0.0 || ^19.0.0",
-    "react-dom": "^18.0.0 || ^19.0.0"
+    "react-dom": "^18.0.0 || ^19.0.0",
+    "react-redux": "^9.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@reduxjs/toolkit": {
+      "optional": true
+    },
+    "@tanstack/react-query-devtools": {
+      "optional": true
+    },
+    "react-redux": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=18.0.0",

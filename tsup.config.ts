@@ -37,7 +37,7 @@ export default defineConfig({
   dts: true,
   sourcemap: process.env.NODE_ENV !== 'production', // Only in development
   clean: true,
-  splitting: false,
+  splitting: true,
   treeshake: true,
   minify: true, // Enable minification to reduce bundle size
   
