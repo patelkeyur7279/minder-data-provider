@@ -30,8 +30,16 @@ zero preflights. Structural 2.00×; real networks add a full RTT per request. Co
 bundle gate ✅ (core.mjs 4K). Outstanding: owner decisions only (SEC-01+M0 branch disposition,
 R-01 evolve-in-place confirmation).
 
-**Next:** M1 planning (zero-config calls, SecretRef boundary enforcement, mutating plugin
-middleware, provider manifest + certification tooling, testing harness, Next.js example app).
+**M1 Wave 1 VERIFIED** (commits 07f7910 M1-01, 1bee075 M1-02, 52edc13 M1-04, 837ef96 M1-06):
+zero-config calls + error.raw + axios escape hatch; config validation + serverOnly boundary +
+.env.example generator; ProviderManifest + 10-point certification lint; runnable Next.js example
+app + CI leg. Gate: 98 suites / 1730 tests / 0 failed, example rebuilt green from fresh pack.
+Example app surfaced defect → new task M1-07 (Redux imported unconditionally despite optional
+peer label). Next.js promotion to Confirmed awaits first green CI run of example-nextjs.yml.
+
+**M1 Wave 2 (dispatched):** M1-03 mutating plugin middleware + capability-hook emitters (opus),
+M1-05 testing harness subpath (sonnet), M1-07 Redux truly optional + HttpMethod subpath exports
+(sonnet).
 Orchestration lesson recorded: shared-tree parallel agents worked but two incidents (git stash,
 npm install churn) — use worktree isolation for overlapping-file waves in M1.
 
