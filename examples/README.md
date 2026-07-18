@@ -1,6 +1,10 @@
 # 🚀 Minder Examples - Complete Guide
 
-**Production-ready examples** demonstrating all features of Minder Data Provider across multiple platforms with **centralized configuration** and **Docker support**.
+> **Which example should I use?**
+> - ✅ **Current & CI-tested:** [`nextjs-app/`](./nextjs-app) — Next.js (App Router-ready, React 19 / Next 15 / TanStack Query 5.90+), with runnable pages for every certified provider (Stripe, Supabase, Clerk, Firebase, Razorpay, Sentry) and local-first. This is the canonical, maintained example, exercised in CI.
+> - ⚠️ **Legacy — pending refresh:** the platform examples below (`web/`, `electron/`, `expo/`, `nodejs/`, `react-native/`) were written for the React 18 / TanStack Query 5.8 era and predate the provider-platform refactor. They still illustrate the shape of each integration, but their pinned versions and some APIs are out of date. Prefer `nextjs-app/` until these are refreshed (tracked in `docs/product/BACKLOG.yaml`).
+
+**Examples** demonstrating features of Minder Data Provider across multiple platforms with **centralized configuration** and **Docker support**.
 
 ## 📋 Table of Contents
 
