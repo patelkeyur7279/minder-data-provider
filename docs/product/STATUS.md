@@ -1,5 +1,11 @@
 # Project Status — updated 2026-07-19
 
+**STANDING OWNER AUTHORIZATION (2026-07-19):** continue the development cycle through all
+remaining roadmap tasks WITHOUT further owner interaction — wave order: Supabase (in flight) →
+Stripe → Clerk → Firebase → Razorpay + Sentry, plus tracked backlog items. Boundaries that
+still require the owner: npm publish/release/tag/deploy (spec rule), and the GitHub
+secret-scanning unblock click (pushes blocked until then; work continues locally).
+
 **PROVIDER PLATFORM FOUNDATION (Plan A) COMPLETE** — spec docs/superpowers/specs/2026-07-18-provider-platform-design.md,
 plan docs/superpowers/plans/2026-07-18-provider-foundation-plan.md, all 7 tasks verified across 2
 waves (commits d96b9fe F-01, 158257f F-02, b6f171e F-03, 40cea67 F-06, 188e6bd F-04, dc32f75 F-05,
