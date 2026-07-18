@@ -57,3 +57,9 @@ export type { CredentialInput } from './security/credentials.js';
 export * from './server/handlers.js';
 export * from './server/webhooks.js';
 export { toNodeHandler } from './server/nodeMount.js';
+
+// G-08: the dependency-free CORS middleware factory (refuses the unsafe
+// credentials+wildcard combination) is server-side utility surface — exported
+// here, deliberately NOT from the root entry.
+export { createCorsMiddleware } from './core/corsMiddleware.js';
+export type { CorsMiddlewareOptions } from './core/corsMiddleware.js';

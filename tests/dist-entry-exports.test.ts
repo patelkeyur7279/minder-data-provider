@@ -252,3 +252,42 @@ maybe('built dist entry exports (dist interop regression guard)', () => {
     });
   }
 });
+
+
+/**
+ * G-08 negative probe (recommended by the G-06 security review): the BUILT
+ * root entry must never gain `resolveCredential` — the server-only boundary
+ * must hold in dist artifacts, not just in source. A bundler/barrel regression
+ * that leaks it would pass ts-jest source tests but fail here.
+ */
+const maybeNeg = distBuilt ? describe : describe.skip;
+maybeNeg('dist boundary: resolveCredential is server-entry-only (G-08)', () => {
+  const rootCjs = path.join(distDir, 'index.js');
+  const rootEsm = path.join(distDir, 'index.mjs');
+  const serverCjs = path.join(distDir, 'server.js');
+
+  it('root CJS + ESM dist entries do NOT export resolveCredential', () => {
+    const cjsOut = execFileSync(
+      process.execPath,
+      ['-e', `const m=require(${JSON.stringify(rootCjs)});process.stdout.write(typeof m.resolveCredential);`],
+      { encoding: 'utf8' }
+    );
+    expect(cjsOut).toBe('undefined');
+    const esmOut = execFileSync(
+      process.execPath,
+      ['--input-type=module', '-e',
+       `import(${JSON.stringify('file://' + rootEsm)}).then(m=>process.stdout.write(typeof m.resolveCredential));`],
+      { encoding: 'utf8' }
+    );
+    expect(esmOut).toBe('undefined');
+  });
+
+  it('server dist entry DOES export resolveCredential (sanity: the probe can see it)', () => {
+    const out = execFileSync(
+      process.execPath,
+      ['-e', `const m=require(${JSON.stringify(serverCjs)});process.stdout.write(typeof m.resolveCredential);`],
+      { encoding: 'utf8' }
+    );
+    expect(out).toBe('function');
+  });
+});

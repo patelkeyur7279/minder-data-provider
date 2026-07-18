@@ -240,6 +240,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Runnable Next.js example app** (`examples/nextjs-app`) consuming the
   packed tarball, with a CI workflow building it on PRs.
 
+### Fixed (CLI honesty + CORS security residuals)
+
+- **`minder` CLI no longer contradicts the catalog.** `minder add <provider>`
+  derives certification from the catalog generator's `CERTIFIED` list (single
+  source of truth — verified side-effect-free and working from the published
+  package layout); all six certified providers now print
+  `status: CERTIFIED`. Help text, config template, `.env.example` headers,
+  and the unknown-provider message were de-staled, with provider lists
+  derived from the registry so they cannot drift.
+- **Express proxy generator aligned with the Next.js one** (SEC-01 class):
+  `Access-Control-Allow-Credentials` is now opt-in (was default-on) and
+  generation refuses the credentials+wildcard-origin combination.
+- **Three residual default-on credential fallbacks fixed** (opt-in now):
+  environment-override resolution (`EnvironmentManager`), `CorsManager`
+  defaults, and the CORS-config utility. An `environments` override with
+  `cors: { enabled: true }` previously armed credentialed mode silently.
+- **`createCorsMiddleware` is now exported from `minder-data-provider/server`**
+  (server-only — the root entry deliberately excludes it, absence-tested).
+  A dist-level negative probe now guards that `resolveCredential` can never
+  appear on the built root entry.
+
 ### Added (custom-provider public API)
 
 - **Custom providers can now be built entirely from the published package.**

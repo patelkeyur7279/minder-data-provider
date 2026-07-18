@@ -75,6 +75,12 @@ describe('custom-provider public API surface (G-06)', () => {
     it('does NOT export resolveCredential — the server-only boundary holds at the root entry', () => {
       expect((rootEntry as Record<string, unknown>).resolveCredential).toBeUndefined();
     });
+
+    // G-08: createCorsMiddleware follows the same server-only placement rule.
+    it('exports createCorsMiddleware from the server entry only', () => {
+      expect(typeof serverEntry.createCorsMiddleware).toBe('function');
+      expect((rootEntry as Record<string, unknown>).createCorsMiddleware).toBeUndefined();
+    });
   });
 
   describe("server entry ('minder-data-provider/server' / ../src/server)", () => {

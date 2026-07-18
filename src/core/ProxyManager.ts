@@ -132,7 +132,17 @@ export class ProxyManager {
 
     const corsMethods = this.config.cors?.methods?.join(',') || 'GET,POST,PUT,DELETE,OPTIONS';
     const corsHeaders = this.config.cors?.headers?.join(',') || 'Content-Type,Authorization';
-    const corsCredentials = this.config.cors?.credentials !== false ? 'true' : 'false';
+    // G-08: credentials are opt-in (was `!== false`, defaulting the unsafe
+    // wildcard+credentials combination ON) — aligned with generateNextJSProxy.
+    const corsCredentials = this.config.cors?.credentials === true ? 'true' : 'false';
+
+    if (corsCredentials === 'true' && corsOrigin === "'*'") {
+      throw new Error(
+        '[minder-data-provider] Refusing to generate an Express proxy that sends ' +
+          'Access-Control-Allow-Credentials with a wildcard origin. Set cors.origin ' +
+          'to an explicit allowlist when cors.credentials is true.'
+      );
+    }
 
     return `
     const express = require('express');
