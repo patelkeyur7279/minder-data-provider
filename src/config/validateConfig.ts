@@ -14,7 +14,8 @@
  * anywhere in the config. This module instead hard-fails on specific,
  * registered key *paths*, regardless of whether the value looks secret-shaped.
  */
-import { isSecretRef } from '../security/secrets.js';
+import { isSecretRef, SUSPICIOUS_KEY } from '../security/secrets.js';
+import { isCredentialInput } from '../security/credentials.js';
 import { levenshteinDistance } from '../utils/routeHelpers.js';
 
 export interface ConfigError {
@@ -163,6 +164,60 @@ function findServerOnlyViolations(cfg: Record<string, unknown>): ConfigError[] {
   return errors;
 }
 
+/**
+ * `providers.*` heuristic enforcement — browser-like environments only.
+ *
+ * Composes with (does not replace) `findServerOnlyViolations` above, which
+ * hard-fails specific REGISTERED key paths (e.g. `providers.*.serverOnly`)
+ * regardless of the key's name. This walker instead inspects every key
+ * under `providers` and flags any RAW STRING value whose key name looks
+ * secret-shaped (`SUSPICIOUS_KEY`, shared with `security/secrets.ts`'s
+ * `findExposedSecrets`) and is not already a valid `CredentialInput`
+ * (`security/credentials.ts`'s `secret()`/serverConfig/file refs) — e.g.
+ * `providers.stripe.secretKey = 'sk_live_...'` typed directly into client
+ * config instead of `secret('STRIPE_SECRET_KEY')`.
+ */
+function findSuspiciousProviderKeyViolations(cfg: Record<string, unknown>): ConfigError[] {
+  const errors: ConfigError[] = [];
+
+  const providers = cfg.providers;
+  if (providers == null || typeof providers !== 'object' || Array.isArray(providers)) {
+    return errors;
+  }
+
+  const seen = new WeakSet<object>();
+
+  const walk = (value: unknown, path: string[]): void => {
+    if (value == null || typeof value !== 'object' || Array.isArray(value)) return;
+    if (seen.has(value as object)) return;
+    seen.add(value as object);
+
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      const childPath = [...path, key];
+
+      if (isCredentialInput(child)) continue; // secret()/serverConfig/file refs are safe — never descend into them
+
+      if (typeof child === 'string' && SUSPICIOUS_KEY.test(key)) {
+        const dotPath = childPath.join('.');
+        errors.push({
+          key: dotPath,
+          message:
+            `"${dotPath}" looks like a secret (its key name is "${key}") but holds a raw string in a ` +
+            `browser-like environment (it would ship in the client bundle).`,
+          fix: `wrap it with secret('ENV_NAME') or move it to server-side config`,
+          level: 'error',
+        });
+        continue;
+      }
+
+      walk(child, childPath);
+    }
+  };
+
+  walk(providers, ['providers']);
+  return errors;
+}
+
 // ── Main entry point ────────────────────────────────────────────────────────
 
 /**
@@ -260,9 +315,10 @@ export function validateMinderConfig(config: unknown): ValidateConfigResult {
     });
   }
 
-  // 5. serverOnly key enforcement — browser-like environments only.
+  // 5. serverOnly key enforcement + suspicious-key heuristic — browser-like environments only.
   if (typeof window !== 'undefined') {
     errors.push(...findServerOnlyViolations(cfg));
+    errors.push(...findSuspiciousProviderKeyViolations(cfg));
   }
 
   const valid = !errors.some((e) => e.level === 'error');
