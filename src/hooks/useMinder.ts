@@ -70,7 +70,7 @@
  * // Everything you need in ONE hook! 🚀
  */
 
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import type { UseQueryOptions, UseMutationOptions, UseInfiniteQueryOptions } from '@tanstack/react-query';
 import { minder } from '../core/minder.js';
@@ -85,6 +85,7 @@ import {
   setUploadProgress as setGlobalUploadProgress,
   getUploadProgress as getGlobalUploadProgress
 } from '../upload/uploadProgressStore.js';
+import type { UploadProgress } from '../upload/uploadProgressStore.js';
 import {
   replaceUrlParams,
   hasUnreplacedParams,
@@ -586,19 +587,36 @@ export function useMinder<TData = any>(
   // All hooks MUST be at the top level (React Rules of Hooks)
   const queryClient = useQueryClient();
 
-  // Upload progress state (local fallback)
-  const [localUploadProgress, setLocalUploadProgress] = useState<{ loaded: number; total: number; percentage: number }>({
-    loaded: 0,
-    total: 0,
-    percentage: 0,
-  });
-
   // Cancellation state
   const [isCancelled, setIsCancelled] = useState(false);
   const cancelledRef = useRef(false);
 
   // Unique upload ID for shared progress
   const uploadIdRef = useRef(`upload-${route}-${Date.now()}`);
+
+  // Latest TanStack query/mutation instances, held in a ref so the stable
+  // callbacks below (refetch / mutate / CRUD operations) can reach the current
+  // instances WITHOUT listing them as deps — their object identity changes on
+  // every state transition by design, which would otherwise churn callback
+  // identity every render. Assigned once per render after the hooks run.
+  const tanstackRef = useRef<{
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    query: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mutation: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    createMutation: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    updateMutation: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    deleteMutation: any;
+  }>({
+    query: null,
+    mutation: null,
+    createMutation: null,
+    updateMutation: null,
+    deleteMutation: null,
+  });
 
   // Context is null in standalone (no-provider) mode — non-throwing accessor
   // keeps the hook order stable (react-hooks/rules-of-hooks).
@@ -736,6 +754,8 @@ export function useMinder<TData = any>(
           {
             params: requestParams,
             headers: options.headers,
+            rawUrl: options.rawUrl,
+            method: options.method,
             ...options.axiosConfig
           } // Pass params as axios config for query string
         );
@@ -900,6 +920,8 @@ export function useMinder<TData = any>(
             {
               params: mergedParams,
               headers: mergedHeaders,
+              rawUrl: options.rawUrl,
+              method: options.method,
               ...mergedAxiosConfig
             }
           );
@@ -992,30 +1014,33 @@ export function useMinder<TData = any>(
   // HELPERS
   // =========================================================================
 
-  const invalidate = async () => {
+  // Stable across renders: only re-created when queryClient/queryKey change.
+  const invalidate = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey });
-  };
+  }, [queryClient, queryKey]);
 
-  const cancel = async () => {
+  const cancel = useCallback(async () => {
     cancelledRef.current = true;
     setIsCancelled(true);
     await queryClient.cancelQueries({ queryKey });
-  };
+  }, [queryClient, queryKey]);
 
-  const refetchData = async (): Promise<MinderResult<TData>> => {
+  // Reads the live query via the ref so its identity never changes, even though
+  // the underlying TanStack query object is re-created on every state change.
+  const refetchData = useCallback(async (): Promise<MinderResult<TData>> => {
     // Reset cancellation state
     cancelledRef.current = false;
     setIsCancelled(false);
-    const result = await query.refetch();
+    const result = await tanstackRef.current.query.refetch();
     return result.data as MinderResult<TData>;
-  };
+  }, []);
 
-  const mutateData = async (data?: any, options?: { params?: Record<string, any>, headers?: Record<string, string>, axiosConfig?: Record<string, any> }): Promise<MinderResult<TData>> => {
+  const mutateData = useCallback(async (data?: any, options?: { params?: Record<string, any>, headers?: Record<string, string>, axiosConfig?: Record<string, any> }): Promise<MinderResult<TData>> => {
     if (options) {
-      return mutation.mutateAsync({ __minder_wrapper: true, data, options });
+      return tanstackRef.current.mutation.mutateAsync({ __minder_wrapper: true, data, options });
     }
-    return mutation.mutateAsync(data);
-  };
+    return tanstackRef.current.mutation.mutateAsync(data);
+  }, []);
 
   // =========================================================================
   // CRUD OPERATIONS (when within MinderDataProvider)
@@ -1079,24 +1104,61 @@ export function useMinder<TData = any>(
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
   });
 
-  let crudOperations: any = undefined;
-  if (context?.apiClient && context?.cacheManager) {
-    crudOperations = {
+  // Point the ref at the live TanStack instances every render, so the stable
+  // callbacks (refetch / mutate above, CRUD operations below) always operate on
+  // the current objects without depending on their per-state-change identity.
+  tanstackRef.current.query = query;
+  tanstackRef.current.mutation = mutation;
+  tanstackRef.current.createMutation = createMutation;
+  tanstackRef.current.updateMutation = updateMutation;
+  tanstackRef.current.deleteMutation = deleteMutation;
+
+  // Each CRUD operation is a stable callback (reads the live mutation/query via
+  // the ref), so the `operations` container only changes identity when the
+  // provider context flips — not on every render or mutation state change.
+  const operationCreate = useCallback(
+    (item: Partial<TData>, opts?: { params?: Record<string, any> }) =>
+      tanstackRef.current.createMutation.mutateAsync({ item, params: opts?.params }),
+    []
+  );
+  const operationUpdate = useCallback(
+    (id: string | number, item: Partial<TData>, opts?: { params?: Record<string, any> }) =>
+      tanstackRef.current.updateMutation.mutateAsync({ id, item, params: opts?.params }),
+    []
+  );
+  const operationDelete = useCallback(
+    (id: string | number, opts?: { params?: Record<string, any> }) =>
+      tanstackRef.current.deleteMutation.mutateAsync({ id, params: opts?.params }),
+    []
+  );
+  const operationFetch = useCallback(async (_opts?: { params?: Record<string, any> }) => {
+    const result = await tanstackRef.current.query.refetch();
+    return (result.data?.data || []) as TData[];
+  }, []);
+  const operationRefresh = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey });
+  }, [queryClient, queryKey]);
+  const operationClear = useCallback(() => {
+    context?.cacheManager?.clearCache(route);
+  }, [context, route]);
+
+  // `operations` is only exposed with a provider context (preserving the
+  // no-context contract where it is `undefined`), and is memoized so its
+  // identity is stable across renders.
+  const crudOperations = useMemo<UseMinderReturn<TData>['operations']>(() => {
+    if (!(context?.apiClient && context?.cacheManager)) {
+      return undefined;
+    }
+    return {
       // ✅ Accept params option in all CRUD operations
-      create: (item: Partial<TData>, opts?: { params?: Record<string, any> }) =>
-        createMutation.mutateAsync({ item, params: opts?.params }),
-      update: (id: string | number, item: Partial<TData>, opts?: { params?: Record<string, any> }) =>
-        updateMutation.mutateAsync({ id, item, params: opts?.params }),
-      delete: (id: string | number, opts?: { params?: Record<string, any> }) =>
-        deleteMutation.mutateAsync({ id, params: opts?.params }),
-      fetch: async (opts?: { params?: Record<string, any> }) => {
-        const result = await query.refetch();
-        return (result.data?.data || []) as TData[];
-      },
-      refresh: () => queryClient.invalidateQueries({ queryKey }),
-      clear: () => context.cacheManager.clearCache(route),
+      create: operationCreate,
+      update: operationUpdate,
+      delete: operationDelete,
+      fetch: operationFetch,
+      refresh: operationRefresh,
+      clear: operationClear,
     };
-  }
+  }, [context, operationCreate, operationUpdate, operationDelete, operationFetch, operationRefresh, operationClear]);
 
   // =========================================================================
   // AUTHENTICATION (integrated from useAuth)
@@ -1234,31 +1296,32 @@ export function useMinder<TData = any>(
   // 🆕 Now uses shared upload progress store
   // =========================================================================
 
-  // Subscribe to shared upload progress
-  const [sharedUploadProgress, setSharedUploadProgress] = useState<{ loaded: number; total: number; percentage: number }>({
-    loaded: 0,
-    total: 0,
-    percentage: 0,
-  });
+  // Upload progress is kept in a REF, not state, so a progress event NEVER
+  // triggers a re-render of this hook instance (or any sibling) and NEVER
+  // changes the identity of the `upload` object or the container. Consumers read
+  // `upload.progress` / `upload.isUploading` through getters that return the
+  // live ref value, so reads stay fresh without an identity change.
+  const uploadProgressRef = useRef<UploadProgress>({ loaded: 0, total: 0, percentage: 0 });
 
   useEffect(() => {
     const unsubscribe = subscribeToUploadProgress(uploadIdRef.current, (progress) => {
-      setSharedUploadProgress(progress);
+      // Ref update only — no setState — so progress ticks don't re-render.
+      uploadProgressRef.current = progress;
     });
     return unsubscribe;
   }, []);
 
-  // Use shared progress if available, otherwise local
-  const currentUploadProgress = sharedUploadProgress.percentage > 0 ? sharedUploadProgress : localUploadProgress;
-
+  // `upload` identity depends only on [context, route] — never on progress — so
+  // it stays Object.is-stable across the many progress events of an upload.
   const uploadMethods = useMemo(() => {
     const uploadFile = async (file: File, customUploadId?: string) => {
       const uploadId = customUploadId || uploadIdRef.current;
 
       if (context?.apiClient) {
-        return context.apiClient.uploadFile(route, file, (progress: any) => {
-          // Update both local and shared stores
-          setLocalUploadProgress(progress);
+        return context.apiClient.uploadFile(route, file, (progress: UploadProgress) => {
+          // Keep the local getter fresh and fan the tick out to other instances'
+          // subscriptions (which also only update their refs — no re-render).
+          uploadProgressRef.current = progress;
           setGlobalUploadProgress(uploadId, progress);
         });
       }
@@ -1274,21 +1337,43 @@ export function useMinder<TData = any>(
     return {
       uploadFile,
       uploadMultiple,
-      progress: currentUploadProgress,
-      isUploading: currentUploadProgress.percentage > 0 && currentUploadProgress.percentage < 100,
+      // Getters read the ref, so the object identity is decoupled from progress
+      // while `upload.progress` / `upload.isUploading` still yield fresh values.
+      get progress(): UploadProgress {
+        return uploadProgressRef.current;
+      },
+      get isUploading(): boolean {
+        const p = uploadProgressRef.current;
+        return p.percentage > 0 && p.percentage < 100;
+      },
     };
-    // setLocalUploadProgress / setGlobalUploadProgress / uploadIdRef are stable refs.
-  }, [context, route, currentUploadProgress]);
+    // uploadIdRef / setGlobalUploadProgress are stable; progress is read via ref.
+  }, [context, route]);
 
   // =========================================================================
   // RETURN
   // =========================================================================
 
-  // Invalid-route RESULT branch. Every hook above has already run in stable
-  // order, so returning here never changes the hook count between renders (this
-  // is the safe replacement for the old early return). The shape below mirrors
-  // the documented invalid-route contract exactly.
-  if (!routeValidation.valid) {
+  // Extract data from MinderResult. Pulled into primitive locals so the
+  // container memo below depends on the VALUES, not just query/mutation object
+  // identity.
+  const resultData = query.data?.data ?? null;
+  const resultError = query.data?.error ?? mutation.data?.error ?? null;
+  const resultSuccess = query.data?.success ?? mutation.data?.success ?? false;
+  const queryIsLoading = query.isLoading;
+  const queryIsFetching = query.isFetching;
+  const queryIsStale = query.isStale;
+  const mutationIsPending = mutation.isPending;
+  const isInfiniteReturn = !!options.infinite;
+
+  // Invalid-route RESULT, memoized on the route/validation identity so its
+  // object identity stays stable across renders while the route is invalid.
+  // Both this and the valid container below are computed UNCONDITIONALLY every
+  // render (all hooks have already run in stable order); the conditional only
+  // SELECTS which one to return, so the hook count never changes between
+  // renders (react-hooks/rules-of-hooks safe). The shape mirrors the documented
+  // invalid-route contract exactly.
+  const invalidRouteResult = useMemo<UseMinderReturn<TData>>(() => {
     const validationError = new MinderError(routeValidation.error || 'Invalid route', 'ROUTE_VALIDATION_ERROR', 400);
     return {
       data: null,
@@ -1348,18 +1433,18 @@ export function useMinder<TData = any>(
       query: {},
       mutation: {},
     };
-  }
+  }, [routeValidation, route]);
 
-  // Extract data from MinderResult
-  const resultData = query.data?.data ?? null;
-  const resultError = query.data?.error ?? mutation.data?.error ?? null;
-  const resultSuccess = query.data?.success ?? mutation.data?.success ?? false;
-
-  return {
+  // Valid-route container. Its identity only changes when meaningful data/state
+  // changes — the callbacks and sub-objects are all stable, so re-renders with
+  // unchanged data return the SAME object. `query`/`mutation` are intentional
+  // deps: TanStack re-creates them on every state transition, which is exactly
+  // when the container SHOULD change (e.g. data arriving).
+  const validResult = useMemo<UseMinderReturn<TData>>(() => ({
     // Data & states
     data: resultData,
     items: resultData,  // Alias for collections
-    loading: query.isLoading || mutation.isPending,
+    loading: queryIsLoading || mutationIsPending,
     error: resultError,
     success: resultSuccess,
 
@@ -1377,15 +1462,15 @@ export function useMinder<TData = any>(
     upload: uploadMethods,
 
     // TanStack Query states
-    isFetching: query.isFetching,
-    isStale: query.isStale,
-    isMutating: mutation.isPending,
+    isFetching: queryIsFetching,
+    isStale: queryIsStale,
+    isMutating: mutationIsPending,
 
     // 🆕 Cancellation state
     isCancelled: cancelledRef.current || isCancelled,
 
     // 🆕 Infinite query methods (only if infinite mode enabled)
-    ...(options.infinite ? {
+    ...(isInfiniteReturn ? {
       fetchNextPage: (query as any).fetchNextPage,
       hasNextPage: (query as any).hasNextPage,
       isFetchingNextPage: (query as any).isFetchingNextPage,
@@ -1397,7 +1482,35 @@ export function useMinder<TData = any>(
     // Raw objects for advanced use
     query,
     mutation,
-  };
+  }), [
+    resultData,
+    resultError,
+    resultSuccess,
+    queryIsLoading,
+    queryIsFetching,
+    queryIsStale,
+    mutationIsPending,
+    refetchData,
+    mutateData,
+    crudOperations,
+    invalidate,
+    cancel,
+    authMethods,
+    cacheMethods,
+    websocketMethods,
+    uploadMethods,
+    isCancelled,
+    isInfiniteReturn,
+    query,
+    mutation,
+  ]);
+
+  // Selection only — no hooks below this point.
+  if (!routeValidation.valid) {
+    return invalidRouteResult;
+  }
+
+  return validResult;
 }
 
 /**
