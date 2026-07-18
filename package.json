@@ -140,6 +140,16 @@
       "types": "./dist/providers/firebase.d.ts",
       "import": "./dist/providers/firebase.mjs",
       "require": "./dist/providers/firebase.js"
+    },
+    "./providers/razorpay": {
+      "types": "./dist/providers/razorpay.d.ts",
+      "import": "./dist/providers/razorpay.mjs",
+      "require": "./dist/providers/razorpay.js"
+    },
+    "./providers/sentry": {
+      "types": "./dist/providers/sentry.d.ts",
+      "import": "./dist/providers/sentry.mjs",
+      "require": "./dist/providers/sentry.js"
     }
   },
   "scripts": {
@@ -237,6 +247,8 @@
     "@tanstack/react-query": "^5.90.6",
     "@tanstack/react-query-devtools": "^5.90.2",
     "firebase": "^10.0.0",
+    "razorpay": "^2.9.0",
+    "@sentry/browser": "^8.0.0",
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0",
     "react-redux": "^9.2.0",
@@ -256,6 +268,12 @@
       "optional": true
     },
     "firebase": {
+      "optional": true
+    },
+    "razorpay": {
+      "optional": true
+    },
+    "@sentry/browser": {
       "optional": true
     },
     "react-redux": {

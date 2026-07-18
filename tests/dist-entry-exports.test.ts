@@ -24,6 +24,10 @@
  * process so jest's transform pipeline can't paper over the interop — and
  * asserts the enum value is present in BOTH module systems. It skips
  * gracefully when `dist/` has not been built yet.
+ *
+ * 'registerRazorpayProvider' and 'registerSentryProvider' are the
+ * providers/razorpay and providers/sentry entries' public exports — added
+ * alongside the other provider entries, same generic probe/assertion.
  */
 
 import { execFileSync } from 'child_process';
@@ -45,7 +49,9 @@ type ExpectKind =
   | 'registerSupabaseProvider'
   | 'registerStripeProvider'
   | 'registerClerkProvider'
-  | 'registerFirebaseProvider';
+  | 'registerFirebaseProvider'
+  | 'registerRazorpayProvider'
+  | 'registerSentryProvider';
 
 // Public entries the Next.js example (and typical consumers) import from.
 // Each is asserted in both module systems.
@@ -91,6 +97,18 @@ const entries: Array<{ name: string; cjs: string; esm: string; expect: ExpectKin
     cjs: path.join(distDir, 'providers/firebase.js'),
     esm: path.join(distDir, 'providers/firebase.mjs'),
     expect: 'registerFirebaseProvider',
+  },
+  {
+    name: 'providers/razorpay (minder-data-provider/providers/razorpay)',
+    cjs: path.join(distDir, 'providers/razorpay.js'),
+    esm: path.join(distDir, 'providers/razorpay.mjs'),
+    expect: 'registerRazorpayProvider',
+  },
+  {
+    name: 'providers/sentry (minder-data-provider/providers/sentry)',
+    cjs: path.join(distDir, 'providers/sentry.js'),
+    esm: path.join(distDir, 'providers/sentry.mjs'),
+    expect: 'registerSentryProvider',
   },
 ];
 

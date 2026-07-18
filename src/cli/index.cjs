@@ -56,9 +56,13 @@ const KEY_SOURCE_REGISTRY = [
   {
     name: 'Razorpay',
     keysUrl: 'https://dashboard.razorpay.com/app/website-app-settings/api-keys',
-    status: 'planned',
+    status: 'experimental — minder add razorpay',
   },
-  { name: 'Sentry', keysUrl: 'https://sentry.io/settings/', status: 'planned' },
+  {
+    name: 'Sentry',
+    keysUrl: 'https://sentry.io/settings/',
+    status: 'experimental — minder add sentry',
+  },
 ];
 
 /**
@@ -194,6 +198,64 @@ export async function GET() {
 }
 `;
 
+const RAZORPAY_CONFIG_SNIPPET = `// Add this to your minder.config.ts "providers" object:
+//
+// import { secret } from 'minder-data-provider/server';
+//
+// providers: {
+//   razorpay: {
+//     keyId: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID!, // keyId is a PUBLIC identifier, not a secret
+//     keySecret: secret('RAZORPAY_KEY_SECRET'),
+//     webhookSecret: secret('RAZORPAY_WEBHOOK_SECRET'),
+//     mock: true, // flip to false once you've added real Razorpay keys
+//   },
+// }
+`;
+
+// Next.js App Router route handlers scaffolded by `minder add razorpay`. Server
+// boundary: both import from 'minder-data-provider/providers/razorpay' (the
+// zero-dependency handler factories) and resolve secrets via `secret(...)`
+// from 'minder-data-provider' — the key secret/webhook secret are never
+// embedded as raw strings in app code.
+const RAZORPAY_ORDER_ROUTE = `import { createOrderHandler } from 'minder-data-provider/providers/razorpay';
+import { secret } from 'minder-data-provider';
+
+const handler = createOrderHandler({
+  keyId: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || '',
+  keySecret: secret('RAZORPAY_KEY_SECRET'),
+});
+
+export async function POST(req: Request) {
+  return handler(req);
+}
+`;
+
+const RAZORPAY_WEBHOOK_ROUTE = `import { createRazorpayWebhookHandler } from 'minder-data-provider/providers/razorpay';
+import { secret } from 'minder-data-provider';
+
+const handler = createRazorpayWebhookHandler({
+  webhookSecret: secret('RAZORPAY_WEBHOOK_SECRET'),
+  onEvent: async (e) => {
+    // e: { body, rawBody, headers }
+    // TODO: switch on e.body's event type and act on it
+  },
+});
+
+export async function POST(req: Request) {
+  return handler(req);
+}
+`;
+
+const SENTRY_CONFIG_SNIPPET = `// Add this to your minder.config.ts "providers" object:
+//
+// providers: {
+//   sentry: {
+//     dsn: process.env.NEXT_PUBLIC_SENTRY_DSN, // DSN is PUBLIC, not a secret
+//     mock: true, // flip to false once you've added a real Sentry DSN
+//   },
+// }
+`;
+
 const PROVIDERS = [
   {
     name: 'supabase',
@@ -236,6 +298,33 @@ const PROVIDERS = [
       'Firebase uses a service-account JSON FILE — set GOOGLE_APPLICATION_CREDENTIALS to its path ' +
       '(or base64 into an env var). NEVER commit the file.',
   },
+  {
+    name: 'razorpay',
+    status: 'experimental',
+    envVars: ['RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET'],
+    configSnippet: RAZORPAY_CONFIG_SNIPPET,
+    keysUrl: 'https://dashboard.razorpay.com/app/website-app-settings/api-keys',
+    scaffoldFiles: [
+      { path: 'app/api/minder/razorpay/order/route.ts', content: RAZORPAY_ORDER_ROUTE },
+      { path: 'app/api/minder/razorpay/webhook/route.ts', content: RAZORPAY_WEBHOOK_ROUTE },
+    ],
+  },
+  {
+    name: 'sentry',
+    status: 'experimental',
+    // Sentry's DSN is a PUBLIC client value (NEXT_PUBLIC_SENTRY_DSN), not a
+    // secret env var — there is nothing here for `minder doctor`/env-example
+    // scaffolding to track, so this is intentionally empty.
+    envVars: [],
+    configSnippet: SENTRY_CONFIG_SNIPPET,
+    keysUrl: 'https://sentry.io/settings/',
+    // Sentry is a client observability plugin, not a server capability
+    // contract — there's no server route to scaffold, so this key is
+    // intentionally omitted (see cmdAdd's guard for providers without it).
+    extraNote:
+      'Sentry is a client observability plugin — no server route or secret key. The DSN is public. ' +
+      'Call registerSentryProvider({ dsn }) in your app entry.',
+  },
 ];
 
 const ENV_EXAMPLE_SECTION_MARKER = '# minder providers';
@@ -268,10 +357,12 @@ Commands:
                              Idempotent: skips existing files unless --force.
 
   add <provider>             Scaffold a provider integration. Currently
-                             supports "supabase", "stripe", "clerk", and
-                             "firebase" (all EXPERIMENTAL — not yet certified;
-                             stripe, clerk, and firebase also scaffold
-                             Next.js App Router route handlers). Every other
+                             supports "supabase", "stripe", "clerk",
+                             "firebase", "razorpay", and "sentry" (all
+                             EXPERIMENTAL — not yet certified; stripe, clerk,
+                             firebase, and razorpay also scaffold Next.js App
+                             Router route handlers; sentry is a client
+                             plugin with no server route). Every other
                              provider name exits 1 — see ${CATALOG_DOC}.
 
   doctor [--config <path>]  Check that provider credentials referenced by
@@ -505,7 +596,13 @@ function cmdAdd(argv, ctx) {
     return 1;
   }
 
-  writeProviderEnvVars(cwd, provider, force);
+  // Providers with no env vars (e.g. Sentry — its DSN is a public client
+  // value, not a secret) get no .env.example section at all: an empty
+  // `envVars` array would otherwise still produce a marker + comment block
+  // with zero `NAME=` lines, which is just noise.
+  if (provider.envVars && provider.envVars.length > 0) {
+    writeProviderEnvVars(cwd, provider, force);
+  }
 
   let scaffoldResult = null;
   if (provider.scaffoldFiles && provider.scaffoldFiles.length > 0) {

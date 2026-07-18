@@ -76,7 +76,14 @@ describe('minder init', () => {
       expect(result.stdout).toContain(entry.name);
       expect(result.stdout).toContain(entry.keysUrl);
     }
-    expect(result.stdout.toLowerCase()).toContain('planned');
+    // As of the razorpay/sentry registration (F-P2), all six roadmap
+    // providers in KEY_SOURCE_REGISTRY are 'experimental' — none are still
+    // 'planned'. Assert that milestone directly instead of asserting the
+    // (now absent) 'planned' substring.
+    expect(cli.KEY_SOURCE_REGISTRY.every((e: { status?: string }) => (e.status || '').startsWith('experimental'))).toBe(
+      true
+    );
+    expect(result.stdout.toLowerCase()).toContain('experimental');
   });
 
   it('is idempotent: a second run without --force skips and leaves files unchanged', () => {
@@ -119,10 +126,10 @@ describe('minder init', () => {
 
 describe('minder add', () => {
   it('exits 1 and points at the provider catalog for an unknown provider', () => {
-    // 'razorpay' is still `status: 'planned'` (unregistered) at the time of
-    // writing — see KEY_SOURCE_REGISTRY. Unlike 'stripe', 'clerk', and
-    // 'firebase' (now registered below), it has no PROVIDERS entry yet.
-    const result = run(['add', 'razorpay'], { cwd: tmpDir });
+    // 'mailgun' is not (and has never been) a registered provider — see
+    // PROVIDERS. Unlike 'stripe', 'clerk', 'firebase', 'razorpay', and
+    // 'sentry' (all registered below), it has no PROVIDERS entry.
+    const result = run(['add', 'mailgun'], { cwd: tmpDir });
 
     expect(result.status).toBe(1);
     const combined = result.stdout + result.stderr;
@@ -392,6 +399,137 @@ describe('minder add', () => {
     const healthContent = fs.readFileSync(healthPath, 'utf8');
     expect(healthContent).not.toContain('// corrupted');
     expect(healthContent).toContain('loadServiceAccount');
+  });
+
+  const razorpayOrderRoute = 'app/api/minder/razorpay/order/route.ts';
+  const razorpayWebhookRoute = 'app/api/minder/razorpay/webhook/route.ts';
+
+  it('add razorpay scaffolds both route files, both env vars, and the experimental notice, exit 0', () => {
+    const razorpay = cli.PROVIDERS.find((p: { name: string }) => p.name === 'razorpay');
+    expect(razorpay).toBeDefined();
+
+    const result = run(['add', 'razorpay'], { cwd: tmpDir });
+
+    expect(result.status).toBe(0);
+
+    // Both route files are written with the expected import lines.
+    const orderPath = path.join(tmpDir, razorpayOrderRoute);
+    const webhookPath = path.join(tmpDir, razorpayWebhookRoute);
+    expect(fs.existsSync(orderPath)).toBe(true);
+    expect(fs.existsSync(webhookPath)).toBe(true);
+
+    const orderContent = fs.readFileSync(orderPath, 'utf8');
+    expect(orderContent).toContain(
+      "import { createOrderHandler } from 'minder-data-provider/providers/razorpay';"
+    );
+    expect(orderContent).toContain("import { secret } from 'minder-data-provider';");
+    expect(orderContent).toContain('export async function POST(req: Request)');
+
+    const webhookContent = fs.readFileSync(webhookPath, 'utf8');
+    expect(webhookContent).toContain(
+      "import { createRazorpayWebhookHandler } from 'minder-data-provider/providers/razorpay';"
+    );
+    expect(webhookContent).toContain("import { secret } from 'minder-data-provider';");
+    expect(webhookContent).toContain('export async function POST(req: Request)');
+
+    // .env.example gains both env vars.
+    const envExamplePath = path.join(tmpDir, '.env.example');
+    expect(fs.existsSync(envExamplePath)).toBe(true);
+    const envExample = fs.readFileSync(envExamplePath, 'utf8');
+    expect(envExample).toContain('RAZORPAY_KEY_SECRET');
+    expect(envExample).toContain('RAZORPAY_WEBHOOK_SECRET');
+
+    // stdout carries the config snippet, both scaffolded file paths, an
+    // explicit EXPERIMENTAL notice, and the keys URL.
+    expect(result.stdout).toContain(razorpay.configSnippet.trim());
+    expect(result.stdout).toContain(razorpayOrderRoute);
+    expect(result.stdout).toContain(razorpayWebhookRoute);
+    expect(result.stdout.toUpperCase()).toContain('EXPERIMENTAL');
+    expect(result.stdout).toContain('not yet certified');
+    expect(result.stdout).toContain(razorpay.keysUrl);
+  });
+
+  it('re-running add razorpay without --force skips the existing route files', () => {
+    const first = run(['add', 'razorpay'], { cwd: tmpDir });
+    expect(first.status).toBe(0);
+
+    const orderPath = path.join(tmpDir, razorpayOrderRoute);
+    const webhookPath = path.join(tmpDir, razorpayWebhookRoute);
+    const orderBefore = fs.readFileSync(orderPath, 'utf8');
+    const webhookBefore = fs.readFileSync(webhookPath, 'utf8');
+
+    const second = run(['add', 'razorpay'], { cwd: tmpDir });
+    expect(second.status).toBe(0);
+    expect(second.stdout).toContain('Skipped');
+    expect(second.stdout).toContain(razorpayOrderRoute);
+    expect(second.stdout).toContain(razorpayWebhookRoute);
+
+    expect(fs.readFileSync(orderPath, 'utf8')).toBe(orderBefore);
+    expect(fs.readFileSync(webhookPath, 'utf8')).toBe(webhookBefore);
+  });
+
+  it('add razorpay --force overwrites existing route files', () => {
+    const first = run(['add', 'razorpay'], { cwd: tmpDir });
+    expect(first.status).toBe(0);
+
+    const orderPath = path.join(tmpDir, razorpayOrderRoute);
+    const webhookPath = path.join(tmpDir, razorpayWebhookRoute);
+
+    // Corrupt both files to prove --force actually rewrites them.
+    fs.writeFileSync(orderPath, '// corrupted\n', 'utf8');
+    fs.writeFileSync(webhookPath, '// corrupted\n', 'utf8');
+
+    const forced = run(['add', 'razorpay', '--force'], { cwd: tmpDir });
+    expect(forced.status).toBe(0);
+    expect(forced.stdout).toContain('Scaffolded route files');
+
+    const orderContent = fs.readFileSync(orderPath, 'utf8');
+    const webhookContent = fs.readFileSync(webhookPath, 'utf8');
+    expect(orderContent).not.toContain('// corrupted');
+    expect(webhookContent).not.toContain('// corrupted');
+    expect(orderContent).toContain('createOrderHandler');
+    expect(webhookContent).toContain('createRazorpayWebhookHandler');
+  });
+
+  it('add sentry scaffolds no route files, writes no env section, and prints the extra note, exit 0', () => {
+    const sentry = cli.PROVIDERS.find((p: { name: string }) => p.name === 'sentry');
+    expect(sentry).toBeDefined();
+    expect(sentry.envVars).toEqual([]);
+    expect(sentry.scaffoldFiles).toBeUndefined();
+
+    const result = run(['add', 'sentry'], { cwd: tmpDir });
+
+    expect(result.status).toBe(0);
+
+    // No server route directory is created for a client-only plugin.
+    expect(fs.existsSync(path.join(tmpDir, 'app', 'api', 'minder', 'sentry'))).toBe(false);
+
+    // envVars is empty, so cmdAdd must not write a ".env.example" section for
+    // sentry at all (no marker, no empty comment block).
+    const envExamplePath = path.join(tmpDir, '.env.example');
+    if (fs.existsSync(envExamplePath)) {
+      const envExample = fs.readFileSync(envExamplePath, 'utf8');
+      expect(envExample).not.toContain('# minder provider: sentry');
+    }
+
+    // stdout carries the config snippet, the extra note, an explicit
+    // EXPERIMENTAL notice, and the keys URL — even with no env vars/scaffold
+    // files to report.
+    expect(result.stdout).toContain(sentry.configSnippet.trim());
+    expect(result.stdout).toContain('Sentry is a client observability plugin');
+    expect(result.stdout).toContain('registerSentryProvider({ dsn })');
+    expect(result.stdout.toUpperCase()).toContain('EXPERIMENTAL');
+    expect(result.stdout).toContain('not yet certified');
+    expect(result.stdout).toContain(sentry.keysUrl);
+  });
+
+  it('re-running add sentry without --force is still a clean no-op success (nothing to skip)', () => {
+    const first = run(['add', 'sentry'], { cwd: tmpDir });
+    expect(first.status).toBe(0);
+
+    const second = run(['add', 'sentry'], { cwd: tmpDir });
+    expect(second.status).toBe(0);
+    expect(second.stdout).toContain('Sentry is a client observability plugin');
   });
 });
 

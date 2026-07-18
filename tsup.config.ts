@@ -34,6 +34,8 @@ export default defineConfig({
     'providers/stripe': 'providers/stripe/src/index.ts',
     'providers/clerk': 'providers/clerk/src/index.ts',
     'providers/firebase': 'providers/firebase/src/index.ts',
+    'providers/razorpay': 'providers/razorpay/src/index.ts',
+    'providers/sentry': 'providers/sentry/src/index.ts',
 
     // Feature modules (for tree-shaking)
     'crud/index': 'src/crud/index.ts',
@@ -79,6 +81,8 @@ export default defineConfig({
     'stripe',
     '@clerk/clerk-js',
     'firebase',
+    'razorpay',
+    '@sentry/browser',
     // Node.js built-ins that should not be in browser bundles
     'fs',
     'path',
