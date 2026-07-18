@@ -334,8 +334,19 @@ tasks:
   - id: OSS-08
     title: Error-message DX pass - every thrown framework error carries a fix suggestion + docs link
     type: implementation
-    status: backlog
+    status: verified
     dependencies: [M1-01]
+    evidence: >-
+      2026-07-19. Audit: 6 error classes (Storage, Platform, Security, Plugin, WebSocket,
+      Upload) auto-added NO suggestions, plus two edge gaps — ValidationError with no fields
+      and NetworkError with an uncovered status code both produced empty suggestions[]. Fix
+      (centralized in src/errors/MinderError.ts, additive — no thrown-type/message/control-flow
+      change): each of the 6 constructors now adds a category-appropriate suggestion (action +
+      verified docs link); ValidationError gained an else branch; NetworkError a default case.
+      Guarantee test tests/error-suggestions-guarantee.test.ts instantiates every typed subclass
+      with minimal args and asserts >=1 suggestion, >=1 with an action, and every docs/*.md link
+      resolves. All 13 subclasses now covered; doc links verified against real files. Full suite
+      2229 pass / 0 fail; lint + type-check green.
   - id: OSS-09
     title: Launch plan for 3.0 - comparison pages (vs DIY, vs per-provider SDKs), Show HN / r/reactjs / dev.to sequence, issue reproduction template on StackBlitz
     type: research
