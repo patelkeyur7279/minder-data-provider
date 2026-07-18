@@ -654,7 +654,35 @@ export class ApiClient {
     );
   }
 
+  /**
+   * Normalize any thrown/rejected error into Minder's structured shape AND attach
+   * the ORIGINAL underlying error as `.raw` on whatever it produces — both the
+   * objects it returns (e.g. the 400 result object) and the MinderError subclasses
+   * it throws. This guarantees every error a consumer eventually sees exposes the
+   * untouched source error (typically the AxiosError) for `.raw` inspection.
+   */
   private handleError(error: unknown): ApiError {
+    const attachRaw = (target: unknown): void => {
+      if (target && (typeof target === 'object' || typeof target === 'function')) {
+        try {
+          (target as { raw?: unknown }).raw = error;
+        } catch {
+          /* frozen/sealed target — best-effort only */
+        }
+      }
+    };
+
+    try {
+      const apiError = this.buildError(error);
+      attachRaw(apiError);
+      return apiError;
+    } catch (thrown) {
+      attachRaw(thrown);
+      throw thrown;
+    }
+  }
+
+  private buildError(error: unknown): ApiError {
     // Check if it's an AxiosError
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError;
@@ -1082,6 +1110,22 @@ export class ApiClient {
     const token = this.authManager.getToken();
     const wsUrl = token ? `${url}?token=${token}` : url;
     return new WebSocket(wsUrl, protocols);
+  }
+
+  /**
+   * Escape hatch: get the live, underlying axios instance for full, unrestricted
+   * control (arbitrary `axios.request(...)`, adding one-off interceptors, etc.).
+   *
+   * Requests you issue directly against this instance bypass Minder's route
+   * registry and plugin request/response emission — you are talking to axios
+   * directly. However, because it is the SAME instance Minder uses internally,
+   * all interceptors configured on it (auth-token injection, CSRF, CORS, retry,
+   * 401 refresh, error normalization) DO still apply to those direct calls.
+   *
+   * @returns the internal AxiosInstance (same reference used for all Minder I/O)
+   */
+  public getAxiosInstance(): AxiosInstance {
+    return this.axiosInstance;
   }
 
   // Get performance metrics

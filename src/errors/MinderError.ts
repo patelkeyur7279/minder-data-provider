@@ -18,6 +18,16 @@ export class MinderError extends Error {
 
   public status: number;
 
+  /**
+   * The ORIGINAL underlying error this MinderError wraps (e.g. the raw
+   * AxiosError). Lets consumers reach the untouched transport-level error —
+   * inspect `isAxiosError`, `response`, `config`, `code`, etc. — instead of only
+   * the normalized Minder shape. Populated by the layer that constructs/throws
+   * the error (ApiClient.handleError, minder()); left `undefined` when there is
+   * no distinct underlying error.
+   */
+  public raw?: unknown;
+
   constructor(
     message: string,
     public code: string,

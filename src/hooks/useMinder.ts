@@ -634,20 +634,32 @@ export function useMinder<TData = any>(
     return null;
   }, [hasContext]);
 
-  // 🛡️ Runtime Safety: Ensure Minder is configured
-  if (!hasContext && !globalConfig) {
+  // 🛡️ Runtime Safety: Ensure Minder is configured.
+  // Zero-config exemption: an absolute http(s) URL needs neither a provider nor a
+  // global config — it carries its own origin and is dispatched verbatim by the
+  // standalone minder() path. So only demand configuration for non-absolute routes.
+  if (!hasContext && !globalConfig && !/^https?:\/\//i.test(route)) {
     throw new Error(
       '[Minder] Configuration missing! You must either:\n' +
       '1. Wrap your app in <MinderDataProvider>\n' +
-      '2. Call configureMinder() globally before using hooks'
+      '2. Call configureMinder() globally before using hooks\n' +
+      '(Absolute http(s) URLs are exempt — they need no configuration.)'
     );
   }
 
   // Validate route and provide suggestions if invalid
   const routeValidation = useMemo(() => {
-    // Ad-hoc / third-party calls: an absolute URL (or the `rawUrl` opt-in) bypasses
-    // the route registry entirely — call any endpoint without pre-registering it.
-    if (/^https?:\/\//i.test(route) || options.rawUrl) {
+    // Ad-hoc / third-party calls bypass the route registry entirely — call any
+    // endpoint without pre-registering it. This covers:
+    //   - an absolute http(s) URL (used verbatim),
+    //   - the explicit `rawUrl` opt-in, and
+    //   - a leading-slash relative PATH (e.g. '/users'), which resolves against
+    //     the configured apiUrl/baseURL as a raw path. This mirrors ApiClient's
+    //     provider-mode behavior (an unregistered '/...' is treated as a raw path)
+    //     so a registry-less config — configureMinder({ apiUrl }) with no routes —
+    //     still lets useMinder('/users') work. Registered route NAMES never start
+    //     with '/', so this never shadows a real registry entry.
+    if (/^https?:\/\//i.test(route) || options.rawUrl || route.startsWith('/')) {
       return { valid: true };
     }
     const config = context?.config || globalConfig;

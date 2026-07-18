@@ -366,6 +366,12 @@ export async function minder<TData = any>(
     // Handle error - NEVER throw
     const minderError = handleError(error);
 
+    // Expose the ORIGINAL underlying error (e.g. the raw AxiosError) as `.raw` so
+    // consumers can inspect the untouched transport error, not just the normalized
+    // Minder shape. Survives into both the returned error result and the thrown
+    // throwOnError error below.
+    (minderError as { raw?: unknown }).raw = error;
+
     // Fire plugin error hooks (non-blocking)
     if (pluginManager.size > 0) {
       void pluginManager.executeErrorHooks({
@@ -388,6 +394,8 @@ export async function minder<TData = any>(
         status: minderError.status,
         details: minderError.details,
         minderError,
+        // Original underlying error, so throwOnError consumers get `.raw` too.
+        raw: error,
       });
       throw err;
     }
