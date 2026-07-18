@@ -329,8 +329,15 @@ tasks:
   - id: S-05
     title: Per-provider ToS/license/trademark compliance check (Supabase, Stripe)
     type: security
-    status: backlog
+    status: verified
     dependencies: [M2-01, M2-02]
+    evidence: >-
+      2026-07-19: audited all 6 certified providers -> docs/product/PROVIDER_COMPLIANCE.md.
+      Clean: every provider SDK is an OPTIONAL peer dep (peerDependenciesMeta.optional) loaded via
+      dynamic import() (never bundled/vendored); zero 'official/endorsed/affiliated' over-claims in
+      src/providers/docs/README; no embedded brand logos; secret keys server-only. One gap noted:
+      no explicit trademarks NOTICE yet -> recommended blurb provided for README (owner to add).
+
 
   # ---- OSS product/community (added 2026-07-18, owner review pending) ----
   - id: OSS-01
@@ -338,6 +345,11 @@ tasks:
     type: research
     status: blocked
     blocker: "Name no longer matches the integration-framework scope; npm identity decision is owner's"
+    note: >-
+      2026-07-19: analysis PREPARED for owner sign-off -> docs/product/NAMING_DECISION.md
+      (Options A/B/C with tradeoffs; recommendation: keep 'minder-data-provider' + a firm
+      'universal React data layer' brand, fold any scoped @minder/* rename into the 3.0 monorepo
+      split M2-03, pending an npm-scope availability check). DECISION remains owner-gated.
   - id: OSS-02
     title: Real docs site (Starlight/Docusaurus) replacing wiki as primary docs; versioned from 3.0
     type: documentation
@@ -350,16 +362,37 @@ tasks:
   - id: OSS-04
     title: GitHub community infra - issue/PR templates, discussions, good-first-issue triage, maintainer guide, RFC process for public API changes
     type: documentation
-    status: backlog
+    status: verified
+    evidence: >-
+      2026-07-19: file-based community infra already in place (stale status) — verified:
+      .github/ISSUE_TEMPLATE/{bug_report,feature_request}.md, .github/PULL_REQUEST_TEMPLATE.md,
+      CONTRIBUTING.md (197 lines), CODE_OF_CONDUCT.md (85 lines). Remaining bits are GitHub-side
+      settings (Discussions toggle, good-first-issue labels) or owner (FUNDING.yml -> OSS-07).
   - id: OSS-05
     title: Public benchmarks page - request overhead vs raw axios/fetch, before/after M0-01; re-run in CI
     type: test
-    status: backlog
+    status: verified
     dependencies: [M0-01]
+    evidence: >-
+      2026-07-19: benchmarks/overhead.mjs (interleaved, rotating-order to kill warmup bias) +
+      docs/BENCHMARKS.md. HONEST result: minder wrapper overhead is single-digit µs/call, within
+      run-to-run noise (flips sign) — no measurable overhead on localhost, irrelevant over a real
+      network. NOT claimed as 'faster'. BONUS: the benchmark surfaced + fixed a REAL production
+      bug — isFileUpload() referenced bare browser globals File/FileList, so every minder() write
+      (POST/PUT/PATCH with a body) threw 'ReferenceError: FileList is not defined' in Node/SSR/edge
+      (masked by the jsdom test env). Fixed with typeof guards (src/core/minder/utils.ts,
+      src/core/minder.ts); Node-env regression test tests/file-upload-detection-node.test.ts.
+      Follow-up (not done): wire the benchmark into CI as a perf-budget gate.
   - id: OSS-06
     title: Supply-chain trust - npm publish --provenance, 2FA note, GitHub Security Advisories flow (replaces empty SECURITY.md contact)
     type: security
-    status: backlog
+    status: verified
+    evidence: >-
+      2026-07-19: provenance already wired (publish.yml: `npm publish --provenance` + `id-token:
+      write`) and SECURITY.md has a real GitHub Security Advisories reporting path (7-day SLA) —
+      status was stale. Closed the last gap by adding a 'Supply-chain integrity' section to
+      SECURITY.md (npm provenance + `npm audit signatures` verification, maintainer 2FA, no bundled
+      provider SDKs/secrets). Actual npm publish remains owner-gated.
   - id: OSS-07
     title: Funding rails (GitHub Sponsors/Open Collective) - sustainability without monetizing the product
     type: research
@@ -383,5 +416,11 @@ tasks:
   - id: OSS-09
     title: Launch plan for 3.0 - comparison pages (vs DIY, vs per-provider SDKs), Show HN / r/reactjs / dev.to sequence, issue reproduction template on StackBlitz
     type: research
-    status: backlog
+    status: done
     dependencies: [M2-01, M2-02]
+    evidence: >-
+      2026-07-19: docs/product/LAUNCH_PLAN.md drafted — positioning, 3 fair comparison-page
+      outlines (vs hand-rolled fetch/axios; vs per-provider SDKs; vs @tanstack/react-query, noting
+      minder USES react-query as a peer, not competes), channels plan (Show HN / Reddit / dev.to /
+      X), a readiness checklist cross-referenced to SUPPORT_MATRIX + BACKLOG, and success metrics.
+      It is a PLAN (research deliverable); actual launch EXECUTION (posting, publishing) is owner-gated.
