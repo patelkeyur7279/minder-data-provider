@@ -265,8 +265,13 @@ describe('generate-catalog', () => {
         outPath: catalogPath,
         dryRun: true,
       });
-      // Bad provider should be skipped, only good provider counted
-      expect(result.community).toBe(1);
+      // Hermetic assertion: the INVALID fixture is skipped (with a warning) and
+      // the valid one is present. Never assert absolute community counts here —
+      // the generator also scans the real providers/ directory, so every real
+      // provider that ships would break an exact-count expectation.
+      expect(result.community).toBeGreaterThanOrEqual(1);
+      expect(result.content).not.toContain('bad-provider');
+      expect(stderrSpy).toHaveBeenCalled();
       stderrSpy.mockRestore();
     });
 
