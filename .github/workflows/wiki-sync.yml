@@ -28,8 +28,11 @@ jobs:
           find . -maxdepth 1 ! -name '.git' ! -name '.' ! -name '..' -exec rm -rf {} +
           cd ..
 
-          # Copy docs content to wiki repo
+          # Copy docs content to wiki repo, then drop internal-only dirs so
+          # process/planning notes are never published to the public wiki.
+          # Curated user docs (guides, providers) sync; internal ones do not.
           cp -a docs/. wiki_repo/
+          rm -rf wiki_repo/development wiki_repo/superpowers
 
           echo "Committing changes..."
           cd wiki_repo
