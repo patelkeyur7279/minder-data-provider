@@ -209,7 +209,9 @@ export async function minder<TData = any>(
       // Convert to FormData if needed
       if (!(data instanceof FormData)) {
         const formData = new FormData();
-        if (data instanceof FileList) {
+        // Guard the browser-only FileList global (undefined in Node/edge) so a
+        // File/Blob upload on the server doesn't throw "FileList is not defined".
+        if (typeof FileList !== 'undefined' && data instanceof FileList) {
           Array.from(data).forEach((file, index) => {
             formData.append(`file${index}`, file);
           });

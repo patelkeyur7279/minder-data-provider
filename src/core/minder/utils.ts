@@ -60,11 +60,16 @@ export function detectMethod(
  */
 export function isFileUpload(data: unknown): boolean {
   if (!data) return false;
-  
+
+  // Guard every browser-only global with `typeof` before `instanceof`: in Node,
+  // SSR, and edge runtimes `File`/`FileList` are undefined, so a bare
+  // `data instanceof FileList` throws `ReferenceError: FileList is not defined`.
+  // That crashed EVERY minder() write (POST/PUT/PATCH with a body) outside the
+  // browser — masked in tests because jsdom provides these globals.
   return (
-    data instanceof File ||
-    data instanceof Blob ||
-    data instanceof FileList ||
+    (typeof File !== 'undefined' && data instanceof File) ||
+    (typeof Blob !== 'undefined' && data instanceof Blob) ||
+    (typeof FileList !== 'undefined' && data instanceof FileList) ||
     (typeof FormData !== 'undefined' && data instanceof FormData)
   );
 }
