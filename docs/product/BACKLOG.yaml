@@ -221,7 +221,16 @@ tasks:
   - id: M2-04
     title: CLI v0 (init, add <provider>, doctor)
     type: implementation
-    status: backlog
+    status: verified
+    evidence: >-
+      2026-07-19: already delivered (doctor via J-03 checkEnvironment; init/add earlier) —
+      status was stale. Verified end-to-end: `bin/minder.js` exposed as the `minder` bin;
+      `init` writes minder.config.ts + .env.example with per-provider key-source table; `add`
+      scaffolds all 6 CERTIFIED providers (supabase/stripe/clerk/firebase/razorpay/sentry;
+      stripe/clerk/firebase/razorpay also emit Next.js App Router route handlers) and rejects
+      unknown providers with exit 1 + a helpful list; `doctor` checks the react-query peer,
+      minder config presence, and provider credentials with secret masking. Ran all 6 `add`
+      commands (exit 0) + unknown (exit 1) in temp dirs; tests/cli-minder.test.ts 38/38 pass.
 
   - id: M2-CLERK
     title: Clerk provider (dedicated auth)
