@@ -109,6 +109,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   progress ticks no longer re-render every hook instance (progress reads are
   getter-based). Memoized children and effect deps now behave.
 
+### Added — Certified provider: Clerk
+
+- **`minder-data-provider/providers/clerk`** — dedicated auth. Client
+  `AuthContract` over `@clerk/clerk-js` (optional peer); server-side session
+  verification via `createClerkSessionHandler` (zero-dep fetch, secret masked
+  from all outputs). **Certified** (10/10), mock-parity tests,
+  browser-verified mock login. Manifest claims react/nextjs/vite only —
+  Clerk's React Native SDK differs and is not claimed.
+- **`minder add clerk`** scaffolds the session-verify route.
+
 ### Added — Certified provider: Stripe
 
 - **`minder-data-provider/providers/stripe`** — payments via the secure server
