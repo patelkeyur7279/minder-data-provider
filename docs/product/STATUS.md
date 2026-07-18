@@ -42,11 +42,17 @@ middleware + 3 capability hooks emitted; /testing subpath harness; Redux truly o
 builds WITHOUT react-redux installed). Gate: 101 suites / 1765 tests / 0 failed, tsc clean,
 lint 0 errors, build OK.
 
-**BLOCKER in progress:** client-side crash in the example app (HttpMethod undefined at hydration
-— pre-existing dist/chunk interop issue, reproduces at HEAD; found by M1-07's browser testing;
-M1-06's curl smoke couldn't see it). Opus debugging agent dispatched: root-cause + library fix +
-real-browser proof + dist-interop regression test. Next.js "Confirmed" promotion blocked on this
-+ first green CI run.
+**BLOCKER RESOLVED** (commit dabd92d): HttpMethod-undefined client crash root-caused (lazy
+enums-chunk init thunk + sideEffects:false → webpack skips initialization on bare re-exports;
+Node/SSR unaffected as they run the full graph). Fix: eager const bindings in public entries.
+Proof: controlled experiment (guard fails on broken build, 15/15 on fixed) + real-browser render
+of the example app with zero console errors. Debug agent was killed mid-task by a session limit;
+orchestrator completed the validation half inline.
+
+**M1 ENGINEERING COMPLETE.** All gates: 1780 tests / 0 failed, tsc clean, lint 0 errors,
+build OK, example app browser-verified. Remaining for M1 closure: push dev + first green run of
+example-nextjs.yml CI (then promote Next.js to Confirmed in SUPPORT_MATRIX.md). Then M2:
+Supabase + Stripe providers against the certification gate.
 Orchestration lesson recorded: shared-tree parallel agents worked but two incidents (git stash,
 npm install churn) — use worktree isolation for overlapping-file waves in M1.
 

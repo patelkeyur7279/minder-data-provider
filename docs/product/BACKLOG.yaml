@@ -101,7 +101,8 @@ tasks:
   - id: M1-03
     title: Mutating plugin middleware + emit onUpload/onSync/onConnectivityChange
     type: implementation
-    status: backlog
+    status: verified
+    evidence: "M1-Wave2 2026-07-18: orchestrator-verified — 1780 tests/0 failed, tsc clean, lint 0 errors, build OK; Redux-optional proven by example building without react-redux; dist-interop crash fixed (dabd92d) with bundler-level regression guard + real-browser proof"
     acceptance: "Plugin can rewrite/short-circuit a request; 3 hooks emitted with tests"
   - id: M1-04
     title: Provider manifest format + certification checklist automation
@@ -112,7 +113,8 @@ tasks:
   - id: M1-05
     title: Testing harness - provider mocks, contract tests, secret-leak helpers
     type: test
-    status: backlog
+    status: verified
+    evidence: "M1-Wave2 2026-07-18: orchestrator-verified — 1780 tests/0 failed, tsc clean, lint 0 errors, build OK; Redux-optional proven by example building without react-redux; dist-interop crash fixed (dabd92d) with bundler-level regression guard + real-browser proof"
   - id: M1-06
     title: Next.js runnable example app in CI (promotes Next.js to Confirmed)
     type: documentation
@@ -123,7 +125,8 @@ tasks:
   - id: M1-07
     title: Make Redux truly optional (lazy provider store) + re-export HttpMethod from /nextjs and /web subpaths
     type: bug
-    status: ready
+    status: verified
+    evidence: "M1-Wave2 2026-07-18: orchestrator-verified — 1780 tests/0 failed, tsc clean, lint 0 errors, build OK; Redux-optional proven by example building without react-redux; dist-interop crash fixed (dabd92d) with bundler-level regression guard + real-browser proof"
     evidence_basis: "M1-06 example app: MinderDataProvider imports react-redux/@reduxjs/toolkit unconditionally while peerDependenciesMeta marks them optional — consumers without them get module-not-found; HttpMethod missing from platform subpath exports"
     acceptance: "Example app builds WITHOUT react-redux/@reduxjs/toolkit installed; store constructed only when redux is present/configured; deprecated useReduxSlice/useStore degrade with clear error; HttpMethod importable from /nextjs and /web"
 
