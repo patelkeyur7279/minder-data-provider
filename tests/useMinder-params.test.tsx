@@ -10,10 +10,19 @@ import * as MinderDataProviderModule from '../src/core/MinderDataProvider';
 jest.mock('../src/core/ApiClient');
 
 // Mock useMinderContext
-jest.mock('../src/core/MinderDataProvider', () => ({
-    ...jest.requireActual('../src/core/MinderDataProvider'),
-    useMinderContext: jest.fn(),
-}));
+jest.mock('../src/core/MinderDataProvider', () => {
+    const actual = jest.requireActual('../src/core/MinderDataProvider');
+    const useMinderContext = jest.fn();
+    return {
+        ...actual,
+        useMinderContext,
+        // Delegates to the same mock; returns null where the mock throws
+        // (mirrors the real non-throwing accessor's no-provider behavior).
+        useMinderContextSafe: () => {
+            try { return useMinderContext(); } catch { return null; }
+        },
+    };
+});
 
 const createWrapper = () => {
     const queryClient = new QueryClient({

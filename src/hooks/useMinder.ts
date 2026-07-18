@@ -75,7 +75,7 @@ import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tansta
 import type { UseQueryOptions, UseMutationOptions, UseInfiniteQueryOptions } from '@tanstack/react-query';
 import { minder } from '../core/minder.js';
 import type { MinderOptions, MinderResult } from '../core/minder.js';
-import { useMinderContext } from '../core/MinderDataProvider.js';
+import { useMinderContextSafe } from '../core/MinderDataProvider.js';
 import { HttpMethod } from '../constants/enums.js';
 import type { RetryConfig } from '../core/types.js';
 import { getGlobalMinderConfig } from '../core/globalConfig.js';
@@ -600,15 +600,11 @@ export function useMinder<TData = any>(
   // Unique upload ID for shared progress
   const uploadIdRef = useRef(`upload-${route}-${Date.now()}`);
 
-  // Try to get context (ApiClient) - gracefully fallback if not available
-  let context: any = null;
-  let hasContext = false;
-  try {
-    context = useMinderContext();
-    hasContext = true;
-  } catch {
-    // Not within MinderDataProvider - use global config
-  }
+  // Context is null in standalone (no-provider) mode — non-throwing accessor
+  // keeps the hook order stable (react-hooks/rules-of-hooks).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const context: any = useMinderContextSafe();
+  const hasContext = context !== null;
 
 
 
@@ -694,70 +690,11 @@ export function useMinder<TData = any>(
 
 
 
-  // ... (inside useMinder)
-
-  // Return validation error if present
-  if (!routeValidation.valid) {
-    const validationError = new MinderError(routeValidation.error || 'Invalid route', 'ROUTE_VALIDATION_ERROR', 400);
-    return {
-      data: null,
-      items: null,
-      loading: false,
-      error: validationError,
-      success: false,
-      refetch: async () => ({
-        data: null,
-        error: validationError,
-        status: 400,
-        success: false,
-        metadata: { method: HttpMethod.GET, url: route, duration: 0, cached: false }
-      }),
-      mutate: async () => ({
-        data: null,
-        error: validationError,
-        status: 400,
-        success: false,
-        metadata: { method: HttpMethod.POST, url: route, duration: 0, cached: false }
-      }),
-      auth: {
-        setToken: async () => { },
-        getToken: () => null,
-        clearAuth: async () => { },
-        isAuthenticated: () => false,
-        setRefreshToken: async () => { },
-        getRefreshToken: () => null,
-        getCurrentUser: () => null,
-      },
-      cache: {
-        invalidate: async () => { },
-        prefetch: async () => { },
-        clear: () => { },
-        getStats: () => [],
-        isQueryFresh: () => false,
-      },
-      websocket: {
-        connect: () => { },
-        disconnect: () => { },
-        send: () => { },
-        subscribe: () => () => { },
-        isConnected: () => false,
-      },
-      upload: {
-        uploadFile: async () => { throw new Error(routeValidation.error); },
-        uploadMultiple: async () => { throw new Error(routeValidation.error); },
-        progress: { loaded: 0, total: 0, percentage: 0 },
-        isUploading: false,
-      },
-      isFetching: false,
-      isStale: false,
-      isMutating: false,
-      invalidate: async () => { },
-      cancel: async () => { },
-      isCancelled: false,
-      query: {},
-      mutation: {},
-    };
-  }
+  // NOTE: The invalid-route case is handled as a RESULT branch AFTER all hooks
+  // run (see the end of this function), not as an early return. Returning early
+  // here would skip the query/mutation/CRUD/upload hooks below and change the
+  // hook count between renders whenever `routeValidation.valid` flips, which
+  // React rejects with "rendered fewer hooks than expected".
 
   // Create retry configuration
   const retryConfig = useMemo(
@@ -851,39 +788,48 @@ export function useMinder<TData = any>(
     return result;
   };
 
-  // Use infinite query if infinite option is enabled
-  const query = options.infinite
-    ? useInfiniteQuery({
-      queryKey,
-      queryFn: ({ pageParam }) => createQueryFn(pageParam)(),
-      enabled: isQueryEnabled,
-      staleTime: options.staleTime || options.cacheTTL || 5 * 60 * 1000,
-      gcTime: options.gcTime || 10 * 60 * 1000,
-      refetchOnWindowFocus: options.refetchOnWindowFocus ?? false,
-      refetchOnReconnect: options.refetchOnReconnect ?? true,
-      refetchInterval: options.refetchInterval || false,
-      retry: retryConfig.retry,
-      retryDelay: retryConfig.retryDelay,
-      throwOnError: options.throwOnError ?? false,
-      getNextPageParam: options.getNextPageParam,
-      getPreviousPageParam: options.getPreviousPageParam,
-      initialPageParam: options.initialPageParam,
-      ...options.queryOptions,
-    } as UseInfiniteQueryOptions<MinderResult<TData>>)
-    : useQuery({
-      queryKey,
-      queryFn: createQueryFn(),
-      enabled: isQueryEnabled,
-      staleTime: options.staleTime || options.cacheTTL || 5 * 60 * 1000,
-      gcTime: options.gcTime || 10 * 60 * 1000,
-      refetchOnWindowFocus: options.refetchOnWindowFocus ?? false,
-      refetchOnReconnect: options.refetchOnReconnect ?? true,
-      refetchInterval: options.refetchInterval || false,
-      retry: retryConfig.retry,
-      retryDelay: retryConfig.retryDelay,
-      throwOnError: options.throwOnError ?? false,
-      ...options.queryOptions,
-    });
+  // Both query hooks are ALWAYS called so the hook order never depends on
+  // `options.infinite` (React Rules of Hooks). The inactive query is disabled
+  // (enabled: false) and its queryKey is namespaced with '__inactive' so it can
+  // never collide with the active query in the cache. The active query keeps the
+  // original `queryKey`, which the rest of the hook uses for invalidation/cancel.
+  const isInfinite = !!options.infinite;
+
+  const infiniteQuery = useInfiniteQuery({
+    queryKey: isInfinite ? queryKey : [...queryKey, '__inactive'],
+    queryFn: ({ pageParam }) => createQueryFn(pageParam)(),
+    enabled: isQueryEnabled && isInfinite,
+    staleTime: options.staleTime || options.cacheTTL || 5 * 60 * 1000,
+    gcTime: options.gcTime || 10 * 60 * 1000,
+    refetchOnWindowFocus: options.refetchOnWindowFocus ?? false,
+    refetchOnReconnect: options.refetchOnReconnect ?? true,
+    refetchInterval: options.refetchInterval || false,
+    retry: retryConfig.retry,
+    retryDelay: retryConfig.retryDelay,
+    throwOnError: options.throwOnError ?? false,
+    getNextPageParam: options.getNextPageParam,
+    getPreviousPageParam: options.getPreviousPageParam,
+    initialPageParam: options.initialPageParam,
+    ...options.queryOptions,
+  } as UseInfiniteQueryOptions<MinderResult<TData>>);
+
+  const regularQuery = useQuery({
+    queryKey: isInfinite ? [...queryKey, '__inactive'] : queryKey,
+    queryFn: createQueryFn(),
+    enabled: isQueryEnabled && !isInfinite,
+    staleTime: options.staleTime || options.cacheTTL || 5 * 60 * 1000,
+    gcTime: options.gcTime || 10 * 60 * 1000,
+    refetchOnWindowFocus: options.refetchOnWindowFocus ?? false,
+    refetchOnReconnect: options.refetchOnReconnect ?? true,
+    refetchInterval: options.refetchInterval || false,
+    retry: retryConfig.retry,
+    retryDelay: retryConfig.retryDelay,
+    throwOnError: options.throwOnError ?? false,
+    ...options.queryOptions,
+  });
+
+  // Select the active query result after both hooks have run.
+  const query = isInfinite ? infiniteQuery : regularQuery;
 
   // =========================================================================
   // MUTATION (for POST/PUT/DELETE requests)
@@ -1075,53 +1021,66 @@ export function useMinder<TData = any>(
   // CRUD OPERATIONS (when within MinderDataProvider)
   // =========================================================================
 
+  // CRUD mutations are ALWAYS created (React Rules of Hooks) — never gated on
+  // context. When there is no provider context the mutationFn throws a
+  // MinderError. `operations` itself is still only exposed when the context is
+  // present (see below), preserving the pre-existing no-context contract where
+  // `operations` is `undefined`.
+  const createMutation = useMutation({
+    mutationFn: async ({ item, params }: {
+      item: Partial<TData>;
+      params?: Record<string, any>
+    }) => {
+      if (!context?.apiClient) {
+        throw new MinderError('CRUD operations require MinderDataProvider context', 'CONTEXT_REQUIRED', 500);
+      }
+      // Validate before create
+      let validatedItem = item;
+      if (options.validate) {
+        validatedItem = await options.validate(item as TData);
+      }
+      // ✅ Pass params to request for dynamic URL replacement
+      return context.apiClient.request(route, validatedItem, params);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, item, params }: {
+      id: string | number;
+      item: Partial<TData>;
+      params?: Record<string, any>
+    }) => {
+      if (!context?.apiClient) {
+        throw new MinderError('CRUD operations require MinderDataProvider context', 'CONTEXT_REQUIRED', 500);
+      }
+      // Validate before update
+      let validatedItem = item;
+      if (options.validate) {
+        validatedItem = await options.validate(item as TData);
+      }
+      // ✅ Merge id with params for URL replacement
+      return context.apiClient.request(route, validatedItem, { ...params, id });
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: ({ id, params }: {
+      id: string | number;
+      params?: Record<string, any>
+    }) => {
+      if (!context?.apiClient) {
+        throw new MinderError('CRUD operations require MinderDataProvider context', 'CONTEXT_REQUIRED', 500);
+      }
+      // ✅ Merge id with params for URL replacement
+      return context.apiClient.request(route, undefined, { ...params, id });
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+  });
+
   let crudOperations: any = undefined;
   if (context?.apiClient && context?.cacheManager) {
-    // Create CRUD operations similar to useOneTouchCrud
-    const createMutation = useMutation({
-      mutationFn: async ({ item, params }: {
-        item: Partial<TData>;
-        params?: Record<string, any>
-      }) => {
-        // Validate before create
-        let validatedItem = item;
-        if (options.validate) {
-          validatedItem = await options.validate(item as TData);
-        }
-        // ✅ Pass params to request for dynamic URL replacement
-        return context.apiClient.request(route, validatedItem, params);
-      },
-      onSuccess: () => queryClient.invalidateQueries({ queryKey }),
-    });
-
-    const updateMutation = useMutation({
-      mutationFn: async ({ id, item, params }: {
-        id: string | number;
-        item: Partial<TData>;
-        params?: Record<string, any>
-      }) => {
-        // Validate before update
-        let validatedItem = item;
-        if (options.validate) {
-          validatedItem = await options.validate(item as TData);
-        }
-        // ✅ Merge id with params for URL replacement
-        return context.apiClient.request(route, validatedItem, { ...params, id });
-      },
-      onSuccess: () => queryClient.invalidateQueries({ queryKey }),
-    });
-
-    const deleteMutation = useMutation({
-      mutationFn: ({ id, params }: {
-        id: string | number;
-        params?: Record<string, any>
-      }) => {
-        // ✅ Merge id with params for URL replacement
-        return context.apiClient.request(route, undefined, { ...params, id });
-      },
-      onSuccess: () => queryClient.invalidateQueries({ queryKey }),
-    });
-
     crudOperations = {
       // ✅ Accept params option in all CRUD operations
       create: (item: Partial<TData>, opts?: { params?: Record<string, any> }) =>
@@ -1324,6 +1283,72 @@ export function useMinder<TData = any>(
   // =========================================================================
   // RETURN
   // =========================================================================
+
+  // Invalid-route RESULT branch. Every hook above has already run in stable
+  // order, so returning here never changes the hook count between renders (this
+  // is the safe replacement for the old early return). The shape below mirrors
+  // the documented invalid-route contract exactly.
+  if (!routeValidation.valid) {
+    const validationError = new MinderError(routeValidation.error || 'Invalid route', 'ROUTE_VALIDATION_ERROR', 400);
+    return {
+      data: null,
+      items: null,
+      loading: false,
+      error: validationError,
+      success: false,
+      refetch: async () => ({
+        data: null,
+        error: validationError,
+        status: 400,
+        success: false,
+        metadata: { method: HttpMethod.GET, url: route, duration: 0, cached: false }
+      }),
+      mutate: async () => ({
+        data: null,
+        error: validationError,
+        status: 400,
+        success: false,
+        metadata: { method: HttpMethod.POST, url: route, duration: 0, cached: false }
+      }),
+      auth: {
+        setToken: async () => { },
+        getToken: () => null,
+        clearAuth: async () => { },
+        isAuthenticated: () => false,
+        setRefreshToken: async () => { },
+        getRefreshToken: () => null,
+        getCurrentUser: () => null,
+      },
+      cache: {
+        invalidate: async () => { },
+        prefetch: async () => { },
+        clear: () => { },
+        getStats: () => [],
+        isQueryFresh: () => false,
+      },
+      websocket: {
+        connect: () => { },
+        disconnect: () => { },
+        send: () => { },
+        subscribe: () => () => { },
+        isConnected: () => false,
+      },
+      upload: {
+        uploadFile: async () => { throw new Error(routeValidation.error); },
+        uploadMultiple: async () => { throw new Error(routeValidation.error); },
+        progress: { loaded: 0, total: 0, percentage: 0 },
+        isUploading: false,
+      },
+      isFetching: false,
+      isStale: false,
+      isMutating: false,
+      invalidate: async () => { },
+      cancel: async () => { },
+      isCancelled: false,
+      query: {},
+      mutation: {},
+    };
+  }
 
   // Extract data from MinderResult
   const resultData = query.data?.data ?? null;

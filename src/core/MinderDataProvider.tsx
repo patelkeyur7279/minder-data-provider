@@ -299,3 +299,13 @@ export function useMinderContext(): MinderContextValue {
   }
   return context;
 }
+
+/**
+ * Non-throwing variant for hooks that support standalone (no-provider) mode.
+ * Returns `null` outside a MinderDataProvider instead of throwing, so callers
+ * don't need to wrap a hook call in try/catch (which violates the Rules of
+ * Hooks and breaks hook-order guarantees if the accessor ever grows).
+ */
+export function useMinderContextSafe(): MinderContextValue | null {
+  return useContext(MinderContext);
+}
