@@ -33,6 +33,11 @@ tasks:
     type: implementation
     status: verified
     evidence: "2026-07-19: checkEnvironment + doctor env section; 4 tests, mutation-verified, real-CLI verified; gate 2177/0. Commit pending."
+  - id: K-01
+    title: "mergeMinderConfig — enterprise config composition"
+    type: implementation
+    status: verified
+    evidence: "2026-07-19: 7 TDD tests, built export verified, no input mutation; gate 2184/0."
   - id: WAVE-H
     title: "Wave H platform certification (H-01 adapter tests, H-02 platform HttpMethod fix + guard, H-04 honest matrix; H-03 RN-web run NOT produced — toolchain)"
     type: implementation
