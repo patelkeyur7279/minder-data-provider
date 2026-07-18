@@ -74,6 +74,29 @@ const entries: Array<{ name: string; cjs: string; esm: string; expect: ExpectKin
     esm: path.join(distDir, 'platforms/web.mjs'),
     expect: 'HttpMethod',
   },
+  // Wave H: the mobile/desktop entries. Each = its base entry + a storage
+  // adapter; they must eagerly export HttpMethod like web/nextjs (an Expo/RN
+  // dev doing `import { HttpMethod } from 'minder-data-provider/expo'` used to
+  // get `undefined` → the dabd92d dist-interop crash, on entries the guard
+  // never covered).
+  {
+    name: 'native (minder-data-provider/native)',
+    cjs: path.join(distDir, 'platforms/native.js'),
+    esm: path.join(distDir, 'platforms/native.mjs'),
+    expect: 'HttpMethod',
+  },
+  {
+    name: 'expo (minder-data-provider/expo)',
+    cjs: path.join(distDir, 'platforms/expo.js'),
+    esm: path.join(distDir, 'platforms/expo.mjs'),
+    expect: 'HttpMethod',
+  },
+  {
+    name: 'electron (minder-data-provider/electron)',
+    cjs: path.join(distDir, 'platforms/electron.js'),
+    esm: path.join(distDir, 'platforms/electron.mjs'),
+    expect: 'HttpMethod',
+  },
   {
     name: 'providers/supabase (minder-data-provider/providers/supabase)',
     cjs: path.join(distDir, 'providers/supabase.js'),
@@ -289,5 +312,33 @@ maybeNeg('dist boundary: resolveCredential is server-entry-only (G-08)', () => {
       { encoding: 'utf8' }
     );
     expect(out).toBe('function');
+  });
+});
+
+/**
+ * Wave H: the node (server) entry exports HttpMethod but not the React
+ * provider/hook by design, so it doesn't fit the standard HttpMethod probe.
+ * Assert the enum alone here — same eager-binding regression guard.
+ */
+const maybeNode = distBuilt ? describe : describe.skip;
+maybeNode('node entry HttpMethod (Wave H)', () => {
+  const nodeCjs = path.join(distDir, 'platforms/node.js');
+  const nodeEsm = path.join(distDir, 'platforms/node.mjs');
+  const t = fs.existsSync(nodeCjs) ? it : it.skip;
+
+  t('exports HttpMethod.GET === "GET" in CJS and ESM', () => {
+    const cjs = execFileSync(
+      process.execPath,
+      ['-e', `const m=require(${JSON.stringify(nodeCjs)});process.stdout.write(String((m.HttpMethod||{}).GET));`],
+      { encoding: 'utf8' }
+    );
+    expect(cjs).toBe('GET');
+    const esm = execFileSync(
+      process.execPath,
+      ['--input-type=module', '-e',
+       `import(${JSON.stringify('file://' + nodeEsm)}).then(m=>process.stdout.write(String((m.HttpMethod||{}).GET)));`],
+      { encoding: 'utf8' }
+    );
+    expect(esm).toBe('GET');
   });
 });
