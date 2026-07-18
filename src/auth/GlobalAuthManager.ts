@@ -12,7 +12,7 @@
  * - Refresh token support
  */
 
-import { parseJWT as decodeJwt } from '../utils/jwt.js';
+import { parseJWT as decodeJwt, isTokenUsable } from '../utils/jwt.js';
 
 interface GlobalAuthConfig {
   storage?: 'localStorage' | 'sessionStorage' | 'memory';
@@ -129,8 +129,13 @@ class GlobalAuthManager {
     }
   }
 
+  /**
+   * Same fail-closed semantics as AuthManager.isAuthenticated() (this is the
+   * no-provider fallback path in useMinder). No signature verification —
+   * see isTokenUsable().
+   */
   isAuthenticated(): boolean {
-    return !!this.token;
+    return isTokenUsable(this.token);
   }
 
   getCurrentUser(): any {

@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gate on `getToken() !== null` instead of `isAuthenticated()`. Note that
   `isAuthenticated()` has never verified JWT signatures — server-side code
   must verify tokens itself.
+- **`GlobalAuthManager.isAuthenticated()` (the no-provider `useMinder`
+  fallback) now applies the same fail-closed semantics.** Previously it only
+  checked token presence — even an *expired* JWT counted as authenticated.
+  It now rejects expired and corrupt JWT-shaped tokens exactly like
+  `AuthManager` (parity is enforced by tests).
 - **CORS defaults no longer combine a wildcard origin with credentials.**
   The default CORS middleware changes from `origin: '*', credentials: true`
   (invalid per the CORS spec and flagged by our own

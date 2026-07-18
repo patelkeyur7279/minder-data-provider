@@ -7,6 +7,7 @@
  */
 import { describe, it, expect } from '@jest/globals';
 import { AuthManager } from '../src/core/AuthManager';
+import { GlobalAuthManager } from '../src/auth/GlobalAuthManager';
 import { StorageType } from '../src/constants/enums';
 
 const b64url = (obj: unknown) =>
@@ -46,5 +47,29 @@ describe('isAuthenticated() fail-closed hardening', () => {
   it('still rejects an expired JWT and exp=0', () => {
     expect(managerWith(jwt({ exp: Date.now() / 1000 - 3600 })).isAuthenticated()).toBe(false);
     expect(managerWith(jwt({ exp: 0 })).isAuthenticated()).toBe(false);
+  });
+});
+
+describe('GlobalAuthManager.isAuthenticated() parity', () => {
+  // The no-provider useMinder path falls back to GlobalAuthManager; its
+  // isAuthenticated() must apply the same fail-closed semantics as AuthManager.
+  const globalWith = async (token: string) => {
+    const m = new GlobalAuthManager();
+    await m.setToken(token);
+    return m;
+  };
+
+  const cases: Array<[string, string, boolean]> = [
+    ['opaque token', 'opaque-session-id-12345', true],
+    ['corrupt JWT payload', 'aaa.@@@not-base64@@@.ccc', false],
+    ['non-numeric exp', `x.${Buffer.from(JSON.stringify({ exp: 'soon' })).toString('base64url')}.y`, false],
+    ['valid future exp', jwt({ exp: Date.now() / 1000 + 3600 }), true],
+    ['expired', jwt({ exp: Date.now() / 1000 - 3600 }), false],
+    ['no exp claim', jwt({ sub: 'no-exp' }), true],
+  ];
+
+  it.each(cases)('%s → %j matches AuthManager behavior', async (_name, token, expected) => {
+    expect((await globalWith(token)).isAuthenticated()).toBe(expected);
+    expect(managerWith(token).isAuthenticated()).toBe(expected);
   });
 });
