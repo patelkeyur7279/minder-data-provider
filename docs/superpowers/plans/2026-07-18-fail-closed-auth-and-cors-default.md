@@ -29,7 +29,7 @@
 **Interfaces:**
 - Produces: `isJwtShaped(token: string | null | undefined): boolean` — true iff token is a string with exactly 3 dot-separated segments and a non-empty header+payload. Task 2 consumes it.
 
-- [ ] **Step 1: Write the failing test** — append to `tests/jwt.test.ts`:
+- [x] **Step 1: Write the failing test** — append to `tests/jwt.test.ts`:
 
 ```ts
 describe('isJwtShaped', () => {
@@ -48,9 +48,9 @@ describe('isJwtShaped', () => {
 
 and add `isJwtShaped` to the import at the top of the file.
 
-- [ ] **Step 2: Run test to verify it fails** — `npx jest tests/jwt.test.ts -t isJwtShaped` → FAIL (`isJwtShaped` is not exported).
+- [x] **Step 2: Run test to verify it fails** — `npx jest tests/jwt.test.ts -t isJwtShaped` → FAIL (`isJwtShaped` is not exported).
 
-- [ ] **Step 3: Minimal implementation** — append to `src/utils/jwt.ts`:
+- [x] **Step 3: Minimal implementation** — append to `src/utils/jwt.ts`:
 
 ```ts
 /**
@@ -66,9 +66,9 @@ export function isJwtShaped(token: string | null | undefined): boolean {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes** — `npx jest tests/jwt.test.ts` → all PASS.
+- [x] **Step 4: Run test to verify it passes** — `npx jest tests/jwt.test.ts` → all PASS.
 
-- [ ] **Step 5: Commit** — `git add src/utils/jwt.ts tests/jwt.test.ts && git commit -m "feat: add isJwtShaped() to the shared JWT utility"`
+- [x] **Step 5: Commit** — `git add src/utils/jwt.ts tests/jwt.test.ts && git commit -m "feat: add isJwtShaped() to the shared JWT utility"`
 
 ### Task 2: Fail-closed `isAuthenticated()`
 
@@ -92,7 +92,7 @@ export function isJwtShaped(token: string | null | undefined): boolean {
 | JWT-shaped, undecodable payload | **true** | **false** |
 | JWT, non-numeric `exp` | **true** | **false** |
 
-- [ ] **Step 1: Write the failing test** — create `tests/auth-fail-closed.test.ts`:
+- [x] **Step 1: Write the failing test** — create `tests/auth-fail-closed.test.ts`:
 
 ```ts
 /**
@@ -147,9 +147,9 @@ describe('isAuthenticated() fail-closed hardening', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails** — `npx jest tests/auth-fail-closed.test.ts` → the three "rejects" cases FAIL (currently return true).
+- [x] **Step 2: Run test to verify it fails** — `npx jest tests/auth-fail-closed.test.ts` → the three "rejects" cases FAIL (currently return true).
 
-- [ ] **Step 3: Implementation** — in `src/core/AuthManager.ts` change line 2 to `import { parseJWT as decodeJwt, isJwtShaped } from '../utils/jwt.js';` and replace the `isAuthenticated()` body (lines 160-209) with:
+- [x] **Step 3: Implementation** — in `src/core/AuthManager.ts` change line 2 to `import { parseJWT as decodeJwt, isJwtShaped } from '../utils/jwt.js';` and replace the `isAuthenticated()` body (lines 160-209) with:
 
 ```ts
   /**
@@ -214,14 +214,14 @@ describe('isAuthenticated() fail-closed hardening', () => {
 
 (The old `try/catch` goes away: `parseJWT` never throws by contract.)
 
-- [ ] **Step 4: Update the tests that encoded fail-open** —
+- [x] **Step 4: Update the tests that encoded fail-open** —
   - `tests/auth-manager.test.ts:146-158`: the two `// Falls back to treating as valid` cases. Inspect each token: if it is JWT-shaped (3 segments) flip the expectation to `false` and rename the `it` to say "fails closed"; if it is not JWT-shaped, keep `true`.
   - `tests/bug5-jwt-parsing.test.ts`: keep every `.not.toThrow()` assertion (that bug stays fixed); for assertions on the *return value* of JWT-shaped corrupt tokens, flip `true` → `false` and update the comment from "treat as valid" to "fail closed". Non-JWT-shaped cases keep `true`.
   - `tests/security.test.ts:350-370`: read the two cases; only change them if they use a JWT-shaped corrupt token (expected: they cover opaque/expired and need no change).
 
-- [ ] **Step 5: Run the full auth test set** — `npx jest tests/auth-fail-closed.test.ts tests/bug5-jwt-parsing.test.ts tests/auth-manager.test.ts tests/security.test.ts tests/jwt.test.ts` → all PASS.
+- [x] **Step 5: Run the full auth test set** — `npx jest tests/auth-fail-closed.test.ts tests/bug5-jwt-parsing.test.ts tests/auth-manager.test.ts tests/security.test.ts tests/jwt.test.ts` → all PASS.
 
-- [ ] **Step 6: Commit** — `git commit -am "fix!: isAuthenticated() fails closed on corrupt JWT-shaped tokens"`
+- [x] **Step 6: Commit** — `git commit -am "fix!: isAuthenticated() fails closed on corrupt JWT-shaped tokens"`
 
 ### Task 3: Safe CORS middleware factory
 
@@ -233,7 +233,7 @@ describe('isAuthenticated() fail-closed hardening', () => {
 - Consumes: nothing from earlier tasks.
 - Produces: `createCorsMiddleware(options?: CorsMiddlewareOptions): (req, res) => Promise<unknown>`; default export unchanged in shape (a `(req, res) => Promise` function) so `ProxyManager`'s `require()` keeps working.
 
-- [ ] **Step 1: Write the failing test** — create `tests/cors-middleware-default.test.ts`:
+- [x] **Step 1: Write the failing test** — create `tests/cors-middleware-default.test.ts`:
 
 ```ts
 /**
@@ -281,9 +281,9 @@ describe('corsMiddleware safe default', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails** — `npx jest tests/cors-middleware-default.test.ts` → FAIL (no named export; default sends credentials header).
+- [x] **Step 2: Run test to verify it fails** — `npx jest tests/cors-middleware-default.test.ts` → FAIL (no named export; default sends credentials header).
 
-- [ ] **Step 3: Implementation** — replace `src/core/corsMiddleware.ts` with:
+- [x] **Step 3: Implementation** — replace `src/core/corsMiddleware.ts` with:
 
 ```ts
 import Cors from 'cors';
@@ -339,9 +339,9 @@ const corsMiddleware = createCorsMiddleware();
 export default corsMiddleware;
 ```
 
-- [ ] **Step 4: Run tests** — `npx jest tests/cors-middleware-default.test.ts tests/cors-handling.test.ts tests/cors-hardening.test.ts tests/generic-proxy.test.ts tests/auto-proxy.test.tsx` → all PASS (proxy tests confirm ProxyManager still works).
+- [x] **Step 4: Run tests** — `npx jest tests/cors-middleware-default.test.ts tests/cors-handling.test.ts tests/cors-hardening.test.ts tests/generic-proxy.test.ts tests/auto-proxy.test.tsx` → all PASS (proxy tests confirm ProxyManager still works).
 
-- [ ] **Step 5: Commit** — `git commit -am "fix!: default CORS middleware no longer combines wildcard origin with credentials"`
+- [x] **Step 5: Commit** — `git commit -am "fix!: default CORS middleware no longer combines wildcard origin with credentials"`
 
 ### Task 4: Changelog, migration notes, and docs
 
@@ -350,7 +350,7 @@ export default corsMiddleware;
 - Modify: `README.md` (security note in the auth section)
 - Modify: `docs/superpowers/plans/2026-07-18-fail-closed-auth-and-cors-default.md` (tick checkboxes)
 
-- [ ] **Step 1: CHANGELOG entry** — add above the `2.2.0-beta.0` entry:
+- [x] **Step 1: CHANGELOG entry** — add above the `2.2.0-beta.0` entry:
 
 ```markdown
 ## [2.2.0-beta.1] - Unreleased
@@ -379,18 +379,18 @@ export default corsMiddleware;
 - `isJwtShaped(token)` exported from the JWT utility.
 ```
 
-- [ ] **Step 2: README security note** — in the authentication section, add a short "Security model" paragraph: client-side `isAuthenticated()` = presence + expiry only, no signature verification; corrupt JWTs rejected as of 2.2.0-beta.1; link to CHANGELOG migration notes.
+- [x] **Step 2: README security note** — in the authentication section, add a short "Security model" paragraph: client-side `isAuthenticated()` = presence + expiry only, no signature verification; corrupt JWTs rejected as of 2.2.0-beta.1; link to CHANGELOG migration notes.
 
-- [ ] **Step 3: Full verification** — `npm run lint:check && npm run type-check && npx jest && npm run build` → all green. Record actual output.
+- [x] **Step 3: Full verification** — `npm run lint:check && npm run type-check && npx jest && npm run build` → all green. Record actual output.
 
-- [ ] **Step 4: Commit** — `git commit -am "docs: changelog + migration notes for fail-closed auth and CORS default"`
+- [x] **Step 4: Commit** — `git commit -am "docs: changelog + migration notes for fail-closed auth and CORS default"`
 
 ## Verification checklist (before claiming done)
 
-- [ ] All 4 tasks committed on `fix/fail-closed-auth-and-cors-default`
-- [ ] Full jest suite passes (record count) — 85 suites / 1631 passed, 5 skipped (pre-existing)
-- [ ] `npm run type-check` clean
-- [ ] `npm run lint:check` clean (pre-existing warnings only, 0 errors)
-- [ ] `npm run build` succeeds
-- [ ] Code review requested (or simulated via /code-review)
-- [ ] CHANGELOG + migration notes present
+- [x] All 4 tasks committed on `fix/fail-closed-auth-and-cors-default`
+- [x] Full jest suite passes (record count) — 85 suites / 1631 passed, 5 skipped (pre-existing)
+- [x] `npm run type-check` clean
+- [x] `npm run lint:check` clean (pre-existing warnings only, 0 errors)
+- [x] `npm run build` succeeds
+- [x] Code review requested (or simulated via /code-review)
+- [x] CHANGELOG + migration notes present
