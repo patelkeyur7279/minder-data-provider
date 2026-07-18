@@ -119,7 +119,10 @@ describe('minder init', () => {
 
 describe('minder add', () => {
   it('exits 1 and points at the provider catalog for an unknown provider', () => {
-    const result = run(['add', 'stripe'], { cwd: tmpDir });
+    // 'clerk' is still `status: 'planned'` (unregistered) at the time of
+    // writing — see KEY_SOURCE_REGISTRY. Unlike 'stripe' (now registered
+    // below), it has no PROVIDERS entry yet.
+    const result = run(['add', 'clerk'], { cwd: tmpDir });
 
     expect(result.status).toBe(1);
     const combined = result.stdout + result.stderr;
@@ -156,6 +159,96 @@ describe('minder add', () => {
     expect(result.stdout.toUpperCase()).toContain('EXPERIMENTAL');
     expect(result.stdout).toContain('not yet certified');
     expect(result.stdout).toContain(supabase.keysUrl);
+  });
+
+  const stripeCheckoutRoute = 'app/api/minder/stripe/checkout/route.ts';
+  const stripeWebhookRoute = 'app/api/minder/stripe/webhook/route.ts';
+
+  it('add stripe scaffolds real route files, env vars, and the experimental notice, exit 0', () => {
+    const stripe = cli.PROVIDERS.find((p: { name: string }) => p.name === 'stripe');
+    expect(stripe).toBeDefined();
+
+    const result = run(['add', 'stripe'], { cwd: tmpDir });
+
+    expect(result.status).toBe(0);
+
+    // Both route files are written with the expected import lines.
+    const checkoutPath = path.join(tmpDir, stripeCheckoutRoute);
+    const webhookPath = path.join(tmpDir, stripeWebhookRoute);
+    expect(fs.existsSync(checkoutPath)).toBe(true);
+    expect(fs.existsSync(webhookPath)).toBe(true);
+
+    const checkoutContent = fs.readFileSync(checkoutPath, 'utf8');
+    expect(checkoutContent).toContain(
+      "import { createCheckoutHandler } from 'minder-data-provider/providers/stripe';"
+    );
+    expect(checkoutContent).toContain("import { secret } from 'minder-data-provider';");
+    expect(checkoutContent).toContain('export async function POST(req: Request)');
+
+    const webhookContent = fs.readFileSync(webhookPath, 'utf8');
+    expect(webhookContent).toContain(
+      "import { createStripeWebhookHandler } from 'minder-data-provider/providers/stripe';"
+    );
+    expect(webhookContent).toContain("import { secret } from 'minder-data-provider';");
+    expect(webhookContent).toContain('export async function POST(req: Request)');
+
+    // .env.example gains both env vars.
+    const envExamplePath = path.join(tmpDir, '.env.example');
+    expect(fs.existsSync(envExamplePath)).toBe(true);
+    const envExample = fs.readFileSync(envExamplePath, 'utf8');
+    expect(envExample).toContain('STRIPE_SECRET_KEY');
+    expect(envExample).toContain('STRIPE_WEBHOOK_SECRET');
+
+    // stdout carries the config snippet, both scaffolded file paths, an
+    // explicit EXPERIMENTAL notice, and the keys URL.
+    expect(result.stdout).toContain(stripe.configSnippet.trim());
+    expect(result.stdout).toContain(stripeCheckoutRoute);
+    expect(result.stdout).toContain(stripeWebhookRoute);
+    expect(result.stdout.toUpperCase()).toContain('EXPERIMENTAL');
+    expect(result.stdout).toContain('not yet certified');
+    expect(result.stdout).toContain(stripe.keysUrl);
+  });
+
+  it('re-running add stripe without --force skips the existing route files', () => {
+    const first = run(['add', 'stripe'], { cwd: tmpDir });
+    expect(first.status).toBe(0);
+
+    const checkoutPath = path.join(tmpDir, stripeCheckoutRoute);
+    const webhookPath = path.join(tmpDir, stripeWebhookRoute);
+    const checkoutBefore = fs.readFileSync(checkoutPath, 'utf8');
+    const webhookBefore = fs.readFileSync(webhookPath, 'utf8');
+
+    const second = run(['add', 'stripe'], { cwd: tmpDir });
+    expect(second.status).toBe(0);
+    expect(second.stdout).toContain('Skipped');
+    expect(second.stdout).toContain(stripeCheckoutRoute);
+    expect(second.stdout).toContain(stripeWebhookRoute);
+
+    expect(fs.readFileSync(checkoutPath, 'utf8')).toBe(checkoutBefore);
+    expect(fs.readFileSync(webhookPath, 'utf8')).toBe(webhookBefore);
+  });
+
+  it('add stripe --force overwrites existing route files', () => {
+    const first = run(['add', 'stripe'], { cwd: tmpDir });
+    expect(first.status).toBe(0);
+
+    const checkoutPath = path.join(tmpDir, stripeCheckoutRoute);
+    const webhookPath = path.join(tmpDir, stripeWebhookRoute);
+
+    // Corrupt both files to prove --force actually rewrites them.
+    fs.writeFileSync(checkoutPath, '// corrupted\n', 'utf8');
+    fs.writeFileSync(webhookPath, '// corrupted\n', 'utf8');
+
+    const forced = run(['add', 'stripe', '--force'], { cwd: tmpDir });
+    expect(forced.status).toBe(0);
+    expect(forced.stdout).toContain('Scaffolded route files');
+
+    const checkoutContent = fs.readFileSync(checkoutPath, 'utf8');
+    const webhookContent = fs.readFileSync(webhookPath, 'utf8');
+    expect(checkoutContent).not.toContain('// corrupted');
+    expect(webhookContent).not.toContain('// corrupted');
+    expect(checkoutContent).toContain('createCheckoutHandler');
+    expect(webhookContent).toContain('createStripeWebhookHandler');
   });
 });
 

@@ -31,6 +31,7 @@ export default defineConfig({
     // key IS the dist-relative output path, so this lands at
     // dist/providers/supabase.{js,mjs,d.ts}.
     'providers/supabase': 'providers/supabase/src/index.ts',
+    'providers/stripe': 'providers/stripe/src/index.ts',
 
     // Feature modules (for tree-shaking)
     'crud/index': 'src/crud/index.ts',
@@ -73,6 +74,7 @@ export default defineConfig({
     'dompurify',
     // Optional provider peer deps — lazy-loaded by their adapters, never bundled.
     '@supabase/supabase-js',
+    'stripe',
     // Node.js built-ins that should not be in browser bundles
     'fs',
     'path',

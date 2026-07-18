@@ -34,10 +34,11 @@ const distDir = path.resolve(__dirname, '../dist');
 
 // What a given entry is expected to export, and therefore which assertion
 // applies to it. 'HttpMethod' is the original dist-interop regression this
-// file guards (see header comment); 'registerSupabaseProvider' is the
-// providers/supabase entry's public export — it doesn't export HttpMethod
-// at all, so it gets its own probe/assertion instead.
-type ExpectKind = 'HttpMethod' | 'registerSupabaseProvider';
+// file guards (see header comment); 'registerSupabaseProvider' and
+// 'registerStripeProvider' are the providers/supabase and providers/stripe
+// entries' public exports — neither exports HttpMethod at all, so each gets
+// its own probe/assertion instead.
+type ExpectKind = 'HttpMethod' | 'registerSupabaseProvider' | 'registerStripeProvider';
 
 // Public entries the Next.js example (and typical consumers) import from.
 // Each is asserted in both module systems.
@@ -66,11 +67,23 @@ const entries: Array<{ name: string; cjs: string; esm: string; expect: ExpectKin
     esm: path.join(distDir, 'providers/supabase.mjs'),
     expect: 'registerSupabaseProvider',
   },
+  {
+    name: 'providers/stripe (minder-data-provider/providers/stripe)',
+    cjs: path.join(distDir, 'providers/stripe.js'),
+    esm: path.join(distDir, 'providers/stripe.mjs'),
+    expect: 'registerStripeProvider',
+  },
 ];
 
 const distBuilt = fs.existsSync(path.join(distDir, 'index.js'));
 
-/** Probe a built entry through a fresh Node process using the given module system. */
+/**
+ * Probe a built entry through a fresh Node process using the given module
+ * system. For non-'HttpMethod' kinds, the export under test is a
+ * `registerXProvider` function — the ExpectKind string itself IS the export
+ * name, so the probe is generic across every provider entry (no per-provider
+ * branch needed to add a new one).
+ */
 function probeEntry(
   kind: 'cjs' | 'esm',
   file: string,
@@ -79,7 +92,7 @@ function probeEntry(
   httpGet: unknown;
   provider: string;
   hook: string;
-  registerSupabaseProvider: string;
+  [exportName: string]: unknown;
 } {
   const jsonFor = (accessor: string) =>
     expectKind === 'HttpMethod'
@@ -88,7 +101,7 @@ function probeEntry(
         `provider:typeof ${accessor}.MinderDataProvider,` +
         `hook:typeof ${accessor}.useMinder` +
         `})`
-      : `JSON.stringify({registerSupabaseProvider:typeof ${accessor}.registerSupabaseProvider})`;
+      : `JSON.stringify({${expectKind}:typeof ${accessor}.${expectKind}})`;
 
   let stdout: string;
   if (kind === 'cjs') {
@@ -115,6 +128,10 @@ function probeEntry(
  * BROKEN dist. Only a tree-shaking bundler that honours `sideEffects: false`
  * (webpack, esbuild) reproduces the bug — so this probe bundles a tiny entry
  * with esbuild (available transitively via tsup) and runs the output.
+ *
+ * Same genericization as `probeEntry`: for non-'HttpMethod' kinds, the
+ * ExpectKind string is used directly as both the named import and the JSON
+ * key, so no per-provider branch is needed to add a new provider entry.
  */
 function probeBundled(esmFile: string, expectKind: ExpectKind): unknown {
   // esbuild's in-process JS API cannot run under jest's jsdom environment
@@ -129,8 +146,8 @@ function probeBundled(esmFile: string, expectKind: ExpectKind): unknown {
       expectKind === 'HttpMethod'
         ? `import { HttpMethod } from ${JSON.stringify(esmFile)};` +
           `process.stdout.write(JSON.stringify({ httpGet: (HttpMethod || {}).GET }));`
-        : `import { registerSupabaseProvider } from ${JSON.stringify(esmFile)};` +
-          `process.stdout.write(JSON.stringify({ registerSupabaseProvider: typeof registerSupabaseProvider }));`;
+        : `import { ${expectKind} } from ${JSON.stringify(esmFile)};` +
+          `process.stdout.write(JSON.stringify({ ${expectKind}: typeof ${expectKind} }));`;
     fs.writeFileSync(entry, entrySource);
     const esbuildBin = require.resolve('esbuild/bin/esbuild');
     execFileSync(
@@ -140,8 +157,8 @@ function probeBundled(esmFile: string, expectKind: ExpectKind): unknown {
       { encoding: 'utf8' }
     );
     const stdout = execFileSync(process.execPath, [out], { encoding: 'utf8' });
-    const parsed = JSON.parse(stdout) as { httpGet?: unknown; registerSupabaseProvider?: unknown };
-    return expectKind === 'HttpMethod' ? parsed.httpGet : parsed.registerSupabaseProvider;
+    const parsed = JSON.parse(stdout) as { httpGet?: unknown; [exportName: string]: unknown };
+    return expectKind === 'HttpMethod' ? parsed.httpGet : parsed[expectKind];
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
@@ -176,9 +193,9 @@ maybe('built dist entry exports (dist interop regression guard)', () => {
               expect(r.hook).not.toBe('undefined');
             });
           } else {
-            t('registerSupabaseProvider is a function', () => {
+            t(`${entry.expect} is a function`, () => {
               const r = probeEntry(kind, file, entry.expect);
-              expect(r.registerSupabaseProvider).toBe('function');
+              expect(r[entry.expect]).toBe('function');
             });
           }
         });
@@ -191,7 +208,7 @@ maybe('built dist entry exports (dist interop regression guard)', () => {
           expect(probeBundled(entry.esm, entry.expect)).toBe('GET');
         });
       } else {
-        tb('BUNDLED (esbuild, tree-shaking): registerSupabaseProvider survives', () => {
+        tb(`BUNDLED (esbuild, tree-shaking): ${entry.expect} survives`, () => {
           expect(probeBundled(entry.esm, entry.expect)).toBe('function');
         });
       }

@@ -38,7 +38,11 @@ const KEY_SOURCE_REGISTRY = [
     keysUrl: 'https://supabase.com/dashboard/project/_/settings/api',
     status: 'experimental — minder add supabase',
   },
-  { name: 'Stripe', keysUrl: 'https://dashboard.stripe.com/apikeys', status: 'planned' },
+  {
+    name: 'Stripe',
+    keysUrl: 'https://dashboard.stripe.com/apikeys',
+    status: 'experimental — minder add stripe',
+  },
   { name: 'Clerk', keysUrl: 'https://dashboard.clerk.com', status: 'planned' },
   { name: 'Firebase', keysUrl: 'https://console.firebase.google.com', status: 'planned' },
   {
@@ -71,6 +75,51 @@ const SUPABASE_CONFIG_SNIPPET = `// Add this to your minder.config.ts "providers
 // }
 `;
 
+const STRIPE_CONFIG_SNIPPET = `// Add this to your minder.config.ts "providers" object:
+//
+// import { secret } from 'minder-data-provider/server';
+//
+// providers: {
+//   stripe: {
+//     publishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!,
+//     secretKey: secret('STRIPE_SECRET_KEY'),
+//     webhookSecret: secret('STRIPE_WEBHOOK_SECRET'),
+//     checkoutPath: '/api/minder/stripe/checkout',
+//     mock: true, // flip to false once you've added real Stripe keys
+//   },
+// }
+`;
+
+// Next.js App Router route handlers scaffolded by `minder add stripe`. Server
+// boundary: both import from 'minder-data-provider/providers/stripe' (the
+// zero-dependency handler factories) and resolve secrets via `secret(...)`
+// from 'minder-data-provider' — the secret key/webhook secret are never
+// embedded as raw strings in app code.
+const STRIPE_CHECKOUT_ROUTE = `import { createCheckoutHandler } from 'minder-data-provider/providers/stripe';
+import { secret } from 'minder-data-provider';
+
+const handler = createCheckoutHandler({ secretKey: secret('STRIPE_SECRET_KEY') });
+
+export async function POST(req: Request) {
+  return handler(req);
+}
+`;
+
+const STRIPE_WEBHOOK_ROUTE = `import { createStripeWebhookHandler } from 'minder-data-provider/providers/stripe';
+import { secret } from 'minder-data-provider';
+
+const handler = createStripeWebhookHandler({
+  webhookSecret: secret('STRIPE_WEBHOOK_SECRET'),
+  onEvent: async (e) => {
+    /* TODO: handle e.body */
+  },
+});
+
+export async function POST(req: Request) {
+  return handler(req);
+}
+`;
+
 const PROVIDERS = [
   {
     name: 'supabase',
@@ -78,6 +127,17 @@ const PROVIDERS = [
     envVars: ['SUPABASE_SERVICE_ROLE_KEY'],
     configSnippet: SUPABASE_CONFIG_SNIPPET,
     keysUrl: 'https://supabase.com/dashboard/project/_/settings/api',
+  },
+  {
+    name: 'stripe',
+    status: 'experimental',
+    envVars: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'],
+    configSnippet: STRIPE_CONFIG_SNIPPET,
+    keysUrl: 'https://dashboard.stripe.com/apikeys',
+    scaffoldFiles: [
+      { path: 'app/api/minder/stripe/checkout/route.ts', content: STRIPE_CHECKOUT_ROUTE },
+      { path: 'app/api/minder/stripe/webhook/route.ts', content: STRIPE_WEBHOOK_ROUTE },
+    ],
   },
 ];
 
@@ -111,9 +171,11 @@ Commands:
                              Idempotent: skips existing files unless --force.
 
   add <provider>             Scaffold a provider integration. Currently
-                             supports "supabase" (EXPERIMENTAL — not yet
-                             certified). Every other provider name exits 1 —
-                             see ${CATALOG_DOC}.
+                             supports "supabase" and "stripe" (both
+                             EXPERIMENTAL — not yet certified; stripe also
+                             scaffolds Next.js App Router route handlers).
+                             Every other provider name exits 1 — see
+                             ${CATALOG_DOC}.
 
   doctor [--config <path>]  Check that provider credentials referenced by
                              your config are present in the environment.
@@ -316,7 +378,7 @@ function cmdInit(argv, ctx) {
 // ── `minder add` ────────────────────────────────────────────────────────────
 
 /**
- * Scaffold a registered provider (currently just Supabase — see
+ * Scaffold a registered provider (currently Supabase and Stripe — see
  * `PROVIDERS`). Unknown provider names (everything not yet in `PROVIDERS`,
  * i.e. everything still `status: 'planned'` in `KEY_SOURCE_REGISTRY`) fall
  * through to the same "no certified providers" catalog message as before —
@@ -324,10 +386,13 @@ function cmdInit(argv, ctx) {
  * the providers it still applies to.
  *
  * For a registered provider this does NOT write minder.config.ts (the user
- * pastes the printed snippet in themselves) and writes no routes/adapters —
- * only `.env.example` gains the provider's env vars. It prints the config
- * snippet plus an explicit "not yet certified" notice so nobody mistakes
- * "installable" for "production ready".
+ * pastes the printed snippet in themselves) — it writes `.env.example`
+ * entries for the provider's env vars, and, when the provider entry declares
+ * `scaffoldFiles` (route handlers etc. — Supabase has none, Stripe does), it
+ * also writes those files via `writeScaffold` (no-clobber unless --force,
+ * same as `writeScaffold`'s general contract). It prints the config snippet,
+ * any scaffolded file paths, and an explicit "not yet certified" notice so
+ * nobody mistakes "installable" for "production ready".
  */
 function cmdAdd(argv, ctx) {
   const { cwd, stdout, stderr } = ctx;
@@ -342,7 +407,29 @@ function cmdAdd(argv, ctx) {
 
   writeProviderEnvVars(cwd, provider, force);
 
+  let scaffoldResult = null;
+  if (provider.scaffoldFiles && provider.scaffoldFiles.length > 0) {
+    scaffoldResult = writeScaffold(provider.scaffoldFiles, { cwd, force });
+  }
+
   stdout.write(`\n${provider.configSnippet}\n`);
+
+  if (scaffoldResult) {
+    if (scaffoldResult.written.length > 0) {
+      stdout.write('Scaffolded route files:\n');
+      for (const file of scaffoldResult.written) {
+        stdout.write(`  ${file}\n`);
+      }
+    }
+    if (scaffoldResult.skipped.length > 0) {
+      stdout.write('Skipped (already exist — use --force to overwrite):\n');
+      for (const file of scaffoldResult.skipped) {
+        stdout.write(`  ${file}\n`);
+      }
+    }
+    stdout.write('\n');
+  }
+
   stdout.write(`status: EXPERIMENTAL — not yet certified; flip mock:false when you add real keys\n`);
   stdout.write(`Get your ${provider.name} keys: ${provider.keysUrl}\n`);
   return 0;
