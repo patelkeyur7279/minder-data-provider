@@ -1,5 +1,320 @@
 # Migration Guide
 
+This guide covers two migrations: **2.2.0-beta.0 → 2.2.0-beta.1** (below — the current
+release) and the older **v1.x → v2.0** guide (further down).
+
+## 2.2.0-beta.0 → 2.2.0-beta.1
+
+Every default-changing or breaking behavior change in the 2.2.0-beta.1 release — see
+[CHANGELOG.md](../CHANGELOG.md) for the complete, unabridged list. These are logged
+there as behavior changes, not API removals: your code will very likely keep compiling
+and running unmodified, but several **defaults** changed, so read this even if nothing
+breaks at build time.
+
+**In this section:**
+
+- [1. Fail-closed `isAuthenticated()`](#1-fail-closed-isauthenticated)
+- [2. CORS defaults](#2-cors-defaults)
+- [3. No forced CORS preflight](#3-no-forced-cors-preflight)
+- [4. Default retry changed](#4-default-retry-changed)
+- [5. peerDependencies move](#5-peerdependencies-move)
+- [6. `useAuth` root-entry shadowing](#6-useauth-root-entry-shadowing)
+- [7. `rawUrl` and config unification](#7-rawurl-and-config-unification)
+
+### 1. Fail-closed `isAuthenticated()`
+
+**Old behavior:** a JWT-shaped token (three dot-separated segments) whose payload
+couldn't be decoded, or whose `exp` claim was non-numeric, was treated as
+**authenticated** (`isAuthenticated()` returned `true`). The no-provider fallback used
+by standalone `useMinder()` (`GlobalAuthManager`) was even looser: it only checked
+token *presence* — an **expired** JWT still counted as authenticated.
+
+**New behavior:** both `AuthManager.isAuthenticated()` (provider mode) and
+`GlobalAuthManager.isAuthenticated()` (standalone/no-provider mode) now fail closed —
+a JWT-shaped token that can't be decoded, or whose `exp` has passed, returns `false`.
+The two are now parity-tested against each other. Opaque (non-JWT) bearer tokens are
+unchanged — still presence-based, since there's nothing to decode. Signature
+verification was never performed client-side and still isn't; this only affects the
+shape/expiry check.
+
+**Why:** silently treating a corrupt or expired token as valid is a fail-open
+authorization bug — it let invalid sessions look "logged in" to client-side route
+guards.
+
+**Migration:**
+
+```typescript
+// Before — a corrupt or expired JWT-shaped token still passed this check
+if (auth.isAuthenticated()) {
+  /* ... */
+}
+
+// After — if you intentionally store JWT-shaped-but-not-actually-JWT strings
+// (three dot-separated segments that aren't valid JWTs) and want the old
+// presence-only semantics, check for a token instead:
+if (auth.getToken() !== null) {
+  /* ... */
+}
+```
+
+No action needed if your tokens are real JWTs or genuinely opaque strings — this is a
+pure bug fix for the corrupt/expired case.
+
+### 2. CORS defaults
+
+**Old behavior:** the library's own CORS-emitting code — the default `corsMiddleware`
+export and `ProxyManager.generateNextJSProxy()` (the Next.js proxy-route generator) —
+defaulted to `origin: '*', credentials: true`. That combination is invalid per the CORS
+spec (browsers reject it) and was already flagged by the library's own
+`CorsManager.validateConfig()`.
+
+**New behavior:** the default is now `origin: '*', credentials: false`.
+`generateNextJSProxy()` emits `Access-Control-Allow-Credentials: false` unless
+`cors.credentials` is explicitly `true` in the `ProxyConfig` you pass it — and now
+**throws** rather than generate a proxy combining `credentials: true` with a wildcard
+origin.
+
+**Why:** `Access-Control-Allow-Credentials: true` next to a wildcard origin tells
+browsers "any origin may send this browser's cookies here" — a real vulnerability if a
+server ever ships that pairing.
+
+**Migration:**
+
+```typescript
+import { ProxyManager } from "minder-data-provider";
+
+// Before (implicit): credentials always on, wildcard origin
+const proxy = new ProxyManager({ enabled: true, baseUrl: "https://api.example.com" });
+
+// After: an explicit allowlist is required to keep credentials on
+const proxy = new ProxyManager({
+  enabled: true,
+  baseUrl: "https://api.example.com",
+  cors: { origin: ["https://app.example.com"], credentials: true },
+});
+proxy.generateNextJSProxy(); // throws if origin is '*' and credentials is true
+```
+
+> **`createCorsMiddleware`:** the CHANGELOG documents a new `createCorsMiddleware(options)`
+> factory with this same safe-by-default behavior. As of this writing it lives at
+> `src/core/corsMiddleware.ts` but is **not re-exported from any published entry point**
+> (`minder-data-provider`, `/server`, `/core`, or any platform subpath) —
+> `import { createCorsMiddleware } from "minder-data-provider"` will fail today. The
+> `ProxyManager` snippet above is the reachable equivalent for Next.js proxy generation.
+
+> **`configureMinder()` history note:** earlier 2.2.0-beta.1 development builds had a
+> preset bug that undermined this change for `configureMinder()` users — the
+> web-platform preset forced `credentials: true` onto any config that didn't set it, and
+> the `corsHelper: true` boolean shorthand also defaulted credentials on. Both are fixed
+> in the current build: `configureMinder()` now defaults credentials **off on every
+> platform**, and only an explicit `corsHelper: { credentials: true }` from you turns
+> them on (explicit user values always win over presets). Note that the `cors` config
+> key is deprecated in favor of `corsHelper` — it logs a runtime deprecation warning and
+> is slated for removal in v3.0, and its `configureMinder()` type only accepts
+> `enabled`/`proxy` (no `credentials` field).
+
+### 3. No forced CORS preflight
+
+**Old behavior:** the default axios instance attached 7 response-type security headers
+(CSP, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security,
+X-XSS-Protection, Referrer-Policy, Permissions-Policy) to every outgoing *request*, and
+set `withCredentials: true` by default. Non-safelisted request headers plus credentialed
+mode force the browser to run a CORS preflight `OPTIONS` round-trip before every
+cross-origin call — roughly doubling latency.
+
+**New behavior:** default request headers are exactly `Content-Type: application/json`
+and `Accept: application/json` — nothing else. `withCredentials` defaults to `false`;
+the client reads the resolved config's `cors.credentials === true` to enable it — via
+`configureMinder()`, set `corsHelper: { credentials: true }` (this also now governs the
+token-refresh call, which previously hardcoded credentials).
+
+**Why:** this was a performance bug, not a security feature — the security-response
+headers never belonged on a *request*, and most apps don't need cookies sent
+cross-origin. The internal helper that builds those response headers
+(`getSecurityHeaders()` in `src/utils/security.ts`) is unaffected — it's just no
+longer applied to outgoing requests. Note it is an internal helper today, not exported
+from any public entry point; set your own server response headers if you need them.
+
+**Migration:**
+
+```typescript
+// If your API relies on cookies for auth, opt back in explicitly (pair with an
+// explicit origin allowlist server-side — see item 2). Use `corsHelper`, not the
+// deprecated `cors` key (see the note in item 2):
+configureMinder({
+  apiUrl: "https://api.example.com",
+  routes: { /* ... */ },
+  corsHelper: { credentials: true },
+});
+
+// If you were relying on the old default request headers, use route- or call-level
+// headers instead — they were never meant to be silent global defaults:
+useMinder("users", { headers: { "X-Custom-Header": "value" } });
+```
+
+> Earlier 2.2.0-beta.1 development builds had a `configureMinder()` preset bug that
+> re-enabled `credentials: true` on web by default, undoing this change; it is fixed in
+> the current build — see the history note in item 2.
+
+### 4. Default retry changed
+
+**Old behavior:** failed queries retried 3 times by default
+(`performance.retries: 3`). Explicitly passing `performance.retries: 0` or
+`retryDelay: 0` to disable retries silently didn't work — the code used `||`-style
+fallbacks (`retries || <default>`), and `||` treats `0` as falsy, reverting to the
+default anyway.
+
+**New behavior:** the default query retry is now 1
+(`config.performance?.retries ?? 1` — `??`, not `||`). An explicit `0` is now honored
+and genuinely disables retries.
+
+**Why:** 3 retries meant a truly-down backend took ~3x longer to surface an error to the
+user; 1 retry balances resilience against transient blips with a faster failure signal.
+The `||` → `??` change is a correctness fix — `0` is a legitimate value that was being
+silently discarded.
+
+**Migration:**
+
+```typescript
+// Restore the old 3-retry behavior explicitly:
+configureMinder({
+  apiUrl: "https://api.example.com",
+  routes: { /* ... */ },
+  performance: { retries: 3 },
+});
+
+// Explicit zero now works (previously silently reverted to the default):
+configureMinder({
+  apiUrl: "https://api.example.com",
+  routes: { /* ... */ },
+  performance: { retries: 0 },
+});
+```
+
+> `retryDelay` is not a `configureMinder()` option (its `performance` block accepts
+> `deduplication`/`retries`/`timeout`/`compression`). The `retryDelay: 0` fix applies
+> when you construct a `MinderConfig` for `<MinderDataProvider>` directly, where
+> `performance.retryDelay` exists.
+
+> **`configureMinder()` history note:** earlier 2.2.0-beta.1 development builds had a
+> preset bug here too — every platform preset hardcoded `performance.retries: 3`, which
+> pre-empted the new default for anyone configuring through `configureMinder()`. Fixed
+> in the current build: `configureMinder()` presets now emit `retries: 1` on every
+> platform, and an explicit user value (including `retries: 0`) still wins. Precision
+> note on where the `?? 1` fallback lives: it is `MinderDataProvider`'s **query-layer**
+> retry default (what TanStack Query uses when `performance.retries` is completely
+> unset). `ApiClient`'s own interceptor-level exponential-backoff retry treats unset
+> `performance.retries` as `0` — it adds no HTTP-layer retries unless you configure
+> some.
+
+### 5. peerDependencies move
+
+**Old behavior:** `@tanstack/react-query`, `@tanstack/query-core`,
+`@reduxjs/toolkit`, `react-redux`, and `@tanstack/react-query-devtools` were regular
+`dependencies` — your package manager installed the library's own copies alongside
+whatever version (if any) your app already had.
+
+**New behavior:** all five moved to `peerDependencies` with caret ranges.
+`@tanstack/react-query` and `@tanstack/query-core` are **required** peers;
+`@reduxjs/toolkit`, `react-redux`, and `@tanstack/react-query-devtools` are **optional**
+peers.
+
+**Why:** a hard dependency on `@tanstack/react-query` could install a second copy
+alongside your app's own, silently breaking `QueryClientProvider` context — React
+context identity is per-module-instance, so two copies of react-query means two
+incompatible `QueryClient` implementations sharing one tree. This also shrank the
+packed install by roughly 73% (928kB → 252kB).
+
+**Migration:**
+
+```bash
+# Required — you almost certainly already have this if you use React Query elsewhere:
+npm install @tanstack/react-query
+
+# Only if you use the Redux-backed hooks:
+npm install @reduxjs/toolkit react-redux
+```
+
+No code changes — this is purely an installation-time change. A peer-dependency warning
+after upgrading is telling you exactly this.
+
+### 6. `useAuth` root-entry shadowing
+
+**Old behavior:** `import { useAuth } from "minder-data-provider"` resolved to the
+legacy `AuthManager`-based hook — token get/set, `isAuthenticated()`, and the rest of
+the request-layer auth API described in the README's Security Model.
+
+**New behavior:** the root entry's `useAuth` is now the **capability-contract** hook —
+the same shape backing provider integrations (Supabase/Clerk/Firebase's
+`useAuth()`: `{ ready, session, error, signOut, getProviderClient }`). It's a different
+contract for a different job: a swappable auth *provider* interface, not the
+request-layer token manager. The legacy hook didn't go away — it's reachable through
+`useMinder().auth`.
+
+**Why:** the provider-platform capability contracts (`useAuth`, `useCheckout`,
+`useStorage`, `useLive`) needed the name every provider's own docs already use for it.
+Explicit named exports at the root entry intentionally shadow the star-exported legacy
+`useAuth` (ES module semantics: local exports win over `export *`).
+
+**Migration:**
+
+```typescript
+// Before (2.2.0-beta.0 and earlier) — root import was the token/session manager
+import { useAuth } from "minder-data-provider";
+const { isAuthenticated, getToken, setToken } = useAuth();
+
+// After — same legacy hook, reached through useMinder()
+import { useMinder } from "minder-data-provider";
+const { auth } = useMinder("anyRouteName");
+const isLoggedIn = auth.isAuthenticated();
+
+// After — root `useAuth` is now the capability-contract hook (requires a
+// registered auth provider — see the README's Level 2)
+import { useAuth } from "minder-data-provider";
+const { session, ready, signOut } = useAuth();
+```
+
+### 7. `rawUrl` and config unification
+
+**Old behavior:** `useMinder("https://api.example.com/users")` or
+`useMinder("/some/path", { rawUrl: true })` threw `"Route not found"` whenever a
+`MinderDataProvider` was mounted — the escape hatch only worked in standalone
+(no-provider) mode. Separately, `configureMinder()`'s routes registry and the
+standalone `minder()` function's URL resolver were two independent stores: calling
+standalone `useMinder("routeName")` after `configureMinder()` treated the route name as
+a literal path instead of resolving it from your registry.
+
+**New behavior:** `ApiClient.request` now dispatches ad-hoc URLs (absolute
+`http(s)://`, `rawUrl: true`, or an unregistered leading-slash path) through the same
+client instance in provider mode too — auth, interceptors, and plugins still run.
+Unknown *bare* route names (no scheme, no leading slash) still throw, so typos are
+still caught. `configureMinder()` now feeds both stores, so standalone
+`useMinder("routeName")` correctly resolves url/method/headers/timeout from your
+registry. `minder.config()` still works but logs a deprecation warning.
+
+**Why:** this was both a capability gap (the escape hatch existed in only one of the
+two usage modes) and a bug (two configs meant to be one source of truth silently
+weren't).
+
+**Migration:**
+
+```tsx
+// Now works identically whether or not <MinderDataProvider> is mounted:
+const { data: status } = useMinder("https://third-party.example.com/status");
+const { data: raw } = useMinder("/unregistered/path", { rawUrl: true });
+
+// Standalone useMinder("routeName") now honors configureMinder()'s registry:
+configureMinder({ apiUrl: "https://api.example.com", routes: { users: "/users" } });
+const { data: users } = useMinder("users"); // resolves via the registry, no provider needed
+```
+
+No action needed unless you were working around the old `"Route not found"` behavior
+(e.g. avoiding `rawUrl` in provider mode) — that workaround is no longer necessary.
+
+---
+
+## v1.x → v2.0
+
 Guide for migrating from Minder Data Provider v1.x to v2.0.
 
 ## Table of Contents

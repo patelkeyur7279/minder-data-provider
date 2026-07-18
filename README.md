@@ -1,79 +1,64 @@
 <div align="center">
 
 # Minder Data Provider
-### The Ultimate Hybrid Data Management Solution
 
 [![npm version](https://img.shields.io/npm/v/minder-data-provider.svg?style=flat-square)](https://www.npmjs.com/package/minder-data-provider)
 [![npm downloads](https://img.shields.io/npm/dm/minder-data-provider.svg?style=flat-square)](https://www.npmjs.com/package/minder-data-provider)
 [![Bundle Size](https://img.shields.io/bundlephobia/minzip/minder-data-provider?style=flat-square)](https://bundlephobia.com/package/minder-data-provider)
+[![CI](https://img.shields.io/github/actions/workflow/status/patelkeyur7279/minder-data-provider/ci.yml?style=flat-square&label=tests)](https://github.com/patelkeyur7279/minder-data-provider/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](./LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-100%25-blue.svg?style=flat-square)](http://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/Tests-1561%20Passing-success?style=flat-square)](./tests)
 
 <br>
 
-**One Hook. Everything Included. Works Everywhere.**
+### The universal React data layer
 
-Combines the global state management of **Redux** with the server state power of **TanStack Query**.  
-Built for **React**, **Next.js**, **React Native**, and **Electron**.
+**UI → `MinderDataProvider` → any backend, local data, or service. One API call to enterprise.**
 
-<br>
+One hook for fetching, auth, and caching. One CLI command for certified third-party
+integrations. One config for plugins, secrets, and edge-safe server handlers — when you
+need them, and not before.
 
-[**📚 Read the Full Documentation (Wiki)**](https://github.com/patelkeyur7279/minder-data-provider/wiki)
-
-<br>
+[**Read the full documentation (Wiki)**](https://github.com/patelkeyur7279/minder-data-provider/wiki)
 
 </div>
 
 ---
 
-## ✨ Features at a Glance
-
-| Feature | Description |
-| ------- | ----------- |
-| 🔐 **Authentication** | Built-in JWT management, auto-refresh, and persistence. |
-| 🚀 **Smart Caching** | Multi-level caching with automatic invalidation and deduplication. |
-| 📡 **Real-Time** | WebSocket support for live data updates and subscriptions. |
-| 💾 **Offline First** | Queue mutations while offline and auto-replay when online. |
-| 🔄 **CRUD Ops** | Create, Read, Update, Delete in a single, intuitive hook. |
-| 📁 **File Upload** | Native support for file uploads with progress tracking. |
-| ⚡ **Performance** | Optimized for speed with request deduplication and lazy loading. |
-| 🛡️ **Security** | Strict CSP support, log sanitization, and secure defaults. |
-| 🌐 **Proxy Support** | Built-in proxy manager to handle CORS issues seamlessly. |
-| 📄 **Pagination** | Infinite scroll and cursor-based pagination out of the box. |
-
-<br>
-
-## 🆕 What's New in 2.2 (beta)
-
-Reliability + extensibility, all **backward-compatible**:
-
-- 🧩 **Plugins & integrations** — register plugins (`config.plugins` / `registerPlugins`) that hook `onRequest`/`onResponse`/`onError`; drop in crash reporting, analytics, payments, or an auth provider (`provideToken`) with no client code.
-- 🔐 **Secret-key safety** — `secret()` / `env()` keep secret keys out of the client bundle; `configureMinder` refuses to run if a raw secret is found in client config. Server-side resolution via `minder-data-provider/server`.
-- 🎛️ **Escape hatches** — `throwOnError` (use try/catch & error boundaries) and ad-hoc absolute URLs (`rawUrl`) that bypass the route registry.
-- ⚡ **Faster & lighter** — memoized hook (no re-render cascades), a minimal `minder-data-provider/core` entry, and an opt-in `transport: 'fetch'` fast path.
-- 🛡️ **Reliability fixes** — JWT crash guard, timer/listener leak cleanup (`destroy()`), offline-persistence fallback, safe stream errors.
-
-📖 **[Features & Capabilities](./docs/FEATURES.md)** — the complete reference for everything below. See the [CHANGELOG](./CHANGELOG.md) for the version history.
-
-<br>
-
-## 🚀 Quick Start
-
-### 1. Install
+## Install
 
 ```bash
-npm install minder-data-provider
+npm install minder-data-provider @tanstack/react-query
 ```
 
-### 2. Configure (Once)
+`@tanstack/react-query` powers the caching layer and is a required peer dependency —
+install it yourself so your app controls the version. Redux support
+(`@reduxjs/toolkit`, `react-redux`) is optional; add it only if you use the
+Redux-backed hooks.
+
+## The Golden Path
+
+Minder meets you where you are. Start at Level 0 and adopt the next level only when you
+actually need it — nothing below requires anything above it.
+
+### Level 0 — zero config
+
+```tsx
+const { data } = useMinder("https://api.example.com/users");
+```
+
+No provider, no config file, nothing to register. An absolute URL is dispatched
+straight through — the routes registry is entirely optional at this level. (You do need
+a TanStack Query `QueryClientProvider` mounted once, somewhere above it — the same
+one-time setup any `@tanstack/react-query` app already has.)
+
+### Level 1 — named routes
 
 ```typescript
-// src/config.ts
 import { configureMinder, HttpMethod } from "minder-data-provider";
 
-export const config = configureMinder({
-  apiBaseUrl: "https://api.example.com",
+configureMinder({
+  apiUrl: "https://api.example.com",
   routes: {
     users: { url: "/users", method: HttpMethod.GET },
     createUser: { url: "/users", method: HttpMethod.POST },
@@ -81,79 +66,169 @@ export const config = configureMinder({
 });
 ```
 
-### 3. Use Anywhere
-
 ```tsx
 import { useMinder } from "minder-data-provider";
 
-function UserList() {
-  const { data, loading, error } = useMinder("users");
-
-  if (loading) return <Spinner />;
-  if (error) return <Error>{error.message}</Error>;
-
-  return (
-    <ul>
-      {data.map(user => <li key={user.id}>{user.name}</li>)}
-    </ul>
-  );
-}
+const { data, loading, error } = useMinder<User[]>("users");
 ```
 
-<br>
+Call `configureMinder` once at your app's entry point; every `useMinder("routeName")`
+after that resolves url/method/headers from the registry — no provider component
+required. Prefer scoping config to part of your tree instead of a global?
+`configureMinder` *returns* the full normalized config — pass that return value to the
+provider: `<MinderDataProvider config={configureMinder({ ... })}>`.
 
-## 🔒 Security Model
+### Level 2 — integrations
 
-- **Client-side auth checks are presence + expiry only.** `isAuthenticated()`
-  inspects token presence and (for JWTs) the `exp` claim — it does **not**
-  verify JWT signatures, because a client bundle cannot hold signing secrets.
-  Server-side code must verify tokens itself (e.g. with `jose`).
-- **Corrupt JWTs are rejected** (as of 2.2.0-beta.1): a JWT-shaped token whose
-  payload cannot be decoded fails closed. Opaque (non-JWT) bearer tokens keep
-  presence-based semantics. See the
-  [CHANGELOG](https://github.com/patelkeyur7279/minder-data-provider/blob/main/CHANGELOG.md)
-  for migration notes.
-- **CORS credentials require an explicit origin allowlist.** Defaults never
-  combine `Access-Control-Allow-Credentials` with a wildcard origin.
+```bash
+npx minder add stripe
+```
 
-<br>
+Scaffolds a `.env.example` entry, a config snippet, and (for providers with a server
+boundary) real Next.js route files. Paste your keys, flip `mock: false`, and call the
+matching capability hook — no other call sites change:
 
-## 📖 Documentation & Guide
+```tsx
+import { useCheckout } from "minder-data-provider/nextjs";
 
-We have moved our comprehensive documentation to the **GitHub Wiki** for better organization and readability.
+const checkout = useCheckout();
+await checkout.createCheckout({
+  items: [{ price: "price_123", quantity: 1 }],
+  successUrl: "/success",
+  cancelUrl: "/cancel",
+});
+```
 
-- **[🏠 Home](https://github.com/patelkeyur7279/minder-data-provider/wiki)**
-- **[🚀 Getting Started](https://github.com/patelkeyur7279/minder-data-provider/wiki/Getting-Started)**
-- **[⚙️ Configuration](https://github.com/patelkeyur7279/minder-data-provider/wiki/Configuration-Guide)**
-- **[📘 Usage Guide](https://github.com/patelkeyur7279/minder-data-provider/wiki/Usage-Guide)**
-- **[📚 API Reference](https://github.com/patelkeyur7279/minder-data-provider/wiki/API-Reference)**
-- **[🌍 Platform Guide](https://github.com/patelkeyur7279/minder-data-provider/wiki/Platform-Guide)**
-- **[🔥 Advanced Features](https://github.com/patelkeyur7279/minder-data-provider/wiki/Advanced-Features)**
+**Mock mode** — every certified provider ships a mock implementation, so you can build
+the whole UI (`useAuth()`, `useCheckout()`, `useStorage()`, `useLive()`) with zero keys
+and zero provider account, then flip `mock: false` when you're ready to go live.
 
-<br>
+| Provider | Categories |
+| --- | --- |
+| Clerk | auth |
+| Firebase | auth, database, storage |
+| Razorpay | payments |
+| Sentry | analytics |
+| Stripe | payments |
+| Supabase | auth, database, storage |
 
-## 🛠️ Platform Support
+All six are **Certified** (10-point checklist, mock-mode example, CI-tested) and ship
+for React, Next.js, and Vite on web, Node, and edge runtimes. Full detail:
+[**Provider Catalog**](./docs/providers/CATALOG.md). Building on your own backend
+instead? See [**Building a custom provider**](./docs/providers/CUSTOM.md).
 
-| Platform | Status |
-| :--- | :--- |
-| **React (Web)** | ✅ Production Ready |
-| **Next.js (App/Pages)** | ✅ Production Ready |
-| **React Native / Expo** | ✅ Production Ready |
-| **Electron** | ✅ Production Ready |
-| **Node.js** | ✅ Production Ready |
+### Level 3 — plugins, servers, and secrets
 
-<br>
+**Plugins** hook every request without touching call sites. `onRequest`/`onResponse`/
+`onError` are fire-and-forget observers; `onRequestIntercept` is the mutating
+middleware — return a rewritten request, or short-circuit it entirely:
 
-## 🤝 Contributing
+```typescript
+import { registerPlugins } from "minder-data-provider";
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+registerPlugins({
+  name: "error-bridge",
+  onRequest: (req) => {/* observe outgoing requests — return value is ignored */},
+  onError: (err) => reportError(err),
+  onRequestIntercept: (config) => ({
+    ...config,
+    headers: { ...config.headers, "X-Trace-Id": crypto.randomUUID() },
+  }),
+});
+```
 
-<br>
+**Server handlers** are edge-safe (no Node-only APIs in the request path) and mount
+anywhere:
+
+```typescript
+import { createWebhookHandler, toNodeHandler, secret } from "minder-data-provider/server";
+
+const handler = createWebhookHandler({
+  secret: secret("WEBHOOK_SECRET"),
+  signatureHeader: "x-signature",
+  algorithm: "hmac-sha256",
+  onEvent: async ({ body }) => {/* signature already verified — act on body */},
+});
+
+export const POST = handler; // Next.js Route Handler / edge runtime
+// self-hosted Node or Express: http.createServer(toNodeHandler(handler))
+```
+
+**Secrets** never reach the client bundle: `secret("ENV_NAME")` resolves server-side
+only, and any raw (non-`secret()`) value under a `providers.<name>.serverOnly` key — or
+any secret-shaped string elsewhere in browser-reachable config — throws at
+`configureMinder()` time, naming the exact offending key.
+
+**Escape hatches**, always available, never a dead end:
+
+- `error.raw` — the original underlying error (e.g. the `AxiosError`) on every error
+  surface, result-mode or `throwOnError`.
+- `getAxiosInstance()` — the live axios instance behind `ApiClient`.
+- `getProviderClient()` — the raw SDK client behind any capability provider.
+- `throwOnError: true` — opt into throwing (try/catch, error boundaries) instead of the
+  default never-throws result object.
+
+## Platform Support
+
+| Environment | Status |
+| --- | --- |
+| React 19 (web) | Confirmed |
+| Next.js (Pages Router) | Experimental |
+| Next.js (App Router / RSC) | Unknown |
+| Vite + React | Inferred-works |
+| React 18 | Unknown |
+| React Native / Expo | Experimental |
+| Electron | Experimental |
+| Node (server) | Experimental |
+| Edge runtimes (Workers, Vercel Edge) | Unknown |
+| Remix, Astro | Planned |
+
+**Confirmed** = runnable example app + CI tests. **Experimental** = built and working,
+without that evidence bar yet. **Unknown** = no evidence either way. **Inferred-works**
+= should work on general principle, unverified. **Planned** = roadmap only, no code.
+Per-capability detail (auth, WebSocket, offline, uploads, …):
+[**Support Matrix**](./docs/product/SUPPORT_MATRIX.md).
+
+## Security Model
+
+- **Client-side auth checks are presence + expiry only.** `isAuthenticated()` inspects
+  token presence and, for JWTs, the `exp` claim — it does **not** verify signatures,
+  because a client bundle cannot hold signing secrets. Server code must verify tokens
+  itself (e.g. with `jose`).
+- **Corrupt JWTs fail closed, everywhere.** A JWT-shaped token whose payload can't be
+  decoded is rejected — including in the no-provider `useMinder` fallback
+  (`GlobalAuthManager`), which previously only checked presence (even an expired token
+  used to pass). Opaque non-JWT bearer tokens keep presence-based semantics.
+- **No forced CORS preflight.** The default axios instance sends only
+  `Content-Type`/`Accept` — response-security headers (CSP, X-Frame-Options, …) never
+  ride along on requests, where their mere presence would force a preflight `OPTIONS`
+  round-trip on every cross-origin call.
+- **Credentialed CORS requires an explicit origin allowlist.** The library's own
+  CORS-emitting code (`ProxyManager.generateNextJSProxy()`) refuses to combine
+  `Access-Control-Allow-Credentials` with a wildcard origin.
+- **Secrets never enter the client bundle.** See Level 3 above.
+
+See the [Migration Guide](./docs/MIGRATION_GUIDE.md) for the full 2.2.0-beta.1 change
+list with before/after code for every behavior change.
+
+## Documentation
+
+- [**Wiki Home**](https://github.com/patelkeyur7279/minder-data-provider/wiki) · [**Getting Started**](https://github.com/patelkeyur7279/minder-data-provider/wiki/Getting-Started) · [**Configuration Guide**](https://github.com/patelkeyur7279/minder-data-provider/wiki/Configuration-Guide)
+- [**API Reference**](https://github.com/patelkeyur7279/minder-data-provider/wiki/API-Reference) · [**Platform Guide**](https://github.com/patelkeyur7279/minder-data-provider/wiki/Platform-Guide) · [**Features & Capabilities**](./docs/FEATURES.md)
+- [**Provider Catalog**](./docs/providers/CATALOG.md) · [**Support Matrix**](./docs/product/SUPPORT_MATRIX.md)
+- [**Changelog**](./CHANGELOG.md) · [**Migration Guide**](./docs/MIGRATION_GUIDE.md)
+
+## Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for
+details.
 
 <div align="center">
 
-**Built with ❤️ for the React Community**
+**Built with care for the React community.**
 
 [Report Bug](https://github.com/patelkeyur7279/minder-data-provider/issues) · [Request Feature](https://github.com/patelkeyur7279/minder-data-provider/issues)
+
+MIT Licensed — see [LICENSE](./LICENSE)
 
 </div>
