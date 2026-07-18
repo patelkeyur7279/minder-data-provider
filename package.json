@@ -110,6 +110,11 @@
       "types": "./dist/logger/index.d.ts",
       "import": "./dist/logger/index.mjs",
       "require": "./dist/logger/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.mjs",
+      "require": "./dist/testing.js"
     }
   },
   "scripts": {

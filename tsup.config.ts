@@ -13,7 +13,11 @@ export default defineConfig({
 
     // Hook-only entry (smaller bundle)
     hook: 'src/hook/index.ts',
-    
+
+    // Testing harness entry (mock ApiClient, provider fixtures, contract
+    // replay, secret-leak assertion — for provider/adapter authors' tests)
+    testing: 'src/testing/index.ts',
+
     // Platform-specific entry points
     'platforms/web': 'src/platforms/web.ts',
     'platforms/nextjs': 'src/platforms/nextjs.ts',
