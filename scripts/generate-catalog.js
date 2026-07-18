@@ -33,13 +33,14 @@ const CERTIFIED = [
   '@minder/provider-stripe',
   '@minder/provider-clerk',
   '@minder/provider-firebase',
+  '@minder/provider-razorpay',
+  '@minder/provider-sentry',
 ];
 
-// Planned providers with roadmap info
-const PLANNED = [
-  { name: 'Razorpay' },
-  { name: 'Sentry' },
-];
+// Planned providers with roadmap info. Empty: Razorpay (F-R1) and Sentry
+// (F-S1) graduated to CERTIFIED in F-E3, closing out the initial 6-provider
+// roadmap — see docs/superpowers/plans/2026-07-19-razorpay-sentry-plan.md.
+const PLANNED = [];
 
 /**
  * Find all manifest.json files in a directory tree.
@@ -205,13 +206,17 @@ function generateCatalogContent(certified, community) {
   // Planned section
   sections.push('## Planned Providers');
   sections.push('');
-  sections.push('The following providers are on the Minder roadmap and are not yet available. They follow the certification process.');
-  sections.push('');
-  const plannedLines = ['| Provider | Status |', '|---|---|'];
-  for (const p of PLANNED) {
-    plannedLines.push(`| ${p.name} | not yet available — follows the certification process |`);
+  if (PLANNED.length === 0) {
+    sections.push('No providers are currently planned — the initial roadmap is complete.');
+  } else {
+    sections.push('The following providers are on the Minder roadmap and are not yet available. They follow the certification process.');
+    sections.push('');
+    const plannedLines = ['| Provider | Status |', '|---|---|'];
+    for (const p of PLANNED) {
+      plannedLines.push(`| ${p.name} | not yet available — follows the certification process |`);
+    }
+    sections.push(plannedLines.join('\n'));
   }
-  sections.push(plannedLines.join('\n'));
   sections.push('');
 
   // Footer

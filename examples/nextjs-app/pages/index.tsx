@@ -36,6 +36,12 @@ export default function Home() {
       <p>
         <Link href="/firebase">See the Firebase provider demo (mock mode, zero keys) &rarr;</Link>
       </p>
+      <p>
+        <Link href="/razorpay">See the Razorpay provider demo (mock mode, zero keys) &rarr;</Link>
+      </p>
+      <p>
+        <Link href="/sentry">See the Sentry provider demo (mock mode, zero keys) &rarr;</Link>
+      </p>
       <ul>
         {users.map((user) => (
           <li key={user.id}>

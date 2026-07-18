@@ -214,9 +214,14 @@ describe('generate-catalog', () => {
       }
     });
 
-    it('should include "not yet available" for planned providers', () => {
+    it('should render a graceful empty-state message when PLANNED is empty (roadmap complete)', () => {
+      // Razorpay (F-R1) and Sentry (F-S1) graduated to CERTIFIED in F-E3,
+      // emptying PLANNED — the generator must render a graceful sentence
+      // instead of a header-only table.
+      expect(PLANNED.length).toBe(0);
       const content = generateCatalogContent([], []);
-      expect(content).toContain('not yet available');
+      expect(content).toContain('No providers are currently planned — the initial roadmap is complete.');
+      expect(content).not.toContain('| Provider | Status |');
     });
 
     it('should NOT contain "all SDKs"', () => {
@@ -390,17 +395,23 @@ describe('generate-catalog', () => {
       expect(Array.isArray(CERTIFIED)).toBe(true);
     });
 
-    it('should have PLANNED with 2 providers', () => {
+    it('should have all 6 roadmap providers in CERTIFIED', () => {
+      expect(CERTIFIED.length).toBe(6);
+      expect(CERTIFIED).toContain('@minder/provider-supabase');
+      expect(CERTIFIED).toContain('@minder/provider-stripe');
+      expect(CERTIFIED).toContain('@minder/provider-clerk');
+      expect(CERTIFIED).toContain('@minder/provider-firebase');
+      expect(CERTIFIED).toContain('@minder/provider-razorpay');
+      expect(CERTIFIED).toContain('@minder/provider-sentry');
+    });
+
+    it('should have an empty PLANNED array — the initial roadmap is complete', () => {
       expect(Array.isArray(PLANNED)).toBe(true);
-      expect(PLANNED.length).toBe(2);
-      // Supabase (S-03), Stripe (T-03), Clerk (D-03), and Firebase (E-03)
-      // graduated to CERTIFIED and are no longer planned.
-      expect(PLANNED.map((p) => p.name)).not.toContain('Supabase');
-      expect(PLANNED.map((p) => p.name)).not.toContain('Stripe');
-      expect(PLANNED.map((p) => p.name)).not.toContain('Clerk');
-      expect(PLANNED.map((p) => p.name)).not.toContain('Firebase');
-      expect(PLANNED.map((p) => p.name)).toContain('Razorpay');
-      expect(PLANNED.map((p) => p.name)).toContain('Sentry');
+      expect(PLANNED.length).toBe(0);
+      // Supabase (S-03), Stripe (T-03), Clerk (D-03), Firebase (E-03),
+      // Razorpay (F-R1), and Sentry (F-S1) all graduated to CERTIFIED — none
+      // are planned any longer.
+      expect(PLANNED).toEqual([]);
     });
   });
 });

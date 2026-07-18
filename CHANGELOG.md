@@ -109,6 +109,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   progress ticks no longer re-render every hook instance (progress reads are
   getter-based). Memoized children and effect deps now behave.
 
+### Added — Certified providers: Razorpay + Sentry (roadmap complete)
+
+- **`minder-data-provider/providers/razorpay`** — payments. Zero-dep server
+  order handler (keySecret masked + sentinel) + hex-HMAC webhook verification.
+  **Certified** (10/10), browser-verified mock order flow.
+- **`minder-data-provider/providers/sentry`** — observability, implemented as a
+  **plugin** on the existing bus (not a capability contract): forwards
+  `useMinder`/`ApiClient` errors to Sentry with no call-site changes. Degrades
+  gracefully if the SDK is absent (never breaks the pipeline it observes) and
+  drops request headers/bodies from forwarded errors. DSN is public by design.
+  **Certified** (10/10), browser-verified mock error capture.
+- **All six roadmap providers are now Certified** (Supabase, Stripe, Clerk,
+  Firebase, Razorpay, Sentry); the catalog's Planned column is empty.
+
 ### Added — Certified provider: Firebase (+ credential-file path)
 
 - **`minder-data-provider/providers/firebase`** — auth + Firestore + storage.
