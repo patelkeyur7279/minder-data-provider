@@ -40,6 +40,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dependency — importing the module crashed with `Cannot find module 'cors'`.
   It is now implemented dependency-free. The generated Next.js proxy template
   also no longer references it (those `require` lines crashed consumer routes).
+- **`useMinder` no longer violates the Rules of Hooks.** Invalid routes,
+  toggling `infinite`, or provider-context changes between renders could crash
+  with "rendered fewer hooks than expected". All hooks now run unconditionally;
+  the invalid-route result is a post-hooks branch; `useMinder`/`usePaginatedMinder`
+  use a new non-throwing `useMinderContextSafe()` accessor. The
+  `react-hooks/rules-of-hooks` lint rule is now enforced as an error in CI.
+- **Debug logs no longer leak secrets.** With `debug.networkLogs` enabled,
+  request/response bodies and params are passed through `redactSecrets`, and
+  the token-refresh log no longer emits raw `Authorization` headers.
+- **`useOffline`/`useNetworkState`/`useOfflineQueue` are event-driven.** The
+  1-second polling intervals (a re-render per second per mounted hook) are
+  replaced by an `OfflineManager.subscribe()` API with equality-guarded
+  updates. Hook return shapes are unchanged.
+- `SecureAuthManager` documentation no longer claims JS-set cookies can be
+  `HttpOnly` (they cannot); the two skipped cookie-security tests are enabled.
 
 ### Changed (performance — behavior changes)
 

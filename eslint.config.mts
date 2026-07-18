@@ -3,6 +3,7 @@ import globals from "globals";
 import tsParser from "@typescript-eslint/parser";
 import tsPlugin from "@typescript-eslint/eslint-plugin";
 import pluginReact from "eslint-plugin-react";
+import pluginReactHooks from "eslint-plugin-react-hooks";
 
 export default [
   js.configs.recommended,
@@ -29,6 +30,7 @@ export default [
     plugins: {
       "@typescript-eslint": tsPlugin,
       react: pluginReact,
+      "react-hooks": pluginReactHooks,
     },
     settings: {
       react: {
@@ -44,6 +46,10 @@ export default [
       "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
       "@typescript-eslint/no-require-imports": "off", // Allow require for dynamic imports
       "no-undef": "off", // TypeScript handles this
+      // Rules-of-Hooks violations shipped a latent crash in useMinder (fixed in
+      // 2.2.0-beta.1); this gate keeps that class of bug out permanently.
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "off", // too noisy for this codebase today; revisit in M1
     },
   },
   {
