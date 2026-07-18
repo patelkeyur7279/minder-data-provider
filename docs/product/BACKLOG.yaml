@@ -151,3 +151,46 @@ tasks:
     type: security
     status: backlog
     dependencies: [M2-01, M2-02]
+
+  # ---- OSS product/community (added 2026-07-18, owner review pending) ----
+  - id: OSS-01
+    title: "DECISION (owner): positioning + naming for 3.0 (keep 'minder-data-provider' vs scoped @minder/* rebrand)"
+    type: research
+    status: blocked
+    blocker: "Name no longer matches the integration-framework scope; npm identity decision is owner's"
+  - id: OSS-02
+    title: Real docs site (Starlight/Docusaurus) replacing wiki as primary docs; versioned from 3.0
+    type: documentation
+    status: backlog
+  - id: OSS-03
+    title: 30-second wow demo + npm create minder-app template; StackBlitz playground links
+    type: implementation
+    status: backlog
+    dependencies: [M1-01]
+  - id: OSS-04
+    title: GitHub community infra - issue/PR templates, discussions, good-first-issue triage, maintainer guide, RFC process for public API changes
+    type: documentation
+    status: backlog
+  - id: OSS-05
+    title: Public benchmarks page - request overhead vs raw axios/fetch, before/after M0-01; re-run in CI
+    type: test
+    status: backlog
+    dependencies: [M0-01]
+  - id: OSS-06
+    title: Supply-chain trust - npm publish --provenance, 2FA note, GitHub Security Advisories flow (replaces empty SECURITY.md contact)
+    type: security
+    status: backlog
+  - id: OSS-07
+    title: Funding rails (GitHub Sponsors/Open Collective) - sustainability without monetizing the product
+    type: research
+    status: backlog
+  - id: OSS-08
+    title: Error-message DX pass - every thrown framework error carries a fix suggestion + docs link
+    type: implementation
+    status: backlog
+    dependencies: [M1-01]
+  - id: OSS-09
+    title: Launch plan for 3.0 - comparison pages (vs DIY, vs per-provider SDKs), Show HN / r/reactjs / dev.to sequence, issue reproduction template on StackBlitz
+    type: research
+    status: backlog
+    dependencies: [M2-01, M2-02]
