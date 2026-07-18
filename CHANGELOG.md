@@ -240,6 +240,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Runnable Next.js example app** (`examples/nextjs-app`) consuming the
   packed tarball, with a CI workflow building it on PRs.
 
+### Added (local-first data)
+
+- **`useMinder(route, { source })`** — read data from local persistent storage,
+  not just the network:
+  - `'network'` (default): unchanged.
+  - `'local'`: read only from local storage (offline data store); never touches
+    the network.
+  - `'local-first'`: fetch from the network; persist the result locally on
+    success; on network failure fall back to the last persisted value — your UI
+    keeps working offline with no extra code.
+- **`LocalStore`** exported (isomorphic: web → localStorage, native →
+  AsyncStorage, expo → SecureStore, electron → electron-store) so apps can
+  pre-seed or manage offline data directly. Omitting `source` leaves the
+  network path byte-identical (regression-tested).
+
 ### Fixed (platform entries — mobile/desktop)
 
 - **`HttpMethod` is now exported from `/native`, `/expo`, and `/node`.**

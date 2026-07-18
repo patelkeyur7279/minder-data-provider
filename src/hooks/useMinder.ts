@@ -93,6 +93,7 @@ import {
 } from '../utils/routeHelpers.js';
 import { MinderError } from '../errors/MinderError.js';
 import { parseJWT as decodeJwt } from '../utils/jwt.js';
+import { getDefaultLocalStore } from '../core/LocalStore.js';
 
 // ============================================================================
 // TYPES
@@ -165,6 +166,21 @@ export interface UseMinderOptions<TData = any> extends MinderOptions<TData> {
    * @default false
    */
   rawUrl?: boolean;
+
+  /**
+   * Where this query reads its data (Wave I — local-first):
+   * - `'network'` (default): fetch from the API, as always.
+   * - `'local'`: read only from local persistent storage (offline data store);
+   *   never touches the network. Returns `null` data if nothing is stored.
+   * - `'local-first'`: fetch from the network; on success persist the result to
+   *   local storage; on network failure fall back to the last persisted value.
+   *   Your UI keeps working offline with no extra code.
+   *
+   * Local storage is platform-appropriate (web → localStorage, native →
+   * AsyncStorage, expo → SecureStore, electron → electron-store).
+   * @default 'network'
+   */
+  source?: 'network' | 'local' | 'local-first';
 
   /**
    * Optional validation function called before mutations
@@ -756,6 +772,24 @@ export function useMinder<TData = any>(
       ? { ...options.params, ...pageParam }
       : options.params;
 
+    // Wave I — local-first. The local key includes pageParam so paginated
+    // local reads don't collide. `source` defaults to 'network' → the branches
+    // below are skipped entirely and the existing code path runs unchanged.
+    const source = options.source ?? 'network';
+    const localKey = pageParam !== undefined ? [...queryKey, pageParam] : queryKey;
+
+    // LOCAL: read only from local storage; never touch the network.
+    if (source === 'local') {
+      const localData = await getDefaultLocalStore().get<TData>(localKey);
+      return {
+        data: localData,
+        error: null,
+        status: 200,
+        success: true,
+        metadata: { method: HttpMethod.GET, url: route, duration: 0, cached: true },
+      };
+    }
+
     if (context?.apiClient) {
       // Use ApiClient for parameter replacement (when within MinderDataProvider)
       try {
@@ -809,6 +843,29 @@ export function useMinder<TData = any>(
         params: requestParams,
         throwOnError: false,
       });
+    }
+
+    // LOCAL-FIRST: persist a successful network read; on failure (e.g. offline)
+    // fall back to the last persisted value so the UI keeps working.
+    if (source === 'local-first') {
+      if (result.success) {
+        try {
+          await getDefaultLocalStore().set(localKey, result.data);
+        } catch {
+          // Persistence is best-effort; a storage failure must not fail the read.
+        }
+      } else {
+        const fallback = await getDefaultLocalStore().get<TData>(localKey);
+        if (fallback !== null) {
+          result = {
+            data: fallback,
+            error: null,
+            status: 200,
+            success: true,
+            metadata: { method: HttpMethod.GET, url: route, duration: 0, cached: true },
+          };
+        }
+      }
     }
 
     // Opt-in: surface errors through TanStack Query / error boundaries instead of

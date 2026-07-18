@@ -103,6 +103,10 @@ export type {
 
 // Provider component (old architecture - RE-ENABLED for backward compatibility)
 export { MinderDataProvider, useMinderContext } from './core/MinderDataProvider.js';
+// Wave I — local-first: the persistence layer behind useMinder's
+// `source: 'local' | 'local-first'`. Exported so apps can pre-seed or manage
+// offline data directly (isomorphic: web / native / expo / electron).
+export { LocalStore, getDefaultLocalStore, localKeyOf } from './core/LocalStore.js';
 export * from './core/types.js';
 export * from './core/EnvironmentManager.js';
 export * from './core/ProxyManager.js';
