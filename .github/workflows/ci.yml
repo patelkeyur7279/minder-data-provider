@@ -12,7 +12,12 @@ jobs:
     
     strategy:
       matrix:
-        node-version: [18, 20]
+        # Node 20 (maintenance LTS) + 22 (active LTS). Node 18 was dropped:
+        # it went EOL 2025-04 and, more concretely, lacks a global WebCrypto
+        # (`crypto.subtle`) — which the edge-safe webhook HMAC verification in
+        # src/server/webhooks.ts requires. WebCrypto is global on Node 20+ and
+        # on every edge/browser/Deno/Bun runtime, so 20 is the honest floor.
+        node-version: [20, 22]
     
     steps:
       - uses: actions/checkout@v4

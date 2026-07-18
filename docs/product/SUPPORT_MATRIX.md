@@ -20,6 +20,13 @@
 | Astro + React islands | **Planned** | No evidence |
 | Edge runtimes (Workers/Vercel Edge) | **Unknown** | `require()` usage in adapters likely breaks edge bundling — needs spike (task R-04) |
 
+> **Node runtime baseline: Node 20+** (`engines.node >= 20`, CI matrix = 20, 22). Node 18 was
+> dropped — it is EOL (2025-04) and, concretely, lacks a **global WebCrypto** (`crypto.subtle`),
+> which the edge-safe webhook HMAC verification (`src/server/webhooks.ts`) requires. WebCrypto is
+> global on Node 20+ and on every edge/browser/Deno/Bun runtime, so 20 is the honest floor. Node
+> 18 users can still consume most of the package but must polyfill `globalThis.crypto` to verify
+> webhooks.
+
 ## Capabilities (today's built-ins)
 
 | Capability | Status | Evidence |
