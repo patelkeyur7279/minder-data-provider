@@ -5,6 +5,42 @@ All notable changes to Minder Data Provider will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0-beta.1] - Unreleased
+
+### Changed (security — behavior changes)
+
+- **`AuthManager.isAuthenticated()` now fails closed.** A JWT-shaped token
+  (three dot-separated segments) whose payload cannot be decoded, or whose
+  `exp` claim is non-numeric, is now treated as **not** authenticated
+  (previously: treated as valid). Opaque non-JWT tokens are unchanged
+  (presence-based). **Migration:** if your app intentionally stores
+  JWT-shaped-but-not-JWT strings as tokens, either store them without dots or
+  gate on `getToken() !== null` instead of `isAuthenticated()`. Note that
+  `isAuthenticated()` has never verified JWT signatures — server-side code
+  must verify tokens itself.
+- **CORS defaults no longer combine a wildcard origin with credentials.**
+  The default CORS middleware changes from `origin: '*', credentials: true`
+  (invalid per the CORS spec and flagged by our own
+  `CorsManager.validateConfig()`) to `origin: '*', credentials: false`, and
+  `generateNextJSProxy()` now emits `Access-Control-Allow-Credentials: false`
+  unless `cors.credentials` is explicitly `true` — and refuses to generate a
+  proxy that combines credentials with a wildcard origin. **Migration:** for
+  credentialed cross-origin requests, set an explicit origin allowlist:
+  `createCorsMiddleware({ origin: ['https://app.example.com'], credentials: true })`
+  or `cors: { origin: [...], credentials: true }` in the proxy config.
+
+### Fixed
+
+- `corsMiddleware` imported the `cors` package, which was never declared as a
+  dependency — importing the module crashed with `Cannot find module 'cors'`.
+  It is now implemented dependency-free. The generated Next.js proxy template
+  also no longer references it (those `require` lines crashed consumer routes).
+
+### Added
+
+- `createCorsMiddleware(options)` factory (rejects credentials + wildcard).
+- `isJwtShaped(token)` exported from the JWT utility.
+
 ## [2.2.0-beta.0] - 2026-06-21
 
 A reliability + extensibility release. Everything here is **additive and backward-compatible** — no

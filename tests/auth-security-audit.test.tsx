@@ -261,7 +261,8 @@ describe('🔒 AUTHENTICATION SECURITY AUDIT', () => {
                 });
 
                 authManager.setToken('header.!!!INVALID_BASE64!!!.signature');
-                expect(authManager.isAuthenticated()).toBe(true);
+                // JWT-shaped but undecodable: fails closed (2.2.0-beta.1)
+                expect(authManager.isAuthenticated()).toBe(false);
             });
 
             it('should handle JWT with invalid JSON', () => {
@@ -272,7 +273,8 @@ describe('🔒 AUTHENTICATION SECURITY AUDIT', () => {
 
                 const invalidJson = Buffer.from('{invalid json}').toString('base64');
                 authManager.setToken(`header.${invalidJson}.signature`);
-                expect(authManager.isAuthenticated()).toBe(true);
+                // JWT-shaped but undecodable: fails closed (2.2.0-beta.1)
+                expect(authManager.isAuthenticated()).toBe(false);
             });
 
             it('should correctly validate JWT expiration timestamps', () => {
@@ -534,8 +536,8 @@ describe('🔒 AUTHENTICATION SECURITY AUDIT', () => {
                 const jwt = `header.${payload}.signature`;
 
                 authManager.setToken(jwt);
-                // Non-numeric exp should be treated as no expiration
-                expect(authManager.isAuthenticated()).toBe(true);
+                // Non-numeric exp claim is malformed: fails closed (2.2.0-beta.1)
+                expect(authManager.isAuthenticated()).toBe(false);
             });
         });
     });

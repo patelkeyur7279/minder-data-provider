@@ -102,6 +102,22 @@ function UserList() {
 
 <br>
 
+## 🔒 Security Model
+
+- **Client-side auth checks are presence + expiry only.** `isAuthenticated()`
+  inspects token presence and (for JWTs) the `exp` claim — it does **not**
+  verify JWT signatures, because a client bundle cannot hold signing secrets.
+  Server-side code must verify tokens itself (e.g. with `jose`).
+- **Corrupt JWTs are rejected** (as of 2.2.0-beta.1): a JWT-shaped token whose
+  payload cannot be decoded fails closed. Opaque (non-JWT) bearer tokens keep
+  presence-based semantics. See the
+  [CHANGELOG](https://github.com/patelkeyur7279/minder-data-provider/blob/main/CHANGELOG.md)
+  for migration notes.
+- **CORS credentials require an explicit origin allowlist.** Defaults never
+  combine `Access-Control-Allow-Credentials` with a wildcard origin.
+
+<br>
+
 ## 📖 Documentation & Guide
 
 We have moved our comprehensive documentation to the **GitHub Wiki** for better organization and readability.
