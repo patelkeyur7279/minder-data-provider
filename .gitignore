@@ -7,6 +7,10 @@ node_modules/
 dist/
 build/
 *.tsbuildinfo
+*.tgz
+
+# Analysis & test artifacts
+BUNDLE_ANALYSIS.json
 
 # Next.js
 .next/

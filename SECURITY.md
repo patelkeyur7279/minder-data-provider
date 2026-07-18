@@ -2,21 +2,20 @@
 
 ## Supported Versions
 
-Use this section to tell people about which versions of your project are currently being supported with security updates.
-
 | Version | Supported          |
 | ------- | ------------------ |
+| 2.2.x   | :white_check_mark: |
 | 2.1.x   | :white_check_mark: |
 | 2.0.x   | :white_check_mark: |
 | 1.x     | :x:                |
 
 ## Reporting a Vulnerability
 
-We take security issues seriously. If you discover a security vulnerability, please follow these steps:
+We take security issues seriously. If you discover a security vulnerability, please report it privately via **GitHub Security Advisories** at:
 
-1.  **Do NOT open a public issue.**
-2.  Include a description of the vulnerability and steps to reproduce it.
-3.  We will acknowledge your report within 48 hours.
+**https://github.com/patelkeyur7279/minder-data-provider/security/advisories/new**
+
+**Do NOT open public issues** for security vulnerabilities. We will acknowledge your report and provide an initial response within 7 days.
 
 ---
 

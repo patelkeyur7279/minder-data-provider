@@ -41,10 +41,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   It is now implemented dependency-free. The generated Next.js proxy template
   also no longer references it (those `require` lines crashed consumer routes).
 
+### Changed (performance — behavior changes)
+
+- **Requests no longer trigger a CORS preflight by default.** The axios
+  instance previously attached 8 security *response* headers (CSP,
+  X-Frame-Options, …) to every outgoing request and enabled
+  `withCredentials` by default — non-safelisted headers + credentialed mode
+  force a preflight `OPTIONS` round-trip on every cross-origin call
+  (~2× latency). Default request headers are now exactly `Content-Type` +
+  `Accept`, and `withCredentials` is opt-in via `cors.credentials: true`
+  (this now also governs the token-refresh call, which previously hardcoded
+  credentials). **Migration:** if your API relies on cookies, set
+  `cors: { credentials: true }` (with an explicit origin allowlist
+  server-side). If you passed `security.headers` expecting them on requests,
+  use `route.headers` or per-call `headers` instead — `getSecurityHeaders()`
+  remains available for configuring server *responses*.
+- **Default query retry is now 1 (was 3).** Transient failures surface ~3×
+  faster. Explicit `performance.retries: 0` and `retryDelay: 0` are now
+  respected (`??` instead of `||`). **Migration:** set
+  `performance.retries: 3` to restore the old behavior.
+
 ### Added
 
 - `createCorsMiddleware(options)` factory (rejects credentials + wildcard).
 - `isJwtShaped(token)` exported from the JWT utility.
+- `getQueryClientConfig()` export for inspecting effective query defaults.
+- `CODE_OF_CONDUCT.md`; SECURITY.md now has a real private-reporting channel
+  (GitHub Security Advisories) and covers 2.2.x.
+
+### Removed
+
+- Nine stale root artifacts (old audit/verification reports, captured test
+  logs, a 2.0.3 tarball) deleted from the repository; `*.tgz` and generated
+  bundle reports are now gitignored.
 
 ## [2.2.0-beta.0] - 2026-06-21
 

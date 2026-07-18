@@ -73,7 +73,7 @@ npm install minder-data-provider
 import { configureMinder, HttpMethod } from "minder-data-provider";
 
 export const config = configureMinder({
-  apiUrl: "https://api.example.com",
+  apiBaseUrl: "https://api.example.com",
   routes: {
     users: { url: "/users", method: HttpMethod.GET },
     createUser: { url: "/users", method: HttpMethod.POST },

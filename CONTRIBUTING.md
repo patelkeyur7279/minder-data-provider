@@ -161,8 +161,8 @@ node scripts/verify-build.js
 - **Functional Components**: Use functional components with hooks. Avoid class components.
 
 ### Style
-- We use **Prettier** for formatting.
-- Run `npm run format` before committing.
+- We use **ESLint** for code quality and formatting.
+- Run `npm run lint` before committing to automatically fix issues.
 
 ---
 
@@ -190,7 +190,7 @@ node scripts/verify-build.js
 
 ## 💬 Community
 
-- **Discord**: Join our [Discord Server](https://discord.gg/minder-data-provider)
+- **Discord**: Join our [Discord Server](https://discord.gg/dN3eFFjmfy)
 - **Discussions**: Use [GitHub Discussions](https://github.com/patelkeyur7279/minder-data-provider/discussions) for questions.
 - **Issues**: Use [GitHub Issues](https://github.com/patelkeyur7279/minder-data-provider/issues) for bugs.
 
