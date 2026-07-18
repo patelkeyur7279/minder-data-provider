@@ -46,6 +46,10 @@ export default [
       "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
       "@typescript-eslint/no-require-imports": "off", // Allow require for dynamic imports
       "no-undef": "off", // TypeScript handles this
+      // Base rule can't see TS declaration spaces (a `const X` + `type X` pair
+      // is legal merging, used by the eager enum re-exports); use the TS-aware rule.
+      "no-redeclare": "off",
+      "@typescript-eslint/no-redeclare": "error",
       // Rules-of-Hooks violations shipped a latent crash in useMinder (fixed in
       // 2.2.0-beta.1); this gate keeps that class of bug out permanently.
       "react-hooks/rules-of-hooks": "error",

@@ -9,8 +9,14 @@ export { minder, configureMinder } from '../core/minder.js';
 export { useMinder } from '../hooks/useMinder.js';
 
 // Enums (re-exported directly so platform-entry consumers don't need to
-// reach into `constants/enums.js` themselves)
-export { HttpMethod } from '../constants/enums.js';
+// reach into `constants/enums.js` themselves). Uses a concrete value binding
+// so esbuild eagerly runs the lazily-wrapped enum init thunk under
+// `splitting` + `sideEffects:false`. See src/index.ts for the full rationale
+// and tests/dist-entry-exports.test.ts for the regression guard.
+import { HttpMethod as _HttpMethod } from '../constants/enums.js';
+export const HttpMethod = _HttpMethod;
+// eslint-disable-next-line @typescript-eslint/no-redeclare -- legal TS value+type merge; the pair is what keeps the enum eagerly initialized
+export type HttpMethod = _HttpMethod;
 
 // Platform detection
 export { PlatformDetector } from '../platform/PlatformDetector.js';

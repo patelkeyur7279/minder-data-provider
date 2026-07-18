@@ -132,11 +132,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Runnable Next.js example app** (`examples/nextjs-app`) consuming the
   packed tarball, with a CI workflow building it on PRs.
 
-### Known issues
+### Fixed (dist interop)
 
-- `react-redux`/`@reduxjs/toolkit` are declared optional peers but
-  `MinderDataProvider` still imports them unconditionally — consumers must
-  install them until the Redux layer becomes lazy (tracked as M1-07).
+- **`HttpMethod` was `undefined` in browser bundles.** Under code splitting,
+  the enums chunk is wrapped in a lazy init thunk; a bare
+  `export { HttpMethod } from …` re-export combined with `sideEffects: false`
+  let consumer bundlers (webpack in Next.js) skip the thunk entirely,
+  crashing client code with `Cannot read properties of undefined`. Public
+  entries now bind the enum to a concrete `const`, forcing eager
+  initialization. A bundler-level regression test
+  (tests/dist-entry-exports.test.ts) tree-shakes the built dist with esbuild
+  and asserts the enum survives — Node-loader checks alone cannot catch this
+  class of bug.
 
 ### Added
 

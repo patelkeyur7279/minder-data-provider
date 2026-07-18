@@ -210,10 +210,22 @@ export type {
 // ENUMS & CONSTANTS - Type-safe values for configuration
 // ============================================================================
 
+// `HttpMethod` is re-exported via a concrete value binding (not a bare
+// `export { HttpMethod } from …`). Under tsup `splitting`, esbuild wraps the
+// shared enums module in a lazy `__esm` init thunk; a pure re-export merely
+// forwards the (still-undefined) binding and, because the package sets
+// `sideEffects: false`, a consuming bundler such as webpack never runs the
+// thunk — leaving `HttpMethod` undefined in the browser client bundle. Tying
+// the export to a concrete const forces esbuild to invoke the init thunk
+// eagerly wherever `HttpMethod` is imported. See tests/dist-entry-exports.
+import { HttpMethod as _HttpMethod } from './constants/enums.js';
+export const HttpMethod = _HttpMethod;
+// eslint-disable-next-line @typescript-eslint/no-redeclare -- legal TS value+type merge; the pair is what keeps the enum eagerly initialized
+export type HttpMethod = _HttpMethod;
+
 // Export all enums for type-safe configuration
 export {
   // HTTP & Network
-  HttpMethod,
   QueryStatus,
   NetworkState,
   RetryStrategy,
