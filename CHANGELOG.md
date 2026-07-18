@@ -109,6 +109,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   progress ticks no longer re-render every hook instance (progress reads are
   getter-based). Memoized children and effect deps now behave.
 
+### Added — 🎉 First certified provider: Supabase
+
+- **`minder-data-provider/providers/supabase`** — auth, storage, and realtime
+  capability contracts over a lazily-loaded `@supabase/supabase-js` (optional
+  peer); `getProviderClient()` returns the raw client. **Certified**: 10/10
+  certification checks, mock-parity tests, secret-sentinel tests, runnable
+  example (mock mode, browser-verified). Live-service E2E requires real
+  credentials and is explicitly outside CI.
+- **Mock mode end-to-end**: `registerSupabaseProvider({ mock: true })` powers a
+  full UI (session + storage) with zero keys — see
+  examples/nextjs-app/pages/supabase.tsx.
+- **`minder add supabase`** scaffolds env vars + config snippet
+  (EXPERIMENTAL label removed only by certification — the catalog is the
+  source of truth).
+- **`registerClientSafeProviderKeys`**: per-provider allowlist distinguishing
+  intentionally-public keys (Supabase `anonKey`) from server-only credentials
+  (`serviceRoleKey`) — allowlisted providers get *stricter* credential-shaped
+  checking with explicit exemptions.
+
 ### Added (provider platform foundation — wave 1)
 
 - **Typed credential model** (`CredentialInput`: env secrets via `secret()`,
