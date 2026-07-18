@@ -23,6 +23,11 @@ edge-safe HMAC primitive. On the client you use one stable hook — `useCheckout
 2. **Add a webhook endpoint** and copy its signing secret (`whsec_...`) from
    <https://dashboard.stripe.com/webhooks>
    - **Webhook signing secret** (`webhookSecret`) — secret; server only.
+   - **Local development:** you don't need a public URL. Install the [Stripe
+     CLI](https://stripe.com/docs/stripe-cli) and run
+     `stripe listen --forward-to localhost:3000/api/minder/stripe/webhook` — it
+     opens a tunnel to your local webhook route and prints a `whsec_...` signing
+     secret to use as `STRIPE_WEBHOOK_SECRET` while developing.
 3. **Install the SDK** — only needed for the raw-client escape hatch
    (`getProviderClient()`); checkout and webhook verification work without it:
    ```sh
@@ -60,7 +65,7 @@ edge-safe HMAC primitive. On the client you use one stable hook — `useCheckout
    import { secret } from 'minder-data-provider';
    export const POST = createStripeWebhookHandler({
      webhookSecret: secret('STRIPE_WEBHOOK_SECRET'),
-     async onEvent({ body }) { /* fulfil the order */ },
+     async onEvent({ type, data }) { /* fulfil the order when type === 'checkout.session.completed' */ },
    });
    ```
 6. **Register the provider** once at startup, then use the hook:
@@ -81,7 +86,7 @@ Develop the entire checkout UI with no Stripe account by flipping one flag:
 providers: { stripe: { mock: true } }
 ```
 The same `useCheckout()` hook lights up against an in-memory mock: `createCheckout`
-returns a deterministic `mock://stripe/checkout/<id>` URL with zero network and no
+returns a deterministic `mock://checkout/session_<n>` URL with zero network and no
 server route required. Flip `mock` back to `false` to go live — no code changes.
 
 ### Teardown / uninstall

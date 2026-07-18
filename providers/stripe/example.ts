@@ -37,21 +37,24 @@ const stripeConfig: StripeProviderConfig = {
   checkoutPath: '/api/minder/stripe/checkout',
 };
 
-// 2a. SERVER — the create-checkout route. Resolves the secret key per-request,
-//     calls Stripe over fetch, and returns { url, id }. Mount this at
-//     `checkoutPath` (Next.js App Router example: export it as `POST`).
+// 2a. SERVER — the create-checkout route. Validates the request, resolves the
+//     secret key per-request, calls Stripe over fetch, and returns { url }. Mount
+//     this at `checkoutPath` (Next.js App Router example: export it as `POST`).
 export const POST_checkout = createCheckoutHandler({
   secretKey: stripeConfig.secretKey!,
 });
 
 // 2b. SERVER — the webhook route. Verifies the `stripe-signature` header on the
-//     F-02 primitive, then processes the event.
+//     F-02 primitive, then processes the event. `onEvent` receives the verified,
+//     parsed event as `{ type, data, raw }`.
 export const POST_webhook = createStripeWebhookHandler({
   webhookSecret: stripeConfig.webhookSecret!,
-  async onEvent({ body }) {
-    // Handle the verified Stripe event, e.g. fulfil the order on
-    // 'checkout.session.completed'. `body` is the parsed event payload.
-    void body;
+  async onEvent({ type, data }) {
+    // Handle the verified Stripe event, e.g. fulfil the order when
+    // `type === 'checkout.session.completed'`. `data` is the event's data object.
+    if (type === 'checkout.session.completed') {
+      void data;
+    }
   },
 });
 
@@ -71,7 +74,7 @@ export function useBuyButton(): { checkout: () => Promise<void>; ready: boolean 
     ready,
     checkout: async () => {
       const { url } = await createCheckout({
-        items: [{ price: 'price_your_price_id', quantity: 1 }],
+        items: [{ name: 'Pro plan', amountCents: 2500, currency: 'usd', quantity: 1 }],
         successUrl: 'https://example.com/success',
         cancelUrl: 'https://example.com/cancel',
       });
