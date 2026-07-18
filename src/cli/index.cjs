@@ -110,8 +110,9 @@ import { secret } from 'minder-data-provider';
 
 const handler = createStripeWebhookHandler({
   webhookSecret: secret('STRIPE_WEBHOOK_SECRET'),
-  onEvent: async (e) => {
-    /* TODO: handle e.body */
+  onEvent: async (event) => {
+    // event: { type: string, data: unknown, raw: string }
+    // TODO: switch on event.type (e.g. 'checkout.session.completed') and act on event.data
   },
 });
 
