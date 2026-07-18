@@ -132,8 +132,8 @@ describe('Bug #5: JWT Parsing with Malformed Tokens', () => {
 
     // ✅ Should handle JSON parse errors gracefully
     expect(() => authManager.isAuthenticated()).not.toThrow();
-    // Should treat as non-JWT token (valid)
-    expect(authManager.isAuthenticated()).toBe(true);
+    // JWT-shaped but undecodable payload: fail closed
+    expect(authManager.isAuthenticated()).toBe(false);
   });
 
   it('should handle tokens with non-base64 payload', () => {
@@ -147,7 +147,7 @@ describe('Bug #5: JWT Parsing with Malformed Tokens', () => {
 
     // ✅ Should handle base64 decode errors gracefully
     expect(() => authManager.isAuthenticated()).not.toThrow();
-    // Should treat as non-JWT token (valid)
-    expect(authManager.isAuthenticated()).toBe(true);
+    // JWT-shaped but undecodable payload: fail closed
+    expect(authManager.isAuthenticated()).toBe(false);
   });
 });
