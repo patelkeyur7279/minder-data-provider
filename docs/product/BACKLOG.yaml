@@ -278,7 +278,21 @@ tasks:
   - id: R-04
     title: Edge-runtime compatibility spike (require() usage in adapters)
     type: research
-    status: backlog
+    status: done
+    evidence: >-
+      Spike 2026-07-19 (analysis-evidenced, not yet CI-confirmed). Bundled every public
+      entry with esbuild --platform=neutral (packages external) to isolate our own code.
+      Finding: the core minder() data path with transport:'fetch', JWT auth (atob-first),
+      and webhook verification (crypto.subtle) is edge-safe BY DESIGN — flagged
+      Buffer/require()/process.* are runtime-guarded fallbacks (typeof-guarded, atob/btoa
+      first, try/catch), never at module-eval. server/handlers.ts+webhooks.ts pass the
+      edge-safety regression guard. NOT edge-safe (documented w/ alternatives): default
+      axios transport (-> transport:'fetch'), file uploads/onProgress (isComplexRequest ->
+      axios), file-based credentials (-> env vars), dev proxy/express. Deliverables:
+      docs/EDGE.md (user guide) + SUPPORT_MATRIX Edge row Unknown->Inferred-works.
+    follow_up: >-
+      To reach 'Confirmed': runnable Cloudflare Worker example calling minder(transport:'fetch')
+      + webhook verify, exercised in CI (needs wrangler toolchain; same class as H-05).
   - id: S-05
     title: Per-provider ToS/license/trademark compliance check (Supabase, Stripe)
     type: security

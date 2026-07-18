@@ -18,7 +18,7 @@
 | Electron | **Experimental** | `./electron` entry built + dist-guarded; ElectronStorageAdapter unit-tested ~62% (was ~4%). **Not yet Confirmed:** no GUI runtime run in CI |
 | Node (server) | **Experimental** | `./server`/`./node` entries built + dist-guarded (`HttpMethod` export fixed in Wave H); fail-closed auth documented as presence/exp-only (signature verification is consumer's job). **Not yet Confirmed:** no server-runtime example in CI |
 | Astro + React islands | **Planned** | No evidence |
-| Edge runtimes (Workers/Vercel Edge) | **Unknown** | `require()` usage in adapters likely breaks edge bundling — needs spike (task R-04) |
+| Edge runtimes (Workers/Vercel Edge/Deno/Bun) | **Inferred-works** (core path) | R-04 spike (2026-07-19): the `minder()` data path with `transport: 'fetch'`, JWT auth (atob-first), and webhook verification (`crypto.subtle`) is edge-safe **by design** — flagged `Buffer`/`require()`/`process.*` are runtime-guarded fallbacks, never at module-eval, verified by bundling every entry with `esbuild --platform=neutral`. `server/handlers.ts`+`webhooks.ts` pass the edge-safety regression guard. **Not edge-safe:** default axios transport (use `transport: 'fetch'`), file uploads, file-based credentials (use env vars), dev proxy. See [EDGE.md](../EDGE.md). **Not yet Confirmed:** no runnable Worker example in CI (needs wrangler toolchain, like H-05) |
 
 > **Node runtime baseline: Node 20+** (`engines.node >= 20`, CI matrix = 20, 22). Node 18 was
 > dropped — it is EOL (2025-04) and, concretely, lacks a **global WebCrypto** (`crypto.subtle`),
