@@ -92,7 +92,7 @@ export class MinderConfigError extends MinderError {
       this.addSuggestion({
         message: `Invalid configuration at: ${configPath}`,
         action: 'Check your configuration object for typos or incorrect values',
-        link: 'https://github.com/patelkeyur7279/minder-data-provider/blob/main/docs/CONFIG_REFERENCE.md'
+        link: 'https://github.com/patelkeyur7279/minder-data-provider/blob/main/docs/CONFIG_GUIDE.md'
       });
     } else {
       this.addSuggestion({
