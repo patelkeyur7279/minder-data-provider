@@ -1,0 +1,22 @@
+{
+  "name": "not-a-scoped-package-name",
+  "version": "v1.0",
+  "displayName": "",
+  "categories": [],
+  "capabilities": ["payments"],
+  "config": {
+    "clientSafe": ["apiKey", "publishableKey"],
+    "serverOnly": ["apiKey", "secretKey"]
+  },
+  "scopes": [
+    { "scope": "payments:charge" }
+  ],
+  "runtimes": [],
+  "frameworks": ["angular"],
+  "peerDependencies": {},
+  "docs": {
+    "setup": "./README.md",
+    "example": "./missing-example.ts",
+    "security": "/absolute/paths/not/allowed.md"
+  }
+}
