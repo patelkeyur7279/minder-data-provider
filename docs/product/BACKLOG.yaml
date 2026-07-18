@@ -12,9 +12,8 @@ tasks:
   - id: SEC-01
     title: Fail-closed isAuthenticated + safe CORS defaults
     type: security
-    status: verified   # unmerged: branch fix/fail-closed-auth-and-cors-default
-    evidence: "8 commits; 86 suites/1592 tests green; plan doc docs/superpowers/plans/2026-07-18-*.md"
-    blocker: "Awaiting owner decision: push + PR, or merge locally"
+    status: complete
+    evidence: "Merged to dev 2026-07-18 (owner decision: all branches merge to dev until dev-complete; not publishing yet); suite green on dev post-merge (1653/0)"
 
   # ---- M0: Trustworthy core ----
   - id: M0-01
@@ -142,8 +141,8 @@ tasks:
   - id: R-01
     title: "DECISION (owner): evolve-in-place vs greenfield monorepo"
     type: research
-    status: blocked
-    blocker: "Material scope decision for project owner. Recommendation: evolve in place, split at M2 (see ROADMAP)."
+    status: complete
+    evidence: "Owner decision 2026-07-18: evolve in place; monorepo split deferred to M2/v3.0 per ROADMAP"
   - id: R-02
     title: Developer interviews (>=5) validating integration-pain hypothesis and provider priority order
     type: research
