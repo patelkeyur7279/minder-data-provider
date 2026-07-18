@@ -30,6 +30,7 @@ import { telemetry } from '../utils/TelemetryTracker.js';
 import { TelemetryManager } from '../utils/telemetry.js';
 import type { DebugManager } from '../debug/DebugManager.js';
 import { PluginManager, pluginManager as globalPluginManager } from '../plugins/PluginSystem.js';
+import { redactSecrets } from '../security/secrets.js';
 
 export class ApiClient {
   private axiosInstance: AxiosInstance;
@@ -319,8 +320,8 @@ export class ApiClient {
             method: config.method,
             url: config.url,
             headers: this.sanitizeHeaders(config.headers),
-            data: config.data,
-            params: config.params
+            data: redactSecrets(config.data),
+            params: redactSecrets(config.params)
           });
         }
 
@@ -384,7 +385,7 @@ export class ApiClient {
           this.debugManager.log(DebugLogType.API, `✅ ${response.status} ${response.config.method?.toUpperCase()} ${response.config.url}${duration ? ` (${duration}ms)` : ''}`, {
             status: response.status,
             statusText: response.statusText,
-            data: response.data,
+            data: redactSecrets(response.data),
             headers: this.sanitizeHeaders(response.headers),
             duration
           });
@@ -399,7 +400,7 @@ export class ApiClient {
             status: error.response?.status,
             statusText: error.response?.statusText,
             message: error.message,
-            data: error.response?.data
+            data: redactSecrets(error.response?.data)
           });
         }
 
@@ -508,7 +509,7 @@ export class ApiClient {
                 this.debugManager.log(DebugLogType.API, `🚀 POST ${fullRefreshUrl} (Refresh)`, {
                   hasRefreshToken: !!refreshToken,
                   isCookieStorage,
-                  headers
+                  headers: this.sanitizeHeaders(headers)
                 });
               }
 
@@ -569,7 +570,7 @@ export class ApiClient {
               // Log refresh failure
               if (this.debugManager && this.config.debug?.networkLogs) {
                 this.debugManager.log(DebugLogType.API, `❌ REFRESH FAILED`, {
-                  error: refreshError instanceof Error ? refreshError.message : refreshError
+                  error: redactSecrets(refreshError instanceof Error ? refreshError.message : refreshError)
                 });
               }
 
