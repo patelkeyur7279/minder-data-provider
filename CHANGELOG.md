@@ -109,6 +109,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   progress ticks no longer re-render every hook instance (progress reads are
   getter-based). Memoized children and effect deps now behave.
 
+### Added — Certified provider: Firebase (+ credential-file path)
+
+- **`minder-data-provider/providers/firebase`** — auth + Firestore + storage.
+  Activates the **credential-file** path: `loadServiceAccount(FileRef)` resolves
+  a service-account JSON server-side only (throws in browser),
+  `validateServiceAccount` returns **masked health only** — the `private_key`
+  is never returned or logged (sentinel-tested). **Certified** (10/10),
+  browser-verified mock auth+storage, guarded keyless health route in CI.
+- Firebase's `apiKey` is documented + tested as a **public identifier** (passes
+  client config); `serviceAccount` hard-fails as a raw value. The canonical
+  "a key named 'apiKey' is not necessarily a secret" case.
+- **`minder add firebase`** scaffolds a masked health-check route with explicit
+  "set GOOGLE_APPLICATION_CREDENTIALS, never commit the file" guidance.
+
 ### Added — Certified provider: Clerk
 
 - **`minder-data-provider/providers/clerk`** — dedicated auth. Client
