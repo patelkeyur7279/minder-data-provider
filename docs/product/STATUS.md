@@ -9,9 +9,16 @@ Subagent execution per docs/superpowers/plans/2026-07-18-m0-execution-plan.md
 39c1d87 (M0-10). Preflight tax is GONE: default request headers are Content-Type+Accept only,
 withCredentials opt-in; retry default 1.
 
-**Wave 2 (dispatched):** M0-03 Rules-of-Hooks (opus), M0-07 log redaction + httpOnly claim
-(sonnet), M0-08 event-driven useOffline (sonnet). Wave 3 after: M0-04 (opus, after M0-03),
-M0-05 (opus), M0-06 (sonnet).
+**Wave 2 VERIFIED** (commits b9f32ff M0-03, 4c27a60 M0-07, a6925eb M0-08, 9dc62b6 lint gate):
+Rules-of-Hooks fixed (+ 2 extra conditional-context sites the new eslint react-hooks gate caught;
+fixed via non-throwing useMinderContextSafe), debug-log secret redaction (incl. a second
+previously-unknown Authorization-header leak in the refresh path), event-driven offline hooks.
+Evidence: jest --coverage exit 0 (91 suites / 1636 tests / 0 failed), tsc clean, lint 0 errors
+with rules-of-hooks=error, build OK, offline tests stress-run 8× stable.
+
+**Wave 3 (dispatched):** M0-04 memoize returns (opus), M0-05 rawUrl + config unification (opus),
+M0-06 packaging (sonnet). Orchestration lesson recorded: a Wave-2 agent used git stash despite
+rules — future waves get worktree isolation for any agent whose task overlaps shared files.
 
 ## Completed, with evidence
 

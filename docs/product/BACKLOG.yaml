@@ -34,7 +34,8 @@ tasks:
   - id: M0-03
     title: Fix Rules-of-Hooks violations in useMinder
     type: bug
-    status: ready
+    status: verified
+    evidence: "Wave2 2026-07-18: orchestrator-verified — jest --coverage exit 0, 91 suites/1636 tests/0 failed, tsc clean, lint 0 errors (rules-of-hooks now error), build OK; offline test stress-run 8x stable"
     acceptance: "No conditional/early-return hook paths; eslint-plugin-react-hooks clean on the file; regression test for route-validity flip"
     evidence_basis: "DX audit A1 (useMinder.ts:700, 855/873, 1079-1123)"
     risks: "Largest file in repo (1381 lines); needs careful decomposition"
@@ -58,12 +59,14 @@ tasks:
   - id: M0-07
     title: Redact debug logs (S-03); correct SecureAuthManager httpOnly claim (S-02); un-skip cookie tests
     type: security
-    status: ready
+    status: verified
+    evidence: "Wave2 2026-07-18: orchestrator-verified — jest --coverage exit 0, 91 suites/1636 tests/0 failed, tsc clean, lint 0 errors (rules-of-hooks now error), build OK; offline test stress-run 8x stable"
     acceptance: "redactSecrets wired into network/debug logs with test; class docs corrected; 2 skipped security tests enabled+passing"
   - id: M0-08
     title: Event-driven useOffline (remove 1s polling)
     type: implementation
-    status: ready
+    status: verified
+    evidence: "Wave2 2026-07-18: orchestrator-verified — jest --coverage exit 0, 91 suites/1636 tests/0 failed, tsc clean, lint 0 errors (rules-of-hooks now error), build OK; offline test stress-run 8x stable"
     acceptance: "No setInterval; subscribes to OfflineManager callbacks; equality-guarded setState"
   - id: M0-09
     title: Regenerate coverage + gate in CI; typecheck on dev workflow
