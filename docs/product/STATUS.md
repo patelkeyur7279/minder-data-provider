@@ -66,6 +66,15 @@ Proof: controlled experiment (guard fails on broken build, 15/15 on fixed) + rea
 of the example app with zero console errors. Debug agent was killed mid-task by a session limit;
 orchestrator completed the validation half inline.
 
+**PROVIDER PLATFORM COMPLETE (2026-07-19) — ALL 6 ROADMAP PROVIDERS CERTIFIED.**
+Foundation (Plan A) + Supabase, Stripe, Clerk, Firebase, Razorpay, Sentry — each 10/10
+certification, mock-mode example browser-verified, secret-sentinel tested. Catalog Planned column
+empty. M2-05 fs-warning fixed. Full gate: 116 suites / 2078 tests / 0 failed, tsc clean, lint 0
+errors, build OK, edge-safety + dist-interop guards green. ~70 commits ahead of origin/dev
+(push blocked on owner's GitHub secret-scanning unblock — the ONLY open item).
+Spec: docs/superpowers/specs/2026-07-18-provider-platform-design.md. Plans A–F in
+docs/superpowers/plans/. Nothing published/released/tagged.
+
 **M1 ENGINEERING COMPLETE.** All gates: 1780 tests / 0 failed, tsc clean, lint 0 errors,
 build OK, example app browser-verified. Remaining for M1 closure: push dev + first green run of
 example-nextjs.yml CI (then promote Next.js to Confirmed in SUPPORT_MATRIX.md). Then M2:
