@@ -207,6 +207,12 @@ tasks:
     status: ready
     evidence_basis: "G-01 Stage-3 review asides (inert, pre-existing)"
 
+  - id: G-08
+    title: "SECURITY follow-up: generateExpressProxy defaults credentials ON (!== false) and LACKS the wildcard-origin guard generateNextJSProxy has; residual ?? true credential defaults in EnvironmentManager.ts:97, utils/corsManager.ts:15, utils/index.ts:25; presets.ts graduated retries need an intentionality doc note"
+    type: security
+    status: ready
+    evidence_basis: "G-05 Stage-3 Opus review, non-blocking findings — same vulnerability class as SEC-01"
+
   # ---- Research / decisions ----
   - id: R-01
     title: "DECISION (owner): evolve-in-place vs greenfield monorepo"
