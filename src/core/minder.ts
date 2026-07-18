@@ -134,7 +134,8 @@ export function configureMinder(config: Partial<MinderConfig>): void {
 }
 
 import { StreamClient, type StreamOptions } from './StreamClient.js';
-import { pluginManager } from '../plugins/PluginSystem.js';
+import { pluginManager, isShortCircuitResponse } from '../plugins/PluginSystem.js';
+import type { InterceptableRequest } from '../plugins/PluginSystem.js';
 
 // ============================================================================
 // CORE MINDER FUNCTION
@@ -243,8 +244,38 @@ export async function minder<TData = any>(
     
     // 6. Execute request
     let responseData: any;
-    let responseStatus: number;
+    let responseStatus = 0;
     let responseHeaders: Record<string, string> = {};
+    let shortCircuited = false;
+
+    // Mutating request middleware: registered plugins may rewrite the outgoing
+    // config or short-circuit the request with a synthetic response. Runs after
+    // the config is fully assembled and before the transport dispatch. Guarded
+    // so there is zero overhead when no plugin implements the hook.
+    if (pluginManager.size > 0 && pluginManager.hasRequestInterceptors()) {
+      const interceptable: InterceptableRequest = {
+        url: config.url || route,
+        method,
+        headers: (config.headers as Record<string, string>) || {},
+        params: config.params as Record<string, unknown> | undefined,
+        data: config.data,
+        routeName: registryRoute ? route : undefined,
+      };
+      const intercepted = await pluginManager.executeRequestInterceptors(interceptable);
+      if (isShortCircuitResponse(intercepted)) {
+        responseData = intercepted.response.data;
+        responseStatus = intercepted.response.status;
+        responseHeaders = intercepted.response.headers || {};
+        shortCircuited = true;
+      } else {
+        // Apply the middleware's mutations back onto the outgoing config.
+        config.url = intercepted.url;
+        config.method = intercepted.method as HttpMethod;
+        config.headers = intercepted.headers;
+        config.params = intercepted.params;
+        config.data = intercepted.data;
+      }
+    }
 
     // Fire plugin request hooks (global plugins; non-blocking observability)
     if (pluginManager.size > 0) {
@@ -266,7 +297,10 @@ export async function minder<TData = any>(
     const isComplexRequest = isFileUpload(data) || options?.onProgress || config.onUploadProgress;
     const useFetch = options?.transport === 'fetch' && !isComplexRequest;
 
-    if (!useFetch) {
+    if (shortCircuited) {
+      // A plugin already produced a synthetic response — skip the transport
+      // entirely (responseData/status/headers were set during interception).
+    } else if (!useFetch) {
       const response = await axios(config);
       responseData = response.data;
       responseStatus = response.status;

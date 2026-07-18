@@ -29,7 +29,12 @@ import { AnalyticsManager } from '../utils/analytics.js';
 import { telemetry } from '../utils/TelemetryTracker.js';
 import { TelemetryManager } from '../utils/telemetry.js';
 import type { DebugManager } from '../debug/DebugManager.js';
-import { PluginManager, pluginManager as globalPluginManager } from '../plugins/PluginSystem.js';
+import {
+  PluginManager,
+  pluginManager as globalPluginManager,
+  isShortCircuitResponse,
+} from '../plugins/PluginSystem.js';
+import type { InterceptableRequest, ShortCircuitResponse } from '../plugins/PluginSystem.js';
 import { redactSecrets } from '../security/secrets.js';
 
 export class ApiClient {
@@ -283,6 +288,47 @@ export class ApiClient {
         : undefined,
       timestamp: Date.now(),
     });
+  }
+
+  /**
+   * Run the mutating `onRequestIntercept` middleware chain against the outgoing
+   * axios config. Header/url/method/params/data mutations are applied in place.
+   * If a plugin short-circuits, the {@link ShortCircuitResponse} is returned and
+   * the caller MUST resolve with its synthetic data without hitting the
+   * transport. Returns `null` when the chain completed normally.
+   *
+   * Zero-overhead fast path: returns immediately when no registered plugin
+   * implements the hook.
+   */
+  private async runRequestInterceptors(
+    requestConfig: AxiosRequestConfig,
+    routeName: string
+  ): Promise<ShortCircuitResponse | null> {
+    if (this.pluginManager.size === 0 || !this.pluginManager.hasRequestInterceptors()) {
+      return null;
+    }
+
+    const interceptable: InterceptableRequest = {
+      url: requestConfig.url || '',
+      method: (requestConfig.method || 'GET').toString().toUpperCase(),
+      headers: (requestConfig.headers as Record<string, string>) || {},
+      params: requestConfig.params as Record<string, unknown> | undefined,
+      data: requestConfig.data,
+      routeName,
+    };
+
+    const result = await this.pluginManager.executeRequestInterceptors(interceptable);
+    if (isShortCircuitResponse(result)) {
+      return result;
+    }
+
+    // Apply the middleware's mutations back onto the outgoing axios config.
+    requestConfig.url = result.url;
+    requestConfig.method = result.method as AxiosRequestConfig['method'];
+    requestConfig.headers = result.headers as AxiosRequestConfig['headers'];
+    requestConfig.params = result.params;
+    requestConfig.data = result.data;
+    return null;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -956,6 +1002,25 @@ export class ApiClient {
       }
     }
 
+    // Mutating request middleware: plugins may rewrite the outgoing config or
+    // short-circuit the request entirely with a synthetic response. Runs after
+    // the config (headers/data) is fully assembled and before any transport.
+    const shortCircuit = await this.runRequestInterceptors(requestConfig, routeName);
+    if (shortCircuit) {
+      const scData = shortCircuit.response.data;
+      // Transform the synthetic payload with the route model too, so a
+      // short-circuited response behaves exactly as if it came from the network.
+      if (route.model && scData) {
+        if (Array.isArray(scData)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          return scData.map((item: any) => new (route.model as any)().fromJSON(item)) as T;
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return new (route.model as any)().fromJSON(scData) as T;
+      }
+      return scData as T;
+    }
+
     // Execute request with caching for GET
     const startTime = performance.now();
 
@@ -1075,6 +1140,12 @@ export class ApiClient {
       } else {
         requestConfig.data = sanitizedData;
       }
+    }
+
+    // Mutating request middleware (same semantics as the registered-route path).
+    const shortCircuit = await this.runRequestInterceptors(requestConfig, routeName);
+    if (shortCircuit) {
+      return shortCircuit.response.data as T;
     }
 
     const response: AxiosResponse<T> = await this.axiosInstance.request(requestConfig);

@@ -23,6 +23,8 @@ import type { ApiClient } from '../core/ApiClient.js';
 import type { DebugManager } from '../debug/DebugManager.js';
 import { DebugLogType } from '../constants/enums.js';
 import { HttpMethod } from '../constants/enums.js';
+import { pluginManager } from '../plugins/PluginSystem.js';
+import type { UploadLifecycleEvent } from '../plugins/PluginSystem.js';
 
 // ============================================================================
 // TYPES
@@ -127,6 +129,10 @@ export class MediaUploadManager {
     options: UploadOptions = {}
   ): Promise<MediaUploadResult> {
     const uploadId = this.generateUploadId(file);
+    const route = options.endpoint || this.config.routes?.upload?.url || '/upload';
+
+    // Notify upload-capability plugins that a media upload is starting.
+    this.emitUploadHook({ phase: 'start', uploadId, route, file });
 
     try {
       this.log(`Starting upload: ${file.name} (${this.formatBytes(file.size)})`);
@@ -135,17 +141,41 @@ export class MediaUploadManager {
       const shouldUseChunked = options.chunked?.enabled &&
         file.size > (options.chunked.chunkSize || 1024 * 1024);
 
-      if (shouldUseChunked) {
-        return await this.uploadChunked(file, options, uploadId);
-      } else {
-        return await this.uploadDirect(file, options, uploadId);
-      }
+      const result = shouldUseChunked
+        ? await this.uploadChunked(file, options, uploadId)
+        : await this.uploadDirect(file, options, uploadId);
+
+      this.emitUploadHook({ phase: 'success', uploadId, route, file, result });
+      return result;
 
     } catch (error) {
       this.log(`❌ Upload failed: ${file.name}`, error);
       this.activeUploads.delete(uploadId);
+      this.emitUploadHook({
+        phase: 'error',
+        uploadId,
+        route,
+        file,
+        error: { message: error instanceof Error ? error.message : String(error) },
+      });
       throw error;
     }
+  }
+
+  /**
+   * Fire the upload-lifecycle plugin hooks (fire-and-forget, error-isolated per
+   * plugin inside the manager). Zero-overhead when no plugins are registered.
+   */
+  private emitUploadHook(
+    event: Omit<UploadLifecycleEvent, 'file' | 'timestamp'> & { file?: File }
+  ): void {
+    if (pluginManager.size === 0) return;
+    const { file, ...rest } = event;
+    void pluginManager.executeUploadHooks({
+      ...rest,
+      file: file ? { name: file.name, size: file.size, type: file.type } : undefined,
+      timestamp: Date.now(),
+    });
   }
 
   /**

@@ -16,6 +16,11 @@ import { Logger, LogLevel } from '../../utils/Logger.js';
 import type { StorageAdapter } from '../adapters/storage/StorageAdapter.js';
 import { MinderOfflineError, MinderNetworkError, MinderValidationError } from '../../errors/index.js';
 import type { NetworkState, QueuedRequest, SyncStats, OfflineConfig } from './types.js';
+// Late-cycle-safe: the plugins layer imports only from utils (Logger), never
+// from platform, so this static import forms no circular dependency. Verified
+// via `grep -rn platform src/plugins` (no hits). Emitting through the global
+// pluginManager keeps OfflineManager decoupled from any core wiring.
+import { pluginManager } from '../../plugins/PluginSystem.js';
 
 const logger = new Logger('OfflineManager', { level: LogLevel.WARN });
 
@@ -243,10 +248,17 @@ Web: Using basic online/offline detection
    * Update network state and trigger sync if needed
    */
   private updateNetworkState(state: NetworkState): void {
+    const wasConnected = this.networkState.isConnected;
     const wasOffline = !this.networkState.isConnected;
     this.networkState = state;
     this.config.onNetworkChange(state);
     this.notify();
+
+    // Notify connectivity-capability plugins when the online/offline boolean
+    // actually transitions (fire-and-forget, error-isolated per plugin).
+    if (wasConnected !== state.isConnected && pluginManager.size > 0) {
+      void pluginManager.executeConnectivityHooks(state.isConnected);
+    }
 
     // Auto-sync when coming back online
     if (wasOffline && state.isConnected && this.config.autoSync) {
@@ -421,6 +433,7 @@ Web: Using basic online/offline detection
     this.isSyncing = true;
     this.config.onSyncStart();
     this.notify();
+    this.emitSyncHook('start');
 
     const startTime = Date.now();
     const stats: SyncStats = {
@@ -436,12 +449,29 @@ Web: Using basic online/offline detection
 
     try {
       const result = await this.syncPromise;
+      this.emitSyncHook('success');
       return result;
+    } catch (error) {
+      this.emitSyncHook('error');
+      throw error;
     } finally {
       this.isSyncing = false;
       this.syncPromise = null;
       this.notify();
     }
+  }
+
+  /**
+   * Fire the offline-sync lifecycle plugin hooks (fire-and-forget,
+   * error-isolated per plugin). Zero-overhead when no plugins are registered.
+   */
+  private emitSyncHook(phase: 'start' | 'success' | 'error'): void {
+    if (pluginManager.size === 0) return;
+    void pluginManager.executeSyncHooks({
+      phase,
+      queueSize: this.getQueueSize(),
+      timestamp: Date.now(),
+    });
   }
 
   /**

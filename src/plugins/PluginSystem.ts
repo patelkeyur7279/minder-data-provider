@@ -45,6 +45,21 @@ export interface MinderPlugin {
   onCacheMiss?: (cacheKey: string) => void | Promise<void>;
   onDestroy?: () => void | Promise<void>;
 
+  /**
+   * Mutating request middleware. Unlike the fire-and-forget `onRequest`
+   * observer, this hook can REWRITE the outgoing request or SHORT-CIRCUIT it
+   * entirely. Plugins run in registration order, each receiving the previous
+   * plugin's output config. Return the (possibly mutated) config to continue
+   * the chain, or a {@link ShortCircuitResponse} to stop the chain AND the
+   * request — the caller then receives that synthetic response as if it had
+   * come from the network. Throwing is treated as a bug: the throwing plugin
+   * is logged and skipped, and the chain continues with the prior config
+   * (deliberate short-circuits are returns, never throws).
+   */
+  onRequestIntercept?: (
+    config: InterceptableRequest
+  ) => InterceptableRequest | ShortCircuitResponse | Promise<InterceptableRequest | ShortCircuitResponse>;
+
   // Capability hooks — all optional, fired only when present.
   /** Supply an auth token (auth-provider plugins: Firebase, Auth0, Clerk…). */
   provideToken?: () => string | null | Promise<string | null>;
@@ -64,6 +79,51 @@ export interface PluginRequest {
   headers?: Record<string, string>;
   body?: any;
   timestamp: number;
+}
+
+/**
+ * The mutable request shape handed to {@link MinderPlugin.onRequestIntercept}.
+ * A plugin may return a modified copy (or the same object) to continue the
+ * chain.
+ */
+export interface InterceptableRequest {
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+  params?: Record<string, unknown>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data?: any;
+  /** The registered route name, when the request originated from one. */
+  routeName?: string;
+}
+
+/**
+ * Returned by {@link MinderPlugin.onRequestIntercept} to stop the middleware
+ * chain and the request itself — the caller receives `response` as though the
+ * network had returned it (no transport call is made).
+ */
+export interface ShortCircuitResponse {
+  shortCircuit: true;
+  response: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data: any;
+    status: number;
+    headers?: Record<string, string>;
+  };
+}
+
+/**
+ * Narrow an {@link MinderPlugin.onRequestIntercept} result to a
+ * {@link ShortCircuitResponse}.
+ */
+export function isShortCircuitResponse(
+  value: InterceptableRequest | ShortCircuitResponse
+): value is ShortCircuitResponse {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as ShortCircuitResponse).shortCircuit === true
+  );
 }
 
 export interface PluginResponse {
@@ -90,19 +150,26 @@ export interface CacheHitEvent {
 }
 
 export interface UploadLifecycleEvent {
-  phase: 'start' | 'progress' | 'complete' | 'error';
+  phase: 'start' | 'progress' | 'success' | 'complete' | 'error';
   uploadId: string;
   url?: string;
+  /** The upload route/endpoint this event refers to. */
+  route?: string;
   file?: { name: string; size: number; type: string };
   progress?: { loaded: number; total: number; percentage: number };
+  /** The upload result payload (present on the `success` phase). */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  result?: any;
   error?: { message: string; code?: string };
   timestamp: number;
 }
 
 export interface SyncLifecycleEvent {
-  phase: 'start' | 'progress' | 'complete' | 'error';
+  phase: 'start' | 'progress' | 'success' | 'complete' | 'error';
   pending?: number;
   processed?: number;
+  /** Number of requests in the offline queue at emission time. */
+  queueSize?: number;
   error?: { message: string; code?: string };
   timestamp: number;
 }
@@ -240,6 +307,52 @@ export class PluginManager {
    */
   get size(): number {
     return this.plugins.size;
+  }
+
+  /**
+   * Whether any registered plugin implements the mutating
+   * {@link MinderPlugin.onRequestIntercept} middleware. Lets the hot request
+   * path skip all interception work (zero overhead) when nobody opted in.
+   */
+  hasRequestInterceptors(): boolean {
+    for (const plugin of this.plugins.values()) {
+      if (plugin.onRequestIntercept) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Run the mutating request-intercept middleware chain. Plugins execute in
+   * REGISTRATION ORDER, each receiving the previous plugin's output config.
+   *
+   * - A plugin returning a {@link ShortCircuitResponse} stops the chain and is
+   *   returned immediately — the caller must then resolve with that synthetic
+   *   response WITHOUT hitting the transport.
+   * - A plugin that THROWS is logged and SKIPPED; the chain continues with the
+   *   prior config (deliberate short-circuits are returns, never throws).
+   *
+   * Returns either the final (possibly mutated) {@link InterceptableRequest} or
+   * the {@link ShortCircuitResponse} that halted the chain.
+   */
+  async executeRequestInterceptors(
+    request: InterceptableRequest
+  ): Promise<InterceptableRequest | ShortCircuitResponse> {
+    let current: InterceptableRequest = request;
+    for (const [name, plugin] of this.plugins) {
+      if (!plugin.onRequestIntercept) continue;
+      try {
+        const result = await plugin.onRequestIntercept(current);
+        if (isShortCircuitResponse(result)) {
+          return result;
+        }
+        // Guard against a plugin returning nothing — keep the prior config.
+        current = result ?? current;
+      } catch (error) {
+        this.logger.warn(`Plugin "${name}" onRequestIntercept threw; skipping`, error);
+        // Chain continues with the prior config (current unchanged).
+      }
+    }
+    return current;
   }
 
   /**
