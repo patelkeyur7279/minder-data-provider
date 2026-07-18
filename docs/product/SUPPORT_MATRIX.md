@@ -1,0 +1,51 @@
+# Support Matrix
+
+> **Rule:** "Confirmed" requires a runnable example app + tests exercising it in CI. Nothing is
+> promoted without that evidence. (Evidence rule: audits of 2026-07-18; test suite = 86 suites /
+> 1592 tests, jsdom + React 19.)
+
+## React frameworks / runtimes
+
+| Environment | Status | Evidence / gap |
+|---|---|---|
+| React 19 (client, web) | **Confirmed** | Full jest suite runs on react/react-dom 19 in jsdom; `./web` entry built |
+| React 18 | **Unknown** | peer range allows it; no CI leg runs 18 — needs compat test (task C-01) |
+| Next.js (Pages Router) | **Experimental** | `./nextjs` entry + SSR helpers + generated proxy exist; **no runnable example app** (examples are markdown-only), proxy template only unit-tested |
+| Next.js (App Router / RSC) | **Unknown** | No RSC-safety audit; `use client` boundaries unverified (task R-03) |
+| Vite + React | **Inferred-works** | Pure ESM bundle exists; no Vite example or CI leg (task C-02) |
+| Remix / React Router | **Planned** | No adapter, no evidence |
+| React Native / Expo | **Experimental** | `./native`/`./expo` entries built; platform adapters exist; **0% test coverage on `src/platforms`**, no example app |
+| Electron | **Experimental** | Entry + adapters built; same evidence gap |
+| Node (server) | **Experimental** | `./server`/`./node` entries built; fail-closed auth documented as presence/exp-only (signature verification is consumer's job) |
+| Astro + React islands | **Planned** | No evidence |
+| Edge runtimes (Workers/Vercel Edge) | **Unknown** | `require()` usage in adapters likely breaks edge bundling — needs spike (task R-04) |
+
+## Capabilities (today's built-ins)
+
+| Capability | Status | Evidence |
+|---|---|---|
+| REST via axios (`ApiClient`) | **Confirmed** | Core test coverage; hardened CORS/auth 2.2.0-beta.1 |
+| Standalone `minder()` fetch transport | **Confirmed** | Tests; opt-in `transport: 'fetch'` |
+| TanStack Query caching | **Confirmed** | query-core based CacheManager, tested |
+| Auth (JWT presence/expiry, refresh) | **Confirmed** | Fail-closed since 2.2.0-beta.1; parity-tested |
+| Plugin bus (request/response/error/token hooks) | **Confirmed** | Emitters live in ApiClient + minder(); tested |
+| Plugin hooks `onUpload`/`onSync`/`onConnectivityChange` | **Not implemented** | Declared in interface, no emitters (audit) |
+| WebSocket | **Experimental** | 3 overlapping layers (core manager / client / adapters); tests exist for manager only |
+| Upload | **Experimental** | Works; re-render storm defect (perf audit A4) |
+| Offline | **Experimental** | Two competing implementations; 1s polling hooks |
+| Redux slices | **Deprecated-candidate** | Built for every route, read by nothing on the main path (audit A8/A9) |
+
+## Provider integrations
+
+| Provider | Status |
+|---|---|
+| **All third-party providers** (Firebase, Auth0, Clerk, Supabase, Appwrite, Stripe, S3, Cloudinary, email/SMS/push, analytics, AI, CMS, search, flags) | **Proposed** — zero provider code exists today [Confirmed by audit]. Build order per ROADMAP.md: Supabase (auth+db+storage in one SDK) → Stripe (server-boundary showcase) → expand only after both pass the certification checklist (RISKS_AND_THREAT_MODEL.md §Provider certification). |
+
+## Package managers / tooling
+
+| Item | Status |
+|---|---|
+| npm | **Confirmed** (CI uses `npm ci`) |
+| yarn / pnpm / bun | **Unknown** — dual lockfiles currently committed (hygiene defect); no CI legs |
+| TypeScript consumers | **Confirmed** (d.ts + d.mts emitted; `moduleResolution: bundler/node16`) |
+| Legacy `moduleResolution: node` | **Known-degraded** — no `typesVersions` fallback (packaging audit) |
