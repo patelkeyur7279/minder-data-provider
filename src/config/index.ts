@@ -6,6 +6,7 @@ import { HttpMethod, StorageType, Platform, LogLevel } from '../constants/enums.
 import { PlatformDetector } from '../platform/PlatformDetector.js';
 import { MinderConfigError } from '../errors/MinderError.js';
 import { assertNoExposedSecrets } from '../security/secrets.js';
+import { validateMinderConfig } from './validateConfig.js';
 import { setGlobalMinderConfig } from '../core/globalConfig.js';
 import { setMinderGlobalConfig } from '../core/minder.js';
 
@@ -174,6 +175,28 @@ export function configureMinder(config: UnifiedMinderConfig): MinderConfig {
       'apiUrl',
       'CONFIG_MISSING_API_URL'
     );
+  }
+
+  // 🛡️ Schema validation: catch every problem in one pass so developers fix
+  // everything in a single edit instead of playing whack-a-mole with configureMinder
+  // throwing once per mistake. Also enforces the `serverOnlyKeys` registry (see
+  // ./validateConfig.ts) in browser-like environments.
+  const validation = validateMinderConfig(config);
+  const validationFailures = validation.errors.filter((e) => e.level === 'error');
+  if (validationFailures.length > 0) {
+    const report = validation.errors
+      .map((e) => `  • [${e.key}] ${e.message}\n    Fix: ${e.fix}`)
+      .join('\n');
+    throw new MinderConfigError(
+      `Invalid Minder configuration — ${validationFailures.length} error(s) found:\n${report}`,
+      validationFailures[0]?.key,
+      'CONFIG_VALIDATION_ERROR'
+    );
+  }
+  for (const warning of validation.errors) {
+    if (warning.level === 'warning') {
+      logger.warn(`[Minder config] ${warning.key}: ${warning.message} Fix: ${warning.fix}`);
+    }
   }
 
   // 🛡️ Security: refuse to run if a raw secret value is present in client config
