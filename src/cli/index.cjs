@@ -839,8 +839,53 @@ function renderDoctorTable(stdout, rows) {
   stdout.write('\n');
 }
 
+/**
+ * Beginner "first debugging" environment checks (J-03). Each returns
+ * { label, ok, fix }. Non-fatal: doctor reports them but only missing
+ * credentials set a non-zero exit code, so a developer sees the full picture.
+ */
+function checkEnvironment(cwd) {
+  const checks = [];
+
+  // The one required peer dependency — the most common "why is nothing
+  // working" beginner mistake is forgetting to install it.
+  const hasReactQuery = fs.existsSync(
+    path.join(cwd, 'node_modules', '@tanstack', 'react-query')
+  );
+  checks.push({
+    label: '@tanstack/react-query installed (required peer)',
+    ok: hasReactQuery,
+    fix: 'npm install @tanstack/react-query',
+  });
+
+  // A minder config in the project.
+  const configFile = ['minder.config.ts', 'minder.config.js', 'minder.config.mjs'].find(
+    (f) => fs.existsSync(path.join(cwd, f))
+  );
+  checks.push({
+    label: 'minder config present',
+    ok: !!configFile,
+    fix: 'run `minder init` to scaffold minder.config.ts (optional — absolute-URL calls need no config)',
+  });
+
+  return checks;
+}
+
+function renderEnvironmentChecks(stdout, checks) {
+  stdout.write('minder doctor: environment\n');
+  for (const c of checks) {
+    stdout.write(`  ${c.ok ? '✓' : '✗'} ${c.label}\n`);
+    if (!c.ok) stdout.write(`      fix: ${c.fix}\n`);
+  }
+  stdout.write('\n');
+}
+
 function cmdDoctor(argv, ctx) {
   const { cwd, stdout, stderr } = ctx;
+
+  // Beginner environment checks first (non-fatal — informational).
+  renderEnvironmentChecks(stdout, checkEnvironment(cwd));
+
   const configFlagIdx = argv.indexOf('--config');
   const configPath = configFlagIdx !== -1 ? argv[configFlagIdx + 1] : null;
 
@@ -957,4 +1002,5 @@ module.exports = {
   collectFromEnvExample,
   CATALOG_DOC,
   isCertifiedProvider,
+  checkEnvironment,
 };

@@ -669,6 +669,51 @@ describe('writeScaffold (unit)', () => {
   });
 });
 
+describe('minder doctor — environment checks (J-03)', () => {
+  it('checkEnvironment flags a missing @tanstack/react-query peer with a fix', () => {
+    // tmpDir has no node_modules → the peer check fails.
+    const checks = cli.checkEnvironment(tmpDir) as Array<{
+      label: string;
+      ok: boolean;
+      fix: string;
+    }>;
+    const rq = checks.find((c) => c.label.includes('react-query'));
+    expect(rq).toBeDefined();
+    expect(rq!.ok).toBe(false);
+    expect(rq!.fix).toContain('npm install @tanstack/react-query');
+  });
+
+  it('checkEnvironment passes the peer check when it is installed', () => {
+    fs.mkdirSync(path.join(tmpDir, 'node_modules', '@tanstack', 'react-query'), {
+      recursive: true,
+    });
+    const checks = cli.checkEnvironment(tmpDir) as Array<{ label: string; ok: boolean }>;
+    expect(checks.find((c) => c.label.includes('react-query'))!.ok).toBe(true);
+  });
+
+  it('checkEnvironment detects a minder config file', () => {
+    expect(
+      (cli.checkEnvironment(tmpDir) as Array<{ label: string; ok: boolean }>).find((c) =>
+        c.label.includes('config')
+      )!.ok
+    ).toBe(false);
+    fs.writeFileSync(path.join(tmpDir, 'minder.config.ts'), 'export default {};');
+    expect(
+      (cli.checkEnvironment(tmpDir) as Array<{ label: string; ok: boolean }>).find((c) =>
+        c.label.includes('config')
+      )!.ok
+    ).toBe(true);
+  });
+
+  it('doctor prints the environment section (with fixes for what is missing)', () => {
+    const r = run(['doctor'], { cwd: tmpDir });
+    expect(r.stdout).toContain('minder doctor: environment');
+    expect(r.stdout).toContain('@tanstack/react-query installed');
+    // tmpDir is bare → the peer is missing → its fix is shown.
+    expect(r.stdout).toContain('npm install @tanstack/react-query');
+  });
+});
+
 describe('minder doctor', () => {
   it('reports a masked table from a JSON config and exits 0 when the env var is set', () => {
     // Constructed at runtime — never a scanner-matching literal in the repo
