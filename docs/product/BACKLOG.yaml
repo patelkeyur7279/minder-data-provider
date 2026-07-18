@@ -189,6 +189,17 @@ tasks:
     status: verified
     evidence: "2026-07-19: CERTIFIED — plan 2026-07-19-firebase-provider-plan.md, commits f0ec248/666b0ea/(E-03); cert 10/10; browser-verified mock auth+storage; FileRef masked health, private_key sentinel; gate 2026 tests/0 failed"
 
+  - id: M2-RAZORPAY
+    title: Razorpay provider (payments)
+    type: implementation
+    status: verified
+    evidence: "2026-07-19: CERTIFIED — plan 2026-07-19-razorpay-sentry-plan.md, commits 8824e9f/a846453/(F-E3); cert 10/10; browser-verified mock order (order_mock_1); keySecret sentinel"
+  - id: M2-SENTRY
+    title: Sentry provider (observability plugin)
+    type: implementation
+    status: verified
+    evidence: "2026-07-19: CERTIFIED — same plan; plugin-based (not capability contract); browser-verified mock error capture; graceful SDK-absent degrade; over-forward sentinel (drops request headers/body)"
+
   # ---- Research / decisions ----
   - id: R-01
     title: "DECISION (owner): evolve-in-place vs greenfield monorepo"
