@@ -66,6 +66,17 @@ Proof: controlled experiment (guard fails on broken build, 15/15 on fixed) + rea
 of the example app with zero console errors. Debug agent was killed mid-task by a session limit;
 orchestrator completed the validation half inline.
 
+**WAVE I (local-first) — I-01 done, I-02 deferred with evidence.** I-01: `useMinder(route,
+{ source: 'local' | 'local-first' })` + exported `LocalStore` over the Wave-H storage adapters —
+offline reads, network+persist+fallback, default path byte-identical (regression-tested),
+mutation-verified. Commit ea794f1. I-02 (offline×2/websocket×3 consolidation): recon FALSIFIED the
+"dead code, safe delete" premise — all layers are LIVE (core/WebSocketManager is used by
+MinderDataProvider:229) — so it's a high-risk refactor with zero user value; deferred, not churned
+(reliability pillar). **WAVE J (golden-path DX) — started:** fixed a beginner-facing 404 in
+MinderConfigError's docs link + added a dead-link regression guard (8e411e6). Gate: 2173 tests/0.
+Process note: a bulk `str.replace('tasks:')` corrupted BACKLOG.yaml's ledger string mid-session;
+caught by yaml.safe_load and repaired (2b1afef) — verification gate held before propagation.
+
 **WAVE H (platform certification) — evidence-based, no overclaiming.** Toolchain (Expo/Electron
 runtimes) not automatable in this env, so NO device/GUI run was produced or fabricated. Delivered
 the fully-verifiable work: (H-01) platform storage adapters Electron/Expo/Native 4-6% -> ~60%
