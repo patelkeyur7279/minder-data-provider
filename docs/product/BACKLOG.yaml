@@ -274,7 +274,31 @@ tasks:
   - id: R-03
     title: Next.js App Router / RSC safety audit
     type: research
+    status: done
+    evidence: >-
+      Audit 2026-07-19. minder() is server-safe (no React hooks; verified it carries no
+      'use client'). Client surface: 5 files already had 'use client'; audit found 7 MORE
+      client modules missing it (MinderErrorBoundary, useOffline, performance, useConfiguration,
+      DevTools, useEnvironment, QueryBuilder) — all fixed. New guard
+      tests/use-client-directive.test.ts scans src for React-hook calls / class components and
+      asserts each starts with 'use client' (12 modules). KEY FINDING: tsup splitting relocates
+      the directive during chunking, so in dist the chunk exporting MinderDataProvider starts
+      with `import` not `'use client'` — importing a client export directly into a Server
+      Component can error. Documented the standard provider-wrapper workaround (works today) in
+      docs/NEXTJS_APP_ROUTER.md; SUPPORT_MATRIX RSC row Unknown->Partial. Verified: build OK,
+      full suite 2230 pass / 0 fail, lint + type-check green.
+  - id: R-03-BUILD
+    title: Preserve 'use client'/'use server' directives through the tsup build (App Router)
+    type: implementation
     status: backlog
+    dependencies: [R-03]
+    notes: >-
+      tsup splitting:true does not keep 'use client' as a valid top-of-chunk prologue (R-03).
+      Fix candidate: esbuild-plugin-preserve-directives (or a client-entry sub-build without
+      splitting + a banner). HIGHER RISK — touches the published build for ALL consumers; must
+      verify every dist entry still resolves (dist-entry-exports guard), the HttpMethod enum
+      eager-export, edge-safety, and add a RUNNABLE Next.js App Router example exercised in CI
+      (overlaps the Next.js example-app gap) to upgrade RSC from Partial to Confirmed.
   - id: R-04
     title: Edge-runtime compatibility spike (require() usage in adapters)
     type: research

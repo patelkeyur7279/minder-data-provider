@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * Performance Optimization Utilities for minder-data-provider
  * Provides memoization, request batching, bundle analysis, and monitoring

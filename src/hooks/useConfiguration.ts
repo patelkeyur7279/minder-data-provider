@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * Hook for managing Minder configuration
  * Allows runtime configuration updates and feature toggling

@@ -11,7 +11,7 @@
 | React 19 (client, web) | **Confirmed** | Full jest suite runs on react/react-dom 19 in jsdom; `./web` entry built |
 | React 18 | **Unknown** | peer range allows it; no CI leg runs 18 — needs compat test (task C-01) |
 | Next.js (Pages Router) | **Experimental** | `./nextjs` entry + SSR helpers + generated proxy exist; **no runnable example app** (examples are markdown-only), proxy template only unit-tested |
-| Next.js (App Router / RSC) | **Unknown** | No RSC-safety audit; `use client` boundaries unverified (task R-03) |
+| Next.js (App Router / RSC) | **Partial** (works via wrapper) | R-03 audit (2026-07-19): `minder()` is server-safe (no hooks); hooks + `MinderDataProvider` carry `"use client"` in source (12 client modules now guarded by tests/use-client-directive.test.ts — 7 were missing it). **Known gap:** tsup `splitting` does not preserve the directive as a valid top-of-chunk prologue in dist, so importing a client export directly into a Server Component can error — the standard `"use client"` provider-wrapper pattern avoids it and works today. See [NEXTJS_APP_ROUTER.md](../NEXTJS_APP_ROUTER.md). Build-level fix + App Router example in CI tracked as R-03-BUILD |
 | Vite + React | **Inferred-works** | Pure ESM bundle exists; no Vite example or CI leg (task C-02) |
 | Remix / React Router | **Planned** | No adapter, no evidence |
 | React Native / Expo | **Experimental** | `./native`/`./expo` entries built + dist-interop guarded (CJS/ESM `HttpMethod` export verified — Wave H fixed an `undefined`-enum bug here); storage adapters (Native, Expo) now unit-tested ~60% (was ~5%) incl. CRUD/TTL/namespace/batch/degradation. **Not yet Confirmed:** no on-device/simulator runtime run in CI (toolchain not automatable in current env) |

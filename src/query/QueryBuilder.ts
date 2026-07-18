@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * Advanced Query Builder
  * Fluent API for building complex API queries
