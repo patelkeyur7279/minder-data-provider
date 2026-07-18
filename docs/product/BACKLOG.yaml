@@ -8,6 +8,16 @@ meta:
   owner: Keyur (maintainer) / Claude (execution agent)
 
 tasks:
+  - id: I-01
+    title: "Local-first data: useMinder source:'local'|'local-first' + LocalStore"
+    type: implementation
+    status: verified
+    evidence: "ea794f1; 12 tests (LocalStore 6 + local-first 6), mutation-verified non-vacuity, default path regression-tested; gate 2172/0"
+  - id: I-02
+    title: "Offline/WebSocket duplication consolidation — DEFERRED (evidence-gated)"
+    type: implementation
+    status: blocked
+    blocker: "Reachability recon FALSIFIED the 'dead code, safe delete' premise: core/OfflineManager is live (ApiClient), platform/offline/OfflineManager is live (native entry + M0-08/M1-03 API), core/WebSocketManager is LIVE (MinderDataProvider.tsx:229 + 5 test files), websocket/WebSocketClient is the live public one. ALL layers live -> consolidation is a high-risk refactor of working production code with ZERO user value. Reliability pillar + YAGNI: do NOT churn. Reassess only if the duplication actively causes a bug; if pursued, needs a dedicated deep-review increment, not a quick merge."
   - id: WAVE-H
     title: "Wave H platform certification (H-01 adapter tests, H-02 platform HttpMethod fix + guard, H-04 honest matrix; H-03 RN-web run NOT produced — toolchain)"
     type: implementation
@@ -22,6 +32,16 @@ tasks:
     type: note
     status: complete
     evidence: "8 tasks:
+  - id: I-01
+    title: "Local-first data: useMinder source:'local'|'local-first' + LocalStore"
+    type: implementation
+    status: verified
+    evidence: "ea794f1; 12 tests (LocalStore 6 + local-first 6), mutation-verified non-vacuity, default path regression-tested; gate 2172/0"
+  - id: I-02
+    title: "Offline/WebSocket duplication consolidation — DEFERRED (evidence-gated)"
+    type: implementation
+    status: blocked
+    blocker: "Reachability recon FALSIFIED the 'dead code, safe delete' premise: core/OfflineManager is live (ApiClient), platform/offline/OfflineManager is live (native entry + M0-08/M1-03 API), core/WebSocketManager is LIVE (MinderDataProvider.tsx:229 + 5 test files), websocket/WebSocketClient is the live public one. ALL layers live -> consolidation is a high-risk refactor of working production code with ZERO user value. Reliability pillar + YAGNI: do NOT churn. Reassess only if the duplication actively causes a bug; if pursued, needs a dedicated deep-review increment, not a quick merge."
   - id: WAVE-H
     title: "Wave H platform certification (H-01 adapter tests, H-02 platform HttpMethod fix + guard, H-04 honest matrix; H-03 RN-web run NOT produced — toolchain)"
     type: implementation
