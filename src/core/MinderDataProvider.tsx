@@ -63,7 +63,7 @@ interface MinderDataProviderProps {
   fallback?: ReactNode;
 }
 
-function getQueryClientConfig(config: MinderConfig) {
+export function getQueryClientConfig(config: MinderConfig) {
   return {
     defaultOptions: {
       queries: {
@@ -71,12 +71,12 @@ function getQueryClientConfig(config: MinderConfig) {
         gcTime: config.cache?.gcTime || 10 * 60 * 1000,
         refetchOnWindowFocus: config.cache?.refetchOnWindowFocus ?? false,
         refetchOnReconnect: config.cache?.refetchOnReconnect ?? true,
-        retry: config.performance?.retries || 3,
-        retryDelay: config.performance?.retryDelay || 1000,
+        retry: config.performance?.retries ?? 1,
+        retryDelay: config.performance?.retryDelay ?? 1000,
         enabled: typeof window !== "undefined" || !config.ssr?.enabled,
       },
       mutations: {
-        retry: config.performance?.retries || 1,
+        retry: config.performance?.retries ?? 1,
       },
     },
   };
@@ -161,11 +161,11 @@ export function MinderDataProvider({
         gcTime: finalConfig.cache?.gcTime || 10 * 60 * 1000,
         refetchOnWindowFocus: finalConfig.cache?.refetchOnWindowFocus ?? false,
         refetchOnReconnect: finalConfig.cache?.refetchOnReconnect ?? true,
-        retry: finalConfig.performance?.retries || 3,
-        retryDelay: finalConfig.performance?.retryDelay || 1000,
+        retry: finalConfig.performance?.retries ?? 1,
+        retryDelay: finalConfig.performance?.retryDelay ?? 1000,
       },
       mutations: {
-        retry: finalConfig.performance?.retries || 1,
+        retry: finalConfig.performance?.retries ?? 1,
       },
     });
 
