@@ -10,6 +10,12 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    # The default GITHUB_TOKEN is read-only in this repo, so the final push to
+    # the .wiki.git 403'd — the wiki-sync had been failing on every run. Grant
+    # write so the token can push the wiki. (If it still fails, a PAT secret
+    # with repo scope is the fallback.)
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - name: Sync Wiki
