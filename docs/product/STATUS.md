@@ -82,20 +82,23 @@ npm install churn) — use worktree isolation for overlapping-file waves in M1.
 | SEC-01: fail-closed auth + safe CORS defaults | Branch `fix/fail-closed-auth-and-cors-default`, 8 commits, 86 suites / 1592 tests green, plan doc with ticked verification checklist |
 | Product foundation artifacts (this directory) | BRIEF, SUPPORT_MATRIX, RISKS_AND_THREAT_MODEL, ROADMAP, BACKLOG |
 
-## Open blockers (decisions needed from owner)
+## Open blockers (owner-only)
 
-1. **SEC-01 branch disposition** — push + PR to main, or merge locally. Unblocks: M0 work stacking on it.
-2. **R-01: evolve-in-place vs greenfield monorepo** — recommendation: evolve in place, split packages at M2. Unblocks: M2 planning detail.
+1. **GitHub secret-scanning unblock click** — pushes to origin/dev blocked until done; all work
+   continues locally. (Historic decisions SEC-01/R-01: resolved 2026-07-18 — merged to dev,
+   evolve-in-place confirmed.)
 
-## Next exact task
+## Next exact task (autonomous cycle)
 
-M0-01 (remove preflight-forcing request headers) — smallest change, largest measured impact.
-Execute via a written plan (superpowers:writing-plans) + TDD, same protocol as SEC-01.
+Integrate S-03 (Supabase certification wave, in flight) → then Plan C (Stripe,
+docs/superpowers/plans/2026-07-19-stripe-provider-plan.md) → Clerk → Firebase →
+Razorpay + Sentry. Same wave protocol throughout.
 
 ## Assumptions awaiting validation
 
-- Personas P1/P2 and provider priority order (Supabase → Stripe) are **Inferred** — task R-02.
-- "Core bundle <80KB after M0-06" is an estimate from the packaging audit's splitting analysis, not yet measured.
+- Personas P1/P2 and provider priority order are **Inferred** — task R-02 (developer interviews).
+- Supabase "Certified" claim covers mock-mode example + contract tests; live-service E2E requires
+  real credentials and is explicitly out of CI.
 
 ## Security-sensitive areas (touch with review)
 
