@@ -12,3 +12,6 @@ export * from '../ssr/index.js';
 
 // Server-side utilities
 export { createSSRConfig, prefetchData, withSSR } from '../ssr/index.js';
+
+// Enums (also re-exported directly - see platforms/web.ts)
+export { HttpMethod } from '../constants/enums.js';

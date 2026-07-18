@@ -35,7 +35,15 @@ export interface MinderConfig {
   /** CORS helper configuration - Does NOT bypass CORS, only adds helpful client-side features */
   corsHelper?: CorsHelperConfig;
   websocket?: WebSocketConfig;
-  redux?: ReduxConfig;
+  /**
+   * Redux integration (react-redux + @reduxjs/toolkit are OPTIONAL peer
+   * dependencies). When those packages aren't installed, Redux is skipped
+   * automatically regardless of this flag.
+   * - `undefined` (default) = auto: enable Redux if the optional peers are installed.
+   * - `false` = explicitly disable Redux even if the optional peers are installed.
+   * - `ReduxConfig` object = enable Redux (if available) with the given options.
+   */
+  redux?: ReduxConfig | false;
   performance?: PerformanceConfig;
   debug?: DebugConfig;
   security?: SecurityConfig;

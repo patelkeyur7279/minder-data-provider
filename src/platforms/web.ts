@@ -8,6 +8,10 @@
 export { minder, configureMinder } from '../core/minder.js';
 export { useMinder } from '../hooks/useMinder.js';
 
+// Enums (re-exported directly so platform-entry consumers don't need to
+// reach into `constants/enums.js` themselves)
+export { HttpMethod } from '../constants/enums.js';
+
 // Platform detection
 export { PlatformDetector } from '../platform/PlatformDetector.js';
 export { PlatformCapabilityDetector } from '../platform/PlatformCapabilities.js';
