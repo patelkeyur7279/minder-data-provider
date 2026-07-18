@@ -20,6 +20,43 @@ import type { NetworkState, QueuedRequest, SyncStats, OfflineConfig } from './ty
 const logger = new Logger('OfflineManager', { level: LogLevel.WARN });
 
 /**
+ * Point-in-time snapshot of OfflineManager state, delivered to subscribers
+ * via {@link OfflineManager.subscribe}.
+ */
+export interface OfflineManagerSnapshot {
+  /**
+   * Is currently online
+   */
+  isOnline: boolean;
+
+  /**
+   * Is currently syncing
+   */
+  isSyncing: boolean;
+
+  /**
+   * Current network state
+   */
+  networkState: NetworkState;
+
+  /**
+   * Queued requests
+   */
+  queue: QueuedRequest[];
+
+  /**
+   * Queue size
+   */
+  queueSize: number;
+}
+
+/**
+ * Listener invoked whenever OfflineManager state transitions
+ * (network changes, sync start/complete, queue add/remove/clear).
+ */
+export type OfflineManagerListener = (snapshot: OfflineManagerSnapshot) => void;
+
+/**
  * OfflineManager - Manages offline request queue and sync
  */
 export class OfflineManager {
@@ -32,6 +69,7 @@ export class OfflineManager {
   private isSyncing = false;
   private syncPromise: Promise<SyncStats> | null = null;
   private netInfoUnsubscribe?: () => void;
+  private listeners = new Set<OfflineManagerListener>();
 
   constructor(config: OfflineConfig = {}) {
     this.config = {
@@ -208,6 +246,7 @@ Web: Using basic online/offline detection
     const wasOffline = !this.networkState.isConnected;
     this.networkState = state;
     this.config.onNetworkChange(state);
+    this.notify();
 
     // Auto-sync when coming back online
     if (wasOffline && state.isConnected && this.config.autoSync) {
@@ -258,6 +297,7 @@ Web: Using basic online/offline detection
     await this.saveQueue();
 
     this.config.onRequestQueued(request);
+    this.notify();
 
     return request.id;
   }
@@ -273,6 +313,7 @@ Web: Using basic online/offline detection
 
     this.queue.splice(index, 1);
     await this.saveQueue();
+    this.notify();
     return true;
   }
 
@@ -296,6 +337,7 @@ Web: Using basic online/offline detection
   async clearQueue(): Promise<void> {
     this.queue = [];
     await this.saveQueue();
+    this.notify();
   }
 
   /**
@@ -320,6 +362,47 @@ Web: Using basic online/offline detection
   }
 
   /**
+   * Subscribe to offline manager state changes (network state, sync status,
+   * and queue mutations). The listener is invoked with a fresh snapshot
+   * whenever one of those transitions occurs.
+   *
+   * @returns An unsubscribe function.
+   */
+  subscribe(listener: OfflineManagerListener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  /**
+   * Get a point-in-time snapshot of offline state (network, sync, queue).
+   */
+  getSnapshot(): OfflineManagerSnapshot {
+    return {
+      isOnline: this.isOnline(),
+      isSyncing: this.isSyncing,
+      networkState: this.getNetworkState(),
+      queue: this.getQueue(),
+      queueSize: this.getQueueSize(),
+    };
+  }
+
+  /**
+   * Notify subscribers of a state transition.
+   */
+  private notify(): void {
+    if (this.listeners.size === 0) {
+      return;
+    }
+
+    const snapshot = this.getSnapshot();
+    for (const listener of this.listeners) {
+      listener(snapshot);
+    }
+  }
+
+  /**
    * Sync queued requests
    */
   async sync(): Promise<SyncStats> {
@@ -337,6 +420,7 @@ Web: Using basic online/offline detection
 
     this.isSyncing = true;
     this.config.onSyncStart();
+    this.notify();
 
     const startTime = Date.now();
     const stats: SyncStats = {
@@ -356,6 +440,7 @@ Web: Using basic online/offline detection
     } finally {
       this.isSyncing = false;
       this.syncPromise = null;
+      this.notify();
     }
   }
 
