@@ -39,3 +39,11 @@ export function resolveSecret(ref: SecretRef | string): string {
 }
 
 export { secret, env, SecretRef, isSecretRef, redactSecrets, findExposedSecrets } from './security/secrets.js';
+
+// ── Web-standard server handler core (F-02) ─────────────────────────────────
+// Edge-safe handler types + JSON helper, HMAC webhook verification, and the
+// Node mount adapter. `toNodeHandler` is re-exported by name (its `http`
+// dependency is type-only, so this stays edge-importable).
+export * from './server/handlers.js';
+export * from './server/webhooks.js';
+export { toNodeHandler } from './server/nodeMount.js';
