@@ -66,6 +66,12 @@ Proof: controlled experiment (guard fails on broken build, 15/15 on fixed) + rea
 of the example app with zero console errors. Debug agent was killed mid-task by a session limit;
 orchestrator completed the validation half inline.
 
+**VISION REFINEMENT (owner, 2026-07-19):** Core identity = the data layer between UI and ANY
+source (backend / local db / server / anything): one-API-call demo → enterprise, every React
+platform (web/mobile/desktop), usable by low-experience developers. Pillars: Performance,
+Reliability, Ease of use, Simple config, Documentation. **AI integration layer explicitly
+de-prioritized (not now).** Provider expansion continues only via community path + certification.
+
 **PROVIDER PLATFORM COMPLETE (2026-07-19) — ALL 6 ROADMAP PROVIDERS CERTIFIED.**
 Foundation (Plan A) + Supabase, Stripe, Clerk, Firebase, Razorpay, Sentry — each 10/10
 certification, mock-mode example browser-verified, secret-sentinel tested. Catalog Planned column
