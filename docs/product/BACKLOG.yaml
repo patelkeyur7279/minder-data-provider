@@ -23,6 +23,11 @@ tasks:
     type: documentation
     status: verified
     evidence: "2026-07-19 audit: error DX already meets the bar — config-missing throw states both fixes + absolute-URL exemption; NO_PROVIDER_FOR_CAPABILITY names the capability + links the real catalog; no other bare [Minder] throws in hot paths. One real defect (dead CONFIG_REFERENCE.md link) fixed + guarded in 8e411e6. No make-work manufactured."
+  - id: J-02
+    title: "Local-first discoverability: docs/LOCAL_FIRST.md + example page + README link"
+    type: documentation
+    status: verified
+    evidence: "2026-07-19: Stage-3 accuracy review (all claims source-verified incl. metadata.cached path, no dead links, no overclaiming); fresh-tarball build + curl 200 + browser render; gate 2173/0."
   - id: WAVE-H
     title: "Wave H platform certification (H-01 adapter tests, H-02 platform HttpMethod fix + guard, H-04 honest matrix; H-03 RN-web run NOT produced — toolchain)"
     type: implementation
