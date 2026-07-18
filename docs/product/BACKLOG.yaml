@@ -201,6 +201,12 @@ tasks:
     status: verified
     evidence: "2026-07-19: CERTIFIED — same plan; plugin-based (not capability contract); browser-verified mock error capture; graceful SDK-absent degrade; over-forward sentinel (drops request headers/body)"
 
+  - id: G-04
+    title: "docs/development/ staleness pass: LOCAL_TESTING_GUIDE references deleted demo/ + test-local-package.sh; ADVANCED_FEATURES_TESTING_GUIDE demo step; jest testPathIgnorePatterns lists /demo/"
+    type: documentation
+    status: ready
+    evidence_basis: "G-01 Stage-3 review asides (inert, pre-existing)"
+
   # ---- Research / decisions ----
   - id: R-01
     title: "DECISION (owner): evolve-in-place vs greenfield monorepo"
