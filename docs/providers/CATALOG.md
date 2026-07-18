@@ -15,7 +15,9 @@ Providers on the Minder roadmap. These are not yet available — they follow the
 
 ## Certified Providers
 
-(none yet)
+| displayName | Categories | Runtimes | Frameworks |
+|---|---|---|---|
+| Supabase | auth, database, storage | web, node, edge | react, nextjs, vite |
 
 ## Community Providers
 
@@ -27,7 +29,6 @@ The following providers are on the Minder roadmap and are not yet available. The
 
 | Provider | Status |
 |---|---|
-| Supabase | not yet available — follows the certification process |
 | Stripe | not yet available — follows the certification process |
 | Clerk | not yet available — follows the certification process |
 | Firebase | not yet available — follows the certification process |

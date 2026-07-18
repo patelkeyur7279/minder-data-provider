@@ -27,12 +27,11 @@ const path = require('path');
 
 const REPO_ROOT = path.join(__dirname, '..');
 
-// Certified provider names (currently empty; nothing is certified yet)
-const CERTIFIED = [];
+// Certified provider names (manifest "name" field)
+const CERTIFIED = ['@minder/provider-supabase'];
 
 // Planned providers with roadmap info
 const PLANNED = [
-  { name: 'Supabase' },
   { name: 'Stripe' },
   { name: 'Clerk' },
   { name: 'Firebase' },

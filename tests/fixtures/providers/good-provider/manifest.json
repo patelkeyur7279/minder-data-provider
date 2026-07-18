@@ -1,7 +1,7 @@
 {
-  "name": "@minder/provider-supabase",
+  "name": "@example/provider-fixture",
   "version": "1.0.0",
-  "displayName": "Supabase",
+  "displayName": "Fixture Provider",
   "categories": ["database", "auth"],
   "capabilities": ["auth-provider", "storage", "realtime-subscriptions"],
   "config": {

@@ -232,7 +232,7 @@ describe('manifest-based mock (M1-05 createMockProvider) wired through registerM
     const manifestPath = path.join(__dirname, 'fixtures', 'providers', 'good-provider', 'manifest.json');
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as ProviderManifest;
 
-    expect(manifest.name).toBe('@minder/provider-supabase');
+    expect(manifest.name).toBe('@example/provider-fixture');
 
     const onRequest = jest.fn(async () => undefined);
     const provideToken = jest.fn(async () => 'mock-token');

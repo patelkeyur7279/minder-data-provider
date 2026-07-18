@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { useMinder } from "minder-data-provider/nextjs";
 
 interface User {
@@ -23,6 +24,9 @@ export default function Home() {
     <main>
       <h1>Minder Data Provider — Next.js example</h1>
       <p>Rendered via useMinder(&quot;users&quot;) against a local /api/users route.</p>
+      <p>
+        <Link href="/supabase">See the Supabase provider demo (mock mode, zero keys) &rarr;</Link>
+      </p>
       <ul>
         {users.map((user) => (
           <li key={user.id}>

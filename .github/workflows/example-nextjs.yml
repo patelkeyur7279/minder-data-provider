@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'src/**'
+      - 'providers/**'
       - 'package.json'
       - 'tsup.config.ts'
       - 'examples/nextjs-app/**'

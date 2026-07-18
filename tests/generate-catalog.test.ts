@@ -46,8 +46,8 @@ describe('generate-catalog', () => {
     it('should load and return valid manifest', () => {
       const manifest = loadManifest(path.join(goodProviderDir, 'manifest.json'));
       expect(manifest).not.toBeNull();
-      expect(manifest?.name).toBe('@minder/provider-supabase');
-      expect(manifest?.displayName).toBe('Supabase');
+      expect(manifest?.name).toBe('@example/provider-fixture');
+      expect(manifest?.displayName).toBe('Fixture Provider');
     });
 
     it('should return null for invalid manifest (with warning)', () => {
@@ -254,8 +254,13 @@ describe('generate-catalog', () => {
         dryRun: true,
       });
       expect(result.community).toBeGreaterThan(0);
-      expect(result.certified).toBe(0);
-      expect(result.content).toContain('Supabase');
+      // The real providers/supabase manifest is always scanned (providersDir is
+      // unconditional) and @minder/provider-supabase is now in CERTIFIED, so at
+      // least that one provider is certified — never assert an exact count here,
+      // for the same "future providers may certify" reason as the community check
+      // below.
+      expect(result.certified).toBeGreaterThanOrEqual(1);
+      expect(result.content).toContain('Fixture Provider');
     });
 
     it('should skip invalid manifest with warning', () => {
@@ -385,10 +390,11 @@ describe('generate-catalog', () => {
       expect(Array.isArray(CERTIFIED)).toBe(true);
     });
 
-    it('should have PLANNED with 6 providers', () => {
+    it('should have PLANNED with 5 providers', () => {
       expect(Array.isArray(PLANNED)).toBe(true);
-      expect(PLANNED.length).toBe(6);
-      expect(PLANNED.map((p) => p.name)).toContain('Supabase');
+      expect(PLANNED.length).toBe(5);
+      // Supabase graduated to CERTIFIED (S-03) and is no longer planned.
+      expect(PLANNED.map((p) => p.name)).not.toContain('Supabase');
       expect(PLANNED.map((p) => p.name)).toContain('Stripe');
       expect(PLANNED.map((p) => p.name)).toContain('Clerk');
       expect(PLANNED.map((p) => p.name)).toContain('Firebase');
