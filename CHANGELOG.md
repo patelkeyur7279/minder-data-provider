@@ -109,6 +109,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   progress ticks no longer re-render every hook instance (progress reads are
   getter-based). Memoized children and effect deps now behave.
 
+### Added (M1 — integration foundation)
+
+- **Zero-config calls.** `useMinder('https://api.example.com/users')` works with
+  no provider and no `configureMinder`; with just `configureMinder({ apiUrl })`,
+  any `'/path'` works — the routes registry is now optional.
+- **`error.raw`.** Every error surface (result-mode `error`, `throwOnError`
+  throws, provider and standalone) exposes the original underlying error
+  (e.g. the `AxiosError`) via `.raw`.
+- **`ApiClient.getAxiosInstance()`** — documented escape hatch to the live
+  axios instance.
+- **Config validation.** `configureMinder` now validates against a schema and
+  throws one aggregated error listing every problem with a `Fix:` line;
+  unknown keys get nearest-key suggestions. Server-only config keys holding
+  raw (non-`secret()`) values hard-fail in browser environments.
+- **`npm run generate:env-example`** — scans the code for env usages and
+  writes a placeholder-only `.env.example`.
+- **Provider manifest + certification.** `ProviderManifest` schema
+  (`defineProviderManifest`, `validateProviderManifest`) and
+  `npm run certify:provider <dir>` validating a provider package against the
+  10-point certification checklist (see docs/providers/CERTIFICATION.md).
+- **Runnable Next.js example app** (`examples/nextjs-app`) consuming the
+  packed tarball, with a CI workflow building it on PRs.
+
+### Known issues
+
+- `react-redux`/`@reduxjs/toolkit` are declared optional peers but
+  `MinderDataProvider` still imports them unconditionally — consumers must
+  install them until the Redux layer becomes lazy (tracked as M1-07).
+
 ### Added
 
 - `createCorsMiddleware(options)` factory (rejects credentials + wildcard).
