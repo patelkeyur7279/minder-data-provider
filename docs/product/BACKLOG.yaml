@@ -130,6 +130,22 @@ tasks:
     evidence_basis: "M1-06 example app: MinderDataProvider imports react-redux/@reduxjs/toolkit unconditionally while peerDependenciesMeta marks them optional — consumers without them get module-not-found; HttpMethod missing from platform subpath exports"
     acceptance: "Example app builds WITHOUT react-redux/@reduxjs/toolkit installed; store constructed only when redux is present/configured; deprecated useReduxSlice/useStore degrade with clear error; HttpMethod importable from /nextjs and /web"
 
+
+  # ---- M2-00: Provider platform foundation (Plan A — complete) ----
+  - id: F-0107
+    title: "Foundation F-01..F-07: credential model, edge-safe handler core + HMAC webhooks, capability contracts, mock mode, minder CLI, catalog, edge guard"
+    type: implementation
+    status: verified
+    evidence: "Foundation 2026-07-18/19: orchestrator-verified — 109 suites/1909 tests/0 failed with coverage gate, tsc clean, lint 0 errors, build OK; edge-safety + dist-interop guards green; webhook crypto spot-reviewed (subtle.verify only)"
+    spec: docs/superpowers/specs/2026-07-18-provider-platform-design.md
+    plan: docs/superpowers/plans/2026-07-18-provider-foundation-plan.md
+  - id: F-08
+    title: "configureMinder must propagate providers config into the stored global MinderConfig (buildFullConfig has no providers handling)"
+    type: bug
+    status: ready
+    evidence_basis: "Found by F-04: getProviderConfig global fallback works only via direct setGlobalMinderConfig; wave-2 Supabase needs the round-trip"
+    acceptance: "configureMinder({providers}) round-trips through getGlobalMinderConfig; getProviderConfig reads it; tests"
+
   # ---- M2: First providers ----
   - id: M2-01
     title: Supabase provider (auth+db+storage)
