@@ -191,6 +191,103 @@ describe('F-02 webhook verification', () => {
   });
 });
 
+describe('F-02 parseSignatureHeader extension (Stripe-style packed header)', () => {
+  // Parse a Stripe-style `t=<ts>,v1=<hex>` header into { signature, timestamp }.
+  function parsePackedSig(raw: string): { signature: string; timestamp?: string } | null {
+    let t: string | undefined;
+    let v1: string | undefined;
+    for (const part of raw.split(',')) {
+      const idx = part.indexOf('=');
+      if (idx === -1) continue;
+      const k = part.slice(0, idx).trim();
+      const v = part.slice(idx + 1).trim();
+      if (k === 't') t = v;
+      else if (k === 'v1' && v1 === undefined) v1 = v;
+    }
+    if (!t || !v1) return null;
+    return { signature: v1, timestamp: t };
+  }
+
+  it('verifies end-to-end with a parser: t=<ts>,v1=<hex> over `${t}.${body}` → 200', async () => {
+    const body = JSON.stringify({ event: 'checkout.session.completed', amount: 4200 });
+    const ts = String(Math.floor(Date.now() / 1000));
+    const sig = await signHex(FAKE_SECRET, `${ts}.${body}`);
+
+    const onEvent = jest.fn(async () => {});
+    const handler = createWebhookHandler({
+      secret: credential(),
+      signatureHeader: 'stripe-signature',
+      algorithm: 'hmac-sha256',
+      parseSignatureHeader: parsePackedSig,
+      payloadFormat: (b, t) => `${t}.${b}`,
+      onEvent,
+    });
+
+    const res = await handler(
+      makeRequest(body, { 'stripe-signature': `t=${ts},v1=${sig}` })
+    );
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({ received: true });
+    expect(onEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects with 401 WEBHOOK_TIMESTAMP_STALE when the parsed timestamp is stale (staleness enforced from the parser)', async () => {
+    const body = JSON.stringify({ ok: true });
+    const staleTs = String(Math.floor(Date.now() / 1000) - 10_000);
+    const sig = await signHex(FAKE_SECRET, `${staleTs}.${body}`); // authentic signature
+
+    const handler = createWebhookHandler({
+      secret: credential(),
+      signatureHeader: 'stripe-signature',
+      algorithm: 'hmac-sha256',
+      timestampToleranceSec: 300,
+      parseSignatureHeader: parsePackedSig,
+      payloadFormat: (b, t) => `${t}.${b}`,
+      onEvent: async () => {},
+    });
+
+    const res = await handler(makeRequest(body, { 'stripe-signature': `t=${staleTs},v1=${sig}` }));
+    expect(res.status).toBe(401);
+    await expect(res.json()).resolves.toMatchObject({ code: 'WEBHOOK_TIMESTAMP_STALE' });
+  });
+
+  it('returns 400 WEBHOOK_SIGNATURE_MALFORMED when the parser returns null', async () => {
+    const handler = createWebhookHandler({
+      secret: credential(),
+      signatureHeader: 'stripe-signature',
+      algorithm: 'hmac-sha256',
+      parseSignatureHeader: parsePackedSig,
+      onEvent: async () => {},
+    });
+
+    // Header has no `v1=` segment → parser returns null → malformed.
+    const res = await handler(makeRequest('{}', { 'stripe-signature': 't=123' }));
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({ code: 'WEBHOOK_SIGNATURE_MALFORMED' });
+  });
+
+  it('regression: WITHOUT a parser, the default path is unchanged (whole header is the hex signature, timestamp from timestampHeader)', async () => {
+    const body = JSON.stringify({ default: 'path' });
+    const ts = String(Math.floor(Date.now() / 1000));
+    const sig = await signHex(FAKE_SECRET, `${ts}.${body}`);
+
+    const onEvent = jest.fn(async () => {});
+    const handler = createWebhookHandler({
+      secret: credential(),
+      signatureHeader: SIG_HEADER,
+      timestampHeader: TS_HEADER,
+      algorithm: 'hmac-sha256',
+      onEvent,
+    });
+
+    // No parseSignatureHeader: the raw hex sig is the whole header value.
+    const res = await handler(makeRequest(body, { [SIG_HEADER]: sig, [TS_HEADER]: ts }));
+    expect(res.status).toBe(200);
+    expect(onEvent).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('F-02 constant-time source inspection', () => {
   it('webhooks.ts never string-compares signatures and never uses require()', () => {
     const source = readFileSync(join(__dirname, '../src/server/webhooks.ts'), 'utf8');

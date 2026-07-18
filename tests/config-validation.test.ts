@@ -288,6 +288,55 @@ describe('registerClientSafeProviderKeys — certified-provider clientSafe allow
   });
 });
 
+describe('registerClientSafeProviderKeys — Stripe certified provider', () => {
+  // Default jest env here is jsdom, so `window` is defined and the browser-only
+  // suspicious-key walker runs. Reset the module-level registry after each test.
+  afterEach(() => {
+    __resetClientSafeProviderKeys();
+  });
+
+  it('a raw secretKey under providers.stripe hard-fails once stripe registers its clientSafe keys', () => {
+    // Register stripe's client-safe allowlist (as providers/stripe/src/index.ts does
+    // at module scope): publishableKey + checkoutPath are exempt, marking stripe
+    // "certified" so any other credential-shaped key must be a secret().
+    registerClientSafeProviderKeys('stripe', ['publishableKey', 'checkoutPath']);
+
+    const result = validateMinderConfig({
+      apiUrl: 'https://api.example.com',
+      providers: { stripe: { secretKey: 'sk_raw_value_leaking_into_the_bundle' } },
+    });
+
+    expect(result.valid).toBe(false);
+    const err = result.errors.find((e) => e.key === 'providers.stripe.secretKey');
+    expect(err).toBeDefined();
+    expect(err!.level).toBe('error');
+    expect(err!.fix).toMatch(/secret\(/);
+  });
+
+  it('a raw publishableKey (public by design) passes because it is registered client-safe', () => {
+    registerClientSafeProviderKeys('stripe', ['publishableKey', 'checkoutPath']);
+
+    const result = validateMinderConfig({
+      apiUrl: 'https://api.example.com',
+      providers: { stripe: { publishableKey: 'pk_test_public_key', checkoutPath: '/api/minder/stripe/checkout' } },
+    });
+
+    expect(result.errors.find((e) => e.key === 'providers.stripe.publishableKey')).toBeUndefined();
+    expect(result.errors.find((e) => e.key === 'providers.stripe.checkoutPath')).toBeUndefined();
+    expect(result.valid).toBe(true);
+  });
+
+  it('secretKey wrapped in secret() passes even for the certified stripe provider', () => {
+    registerClientSafeProviderKeys('stripe', ['publishableKey', 'checkoutPath']);
+    const result = validateMinderConfig({
+      apiUrl: 'https://api.example.com',
+      providers: { stripe: { secretKey: secret('STRIPE_SECRET_KEY') } },
+    });
+    expect(result.errors.find((e) => e.key === 'providers.stripe.secretKey')).toBeUndefined();
+    expect(result.valid).toBe(true);
+  });
+});
+
 describe('configureMinder — wired validation', () => {
   it('still throws the original message when apiUrl is entirely missing (existing behavior preserved)', () => {
     // @ts-expect-error - intentionally invalid for the runtime check

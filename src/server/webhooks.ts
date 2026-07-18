@@ -16,8 +16,11 @@
  *     dynamic `import()` may inject the resolver through the internal
  *     `_credentialResolver` seam (never a synchronous CommonJS loader here).
  *
- * Signature encoding: the signature header value is expected to be a HEX-encoded
- * HMAC-SHA256 digest (64 lowercase/uppercase hex chars). Malformed hex → 400.
+ * Signature encoding: by default the signature header value is expected to be a
+ * HEX-encoded HMAC-SHA256 digest (64 lowercase/uppercase hex chars); malformed
+ * hex → 400. Providers whose header PACKS more than the bare signature (e.g.
+ * Stripe's `t=<ts>,v1=<hex>`) supply `parseSignatureHeader` to extract the hex
+ * signature (and, optionally, a timestamp) from the raw header value.
  */
 import type { CredentialInput } from '../security/credentials.js';
 import type { MinderHandler } from './handlers.js';
@@ -43,6 +46,17 @@ export interface WebhookVerifyOptions {
    * Default: `timestamp ? `${timestamp}.${body}` : body`.
    */
   payloadFormat?: (body: string, timestamp?: string) => string;
+  /**
+   * Optional parser for providers (e.g. Stripe) that pack the hex signature AND a
+   * timestamp into a SINGLE header value (`stripe-signature: t=<ts>,v1=<hex>`).
+   * When supplied, it is run on the RAW `signatureHeader` value to yield the hex
+   * signature (+ optional timestamp) — instead of treating the whole header as the
+   * hex signature and reading the timestamp from `timestampHeader`. Returning
+   * `null` marks the header malformed (→ 400 `WEBHOOK_SIGNATURE_MALFORMED`). When
+   * it returns a `timestamp`, staleness is enforced against `timestampToleranceSec`
+   * (no separate `timestampHeader` needed). When omitted, behavior is UNCHANGED.
+   */
+  parseSignatureHeader?: (raw: string) => { signature: string; timestamp?: string } | null;
 }
 
 const defaultPayloadFormat = (body: string, timestamp?: string): string =>
@@ -128,18 +142,41 @@ export function createWebhookHandler(
       );
     }
 
-    // 2) Signature must be valid hex.
-    const sigBytes = hexToBytes(sigHeader.trim());
+    // 2) Extract the hex signature (and optional timestamp). When a
+    //    `parseSignatureHeader` is supplied (e.g. Stripe packs `t=…,v1=…` into a
+    //    single header), it runs on the RAW header value to yield the hex signature
+    //    + timestamp; returning null means the header is malformed. Without a
+    //    parser the default behavior is UNCHANGED: the whole header is the hex
+    //    signature and the timestamp (if any) comes from `timestampHeader`.
+    let signatureHex: string;
+    let timestamp: string | undefined;
+    let timestampFromParser = false;
+
+    if (opts.parseSignatureHeader) {
+      const parsed = opts.parseSignatureHeader(sigHeader);
+      if (!parsed) {
+        return jsonResponse(
+          { error: 'Malformed webhook signature header.', code: 'WEBHOOK_SIGNATURE_MALFORMED' },
+          { status: 400 }
+        );
+      }
+      signatureHex = parsed.signature;
+      timestamp = parsed.timestamp;
+      timestampFromParser = true;
+    } else {
+      signatureHex = sigHeader.trim();
+      timestamp =
+        opts.timestampHeader != null ? req.headers.get(opts.timestampHeader) ?? undefined : undefined;
+    }
+
+    // 3) Signature must be valid hex.
+    const sigBytes = hexToBytes(signatureHex.trim());
     if (!sigBytes) {
       return jsonResponse(
         { error: 'Malformed webhook signature header.', code: 'WEBHOOK_SIGNATURE_MALFORMED' },
         { status: 400 }
       );
     }
-
-    // 3) Optional timestamp (used both for the signed payload and staleness).
-    const timestamp =
-      opts.timestampHeader != null ? req.headers.get(opts.timestampHeader) ?? undefined : undefined;
 
     // 4) Resolve the signing secret per-request (lazy import → no load-order coupling).
     let secretValue: string;
@@ -183,8 +220,13 @@ export function createWebhookHandler(
       );
     }
 
-    // 6) Timestamp tolerance — only after the request is proven authentic.
-    if (opts.timestampHeader != null && toleranceSec > 0) {
+    // 6) Timestamp tolerance — only after the request is proven authentic. Runs
+    //    when the timestamp came from a configured `timestampHeader` (default
+    //    behavior, unchanged) or from a `parseSignatureHeader` that supplied one.
+    const enforceTimestamp =
+      toleranceSec > 0 &&
+      (opts.timestampHeader != null || (timestampFromParser && timestamp != null));
+    if (enforceTimestamp) {
       const ts = timestamp != null ? Number.parseInt(timestamp, 10) : Number.NaN;
       const nowSec = Math.floor(Date.now() / 1000);
       if (Number.isNaN(ts) || Math.abs(nowSec - ts) > toleranceSec) {
