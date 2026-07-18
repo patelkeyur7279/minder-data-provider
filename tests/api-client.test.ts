@@ -103,10 +103,15 @@ describe('ApiClient', () => {
     it('should create axios instance with correct config', () => {
       new ApiClient(config, mockAuthManager);
 
+      // M0-01: withCredentials is opt-in (config.cors.credentials === true),
+      // not a `true`-by-default. Defaulting it on would send credentials on
+      // cross-origin requests without the app ever asking for it, and combined
+      // with non-safelisted headers it inflates every cross-origin call with
+      // a CORS preflight OPTIONS round-trip.
       expect(mockedAxios.create).toHaveBeenCalledWith({
         baseURL: 'http://api.example.com',
         timeout: 30000,
-        withCredentials: true,
+        withCredentials: false,
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',

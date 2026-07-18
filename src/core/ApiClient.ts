@@ -17,8 +17,7 @@ import {
 import {
   CSRFTokenManager,
   XSSSanitizer,
-  RateLimiter,
-  getSecurityHeaders
+  RateLimiter
 } from '../utils/security.js';
 import { CorsManager, handleCorsError } from '../utils/corsManager.js';
 import {
@@ -185,15 +184,28 @@ export class ApiClient {
     // Use proxy baseURL if enabled, otherwise use original
     const baseURL = proxyManager?.isEnabled() ? proxyManager.config.baseUrl : config.apiBaseUrl;
 
-    // Create axios instance with CORS support
+    // Create axios instance with CORS support.
+    //
+    // IMPORTANT: default request headers here must stay within the CORS
+    // "safelisted" set (Content-Type: application/json is safelisted;
+    // Accept always is). Response-type security headers (CSP, X-Frame-Options,
+    // etc. — see getSecurityHeaders() in utils/security.ts) must NEVER be
+    // spread onto the request here: they are non-safelisted, so their mere
+    // presence forces the browser to perform a CORS preflight OPTIONS request
+    // before every single call, roughly doubling latency cross-origin.
+    //
+    // withCredentials defaults to false (opt-in via config.cors.credentials)
+    // for the same reason: sending credentials on cross-origin requests
+    // changes preflight requirements and requires the server to echo back a
+    // non-wildcard Access-Control-Allow-Origin, so it should be an explicit
+    // choice rather than a silent default.
     this.axiosInstance = axios.create({
       baseURL,
       timeout: config.performance?.timeout || 30000,
-      withCredentials: config.cors?.credentials ?? true,
+      withCredentials: config.cors?.credentials === true,
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        ...getSecurityHeaders(config.security?.headers, config.security?.strictCSP),
       },
     });
 
@@ -506,7 +518,10 @@ export class ApiClient {
                   ? this.config.auth.getRefreshRequestBody(refreshToken)
                   : (refreshToken ? { refreshToken } : {}),
                 {
-                  withCredentials: true, // Important for cookies
+                  // Follow the same opt-in flag as the main axios instance —
+                  // defaulting to true here would silently send credentials
+                  // cross-origin even when the app never asked for it.
+                  withCredentials: this.config.cors?.credentials === true,
                   headers
                 }
               );

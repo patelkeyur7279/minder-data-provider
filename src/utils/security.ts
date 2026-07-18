@@ -315,6 +315,23 @@ export class InputValidator {
 
 /**
  * Security Headers Configuration
+ *
+ * IMPORTANT: These are HTTP **response** headers (Content-Security-Policy,
+ * X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security,
+ * X-XSS-Protection, Referrer-Policy, Permissions-Policy) meant for your
+ * *server* to send back on its responses — they tell the browser how to
+ * treat the page/response it just received.
+ *
+ * Do NOT attach the return value of this function to outgoing HTTP
+ * *requests* (e.g. as default axios instance headers). Most of these header
+ * names are not part of the CORS-safelisted request header set, so if they
+ * are present on a request the browser is forced to perform a CORS
+ * preflight (OPTIONS) round-trip before every cross-origin call, roughly
+ * doubling request latency for no benefit (the server ignores security
+ * response-header names sent as request headers).
+ *
+ * Use this helper only to build the header object your server-side
+ * middleware/framework sends on responses.
  */
 export function getSecurityHeaders(config?: SecurityConfig['headers'], strictCSP: boolean = false): Record<string, string> {
   const headers: Record<string, string> = {};
