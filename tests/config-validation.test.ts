@@ -385,6 +385,61 @@ describe('registerClientSafeProviderKeys — Clerk certified provider', () => {
   });
 });
 
+describe('registerClientSafeProviderKeys — Razorpay certified provider', () => {
+  // Default jest env here is jsdom, so `window` is defined and the browser-only
+  // suspicious-key walker runs. Reset the module-level registry after each test.
+  afterEach(() => {
+    __resetClientSafeProviderKeys();
+  });
+
+  it('a raw keySecret under providers.razorpay hard-fails once razorpay registers its clientSafe keys', () => {
+    // Register razorpay's client-safe allowlist (as providers/razorpay/src/index.ts
+    // does at module scope): keyId + mock are exempt, marking razorpay "certified"
+    // so any other credential-shaped key must be a secret().
+    registerClientSafeProviderKeys('razorpay', ['keyId', 'mock']);
+
+    const result = validateMinderConfig({
+      apiUrl: 'https://api.example.com',
+      providers: { razorpay: { keySecret: 'raw_key_secret_leaking_into_the_bundle' } },
+    });
+
+    expect(result.valid).toBe(false);
+    const err = result.errors.find((e) => e.key === 'providers.razorpay.keySecret');
+    expect(err).toBeDefined();
+    expect(err!.level).toBe('error');
+    expect(err!.fix).toMatch(/secret\(/);
+  });
+
+  it('a raw keyId (public by design) passes because it is registered client-safe', () => {
+    registerClientSafeProviderKeys('razorpay', ['keyId', 'mock']);
+
+    const result = validateMinderConfig({
+      apiUrl: 'https://api.example.com',
+      providers: { razorpay: { keyId: 'rzp_test_public_key_id' } },
+    });
+
+    expect(result.errors.find((e) => e.key === 'providers.razorpay.keyId')).toBeUndefined();
+    expect(result.valid).toBe(true);
+  });
+
+  it('keySecret + webhookSecret wrapped in secret() pass even for the certified razorpay provider', () => {
+    registerClientSafeProviderKeys('razorpay', ['keyId', 'mock']);
+    const result = validateMinderConfig({
+      apiUrl: 'https://api.example.com',
+      providers: {
+        razorpay: {
+          keyId: 'rzp_test_public_key_id',
+          keySecret: secret('RAZORPAY_KEY_SECRET'),
+          webhookSecret: secret('RAZORPAY_WEBHOOK_SECRET'),
+        },
+      },
+    });
+    expect(result.errors.find((e) => e.key === 'providers.razorpay.keySecret')).toBeUndefined();
+    expect(result.errors.find((e) => e.key === 'providers.razorpay.webhookSecret')).toBeUndefined();
+    expect(result.valid).toBe(true);
+  });
+});
+
 describe('registerClientSafeProviderKeys — Firebase certified provider (public apiKey, server-only serviceAccount)', () => {
   // Default jest env here is jsdom, so `window` is defined and the browser-only
   // suspicious-key walker runs. Reset the module-level registry after each test.
@@ -436,6 +491,40 @@ describe('registerClientSafeProviderKeys — Firebase certified provider (public
       providers: { firebase: { serviceAccount: secret('FIREBASE_SERVICE_ACCOUNT') } },
     });
     expect(result.errors.find((e) => e.key === 'providers.firebase.serviceAccount')).toBeUndefined();
+    expect(result.valid).toBe(true);
+  });
+});
+
+describe('registerClientSafeProviderKeys — Sentry certified provider (dsn public, no serverOnly credential)', () => {
+  // Default jest env here is jsdom, so `window` is defined and the browser-only
+  // suspicious-key walker runs. Reset the module-level registry after each test.
+  afterEach(() => {
+    __resetClientSafeProviderKeys();
+  });
+
+  it('a raw dsn PASSES even without registering — "dsn" is not SUSPICIOUS_KEY-shaped', () => {
+    const result = validateMinderConfig({
+      apiUrl: 'https://api.example.com',
+      providers: { sentry: { dsn: 'https://examplePublicKey@o0.ingest.sentry.io/0' } },
+    });
+    expect(result.errors.find((e) => e.key === 'providers.sentry.dsn')).toBeUndefined();
+    expect(result.valid).toBe(true);
+  });
+
+  it('a raw dsn PASSES once sentry registers its clientSafe allowlist too (defense in depth)', () => {
+    // As providers/sentry/src/index.ts does at module scope: dsn + mock are
+    // registered client-safe. Unlike Stripe/Clerk/Firebase, Sentry has no
+    // serverOnly credential at all — the DSN is public by design (like a
+    // Firebase apiKey), so there is nothing analogous to a secretKey to assert
+    // hard-fails here.
+    registerClientSafeProviderKeys('sentry', ['dsn', 'mock']);
+
+    const result = validateMinderConfig({
+      apiUrl: 'https://api.example.com',
+      providers: { sentry: { dsn: 'https://examplePublicKey@o0.ingest.sentry.io/0', mock: false } },
+    });
+    expect(result.errors.find((e) => e.key === 'providers.sentry.dsn')).toBeUndefined();
+    expect(result.errors.find((e) => e.key === 'providers.sentry.mock')).toBeUndefined();
     expect(result.valid).toBe(true);
   });
 });

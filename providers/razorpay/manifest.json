@@ -1,0 +1,32 @@
+{
+  "name": "@minder/provider-razorpay",
+  "version": "0.1.0",
+  "displayName": "Razorpay",
+  "categories": ["payments"],
+  "capabilities": ["payments", "orders", "webhooks"],
+  "config": {
+    "clientSafe": ["keyId", "mock"],
+    "serverOnly": ["keySecret", "webhookSecret"]
+  },
+  "scopes": [
+    {
+      "scope": "orders:create",
+      "why": "Create Razorpay orders server-side (POST /v1/orders with HTTP Basic auth) when the app calls useCheckout().createCheckout(); the key secret is resolved per-request and never reaches the browser. Only the public keyId is returned for the client Checkout widget."
+    },
+    {
+      "scope": "webhooks:verify",
+      "why": "Verify inbound Razorpay webhook signatures (the 'x-razorpay-signature' hex HMAC-SHA256 header) with the webhook secret so payment events are processed only when authentic."
+    }
+  ],
+  "runtimes": ["web", "node", "edge"],
+  "frameworks": ["react", "nextjs", "vite"],
+  "peerDependencies": {
+    "razorpay": "^2.9.0"
+  },
+  "docs": {
+    "setup": "./README.md",
+    "example": "./example.ts",
+    "security": "./README.md"
+  },
+  "license": "MIT"
+}
