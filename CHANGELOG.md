@@ -109,6 +109,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   progress ticks no longer re-render every hook instance (progress reads are
   getter-based). Memoized children and effect deps now behave.
 
+### Added (provider platform foundation — wave 1)
+
+- **Typed credential model** (`CredentialInput`: env secrets via `secret()`,
+  server-config references, credential-file refs) with server-only
+  `resolveCredential()` and masked `describeCredential()`. File contents can
+  never appear in error messages (sentinel-tested). Raw secret-shaped strings
+  under `providers.*` hard-fail in browser configs naming the exact key.
+- **Edge-safe server handler core** (`minder-data-provider/server`): web-standard
+  `MinderHandler` type, `createWebhookHandler` with constant-time HMAC-SHA256
+  verification via WebCrypto (timestamp tolerance, typed 400/401 error codes),
+  and `toNodeHandler` for Express/self-hosted Node. No Node-only APIs in the
+  edge path.
+- **Capability contracts**: `useAuth()`, `useCheckout()`, `useStorage()`,
+  `useLive()` + `registerCapabilityProvider()` — one stable client contract per
+  capability, providers swappable by config; `getProviderClient()` escape hatch
+  guarantees no capability loss. **Behavior change:** `useAuth` from the root
+  entry is now the capability-contract hook (it shadows the legacy
+  AuthManager-based `useAuth`; that behavior remains available via
+  `useMinder().auth`).
+- **Provider catalog** (`docs/providers/CATALOG.md`, `npm run generate:catalog`):
+  honest Certified / Community / Planned tiers generated from manifests, with
+  per-provider runtime/framework claims.
+
 ### Added (M1 — integration foundation)
 
 - **Zero-config calls.** `useMinder('https://api.example.com/users')` works with
