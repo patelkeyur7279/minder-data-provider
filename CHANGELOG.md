@@ -76,6 +76,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   respected (`??` instead of `||`). **Migration:** set
   `performance.retries: 3` to restore the old behavior.
 
+### Changed (packaging — action may be required)
+
+- **React-context libraries are now peerDependencies.** `@tanstack/react-query`,
+  `@tanstack/query-core`, `@reduxjs/toolkit` (optional), `react-redux`
+  (optional), and `@tanstack/react-query-devtools` (optional) moved from
+  `dependencies` to `peerDependencies` with caret ranges. As hard deps they
+  could install a second copy alongside yours, breaking Redux/QueryClient
+  context. **Migration:** ensure `@tanstack/react-query` is in your own
+  dependencies (you almost certainly already have it).
+- **~73% smaller install.** Code splitting enabled: packed size 928kB → 252kB;
+  `index.mjs` 227kB → 24kB; `core.mjs` 119kB → 4kB. `sideEffects: false` added
+  for consumer tree-shaking. Dead `./core/*` and `./hooks/*` export wildcards
+  removed (they never resolved); `./hook` subpath export added.
+
+### Fixed (escape hatches & config)
+
+- **`rawUrl` and absolute URLs now work in provider mode.** Previously
+  `useMinder('https://…')` or `{rawUrl: true}` threw "Route not found" when a
+  MinderDataProvider was present. `ApiClient.request` now dispatches ad-hoc
+  URLs (absolute, `rawUrl`, or unregistered leading-slash paths) through the
+  same instance — auth, interceptors, and plugins still apply. Unknown bare
+  route names still throw.
+- **The two global configs are unified.** `configureMinder()` now feeds both
+  the routes registry and the standalone `minder()` resolver, so standalone
+  `useMinder('routeName')` finally resolves url/method/headers/timeout from
+  your registry instead of treating the name as a literal path.
+  `minder.config()` still works but warns (deprecated).
+- **`useMinder` returns are referentially stable.** `refetch`/`mutate`/
+  `invalidate`/`cancel`/`operations` and the `auth`/`cache`/`websocket`/
+  `upload` objects keep their identity across unrelated re-renders, and upload
+  progress ticks no longer re-render every hook instance (progress reads are
+  getter-based). Memoized children and effect deps now behave.
+
 ### Added
 
 - `createCorsMiddleware(options)` factory (rejects credentials + wildcard).
