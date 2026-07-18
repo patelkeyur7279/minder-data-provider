@@ -119,10 +119,10 @@ describe('minder init', () => {
 
 describe('minder add', () => {
   it('exits 1 and points at the provider catalog for an unknown provider', () => {
-    // 'clerk' is still `status: 'planned'` (unregistered) at the time of
-    // writing — see KEY_SOURCE_REGISTRY. Unlike 'stripe' (now registered
-    // below), it has no PROVIDERS entry yet.
-    const result = run(['add', 'clerk'], { cwd: tmpDir });
+    // 'firebase' is still `status: 'planned'` (unregistered) at the time of
+    // writing — see KEY_SOURCE_REGISTRY. Unlike 'stripe' and 'clerk' (now
+    // registered below), it has no PROVIDERS entry yet.
+    const result = run(['add', 'firebase'], { cwd: tmpDir });
 
     expect(result.status).toBe(1);
     const combined = result.stdout + result.stderr;
@@ -249,6 +249,75 @@ describe('minder add', () => {
     expect(webhookContent).not.toContain('// corrupted');
     expect(checkoutContent).toContain('createCheckoutHandler');
     expect(webhookContent).toContain('createStripeWebhookHandler');
+  });
+
+  const clerkVerifyRoute = 'app/api/minder/clerk/verify/route.ts';
+
+  it('add clerk scaffolds the verify route file, env var, and the experimental notice, exit 0', () => {
+    const clerk = cli.PROVIDERS.find((p: { name: string }) => p.name === 'clerk');
+    expect(clerk).toBeDefined();
+
+    const result = run(['add', 'clerk'], { cwd: tmpDir });
+
+    expect(result.status).toBe(0);
+
+    // The verify route file is written with the expected import lines.
+    const verifyPath = path.join(tmpDir, clerkVerifyRoute);
+    expect(fs.existsSync(verifyPath)).toBe(true);
+
+    const verifyContent = fs.readFileSync(verifyPath, 'utf8');
+    expect(verifyContent).toContain(
+      "import { createClerkSessionHandler } from 'minder-data-provider/providers/clerk';"
+    );
+    expect(verifyContent).toContain("import { secret } from 'minder-data-provider';");
+    expect(verifyContent).toContain('export async function POST(req: Request)');
+
+    // .env.example gains the provider's env var.
+    const envExamplePath = path.join(tmpDir, '.env.example');
+    expect(fs.existsSync(envExamplePath)).toBe(true);
+    const envExample = fs.readFileSync(envExamplePath, 'utf8');
+    expect(envExample).toContain('CLERK_SECRET_KEY');
+
+    // stdout carries the config snippet, the scaffolded file path, an
+    // explicit EXPERIMENTAL notice, and the keys URL.
+    expect(result.stdout).toContain(clerk.configSnippet.trim());
+    expect(result.stdout).toContain(clerkVerifyRoute);
+    expect(result.stdout.toUpperCase()).toContain('EXPERIMENTAL');
+    expect(result.stdout).toContain('not yet certified');
+    expect(result.stdout).toContain(clerk.keysUrl);
+  });
+
+  it('re-running add clerk without --force skips the existing route file', () => {
+    const first = run(['add', 'clerk'], { cwd: tmpDir });
+    expect(first.status).toBe(0);
+
+    const verifyPath = path.join(tmpDir, clerkVerifyRoute);
+    const verifyBefore = fs.readFileSync(verifyPath, 'utf8');
+
+    const second = run(['add', 'clerk'], { cwd: tmpDir });
+    expect(second.status).toBe(0);
+    expect(second.stdout).toContain('Skipped');
+    expect(second.stdout).toContain(clerkVerifyRoute);
+
+    expect(fs.readFileSync(verifyPath, 'utf8')).toBe(verifyBefore);
+  });
+
+  it('add clerk --force overwrites the existing route file', () => {
+    const first = run(['add', 'clerk'], { cwd: tmpDir });
+    expect(first.status).toBe(0);
+
+    const verifyPath = path.join(tmpDir, clerkVerifyRoute);
+
+    // Corrupt the file to prove --force actually rewrites it.
+    fs.writeFileSync(verifyPath, '// corrupted\n', 'utf8');
+
+    const forced = run(['add', 'clerk', '--force'], { cwd: tmpDir });
+    expect(forced.status).toBe(0);
+    expect(forced.stdout).toContain('Scaffolded route files');
+
+    const verifyContent = fs.readFileSync(verifyPath, 'utf8');
+    expect(verifyContent).not.toContain('// corrupted');
+    expect(verifyContent).toContain('createClerkSessionHandler');
   });
 });
 

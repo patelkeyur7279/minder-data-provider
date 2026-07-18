@@ -130,6 +130,11 @@
       "types": "./dist/providers/stripe.d.ts",
       "import": "./dist/providers/stripe.mjs",
       "require": "./dist/providers/stripe.js"
+    },
+    "./providers/clerk": {
+      "types": "./dist/providers/clerk.d.ts",
+      "import": "./dist/providers/clerk.mjs",
+      "require": "./dist/providers/clerk.js"
     }
   },
   "scripts": {
@@ -220,6 +225,7 @@
     "webpack-bundle-analyzer": "^4.10.2"
   },
   "peerDependencies": {
+    "@clerk/clerk-js": "^5.0.0",
     "@reduxjs/toolkit": "^2.9.2",
     "@supabase/supabase-js": "^2.0.0",
     "@tanstack/query-core": "^5.90.6",
@@ -231,6 +237,9 @@
     "stripe": "^14.0.0"
   },
   "peerDependenciesMeta": {
+    "@clerk/clerk-js": {
+      "optional": true
+    },
     "@reduxjs/toolkit": {
       "optional": true
     },

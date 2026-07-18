@@ -34,11 +34,16 @@ const distDir = path.resolve(__dirname, '../dist');
 
 // What a given entry is expected to export, and therefore which assertion
 // applies to it. 'HttpMethod' is the original dist-interop regression this
-// file guards (see header comment); 'registerSupabaseProvider' and
-// 'registerStripeProvider' are the providers/supabase and providers/stripe
-// entries' public exports — neither exports HttpMethod at all, so each gets
-// its own probe/assertion instead.
-type ExpectKind = 'HttpMethod' | 'registerSupabaseProvider' | 'registerStripeProvider';
+// file guards (see header comment); 'registerSupabaseProvider',
+// 'registerStripeProvider', and 'registerClerkProvider' are the
+// providers/supabase, providers/stripe, and providers/clerk entries' public
+// exports — none of them export HttpMethod at all, so each gets its own
+// probe/assertion instead.
+type ExpectKind =
+  | 'HttpMethod'
+  | 'registerSupabaseProvider'
+  | 'registerStripeProvider'
+  | 'registerClerkProvider';
 
 // Public entries the Next.js example (and typical consumers) import from.
 // Each is asserted in both module systems.
@@ -72,6 +77,12 @@ const entries: Array<{ name: string; cjs: string; esm: string; expect: ExpectKin
     cjs: path.join(distDir, 'providers/stripe.js'),
     esm: path.join(distDir, 'providers/stripe.mjs'),
     expect: 'registerStripeProvider',
+  },
+  {
+    name: 'providers/clerk (minder-data-provider/providers/clerk)',
+    cjs: path.join(distDir, 'providers/clerk.js'),
+    esm: path.join(distDir, 'providers/clerk.mjs'),
+    expect: 'registerClerkProvider',
   },
 ];
 

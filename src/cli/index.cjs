@@ -43,7 +43,11 @@ const KEY_SOURCE_REGISTRY = [
     keysUrl: 'https://dashboard.stripe.com/apikeys',
     status: 'experimental — minder add stripe',
   },
-  { name: 'Clerk', keysUrl: 'https://dashboard.clerk.com', status: 'planned' },
+  {
+    name: 'Clerk',
+    keysUrl: 'https://dashboard.clerk.com',
+    status: 'experimental — minder add clerk',
+  },
   { name: 'Firebase', keysUrl: 'https://console.firebase.google.com', status: 'planned' },
   {
     name: 'Razorpay',
@@ -121,6 +125,34 @@ export async function POST(req: Request) {
 }
 `;
 
+const CLERK_CONFIG_SNIPPET = `// Add this to your minder.config.ts "providers" object:
+//
+// import { secret } from 'minder-data-provider/server';
+//
+// providers: {
+//   clerk: {
+//     publishableKey: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY!,
+//     secretKey: secret('CLERK_SECRET_KEY'),
+//     mock: true, // flip to false once you've added real Clerk keys
+//   },
+// }
+`;
+
+// Next.js App Router route handler scaffolded by `minder add clerk`. Server
+// boundary: imports from 'minder-data-provider/providers/clerk' (the
+// zero-dependency session-verify handler factory) and resolves the secret
+// key via `secret(...)` from 'minder-data-provider' — never embedded as a
+// raw string in app code.
+const CLERK_VERIFY_ROUTE = `import { createClerkSessionHandler } from 'minder-data-provider/providers/clerk';
+import { secret } from 'minder-data-provider';
+
+const handler = createClerkSessionHandler({ secretKey: secret('CLERK_SECRET_KEY') });
+
+export async function POST(req: Request) {
+  return handler(req);
+}
+`;
+
 const PROVIDERS = [
   {
     name: 'supabase',
@@ -139,6 +171,14 @@ const PROVIDERS = [
       { path: 'app/api/minder/stripe/checkout/route.ts', content: STRIPE_CHECKOUT_ROUTE },
       { path: 'app/api/minder/stripe/webhook/route.ts', content: STRIPE_WEBHOOK_ROUTE },
     ],
+  },
+  {
+    name: 'clerk',
+    status: 'experimental',
+    envVars: ['CLERK_SECRET_KEY'],
+    configSnippet: CLERK_CONFIG_SNIPPET,
+    keysUrl: 'https://dashboard.clerk.com',
+    scaffoldFiles: [{ path: 'app/api/minder/clerk/verify/route.ts', content: CLERK_VERIFY_ROUTE }],
   },
 ];
 
@@ -172,11 +212,11 @@ Commands:
                              Idempotent: skips existing files unless --force.
 
   add <provider>             Scaffold a provider integration. Currently
-                             supports "supabase" and "stripe" (both
-                             EXPERIMENTAL — not yet certified; stripe also
-                             scaffolds Next.js App Router route handlers).
-                             Every other provider name exits 1 — see
-                             ${CATALOG_DOC}.
+                             supports "supabase", "stripe", and "clerk" (all
+                             EXPERIMENTAL — not yet certified; stripe and
+                             clerk also scaffold Next.js App Router route
+                             handlers). Every other provider name exits 1 —
+                             see ${CATALOG_DOC}.
 
   doctor [--config <path>]  Check that provider credentials referenced by
                              your config are present in the environment.
@@ -379,21 +419,21 @@ function cmdInit(argv, ctx) {
 // ── `minder add` ────────────────────────────────────────────────────────────
 
 /**
- * Scaffold a registered provider (currently Supabase and Stripe — see
- * `PROVIDERS`). Unknown provider names (everything not yet in `PROVIDERS`,
- * i.e. everything still `status: 'planned'` in `KEY_SOURCE_REGISTRY`) fall
- * through to the same "no certified providers" catalog message as before —
- * that message is deliberately unchanged so it still reads correctly for
- * the providers it still applies to.
+ * Scaffold a registered provider (currently Supabase, Stripe, and Clerk —
+ * see `PROVIDERS`). Unknown provider names (everything not yet in
+ * `PROVIDERS`, i.e. everything still `status: 'planned'` in
+ * `KEY_SOURCE_REGISTRY`) fall through to the same "no certified providers"
+ * catalog message as before — that message is deliberately unchanged so it
+ * still reads correctly for the providers it still applies to.
  *
  * For a registered provider this does NOT write minder.config.ts (the user
  * pastes the printed snippet in themselves) — it writes `.env.example`
  * entries for the provider's env vars, and, when the provider entry declares
- * `scaffoldFiles` (route handlers etc. — Supabase has none, Stripe does), it
- * also writes those files via `writeScaffold` (no-clobber unless --force,
- * same as `writeScaffold`'s general contract). It prints the config snippet,
- * any scaffolded file paths, and an explicit "not yet certified" notice so
- * nobody mistakes "installable" for "production ready".
+ * `scaffoldFiles` (route handlers etc. — Supabase has none, Stripe and Clerk
+ * do), it also writes those files via `writeScaffold` (no-clobber unless
+ * --force, same as `writeScaffold`'s general contract). It prints the config
+ * snippet, any scaffolded file paths, and an explicit "not yet certified"
+ * notice so nobody mistakes "installable" for "production ready".
  */
 function cmdAdd(argv, ctx) {
   const { cwd, stdout, stderr } = ctx;
