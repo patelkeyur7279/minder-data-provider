@@ -138,6 +138,7 @@
     "verify-lazy-loading": "node scripts/verify-lazy-loading.js",
     "security-audit": "npm audit --audit-level moderate",
     "generate:env-example": "node scripts/generate-env-example.js",
+    "generate:catalog": "node scripts/generate-catalog.js",
     "check-versions": "node scripts/check-peer-deps.js",
     "fix-versions": "node scripts/fix-peer-deps.js",
     "certify:provider": "node scripts/certify-provider.js",
