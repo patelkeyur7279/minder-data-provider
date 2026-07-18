@@ -135,6 +135,11 @@
       "types": "./dist/providers/clerk.d.ts",
       "import": "./dist/providers/clerk.mjs",
       "require": "./dist/providers/clerk.js"
+    },
+    "./providers/firebase": {
+      "types": "./dist/providers/firebase.d.ts",
+      "import": "./dist/providers/firebase.mjs",
+      "require": "./dist/providers/firebase.js"
     }
   },
   "scripts": {
@@ -231,6 +236,7 @@
     "@tanstack/query-core": "^5.90.6",
     "@tanstack/react-query": "^5.90.6",
     "@tanstack/react-query-devtools": "^5.90.2",
+    "firebase": "^10.0.0",
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0",
     "react-redux": "^9.2.0",
@@ -247,6 +253,9 @@
       "optional": true
     },
     "@tanstack/react-query-devtools": {
+      "optional": true
+    },
+    "firebase": {
       "optional": true
     },
     "react-redux": {

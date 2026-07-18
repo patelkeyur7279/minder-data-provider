@@ -33,6 +33,7 @@ export default defineConfig({
     'providers/supabase': 'providers/supabase/src/index.ts',
     'providers/stripe': 'providers/stripe/src/index.ts',
     'providers/clerk': 'providers/clerk/src/index.ts',
+    'providers/firebase': 'providers/firebase/src/index.ts',
 
     // Feature modules (for tree-shaking)
     'crud/index': 'src/crud/index.ts',
@@ -77,6 +78,7 @@ export default defineConfig({
     '@supabase/supabase-js',
     'stripe',
     '@clerk/clerk-js',
+    'firebase',
     // Node.js built-ins that should not be in browser bundles
     'fs',
     'path',

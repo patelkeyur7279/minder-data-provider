@@ -48,7 +48,11 @@ const KEY_SOURCE_REGISTRY = [
     keysUrl: 'https://dashboard.clerk.com',
     status: 'experimental — minder add clerk',
   },
-  { name: 'Firebase', keysUrl: 'https://console.firebase.google.com', status: 'planned' },
+  {
+    name: 'Firebase',
+    keysUrl: 'https://console.firebase.google.com',
+    status: 'experimental — minder add firebase',
+  },
   {
     name: 'Razorpay',
     keysUrl: 'https://dashboard.razorpay.com/app/website-app-settings/api-keys',
@@ -153,6 +157,43 @@ export async function POST(req: Request) {
 }
 `;
 
+const FIREBASE_CONFIG_SNIPPET = `// Add this to your minder.config.ts "providers" object:
+//
+// providers: {
+//   firebase: {
+//     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!, // apiKey is a PUBLIC identifier, not a secret
+//     authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
+//     projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
+//     // serviceAccount is a FileRef — resolved server-only, contents never
+//     // logged or returned to the client:
+//     serviceAccount: { kind: 'file', source: 'path', ref: process.env.GOOGLE_APPLICATION_CREDENTIALS },
+//     mock: true, // flip to false once you've added real Firebase keys
+//   },
+// }
+`;
+
+// Next.js App Router route handler scaffolded by `minder add firebase`. Server
+// boundary: imports from 'minder-data-provider/providers/firebase' (the
+// zero-dependency service-account loader) and resolves the credential file
+// via a FileRef — the file's contents (private_key, raw client_email, etc.)
+// are never returned by this route, only the MASKED health summary.
+const FIREBASE_HEALTH_ROUTE = `import { loadServiceAccount } from 'minder-data-provider/providers/firebase';
+
+export async function GET() {
+  // GOOGLE_APPLICATION_CREDENTIALS points at the service-account JSON FILE
+  // path — never commit that file, and never inline its contents here.
+  const health = await loadServiceAccount({
+    kind: 'file',
+    source: 'path',
+    ref: process.env.GOOGLE_APPLICATION_CREDENTIALS || '',
+  });
+
+  // health is MASKED (projectId + masked clientEmail + hasPrivateKey only) —
+  // the private_key itself is never included.
+  return Response.json(health);
+}
+`;
+
 const PROVIDERS = [
   {
     name: 'supabase',
@@ -179,6 +220,21 @@ const PROVIDERS = [
     configSnippet: CLERK_CONFIG_SNIPPET,
     keysUrl: 'https://dashboard.clerk.com',
     scaffoldFiles: [{ path: 'app/api/minder/clerk/verify/route.ts', content: CLERK_VERIFY_ROUTE }],
+  },
+  {
+    name: 'firebase',
+    status: 'experimental',
+    envVars: ['GOOGLE_APPLICATION_CREDENTIALS'],
+    configSnippet: FIREBASE_CONFIG_SNIPPET,
+    keysUrl: 'https://console.firebase.google.com',
+    scaffoldFiles: [{ path: 'app/api/minder/firebase/health/route.ts', content: FIREBASE_HEALTH_ROUTE }],
+    // Firebase is the first provider whose credential is a FILE (a
+    // service-account JSON), not a plain env-var string — cmdAdd prints this
+    // via the generic `extraNote` field (see cmdAdd) so the file-vs-string
+    // distinction isn't buried in the config snippet alone.
+    extraNote:
+      'Firebase uses a service-account JSON FILE — set GOOGLE_APPLICATION_CREDENTIALS to its path ' +
+      '(or base64 into an env var). NEVER commit the file.',
   },
 ];
 
@@ -212,11 +268,11 @@ Commands:
                              Idempotent: skips existing files unless --force.
 
   add <provider>             Scaffold a provider integration. Currently
-                             supports "supabase", "stripe", and "clerk" (all
-                             EXPERIMENTAL — not yet certified; stripe and
-                             clerk also scaffold Next.js App Router route
-                             handlers). Every other provider name exits 1 —
-                             see ${CATALOG_DOC}.
+                             supports "supabase", "stripe", "clerk", and
+                             "firebase" (all EXPERIMENTAL — not yet certified;
+                             stripe, clerk, and firebase also scaffold
+                             Next.js App Router route handlers). Every other
+                             provider name exits 1 — see ${CATALOG_DOC}.
 
   doctor [--config <path>]  Check that provider credentials referenced by
                              your config are present in the environment.
@@ -419,8 +475,8 @@ function cmdInit(argv, ctx) {
 // ── `minder add` ────────────────────────────────────────────────────────────
 
 /**
- * Scaffold a registered provider (currently Supabase, Stripe, and Clerk —
- * see `PROVIDERS`). Unknown provider names (everything not yet in
+ * Scaffold a registered provider (currently Supabase, Stripe, Clerk, and
+ * Firebase — see `PROVIDERS`). Unknown provider names (everything not yet in
  * `PROVIDERS`, i.e. everything still `status: 'planned'` in
  * `KEY_SOURCE_REGISTRY`) fall through to the same "no certified providers"
  * catalog message as before — that message is deliberately unchanged so it
@@ -429,11 +485,14 @@ function cmdInit(argv, ctx) {
  * For a registered provider this does NOT write minder.config.ts (the user
  * pastes the printed snippet in themselves) — it writes `.env.example`
  * entries for the provider's env vars, and, when the provider entry declares
- * `scaffoldFiles` (route handlers etc. — Supabase has none, Stripe and Clerk
- * do), it also writes those files via `writeScaffold` (no-clobber unless
- * --force, same as `writeScaffold`'s general contract). It prints the config
- * snippet, any scaffolded file paths, and an explicit "not yet certified"
- * notice so nobody mistakes "installable" for "production ready".
+ * `scaffoldFiles` (route handlers etc. — Supabase has none, Stripe, Clerk,
+ * and Firebase do), it also writes those files via `writeScaffold` (no-clobber
+ * unless --force, same as `writeScaffold`'s general contract). It prints the
+ * config snippet, any scaffolded file paths, an explicit "not yet certified"
+ * notice, and — when the provider entry declares one — a generic `extraNote`
+ * (currently only Firebase, whose credential is a service-account FILE
+ * rather than a plain secret string) so nobody mistakes "installable" for
+ * "production ready".
  */
 function cmdAdd(argv, ctx) {
   const { cwd, stdout, stderr } = ctx;
@@ -473,6 +532,14 @@ function cmdAdd(argv, ctx) {
 
   stdout.write(`status: EXPERIMENTAL — not yet certified; flip mock:false when you add real keys\n`);
   stdout.write(`Get your ${provider.name} keys: ${provider.keysUrl}\n`);
+
+  // Generic hook for providers with a note that doesn't fit the config
+  // snippet or scaffold-files sections — currently only Firebase (its
+  // credential is a service-account FILE, not a plain secret string).
+  if (provider.extraNote) {
+    stdout.write(`\nNote: ${provider.extraNote}\n`);
+  }
+
   return 0;
 }
 

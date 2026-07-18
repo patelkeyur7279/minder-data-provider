@@ -119,10 +119,10 @@ describe('minder init', () => {
 
 describe('minder add', () => {
   it('exits 1 and points at the provider catalog for an unknown provider', () => {
-    // 'firebase' is still `status: 'planned'` (unregistered) at the time of
-    // writing — see KEY_SOURCE_REGISTRY. Unlike 'stripe' and 'clerk' (now
-    // registered below), it has no PROVIDERS entry yet.
-    const result = run(['add', 'firebase'], { cwd: tmpDir });
+    // 'razorpay' is still `status: 'planned'` (unregistered) at the time of
+    // writing — see KEY_SOURCE_REGISTRY. Unlike 'stripe', 'clerk', and
+    // 'firebase' (now registered below), it has no PROVIDERS entry yet.
+    const result = run(['add', 'razorpay'], { cwd: tmpDir });
 
     expect(result.status).toBe(1);
     const combined = result.stdout + result.stderr;
@@ -318,6 +318,80 @@ describe('minder add', () => {
     const verifyContent = fs.readFileSync(verifyPath, 'utf8');
     expect(verifyContent).not.toContain('// corrupted');
     expect(verifyContent).toContain('createClerkSessionHandler');
+  });
+
+  const firebaseHealthRoute = 'app/api/minder/firebase/health/route.ts';
+
+  it('add firebase scaffolds the health route file, env var, extra note, and the experimental notice, exit 0', () => {
+    const firebase = cli.PROVIDERS.find((p: { name: string }) => p.name === 'firebase');
+    expect(firebase).toBeDefined();
+
+    const result = run(['add', 'firebase'], { cwd: tmpDir });
+
+    expect(result.status).toBe(0);
+
+    // The health route file is written with the expected import lines.
+    const healthPath = path.join(tmpDir, firebaseHealthRoute);
+    expect(fs.existsSync(healthPath)).toBe(true);
+
+    const healthContent = fs.readFileSync(healthPath, 'utf8');
+    expect(healthContent).toContain(
+      "import { loadServiceAccount } from 'minder-data-provider/providers/firebase';"
+    );
+    expect(healthContent).toContain('export async function GET()');
+    expect(healthContent).toContain('GOOGLE_APPLICATION_CREDENTIALS');
+
+    // .env.example gains the provider's env var.
+    const envExamplePath = path.join(tmpDir, '.env.example');
+    expect(fs.existsSync(envExamplePath)).toBe(true);
+    const envExample = fs.readFileSync(envExamplePath, 'utf8');
+    expect(envExample).toContain('GOOGLE_APPLICATION_CREDENTIALS');
+
+    // stdout carries the config snippet, the scaffolded file path, the
+    // credential-FILE extra note, an explicit EXPERIMENTAL notice, and the
+    // keys URL.
+    expect(result.stdout).toContain(firebase.configSnippet.trim());
+    expect(result.stdout).toContain(firebaseHealthRoute);
+    expect(result.stdout).toContain(
+      'Firebase uses a service-account JSON FILE — set GOOGLE_APPLICATION_CREDENTIALS to its path'
+    );
+    expect(result.stdout).toContain('NEVER commit the file');
+    expect(result.stdout.toUpperCase()).toContain('EXPERIMENTAL');
+    expect(result.stdout).toContain('not yet certified');
+    expect(result.stdout).toContain(firebase.keysUrl);
+  });
+
+  it('re-running add firebase without --force skips the existing route file', () => {
+    const first = run(['add', 'firebase'], { cwd: tmpDir });
+    expect(first.status).toBe(0);
+
+    const healthPath = path.join(tmpDir, firebaseHealthRoute);
+    const healthBefore = fs.readFileSync(healthPath, 'utf8');
+
+    const second = run(['add', 'firebase'], { cwd: tmpDir });
+    expect(second.status).toBe(0);
+    expect(second.stdout).toContain('Skipped');
+    expect(second.stdout).toContain(firebaseHealthRoute);
+
+    expect(fs.readFileSync(healthPath, 'utf8')).toBe(healthBefore);
+  });
+
+  it('add firebase --force overwrites the existing route file', () => {
+    const first = run(['add', 'firebase'], { cwd: tmpDir });
+    expect(first.status).toBe(0);
+
+    const healthPath = path.join(tmpDir, firebaseHealthRoute);
+
+    // Corrupt the file to prove --force actually rewrites it.
+    fs.writeFileSync(healthPath, '// corrupted\n', 'utf8');
+
+    const forced = run(['add', 'firebase', '--force'], { cwd: tmpDir });
+    expect(forced.status).toBe(0);
+    expect(forced.stdout).toContain('Scaffolded route files');
+
+    const healthContent = fs.readFileSync(healthPath, 'utf8');
+    expect(healthContent).not.toContain('// corrupted');
+    expect(healthContent).toContain('loadServiceAccount');
   });
 });
 
