@@ -59,7 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed (performance — behavior changes)
 
 - **Requests no longer trigger a CORS preflight by default.** The axios
-  instance previously attached 8 security *response* headers (CSP,
+  instance previously attached 7 security *response* headers (CSP,
   X-Frame-Options, …) to every outgoing request and enabled
   `withCredentials` by default — non-safelisted headers + credentialed mode
   force a preflight `OPTIONS` round-trip on every cross-origin call
@@ -69,8 +69,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   credentials). **Migration:** if your API relies on cookies, set
   `cors: { credentials: true }` (with an explicit origin allowlist
   server-side). If you passed `security.headers` expecting them on requests,
-  use `route.headers` or per-call `headers` instead — `getSecurityHeaders()`
-  remains available for configuring server *responses*.
+  use `route.headers` or per-call `headers` instead. (`getSecurityHeaders()`
+  still exists in the codebase as an internal helper for server *response*
+  configuration; it is not exported from a public entry point.)
 - **Default query retry is now 1 (was 3).** Transient failures surface ~3×
   faster. Explicit `performance.retries: 0` and `retryDelay: 0` are now
   respected (`??` instead of `||`). **Migration:** set
@@ -238,6 +239,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   10-point certification checklist (see docs/providers/CERTIFICATION.md).
 - **Runnable Next.js example app** (`examples/nextjs-app`) consuming the
   packed tarball, with a CI workflow building it on PRs.
+
+### Fixed (configureMinder presets)
+
+- **`configureMinder()` presets no longer override the M0 flagship defaults.**
+  Platform presets previously hardcoded `retries: 3` (all platforms) and
+  `cors: { credentials: true }` (web), silently reinstating the
+  pre-2.2.0-beta.1 3-retry / always-credentialed behavior and the
+  CORS-preflight tax for every `configureMinder()` consumer. Presets now
+  default to `retries: 1` and credentials **opt-in** (`credentials` is on only
+  when explicitly `true`, including for the `cors: true` / `corsHelper: true`
+  shorthands). **Migration:** to restore the old behavior, set
+  `performance: { retries: 3 }`; for credentialed cross-origin/cookie requests
+  set `corsHelper: { credentials: true }` (with an explicit `origin`
+  allowlist — not `*`). Explicit `performance.retries: 0` and
+  `credentials: false` are respected.
 
 ### Fixed (dist interop)
 

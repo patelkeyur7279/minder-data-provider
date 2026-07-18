@@ -307,7 +307,15 @@ function getPlatformDefaults(platform: Platform, apiUrl: string): Partial<Minder
   const defaults: Partial<MinderConfig> = {
     performance: {
       deduplication: true,
-      retries: 3,
+      // G-05: was `3`, silently overriding MinderDataProvider's documented
+      // `?? 1` default (CHANGELOG 2.2.0-beta.1, M0-02) for every consumer
+      // that goes through configureMinder(). Explicit `1` here (rather than
+      // omitting the key) keeps the value directly test-observable on the
+      // configureMinder() return value while staying fully user-overridable
+      // — applyUserConfig() below does `{ ...baseConfig.performance,
+      // ...userConfig.performance }`, so any explicit user value (including
+      // `retries: 0`) still wins.
+      retries: 1,
       retryDelay: 1000,
       timeout: 30000,
       compression: true,
@@ -326,7 +334,12 @@ function getPlatformDefaults(platform: Platform, apiUrl: string): Partial<Minder
           refetchOnWindowFocus: true,
           refetchOnReconnect: true,
         },
-        cors: { enabled: true, credentials: true },
+        // G-05: `credentials: true` here silently re-enabled the CORS
+        // preflight tax that M0-01 opted out by default (ApiClient's
+        // `withCredentials: config.cors?.credentials === true`). `enabled`
+        // stays `true` — the CORS-error-handling/proxy machinery is still
+        // useful by default; only credentialed requests must be opt-in.
+        cors: { enabled: true, credentials: false },
         websocket: {
           url: apiUrl.replace(/^http/, 'ws') + '/ws',
           reconnect: true,
@@ -479,8 +492,12 @@ function applyUserConfig(
     }
 
     if (corsConfig === true) {
-      baseConfig.cors = { enabled: true, credentials: true };
-      (baseConfig as any).corsHelper = { enabled: true, credentials: true };
+      // G-05: boolean shorthand `cors: true` / `corsHelper: true` must not
+      // imply credentialed requests — `true` here only means "enable the
+      // CORS helper", not "opt into cookies/Authorization on cross-origin
+      // calls". Mirrors the object-branch opt-in rule below.
+      baseConfig.cors = { enabled: true, credentials: false };
+      (baseConfig as any).corsHelper = { enabled: true, credentials: false };
     } else if (corsConfig === false) {
       baseConfig.cors = { enabled: false };
       (baseConfig as any).corsHelper = { enabled: false };
@@ -488,7 +505,13 @@ function applyUserConfig(
       const config = {
         enabled: corsConfig.enabled ?? true,
         proxy: corsConfig.proxy,
-        credentials: corsConfig.credentials ?? true,
+        // G-05: was `corsConfig.credentials ?? true`, which turned
+        // credentials on by default for anyone who enabled CORS/corsHelper
+        // without an opinion on credentials. Aligns with ApiClient's
+        // `withCredentials: config.cors?.credentials === true` — opt-in
+        // only, explicit `credentials: true` from the user still passes
+        // through unchanged.
+        credentials: corsConfig.credentials === true,
         origin: corsConfig.origin,
         methods: corsConfig.methods,
         headers: corsConfig.headers,
