@@ -8,11 +8,29 @@ meta:
   owner: Keyur (maintainer) / Claude (execution agent)
 
 tasks:
+  - id: WAVE-H
+    title: "Wave H platform certification (H-01 adapter tests, H-02 platform HttpMethod fix + guard, H-04 honest matrix; H-03 RN-web run NOT produced — toolchain)"
+    type: implementation
+    status: verified
+    evidence: "2026-07-19: adapters 4-6%->~60% (mutation-verified non-vacuity, commit b0e7701); /native//expo//node HttpMethod undefined bug fixed + guard extended (0982577); matrix honest, platforms remain Experimental (no CI runtime run). Gate 2160/0."
+  - id: H-05
+    title: "Wave H follow-up: runnable Expo + Electron example apps in CI (needs a CI env with the RN/Electron toolchain) to promote to Confirmed"
+    type: test
+    status: backlog
   - id: WAVE-G-LEDGER
     title: "Wave G acceptance ledger (six-stage pipeline, first full wave)"
     type: note
     status: complete
-    evidence: "8 tasks: G-01 (bounce->fix->981e7f9), G-02 (bounce 6 findings->fix->re-review ACCEPT->c754a36), G-03+G-06 (bounce->fixes->Opus ACCEPT->aafd1fa; boundary proven source+dist+runtime), G-05 (Opus ACCEPT->943a4ab), G-07 (tarball-verified->106d58d), G-08 (adecd7c). 4 bounces caught pre-commit; 3 product bugs found by doc verification (preset overrides, CLI staleness, export gap); 2 live SEC-01-class residuals fixed. Final gate 2112 tests/0 failed."
+    evidence: "8 tasks:
+  - id: WAVE-H
+    title: "Wave H platform certification (H-01 adapter tests, H-02 platform HttpMethod fix + guard, H-04 honest matrix; H-03 RN-web run NOT produced — toolchain)"
+    type: implementation
+    status: verified
+    evidence: "2026-07-19: adapters 4-6%->~60% (mutation-verified non-vacuity, commit b0e7701); /native//expo//node HttpMethod undefined bug fixed + guard extended (0982577); matrix honest, platforms remain Experimental (no CI runtime run). Gate 2160/0."
+  - id: H-05
+    title: "Wave H follow-up: runnable Expo + Electron example apps in CI (needs a CI env with the RN/Electron toolchain) to promote to Confirmed"
+    type: test
+    status: backlog G-01 (bounce->fix->981e7f9), G-02 (bounce 6 findings->fix->re-review ACCEPT->c754a36), G-03+G-06 (bounce->fixes->Opus ACCEPT->aafd1fa; boundary proven source+dist+runtime), G-05 (Opus ACCEPT->943a4ab), G-07 (tarball-verified->106d58d), G-08 (adecd7c). 4 bounces caught pre-commit; 3 product bugs found by doc verification (preset overrides, CLI staleness, export gap); 2 live SEC-01-class residuals fixed. Final gate 2112 tests/0 failed."
   - id: ORCH-LESSON-1
     title: "Orchestration lesson: never commit a provider dir while its authoring agent may still be writing"
     type: note

@@ -240,6 +240,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Runnable Next.js example app** (`examples/nextjs-app`) consuming the
   packed tarball, with a CI workflow building it on PRs.
 
+### Fixed (platform entries — mobile/desktop)
+
+- **`HttpMethod` is now exported from `/native`, `/expo`, and `/node`.**
+  `import { HttpMethod } from 'minder-data-provider/expo'` (or `/native`,
+  `/node`) previously returned `undefined` — the same dist-interop bug fixed
+  earlier for the root/web/nextjs entries, on platform entries the regression
+  guard didn't cover. Fixed with the eager const-binding; the guard now probes
+  all platform entries.
+
+### Added (platform reliability)
+
+- **Storage adapter test coverage.** The Electron, Expo, and React Native
+  storage adapters — the platform-specific delta of `/electron`, `/expo`,
+  `/native` — went from ~4-6% to ~60% coverage: CRUD, TTL expiry, namespace
+  isolation, batch `multiGet`/`multiSet`, and graceful degradation when the
+  optional backing peer is absent. (RN/Expo/Electron remain **Experimental** —
+  no on-device/GUI runtime run in CI yet; see the support matrix.)
+
 ### Fixed (CLI honesty + CORS security residuals)
 
 - **`minder` CLI no longer contradicts the catalog.** `minder add <provider>`

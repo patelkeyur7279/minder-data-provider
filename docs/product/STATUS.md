@@ -66,6 +66,16 @@ Proof: controlled experiment (guard fails on broken build, 15/15 on fixed) + rea
 of the example app with zero console errors. Debug agent was killed mid-task by a session limit;
 orchestrator completed the validation half inline.
 
+**WAVE H (platform certification) — evidence-based, no overclaiming.** Toolchain (Expo/Electron
+runtimes) not automatable in this env, so NO device/GUI run was produced or fabricated. Delivered
+the fully-verifiable work: (H-01) platform storage adapters Electron/Expo/Native 4-6% -> ~60%
+coverage, non-vacuity mutation-verified; (H-02) found + fixed a real mobile bug — /native /expo
+/node returned `undefined` for HttpMethod (dabd92d-class dist-interop on uncovered entries) — and
+extended the dist guard to all platform entries; (H-04) SUPPORT_MATRIX updated with exact evidence,
+platforms stay Experimental (Confirmed requires a CI runtime run we can't produce here). H-03
+react-native-web browser proof NOT produced (toolchain) — documented honestly, not faked. Gate:
+2160 tests / 0 failed. Commits b0e7701, 0982577.
+
 **WAVE G COMPLETE (2026-07-19) — first full six-stage-pipeline wave.** Cleanup + docs + the
 bugs the pipeline itself surfaced: README golden-path rewrite, migration guide, custom-provider
 public API (server-only boundary proven at source/dist/runtime), configureMinder preset-override

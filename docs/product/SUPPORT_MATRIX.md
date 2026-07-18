@@ -14,9 +14,9 @@
 | Next.js (App Router / RSC) | **Unknown** | No RSC-safety audit; `use client` boundaries unverified (task R-03) |
 | Vite + React | **Inferred-works** | Pure ESM bundle exists; no Vite example or CI leg (task C-02) |
 | Remix / React Router | **Planned** | No adapter, no evidence |
-| React Native / Expo | **Experimental** | `./native`/`./expo` entries built; platform adapters exist; **0% test coverage on `src/platforms`**, no example app |
-| Electron | **Experimental** | Entry + adapters built; same evidence gap |
-| Node (server) | **Experimental** | `./server`/`./node` entries built; fail-closed auth documented as presence/exp-only (signature verification is consumer's job) |
+| React Native / Expo | **Experimental** | `./native`/`./expo` entries built + dist-interop guarded (CJS/ESM `HttpMethod` export verified — Wave H fixed an `undefined`-enum bug here); storage adapters (Native, Expo) now unit-tested ~60% (was ~5%) incl. CRUD/TTL/namespace/batch/degradation. **Not yet Confirmed:** no on-device/simulator runtime run in CI (toolchain not automatable in current env) |
+| Electron | **Experimental** | `./electron` entry built + dist-guarded; ElectronStorageAdapter unit-tested ~62% (was ~4%). **Not yet Confirmed:** no GUI runtime run in CI |
+| Node (server) | **Experimental** | `./server`/`./node` entries built + dist-guarded (`HttpMethod` export fixed in Wave H); fail-closed auth documented as presence/exp-only (signature verification is consumer's job). **Not yet Confirmed:** no server-runtime example in CI |
 | Astro + React islands | **Planned** | No evidence |
 | Edge runtimes (Workers/Vercel Edge) | **Unknown** | `require()` usage in adapters likely breaks edge bundling — needs spike (task R-04) |
 
