@@ -7,6 +7,11 @@
 // Everything from web
 export * from './web.js';
 
+// Capability contract hooks (provider foundation, task F-03) — already re-exported transitively
+// via `export * from './web.js'` above; restated explicitly per the cross-task export contract.
+export { useAuth, useCheckout, useStorage, useLive } from '../hooks/contracts.js';
+export { registerCapabilityProvider } from '../contracts/registry.js';
+
 // SSR-specific features
 export * from '../ssr/index.js';
 

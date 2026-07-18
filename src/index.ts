@@ -75,6 +75,19 @@ export type {
   UseMinderReturn,
 } from './hooks/useMinder.js';
 
+// Capability contract hooks (provider foundation, task F-03). Explicit named re-exports here
+// intentionally shadow the legacy `useAuth` pulled in below via `export * from './hooks/index.js'`
+// (ES module semantics: local/explicit exports take precedence over star-exported names) — this
+// capability-contract `useAuth` is the one consumers of the root entry point get.
+export { useAuth, useCheckout, useStorage, useLive } from './hooks/contracts.js';
+export type {
+  UseAuthReturn,
+  UseCheckoutReturn,
+  UseStorageReturn,
+  UseLiveReturn,
+} from './hooks/contracts.js';
+export * from './contracts/index.js';
+
 // Pagination hook
 export { usePaginatedMinder } from './hooks/usePaginatedMinder.js';
 export type {

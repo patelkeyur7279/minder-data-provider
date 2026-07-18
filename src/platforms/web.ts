@@ -8,6 +8,12 @@
 export { minder, configureMinder } from '../core/minder.js';
 export { useMinder } from '../hooks/useMinder.js';
 
+// Capability contract hooks (provider foundation, task F-03) + the registration function apps
+// need to wire a provider up. The full contracts barrel (types + getCapabilityProvider etc.) is
+// exported from the root entry point only — see src/index.ts.
+export { useAuth, useCheckout, useStorage, useLive } from '../hooks/contracts.js';
+export { registerCapabilityProvider } from '../contracts/registry.js';
+
 // Enums (re-exported directly so platform-entry consumers don't need to
 // reach into `constants/enums.js` themselves). Uses a concrete value binding
 // so esbuild eagerly runs the lazily-wrapped enum init thunk under
