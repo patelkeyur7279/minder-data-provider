@@ -37,9 +37,16 @@ app + CI leg. Gate: 98 suites / 1730 tests / 0 failed, example rebuilt green fro
 Example app surfaced defect → new task M1-07 (Redux imported unconditionally despite optional
 peer label). Next.js promotion to Confirmed awaits first green CI run of example-nextjs.yml.
 
-**M1 Wave 2 (dispatched):** M1-03 mutating plugin middleware + capability-hook emitters (opus),
-M1-05 testing harness subpath (sonnet), M1-07 Redux truly optional + HttpMethod subpath exports
-(sonnet).
+**M1 Wave 2 VERIFIED** (commits 83f24e1 M1-03, 949c5ea M1-05, aa64423 M1-07): mutating plugin
+middleware + 3 capability hooks emitted; /testing subpath harness; Redux truly optional (example
+builds WITHOUT react-redux installed). Gate: 101 suites / 1765 tests / 0 failed, tsc clean,
+lint 0 errors, build OK.
+
+**BLOCKER in progress:** client-side crash in the example app (HttpMethod undefined at hydration
+— pre-existing dist/chunk interop issue, reproduces at HEAD; found by M1-07's browser testing;
+M1-06's curl smoke couldn't see it). Opus debugging agent dispatched: root-cause + library fix +
+real-browser proof + dist-interop regression test. Next.js "Confirmed" promotion blocked on this
++ first green CI run.
 Orchestration lesson recorded: shared-tree parallel agents worked but two incidents (git stash,
 npm install churn) — use worktree isolation for overlapping-file waves in M1.
 
