@@ -67,23 +67,34 @@ describe('minder init', () => {
     expect(config).toContain('configureMinder');
     expect(config).toContain('providers: {');
     expect(config).toContain('docs/providers/CATALOG.md');
+    // G-07: the generated config template used to claim "nothing is
+    // certified yet" — false since all six roadmap providers are CERTIFIED.
+    // It now defers to the catalog + `minder add` instead.
+    expect(config).not.toContain('nothing is certified yet');
+    expect(config).toContain('minder add');
 
     const envExample = fs.readFileSync(path.join(tmpDir, '.env.example'), 'utf8');
     expect(envExample).toContain('# minder providers');
+    // G-07: same staleness in the .env.example header — it used to open
+    // with "No providers are certified yet". Flipped to the catalog pointer.
+    expect(envExample).not.toContain('No providers are certified yet');
+    expect(envExample).toContain('docs/providers/CATALOG.md');
 
     // Key-source table: every registry entry's name + keysUrl on stdout.
     for (const entry of cli.KEY_SOURCE_REGISTRY) {
       expect(result.stdout).toContain(entry.name);
       expect(result.stdout).toContain(entry.keysUrl);
     }
-    // As of the razorpay/sentry registration (F-P2), all six roadmap
-    // providers in KEY_SOURCE_REGISTRY are 'experimental' — none are still
-    // 'planned'. Assert that milestone directly instead of asserting the
-    // (now absent) 'planned' substring.
-    expect(cli.KEY_SOURCE_REGISTRY.every((e: { status?: string }) => (e.status || '').startsWith('experimental'))).toBe(
+    // G-07: cmdAdd's certification claim is derived from
+    // scripts/generate-catalog.js's CERTIFIED list, and KEY_SOURCE_REGISTRY's
+    // status strings were corrected to match reality — all six roadmap
+    // providers are now 'certified' (none are 'experimental' or 'planned'
+    // any more). Flipped from the old 'experimental'-everywhere assertion.
+    expect(cli.KEY_SOURCE_REGISTRY.every((e: { status?: string }) => (e.status || '').startsWith('certified'))).toBe(
       true
     );
-    expect(result.stdout.toLowerCase()).toContain('experimental');
+    expect(result.stdout.toLowerCase()).toContain('certified');
+    expect(result.stdout.toLowerCase()).not.toContain('experimental');
   });
 
   it('is idempotent: a second run without --force skips and leaves files unchanged', () => {
@@ -125,7 +136,7 @@ describe('minder init', () => {
 });
 
 describe('minder add', () => {
-  it('exits 1 and points at the provider catalog for an unknown provider', () => {
+  it('exits 1, names the unknown provider, and lists the registered providers + catalog', () => {
     // 'mailgun' is not (and has never been) a registered provider — see
     // PROVIDERS. Unlike 'stripe', 'clerk', 'firebase', 'razorpay', and
     // 'sentry' (all registered below), it has no PROVIDERS entry.
@@ -133,7 +144,15 @@ describe('minder add', () => {
 
     expect(result.status).toBe(1);
     const combined = result.stdout + result.stderr;
-    expect(combined).toContain('No certified providers are available yet');
+    // G-07: flipped from 'No certified providers are available yet' — that
+    // claim became false once the six roadmap providers were certified. The
+    // error now names the unknown provider and lists what IS registered
+    // (derived from PROVIDERS, so the list can't go stale either).
+    expect(combined).toContain('Unknown provider "mailgun"');
+    for (const p of cli.PROVIDERS as Array<{ name: string }>) {
+      expect(combined).toContain(p.name);
+    }
+    expect(combined).not.toContain('No certified providers are available yet');
     expect(combined).toContain('docs/providers/CATALOG.md');
   });
 
@@ -142,11 +161,29 @@ describe('minder add', () => {
 
     expect(result.status).toBe(1);
     const combined = result.stdout + result.stderr;
-    expect(combined).toContain('No certified providers are available yet');
+    // G-07: flipped from 'No certified providers are available yet' — see
+    // the mailgun test above for the full rationale.
+    expect(combined).toContain('Unknown provider "not-a-real-provider"');
+    expect(combined).not.toContain('No certified providers are available yet');
     expect(combined).toContain('docs/providers/CATALOG.md');
   });
 
-  it('add supabase scaffolds the experimental config snippet and env var, exit 0', () => {
+  it('add with no provider name exits 1 with a missing-name error, not "undefined"', () => {
+    const result = run(['add'], { cwd: tmpDir });
+
+    expect(result.status).toBe(1);
+    const combined = result.stdout + result.stderr;
+    // G-07: with the unknown-provider message now interpolating the typed
+    // name, a bare `minder add` must get its own message instead of the
+    // nonsensical `Unknown provider "undefined"`.
+    expect(combined).toContain('missing provider name');
+    expect(combined).not.toContain('undefined');
+    expect(combined).toContain('supabase');
+    expect(combined).toContain('sentry');
+    expect(combined).toContain('docs/providers/CATALOG.md');
+  });
+
+  it('add supabase scaffolds the certified config snippet and env var, exit 0', () => {
     const supabase = cli.PROVIDERS.find((p: { name: string }) => p.name === 'supabase');
     expect(supabase).toBeDefined();
 
@@ -160,18 +197,23 @@ describe('minder add', () => {
     const envExample = fs.readFileSync(envExamplePath, 'utf8');
     expect(envExample).toContain('SUPABASE_SERVICE_ROLE_KEY');
 
-    // stdout carries the config snippet, an explicit EXPERIMENTAL notice,
-    // and the keys URL.
+    // stdout carries the config snippet, the CERTIFIED notice + catalog
+    // pointer, the mock-mode tip, and the keys URL.
+    // G-07: supabase is in scripts/generate-catalog.js's CERTIFIED list, so
+    // cmdAdd must print CERTIFIED, never the old "EXPERIMENTAL — not yet
+    // certified" claim it printed for every provider regardless of status.
     expect(result.stdout).toContain(supabase.configSnippet.trim());
-    expect(result.stdout.toUpperCase()).toContain('EXPERIMENTAL');
-    expect(result.stdout).toContain('not yet certified');
+    expect(result.stdout).toContain('status: CERTIFIED');
+    expect(result.stdout).toContain(cli.CATALOG_DOC);
+    expect(result.stdout).not.toContain('not yet certified');
+    expect(result.stdout).toContain('flip mock:false when you add real keys');
     expect(result.stdout).toContain(supabase.keysUrl);
   });
 
   const stripeCheckoutRoute = 'app/api/minder/stripe/checkout/route.ts';
   const stripeWebhookRoute = 'app/api/minder/stripe/webhook/route.ts';
 
-  it('add stripe scaffolds real route files, env vars, and the experimental notice, exit 0', () => {
+  it('add stripe scaffolds real route files, env vars, and the certified notice, exit 0', () => {
     const stripe = cli.PROVIDERS.find((p: { name: string }) => p.name === 'stripe');
     expect(stripe).toBeDefined();
 
@@ -206,13 +248,16 @@ describe('minder add', () => {
     expect(envExample).toContain('STRIPE_SECRET_KEY');
     expect(envExample).toContain('STRIPE_WEBHOOK_SECRET');
 
-    // stdout carries the config snippet, both scaffolded file paths, an
-    // explicit EXPERIMENTAL notice, and the keys URL.
+    // stdout carries the config snippet, both scaffolded file paths, the
+    // CERTIFIED notice + catalog pointer, and the keys URL.
+    // G-07: stripe is CERTIFIED — flipped from the old blanket EXPERIMENTAL
+    // assertion (see the supabase test above for the full rationale).
     expect(result.stdout).toContain(stripe.configSnippet.trim());
     expect(result.stdout).toContain(stripeCheckoutRoute);
     expect(result.stdout).toContain(stripeWebhookRoute);
-    expect(result.stdout.toUpperCase()).toContain('EXPERIMENTAL');
-    expect(result.stdout).toContain('not yet certified');
+    expect(result.stdout).toContain('status: CERTIFIED');
+    expect(result.stdout).toContain(cli.CATALOG_DOC);
+    expect(result.stdout).not.toContain('not yet certified');
     expect(result.stdout).toContain(stripe.keysUrl);
   });
 
@@ -260,7 +305,7 @@ describe('minder add', () => {
 
   const clerkVerifyRoute = 'app/api/minder/clerk/verify/route.ts';
 
-  it('add clerk scaffolds the verify route file, env var, and the experimental notice, exit 0', () => {
+  it('add clerk scaffolds the verify route file, env var, and the certified notice, exit 0', () => {
     const clerk = cli.PROVIDERS.find((p: { name: string }) => p.name === 'clerk');
     expect(clerk).toBeDefined();
 
@@ -285,12 +330,15 @@ describe('minder add', () => {
     const envExample = fs.readFileSync(envExamplePath, 'utf8');
     expect(envExample).toContain('CLERK_SECRET_KEY');
 
-    // stdout carries the config snippet, the scaffolded file path, an
-    // explicit EXPERIMENTAL notice, and the keys URL.
+    // stdout carries the config snippet, the scaffolded file path, the
+    // CERTIFIED notice + catalog pointer, and the keys URL.
+    // G-07: clerk is CERTIFIED — flipped from the old blanket EXPERIMENTAL
+    // assertion (see the supabase test above for the full rationale).
     expect(result.stdout).toContain(clerk.configSnippet.trim());
     expect(result.stdout).toContain(clerkVerifyRoute);
-    expect(result.stdout.toUpperCase()).toContain('EXPERIMENTAL');
-    expect(result.stdout).toContain('not yet certified');
+    expect(result.stdout).toContain('status: CERTIFIED');
+    expect(result.stdout).toContain(cli.CATALOG_DOC);
+    expect(result.stdout).not.toContain('not yet certified');
     expect(result.stdout).toContain(clerk.keysUrl);
   });
 
@@ -329,7 +377,7 @@ describe('minder add', () => {
 
   const firebaseHealthRoute = 'app/api/minder/firebase/health/route.ts';
 
-  it('add firebase scaffolds the health route file, env var, extra note, and the experimental notice, exit 0', () => {
+  it('add firebase scaffolds the health route file, env var, extra note, and the certified notice, exit 0', () => {
     const firebase = cli.PROVIDERS.find((p: { name: string }) => p.name === 'firebase');
     expect(firebase).toBeDefined();
 
@@ -355,16 +403,19 @@ describe('minder add', () => {
     expect(envExample).toContain('GOOGLE_APPLICATION_CREDENTIALS');
 
     // stdout carries the config snippet, the scaffolded file path, the
-    // credential-FILE extra note, an explicit EXPERIMENTAL notice, and the
-    // keys URL.
+    // credential-FILE extra note, the CERTIFIED notice + catalog pointer,
+    // and the keys URL.
+    // G-07: firebase is CERTIFIED — flipped from the old blanket
+    // EXPERIMENTAL assertion (see the supabase test above for rationale).
     expect(result.stdout).toContain(firebase.configSnippet.trim());
     expect(result.stdout).toContain(firebaseHealthRoute);
     expect(result.stdout).toContain(
       'Firebase uses a service-account JSON FILE — set GOOGLE_APPLICATION_CREDENTIALS to its path'
     );
     expect(result.stdout).toContain('NEVER commit the file');
-    expect(result.stdout.toUpperCase()).toContain('EXPERIMENTAL');
-    expect(result.stdout).toContain('not yet certified');
+    expect(result.stdout).toContain('status: CERTIFIED');
+    expect(result.stdout).toContain(cli.CATALOG_DOC);
+    expect(result.stdout).not.toContain('not yet certified');
     expect(result.stdout).toContain(firebase.keysUrl);
   });
 
@@ -404,7 +455,7 @@ describe('minder add', () => {
   const razorpayOrderRoute = 'app/api/minder/razorpay/order/route.ts';
   const razorpayWebhookRoute = 'app/api/minder/razorpay/webhook/route.ts';
 
-  it('add razorpay scaffolds both route files, both env vars, and the experimental notice, exit 0', () => {
+  it('add razorpay scaffolds both route files, both env vars, and the certified notice, exit 0', () => {
     const razorpay = cli.PROVIDERS.find((p: { name: string }) => p.name === 'razorpay');
     expect(razorpay).toBeDefined();
 
@@ -439,13 +490,16 @@ describe('minder add', () => {
     expect(envExample).toContain('RAZORPAY_KEY_SECRET');
     expect(envExample).toContain('RAZORPAY_WEBHOOK_SECRET');
 
-    // stdout carries the config snippet, both scaffolded file paths, an
-    // explicit EXPERIMENTAL notice, and the keys URL.
+    // stdout carries the config snippet, both scaffolded file paths, the
+    // CERTIFIED notice + catalog pointer, and the keys URL.
+    // G-07: razorpay is CERTIFIED — flipped from the old blanket
+    // EXPERIMENTAL assertion (see the supabase test above for rationale).
     expect(result.stdout).toContain(razorpay.configSnippet.trim());
     expect(result.stdout).toContain(razorpayOrderRoute);
     expect(result.stdout).toContain(razorpayWebhookRoute);
-    expect(result.stdout.toUpperCase()).toContain('EXPERIMENTAL');
-    expect(result.stdout).toContain('not yet certified');
+    expect(result.stdout).toContain('status: CERTIFIED');
+    expect(result.stdout).toContain(cli.CATALOG_DOC);
+    expect(result.stdout).not.toContain('not yet certified');
     expect(result.stdout).toContain(razorpay.keysUrl);
   });
 
@@ -512,14 +566,17 @@ describe('minder add', () => {
       expect(envExample).not.toContain('# minder provider: sentry');
     }
 
-    // stdout carries the config snippet, the extra note, an explicit
-    // EXPERIMENTAL notice, and the keys URL — even with no env vars/scaffold
-    // files to report.
+    // stdout carries the config snippet, the extra note, the CERTIFIED
+    // notice + catalog pointer, and the keys URL — even with no env
+    // vars/scaffold files to report.
+    // G-07: sentry is CERTIFIED — flipped from the old blanket EXPERIMENTAL
+    // assertion (see the supabase test above for the full rationale).
     expect(result.stdout).toContain(sentry.configSnippet.trim());
     expect(result.stdout).toContain('Sentry is a client observability plugin');
     expect(result.stdout).toContain('registerSentryProvider({ dsn })');
-    expect(result.stdout.toUpperCase()).toContain('EXPERIMENTAL');
-    expect(result.stdout).toContain('not yet certified');
+    expect(result.stdout).toContain('status: CERTIFIED');
+    expect(result.stdout).toContain(cli.CATALOG_DOC);
+    expect(result.stdout).not.toContain('not yet certified');
     expect(result.stdout).toContain(sentry.keysUrl);
   });
 
@@ -530,6 +587,40 @@ describe('minder add', () => {
     const second = run(['add', 'sentry'], { cwd: tmpDir });
     expect(second.status).toBe(0);
     expect(second.stdout).toContain('Sentry is a client observability plugin');
+  });
+});
+
+// G-07: `minder add <provider>` used to print a hardcoded "EXPERIMENTAL —
+// not yet certified" status for every provider, including the six that had
+// since graduated to CERTIFIED in scripts/generate-catalog.js's CERTIFIED
+// list — directly contradicting the catalog. The fix makes cmdAdd derive
+// its certification claim from that single source of truth instead of a
+// hand-maintained (and easily stale) label. These tests cover the lookup
+// helper directly, independent of the full `minder add` child-process run.
+describe('certification lookup (unit) — G-07', () => {
+  it('every PROVIDERS entry is certified, and its status field says so', () => {
+    for (const provider of cli.PROVIDERS as Array<{ name: string; status: string }>) {
+      expect(cli.isCertifiedProvider(provider.name)).toBe(true);
+      // PROVIDERS[].status is a human-maintained label, not what cmdAdd
+      // actually prints (that's isCertifiedProvider) — but it must still
+      // say the truth, or it's the exact staleness this ticket fixed.
+      expect(provider.status).toBe('certified');
+    }
+  });
+
+  it('an unknown/unregistered provider name is not certified', () => {
+    expect(cli.isCertifiedProvider('mailgun')).toBe(false);
+    expect(cli.isCertifiedProvider('not-a-real-provider')).toBe(false);
+    expect(cli.isCertifiedProvider('')).toBe(false);
+  });
+
+  it('derives from scripts/generate-catalog.js CERTIFIED — not a hardcoded duplicate', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { CERTIFIED } = require('../scripts/generate-catalog.js');
+    const names = ['supabase', 'stripe', 'clerk', 'firebase', 'razorpay', 'sentry', 'mailgun', 'unknown-future'];
+    for (const name of names) {
+      expect(cli.isCertifiedProvider(name)).toBe(CERTIFIED.includes(`@minder/provider-${name}`));
+    }
   });
 });
 
@@ -660,6 +751,22 @@ describe('minder --help / no args', () => {
     expect(noArgs.status).toBe(0);
     expect(noArgs.stdout).toBe(help.stdout);
   });
+
+  it('describes the six providers as certified, with no stale uncertified claims', () => {
+    const help = run(['--help'], { cwd: tmpDir });
+    expect(help.status).toBe(0);
+
+    // G-07: --help's add blurb hardcoded "(all EXPERIMENTAL — not yet
+    // certified ...)" and its init blurb said "none are certified yet" —
+    // both false since the six roadmap providers were certified, and both
+    // directly contradicting the CERTIFIED status `minder add` itself now
+    // prints. Flipped to assert the accurate claim.
+    expect(help.stdout).toContain('CERTIFIED');
+    expect(help.stdout).toContain(cli.CATALOG_DOC);
+    expect(help.stdout.toUpperCase()).not.toContain('EXPERIMENTAL');
+    expect(help.stdout).not.toContain('not yet certified');
+    expect(help.stdout).not.toContain('none are certified yet');
+  });
 });
 
 describe('npm pack --dry-run ships the CLI', () => {
@@ -670,5 +777,10 @@ describe('npm pack --dry-run ships the CLI', () => {
 
     expect(files).toContain('bin/minder.js');
     expect(files).toContain('src/cli/index.cjs');
+    // G-07: cmdAdd now `require()`s scripts/generate-catalog.js at runtime
+    // (the single source of truth for certification status) — it must ship
+    // in the published package too, or `minder add` throws MODULE_NOT_FOUND
+    // for anyone who installed via npm instead of a git checkout.
+    expect(files).toContain('scripts/generate-catalog.js');
   });
 });

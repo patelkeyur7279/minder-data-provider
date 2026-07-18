@@ -23,55 +23,99 @@
 const fs = require('fs');
 const path = require('path');
 
+/**
+ * Single source of truth for "is this provider certified?" — the exact
+ * CERTIFIED array scripts/generate-catalog.js uses to build
+ * docs/providers/CATALOG.md's Certified table. Requiring it here is
+ * side-effect-free: everything at that module's top level is a function or
+ * constant declaration (CERTIFIED, PLANNED, findManifests, ...) — the
+ * filesystem scan and the docs/providers/CATALOG.md write only happen
+ * inside its `main()`, which itself only runs when `require.main === module`
+ * (see the bottom of scripts/generate-catalog.js). That's true when the
+ * file is executed directly (`node scripts/generate-catalog.js` / `npm run
+ * generate:catalog`) and false whenever it's `require()`-d from elsewhere,
+ * including here. scripts/generate-catalog.js also has no dependencies
+ * beyond Node builtins, and `scripts/` ships in the published npm package
+ * (see package.json "files"), so this require resolves the same way from a
+ * plain git checkout and from `npm install minder-data-provider`.
+ *
+ * G-07: PROVIDERS[].status and KEY_SOURCE_REGISTRY[].status below are
+ * hand-maintained, human-readable labels for documentation/env-file
+ * comments — cmdAdd's own certification claim must NOT be sourced from
+ * either of them, because that's exactly what let `minder add <provider>`
+ * print "EXPERIMENTAL — not yet certified" for providers the catalog had
+ * already certified. Deriving from CERTIFIED here is what prevents that
+ * drift from recurring.
+ */
+const { CERTIFIED } = require('../../scripts/generate-catalog.js');
+
 const CATALOG_DOC = 'docs/providers/CATALOG.md';
 
 /**
+ * True when `name` (a PROVIDERS entry's `name`, e.g. 'stripe') is certified
+ * per scripts/generate-catalog.js's CERTIFIED array, keyed by manifest name
+ * (`@minder/provider-<name>`). Unknown/unregistered names are never
+ * certified.
+ */
+function isCertifiedProvider(name) {
+  return CERTIFIED.includes(`@minder/provider-${name}`);
+}
+
+/**
  * Static key-source registry — where to get API keys for each provider.
- * Most are still PLANNED (nothing to install yet); Supabase has graduated to
- * `status: 'experimental'` now that `minder add supabase` (see `PROVIDERS`
- * below) actually scaffolds something. This registry is purely a
- * convenience pointer printed by `minder init`.
+ * All six roadmap providers below are CERTIFIED (see the CERTIFIED array in
+ * scripts/generate-catalog.js and docs/providers/CATALOG.md). `status` here
+ * is a hand-maintained, human-readable label for `minder init`'s printed
+ * table — kept in sync with reality by hand, unlike cmdAdd's own
+ * certification claim, which is derived from CERTIFIED (see
+ * `isCertifiedProvider` above) precisely so it can't go stale the same way.
+ * This registry is purely a convenience pointer printed by `minder init`.
  */
 const KEY_SOURCE_REGISTRY = [
   {
     name: 'Supabase',
     keysUrl: 'https://supabase.com/dashboard/project/_/settings/api',
-    status: 'experimental — minder add supabase',
+    status: 'certified — minder add supabase',
   },
   {
     name: 'Stripe',
     keysUrl: 'https://dashboard.stripe.com/apikeys',
-    status: 'experimental — minder add stripe',
+    status: 'certified — minder add stripe',
   },
   {
     name: 'Clerk',
     keysUrl: 'https://dashboard.clerk.com',
-    status: 'experimental — minder add clerk',
+    status: 'certified — minder add clerk',
   },
   {
     name: 'Firebase',
     keysUrl: 'https://console.firebase.google.com',
-    status: 'experimental — minder add firebase',
+    status: 'certified — minder add firebase',
   },
   {
     name: 'Razorpay',
     keysUrl: 'https://dashboard.razorpay.com/app/website-app-settings/api-keys',
-    status: 'experimental — minder add razorpay',
+    status: 'certified — minder add razorpay',
   },
   {
     name: 'Sentry',
     keysUrl: 'https://sentry.io/settings/',
-    status: 'experimental — minder add sentry',
+    status: 'certified — minder add sentry',
   },
 ];
 
 /**
  * Registry of providers `minder add <provider>` actually knows how to
- * scaffold. Everything not listed here falls through to the generic
- * "no certified providers" catalog message in `cmdAdd`. Entries here are
- * honestly labeled by `status` — `'experimental'` means "installable, but
- * not yet certified" (see docs/providers/CATALOG.md), never "production
- * ready".
+ * scaffold. Everything not listed here exits 1 via cmdAdd's
+ * unknown-provider error, which lists the names registered here so the
+ * message can't go stale. Entries here are
+ * honestly labeled by `status` — `'certified'` means it completed the
+ * certification process (see docs/providers/CATALOG.md); a provider added
+ * ahead of certification should say `'experimental'` instead. Either way,
+ * `status` is a human-maintained label used for documentation and
+ * .env.example comments — cmdAdd's own printed certification claim is
+ * derived separately from CERTIFIED (see `isCertifiedProvider` above), so
+ * this field drifting stale can no longer make cmdAdd itself lie.
  */
 const SUPABASE_CONFIG_SNIPPET = `// Add this to your minder.config.ts "providers" object:
 //
@@ -259,14 +303,14 @@ const SENTRY_CONFIG_SNIPPET = `// Add this to your minder.config.ts "providers" 
 const PROVIDERS = [
   {
     name: 'supabase',
-    status: 'experimental',
+    status: 'certified',
     envVars: ['SUPABASE_SERVICE_ROLE_KEY'],
     configSnippet: SUPABASE_CONFIG_SNIPPET,
     keysUrl: 'https://supabase.com/dashboard/project/_/settings/api',
   },
   {
     name: 'stripe',
-    status: 'experimental',
+    status: 'certified',
     envVars: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'],
     configSnippet: STRIPE_CONFIG_SNIPPET,
     keysUrl: 'https://dashboard.stripe.com/apikeys',
@@ -277,7 +321,7 @@ const PROVIDERS = [
   },
   {
     name: 'clerk',
-    status: 'experimental',
+    status: 'certified',
     envVars: ['CLERK_SECRET_KEY'],
     configSnippet: CLERK_CONFIG_SNIPPET,
     keysUrl: 'https://dashboard.clerk.com',
@@ -285,7 +329,7 @@ const PROVIDERS = [
   },
   {
     name: 'firebase',
-    status: 'experimental',
+    status: 'certified',
     envVars: ['GOOGLE_APPLICATION_CREDENTIALS'],
     configSnippet: FIREBASE_CONFIG_SNIPPET,
     keysUrl: 'https://console.firebase.google.com',
@@ -300,7 +344,7 @@ const PROVIDERS = [
   },
   {
     name: 'razorpay',
-    status: 'experimental',
+    status: 'certified',
     envVars: ['RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET'],
     configSnippet: RAZORPAY_CONFIG_SNIPPET,
     keysUrl: 'https://dashboard.razorpay.com/app/website-app-settings/api-keys',
@@ -311,7 +355,7 @@ const PROVIDERS = [
   },
   {
     name: 'sentry',
-    status: 'experimental',
+    status: 'certified',
     // Sentry's DSN is a PUBLIC client value (NEXT_PUBLIC_SENTRY_DSN), not a
     // secret env var — there is nothing here for `minder doctor`/env-example
     // scaffolding to track, so this is intentionally empty.
@@ -329,41 +373,52 @@ const PROVIDERS = [
 
 const ENV_EXAMPLE_SECTION_MARKER = '# minder providers';
 
+// G-07: this template used to claim "nothing is certified yet" (and the
+// inner comment "once they're certified") — stale since the six roadmap
+// providers were certified. It now defers to the catalog + `minder add`
+// instead of hardcoding a certification claim that can drift.
 const CONFIG_TEMPLATE = `/**
  * Minder configuration.
  *
  * Generated by \`minder init\`. See docs/providers/CATALOG.md for the
- * current provider catalog — nothing is certified yet, so \`providers\`
- * starts empty. Run \`minder add <provider>\` once a provider ships to
- * scaffold its config here.
+ * current provider catalog and each provider's certification status —
+ * \`providers\` starts empty; run \`minder add <provider>\` (e.g.
+ * \`minder add supabase\`) to scaffold a provider's config here.
  */
 import { configureMinder } from 'minder-data-provider';
 
 export default configureMinder({
   providers: {
-    // Add providers here once they're certified — see
-    // docs/providers/CATALOG.md for the current list and status.
+    // Add providers here with \`minder add <provider>\` — see
+    // docs/providers/CATALOG.md for the certified list and status.
   },
 });
 `;
 
+// G-07: this help text used to hardcode "(all EXPERIMENTAL — not yet
+// certified)" in the add blurb and "none are certified yet" in the init
+// blurb — both false once the six roadmap providers were certified, and
+// both contradicting the CERTIFIED status `minder add` itself prints. The
+// wording below matches reality; the authoritative per-provider status is
+// what `minder add` derives from CERTIFIED (see `isCertifiedProvider`).
 const HELP_TEXT = `Usage: minder <command> [options]
 
 Commands:
   init [--force]            Write minder.config.ts + a "${ENV_EXAMPLE_SECTION_MARKER}"
                              section in .env.example, and print where to get
-                             API keys for each planned provider (none are
-                             certified yet — see ${CATALOG_DOC}).
+                             API keys for each supported provider (see
+                             ${CATALOG_DOC} for certification status).
                              Idempotent: skips existing files unless --force.
 
   add <provider>             Scaffold a provider integration. Currently
                              supports "supabase", "stripe", "clerk",
-                             "firebase", "razorpay", and "sentry" (all
-                             EXPERIMENTAL — not yet certified; stripe, clerk,
+                             "firebase", "razorpay", and "sentry" — all six
+                             CERTIFIED (see ${CATALOG_DOC}). stripe, clerk,
                              firebase, and razorpay also scaffold Next.js App
                              Router route handlers; sentry is a client
-                             plugin with no server route). Every other
-                             provider name exits 1 — see ${CATALOG_DOC}.
+                             plugin with no server route. Every other
+                             provider name exits 1 with the list of
+                             registered providers.
 
   doctor [--config <path>]  Check that provider credentials referenced by
                              your config are present in the environment.
@@ -431,12 +486,15 @@ function writeScaffold(files, opts) {
 // ── `minder init` ───────────────────────────────────────────────────────────
 
 function buildEnvExampleSection() {
+  // G-07: this header used to open with "No providers are certified yet" —
+  // stale since the six roadmap providers were certified. Defer to the
+  // catalog for status instead of hardcoding a claim here.
   const lines = [
     ENV_EXAMPLE_SECTION_MARKER,
     '#',
     '# Provider credentials go here once you add a provider with `minder add`.',
-    '# No providers are certified yet — see docs/providers/CATALOG.md for the',
-    "# current catalog and status. Get API keys from each provider's dashboard:",
+    '# See docs/providers/CATALOG.md for the current catalog and certification',
+    "# status. Get API keys from each provider's dashboard:",
   ];
   for (const entry of KEY_SOURCE_REGISTRY) {
     lines.push(`#   ${entry.name}: ${entry.keysUrl}`);
@@ -491,14 +549,18 @@ function writeEnvExampleSection(cwd, force) {
  * `minder add`-ing a second provider later doesn't strip this one. Emits
  * real, uncommented `NAME=` lines (not just comments) so `minder doctor`'s
  * .env.example fallback scan picks them up.
+ *
+ * G-07: the trailing "(not yet certified)" used to be unconditional — once
+ * `provider.status` says 'certified' that would read as "status: certified
+ * (not yet certified)", a straight self-contradiction. Only append it for
+ * providers `isCertifiedProvider` doesn't recognize.
  */
 function buildProviderEnvSection(provider) {
   const marker = `# minder provider: ${provider.name}`;
-  const lines = [
-    marker,
-    '#',
-    `# ${provider.name} — status: ${provider.status} (not yet certified). See ${CATALOG_DOC}.`,
-  ];
+  const statusNote = isCertifiedProvider(provider.name)
+    ? `status: ${provider.status}`
+    : `status: ${provider.status} (not yet certified)`;
+  const lines = [marker, '#', `# ${provider.name} — ${statusNote}. See ${CATALOG_DOC}.`];
   for (const envVar of provider.envVars) {
     lines.push(`${envVar}=`);
   }
@@ -566,24 +628,27 @@ function cmdInit(argv, ctx) {
 // ── `minder add` ────────────────────────────────────────────────────────────
 
 /**
- * Scaffold a registered provider (currently Supabase, Stripe, Clerk, and
- * Firebase — see `PROVIDERS`). Unknown provider names (everything not yet in
- * `PROVIDERS`, i.e. everything still `status: 'planned'` in
- * `KEY_SOURCE_REGISTRY`) fall through to the same "no certified providers"
- * catalog message as before — that message is deliberately unchanged so it
- * still reads correctly for the providers it still applies to.
+ * Scaffold a registered provider (currently Supabase, Stripe, Clerk,
+ * Firebase, Razorpay, and Sentry — see `PROVIDERS`, all CERTIFIED today).
+ * Unknown provider names (everything not in `PROVIDERS`) exit 1 with an
+ * "Unknown provider" error that lists the registered names — derived from
+ * `PROVIDERS`, so the list can't go stale — and points at the catalog
+ * (G-07: this replaced the "No certified providers are available yet"
+ * message, which became false once the six roadmap providers certified).
  *
  * For a registered provider this does NOT write minder.config.ts (the user
  * pastes the printed snippet in themselves) — it writes `.env.example`
  * entries for the provider's env vars, and, when the provider entry declares
- * `scaffoldFiles` (route handlers etc. — Supabase has none, Stripe, Clerk,
- * and Firebase do), it also writes those files via `writeScaffold` (no-clobber
- * unless --force, same as `writeScaffold`'s general contract). It prints the
- * config snippet, any scaffolded file paths, an explicit "not yet certified"
- * notice, and — when the provider entry declares one — a generic `extraNote`
- * (currently only Firebase, whose credential is a service-account FILE
- * rather than a plain secret string) so nobody mistakes "installable" for
- * "production ready".
+ * `scaffoldFiles` (route handlers etc. — Supabase has none, the others do),
+ * it also writes those files via `writeScaffold` (no-clobber unless
+ * --force, same as `writeScaffold`'s general contract). It prints the
+ * config snippet, any scaffolded file paths, a certification notice — see
+ * `isCertifiedProvider` (G-07): "CERTIFIED" + the catalog link for
+ * providers in scripts/generate-catalog.js's CERTIFIED list, else the
+ * original "EXPERIMENTAL — not yet certified" wording for anything added
+ * ahead of certification — and, when the provider entry declares one, a
+ * generic `extraNote` (currently Firebase and Sentry) so nobody mistakes
+ * "installable" for more than what its actual status says.
  */
 function cmdAdd(argv, ctx) {
   const { cwd, stdout, stderr } = ctx;
@@ -592,7 +657,18 @@ function cmdAdd(argv, ctx) {
 
   const provider = PROVIDERS.find((p) => p.name === name);
   if (!provider) {
-    stderr.write(`No certified providers are available yet — see ${CATALOG_DOC}\n`);
+    // G-07: the old "No certified providers are available yet" claim became
+    // false the moment the six roadmap providers were certified — the real
+    // problem is that the typed name isn't registered. Name that problem
+    // and derive the available list from PROVIDERS so this message can't go
+    // stale as the registry grows. A bare `minder add` (no name at all)
+    // gets its own message instead of `Unknown provider "undefined"`.
+    const available = PROVIDERS.map((p) => p.name).join(', ');
+    if (!name) {
+      stderr.write(`minder add: missing provider name. Available providers: ${available} (see ${CATALOG_DOC})\n`);
+    } else {
+      stderr.write(`Unknown provider "${name}". Available providers: ${available} (see ${CATALOG_DOC})\n`);
+    }
     return 1;
   }
 
@@ -627,7 +703,15 @@ function cmdAdd(argv, ctx) {
     stdout.write('\n');
   }
 
-  stdout.write(`status: EXPERIMENTAL — not yet certified; flip mock:false when you add real keys\n`);
+  // G-07: derive the certification claim from CERTIFIED (single source of
+  // truth — see `isCertifiedProvider`) instead of hardcoding EXPERIMENTAL
+  // for every provider regardless of its actual catalog status.
+  if (isCertifiedProvider(provider.name)) {
+    stdout.write(`status: CERTIFIED — see ${CATALOG_DOC}\n`);
+    stdout.write('mock: true works with zero keys; flip mock:false when you add real keys\n');
+  } else {
+    stdout.write('status: EXPERIMENTAL — not yet certified; flip mock:false when you add real keys\n');
+  }
   stdout.write(`Get your ${provider.name} keys: ${provider.keysUrl}\n`);
 
   // Generic hook for providers with a note that doesn't fit the config
@@ -872,4 +956,5 @@ module.exports = {
   collectFromJsonConfig,
   collectFromEnvExample,
   CATALOG_DOC,
+  isCertifiedProvider,
 };
