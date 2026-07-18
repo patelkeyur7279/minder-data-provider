@@ -5,6 +5,9 @@
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "minder": "./bin/minder.js"
+  },
   "files": [
     "dist/**/*.js",
     "dist/**/*.mjs",
@@ -13,7 +16,9 @@
     "!dist/**/*.map",
     "README.md",
     "LICENSE",
-    "scripts"
+    "scripts",
+    "bin",
+    "src/cli"
   ],
   "exports": {
     ".": {
