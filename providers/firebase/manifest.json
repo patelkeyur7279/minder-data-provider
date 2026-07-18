@@ -1,0 +1,44 @@
+{
+  "name": "@minder/provider-firebase",
+  "version": "0.1.0",
+  "displayName": "Firebase",
+  "categories": ["auth", "database", "storage"],
+  "capabilities": ["auth", "storage", "service-account", "custom-tokens"],
+  "config": {
+    "clientSafe": ["apiKey", "authDomain", "projectId", "storageBucket", "messagingSenderId", "appId", "mock"],
+    "serverOnly": ["serviceAccount"]
+  },
+  "scopes": [
+    {
+      "scope": "auth:session",
+      "why": "Read the current Firebase Auth user (auth.currentUser) to expose the signed-in user via useAuth()."
+    },
+    {
+      "scope": "auth:signout",
+      "why": "Sign the user out (signOut) when the app calls useAuth().signOut()."
+    },
+    {
+      "scope": "storage:object:write",
+      "why": "Upload objects to Cloud Storage for Firebase (uploadBytes) when the app calls useStorage().upload()."
+    },
+    {
+      "scope": "storage:object:delete",
+      "why": "Remove objects from Cloud Storage for Firebase (deleteObject) when the app calls useStorage().remove()."
+    },
+    {
+      "scope": "admin:custom-token",
+      "why": "Server-only: mint custom auth tokens and perform privileged admin operations using the service-account credential (firebase-admin). Never runs in the browser."
+    }
+  ],
+  "runtimes": ["web", "node", "edge"],
+  "frameworks": ["react", "nextjs", "vite"],
+  "peerDependencies": {
+    "firebase": "^10.0.0"
+  },
+  "docs": {
+    "setup": "./README.md",
+    "example": "./example.ts",
+    "security": "./README.md"
+  },
+  "license": "MIT"
+}

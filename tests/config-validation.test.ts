@@ -385,6 +385,61 @@ describe('registerClientSafeProviderKeys — Clerk certified provider', () => {
   });
 });
 
+describe('registerClientSafeProviderKeys — Firebase certified provider (public apiKey, server-only serviceAccount)', () => {
+  // Default jest env here is jsdom, so `window` is defined and the browser-only
+  // suspicious-key walker runs. Reset the module-level registry after each test.
+  afterEach(() => {
+    __resetClientSafeProviderKeys();
+  });
+
+  // The whole Firebase web config is clientSafe. Crucially `apiKey` is PUBLIC —
+  // Firebase's apiKey is a project IDENTIFIER, not a secret — so a raw apiKey
+  // string must PASS even for the certified provider.
+  const registerFirebase = (): void =>
+    registerClientSafeProviderKeys('firebase', [
+      'apiKey',
+      'authDomain',
+      'projectId',
+      'storageBucket',
+      'messagingSenderId',
+      'appId',
+      'mock',
+    ]);
+
+  it('a raw apiKey (public by design) PASSES because it is registered client-safe', () => {
+    registerFirebase();
+    const result = validateMinderConfig({
+      apiUrl: 'https://api.example.com',
+      providers: { firebase: { apiKey: 'AIzaSy-raw-public-web-api-key', projectId: 'demo' } },
+    });
+    expect(result.errors.find((e) => e.key === 'providers.firebase.apiKey')).toBeUndefined();
+    expect(result.valid).toBe(true);
+  });
+
+  it('a raw serviceAccount string under providers.firebase hard-fails once firebase registers its clientSafe keys', () => {
+    registerFirebase();
+    const result = validateMinderConfig({
+      apiUrl: 'https://api.example.com',
+      providers: { firebase: { serviceAccount: '{"type":"service_account"}' } },
+    });
+    expect(result.valid).toBe(false);
+    const err = result.errors.find((e) => e.key === 'providers.firebase.serviceAccount');
+    expect(err).toBeDefined();
+    expect(err!.level).toBe('error');
+    expect(err!.fix).toMatch(/secret\(|server/i);
+  });
+
+  it('serviceAccount wrapped in secret() passes even for the certified firebase provider', () => {
+    registerFirebase();
+    const result = validateMinderConfig({
+      apiUrl: 'https://api.example.com',
+      providers: { firebase: { serviceAccount: secret('FIREBASE_SERVICE_ACCOUNT') } },
+    });
+    expect(result.errors.find((e) => e.key === 'providers.firebase.serviceAccount')).toBeUndefined();
+    expect(result.valid).toBe(true);
+  });
+});
+
 describe('configureMinder — wired validation', () => {
   it('still throws the original message when apiUrl is entirely missing (existing behavior preserved)', () => {
     // @ts-expect-error - intentionally invalid for the runtime check
