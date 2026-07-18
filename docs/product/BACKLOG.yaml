@@ -18,6 +18,11 @@ tasks:
     type: implementation
     status: blocked
     blocker: "Reachability recon FALSIFIED the 'dead code, safe delete' premise: core/OfflineManager is live (ApiClient), platform/offline/OfflineManager is live (native entry + M0-08/M1-03 API), core/WebSocketManager is LIVE (MinderDataProvider.tsx:229 + 5 test files), websocket/WebSocketClient is the live public one. ALL layers live -> consolidation is a high-risk refactor of working production code with ZERO user value. Reliability pillar + YAGNI: do NOT churn. Reassess only if the duplication actively causes a bug; if pursued, needs a dedicated deep-review increment, not a quick merge."
+  - id: J-01
+    title: "Error-message DX pass (audit)"
+    type: documentation
+    status: verified
+    evidence: "2026-07-19 audit: error DX already meets the bar — config-missing throw states both fixes + absolute-URL exemption; NO_PROVIDER_FOR_CAPABILITY names the capability + links the real catalog; no other bare [Minder] throws in hot paths. One real defect (dead CONFIG_REFERENCE.md link) fixed + guarded in 8e411e6. No make-work manufactured."
   - id: WAVE-H
     title: "Wave H platform certification (H-01 adapter tests, H-02 platform HttpMethod fix + guard, H-04 honest matrix; H-03 RN-web run NOT produced — toolchain)"
     type: implementation
