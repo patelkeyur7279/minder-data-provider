@@ -36,6 +36,7 @@ import {
 } from '../plugins/PluginSystem.js';
 import type { InterceptableRequest, ShortCircuitResponse } from '../plugins/PluginSystem.js';
 import { redactSecrets } from '../security/secrets.js';
+import { applyRequestBody, buildUploadFormData, createUploadProgressHandler } from './apiClient/upload.js';
 
 export class ApiClient {
   private axiosInstance: AxiosInstance;
@@ -870,17 +871,6 @@ export class ApiClient {
     };
   }
 
-  private sanitizeData(data: unknown): unknown {
-    if (!this.sanitizer) return data;
-
-    // Skip sanitization for binary types and FormData
-    if (typeof FormData !== 'undefined' && data instanceof FormData) return data;
-    if (typeof Blob !== 'undefined' && data instanceof Blob) return data;
-    if (typeof File !== 'undefined' && data instanceof File) return data;
-
-    return this.sanitizer.sanitize(data);
-  }
-
   private sanitizeHeaders(headers: any): any {
     if (!headers) return headers;
     const sanitized = { ...headers };
@@ -981,26 +971,7 @@ export class ApiClient {
     }
 
     // Handle different content types with sanitization
-    if (data) {
-      const sanitizedData = this.sanitizeData(data);
-
-      if (typeof FormData !== 'undefined' && sanitizedData instanceof FormData) {
-        requestConfig.data = sanitizedData;
-        // Remove Content-Type to let browser/axios set it with boundary
-        // We set it to undefined to ensure it's not merged with defaults
-        if (requestConfig.headers) {
-          delete requestConfig.headers['Content-Type'];
-          delete requestConfig.headers['content-type'];
-          // Also set to undefined in case some parts of the system re-add it
-          (requestConfig.headers as any)['Content-Type'] = undefined;
-        }
-      } else if (typeof sanitizedData === 'string' && sanitizedData.startsWith('<?xml')) {
-        requestConfig.data = sanitizedData;
-        requestConfig.headers!['Content-Type'] = 'application/xml';
-      } else {
-        requestConfig.data = sanitizedData;
-      }
-    }
+    applyRequestBody(requestConfig, data, this.sanitizer);
 
     // Mutating request middleware: plugins may rewrite the outgoing config or
     // short-circuit the request entirely with a synthetic response. Runs after
@@ -1124,23 +1095,7 @@ export class ApiClient {
     }
 
     // Body handling with sanitization, mirroring the registered-route path.
-    if (data) {
-      const sanitizedData = this.sanitizeData(data);
-
-      if (typeof FormData !== 'undefined' && sanitizedData instanceof FormData) {
-        requestConfig.data = sanitizedData;
-        if (requestConfig.headers) {
-          delete (requestConfig.headers as Record<string, unknown>)['Content-Type'];
-          delete (requestConfig.headers as Record<string, unknown>)['content-type'];
-          (requestConfig.headers as Record<string, unknown>)['Content-Type'] = undefined;
-        }
-      } else if (typeof sanitizedData === 'string' && sanitizedData.startsWith('<?xml')) {
-        requestConfig.data = sanitizedData;
-        requestConfig.headers!['Content-Type'] = 'application/xml';
-      } else {
-        requestConfig.data = sanitizedData;
-      }
-    }
+    applyRequestBody(requestConfig, data, this.sanitizer);
 
     // Mutating request middleware (same semantics as the registered-route path).
     const shortCircuit = await this.runRequestInterceptors(requestConfig, routeName);
@@ -1159,20 +1114,8 @@ export class ApiClient {
     onProgress?: (progress: { loaded: number; total: number; percentage: number }) => void
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ): Promise<any> {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    return this.request(routeName, formData, undefined, {
-      onUploadProgress: (progressEvent) => {
-        if (onProgress && progressEvent.total) {
-          const percentage = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          onProgress({
-            loaded: progressEvent.loaded,
-            total: progressEvent.total,
-            percentage,
-          });
-        }
-      },
+    return this.request(routeName, buildUploadFormData(file), undefined, {
+      onUploadProgress: createUploadProgressHandler(onProgress),
     });
   }
 

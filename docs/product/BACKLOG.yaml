@@ -634,9 +634,10 @@ tasks:
     owner_decision: "DEC-2 (3.0 boundary), DEC-5 (removal policy)"
   - id: QR-M1
     title: Decompose oversized modules (useMinder.ts 1588, ApiClient.ts 1210)
-    status: proposed
+    status: in_progress
     priority: P2
     milestone: M-Q2
+    progress: "2026-07-19 increment 1 (Sonnet subagent, orchestrator-verified independently vs git HEAD): extracted sanitizeRequestData/applyRequestBody/buildUploadFormData/createUploadProgressHandler into src/core/apiClient/upload.ts (also de-duped the identical request()/requestRaw() body block). ApiClient 1210->1153 lines. VERIFIED: change scope = only ApiClient.ts + the new module (no test/other edits); ApiClient public method signatures byte-identical to HEAD; full suite 2275/0; type-check + build green; extracted helpers keep the edge-safe typeof File/Blob/FormData guards. Remaining: further ApiClient facets + useMinder.ts (1588) in future increments."
     evidence: "wc -l: src/hooks/useMinder.ts = 1588, src/core/ApiClient.ts = 1210 (largest source files). Env-masked bugs (FileList) hid in large files."
     problem: Oversized modules are hard to review and hide bugs.
     scope: Behavior-preserving decomposition by responsibility (query/mutation/auth/cache/upload facets), no public-API change.
