@@ -86,14 +86,21 @@ import {
   getUploadProgress as getGlobalUploadProgress
 } from '../upload/uploadProgressStore.js';
 import type { UploadProgress } from '../upload/uploadProgressStore.js';
-import {
-  replaceUrlParams,
-  hasUnreplacedParams,
-  getRouteSuggestions,
-} from '../utils/routeHelpers.js';
 import { MinderError } from '../errors/MinderError.js';
 import { parseJWT as decodeJwt } from '../utils/jwt.js';
 import { getDefaultLocalStore } from '../core/LocalStore.js';
+import {
+  createRetryConfig,
+  deriveQueryKey,
+  mergeRequestParams,
+  deriveLocalKey,
+  computeRouteValidation,
+  validateMutationRoute,
+  buildMinderResult,
+  unwrapMutationVariables,
+  mergeMutationRuntimeOptions,
+  buildInvalidRouteResult,
+} from './useMinder.helpers.js';
 
 // ============================================================================
 // TYPES
@@ -530,55 +537,6 @@ export interface UseMinderReturn<TData = any> {
 // ============================================================================
 
 /**
- * Helper function to create retry configuration for React Query
- */
-function createRetryConfig(retryConfig?: RetryConfig) {
-  const defaultRetryableStatusCodes = [408, 429, 500, 502, 503, 504];
-  const maxRetries = retryConfig?.maxRetries ?? 3;
-  const retryableStatusCodes = retryConfig?.retryableStatusCodes ?? defaultRetryableStatusCodes;
-  const baseDelay = retryConfig?.baseDelay ?? 1000;
-  const maxDelay = retryConfig?.maxDelay ?? 30000;
-  const backoffStrategy = retryConfig?.backoff ?? 'exponential';
-
-  return {
-    retry: (failureCount: number, error: any): boolean => {
-      // Check max retries
-      if (failureCount >= maxRetries) return false;
-
-      // Custom shouldRetry function takes precedence
-      if (retryConfig?.shouldRetry) {
-        return retryConfig.shouldRetry(error, failureCount);
-      }
-
-      // Check if status code is retryable
-      if (error?.status && !retryableStatusCodes.includes(error.status)) {
-        return false;
-      }
-
-      return true;
-    },
-    retryDelay: (attemptIndex: number): number => {
-      // Custom backoff function
-      if (typeof backoffStrategy === 'function') {
-        return Math.min(backoffStrategy(attemptIndex), maxDelay);
-      }
-
-      // Exponential backoff: baseDelay * 2^attempt
-      if (backoffStrategy === 'exponential') {
-        return Math.min(baseDelay * Math.pow(2, attemptIndex), maxDelay);
-      }
-
-      // Linear backoff: baseDelay * (attempt + 1)
-      if (backoffStrategy === 'linear') {
-        return Math.min(baseDelay * (attemptIndex + 1), maxDelay);
-      }
-
-      return baseDelay;
-    },
-  };
-}
-
-/**
  * useMinder - React hook for data fetching and mutations
  * 
  * Thin wrapper around minder() function with reactive state
@@ -663,68 +621,25 @@ export function useMinder<TData = any>(
     );
   }
 
-  // Validate route and provide suggestions if invalid
-  const routeValidation = useMemo(() => {
-    // Ad-hoc / third-party calls bypass the route registry entirely — call any
-    // endpoint without pre-registering it. This covers:
-    //   - an absolute http(s) URL (used verbatim),
-    //   - the explicit `rawUrl` opt-in, and
-    //   - a leading-slash relative PATH (e.g. '/users'), which resolves against
-    //     the configured apiUrl/baseURL as a raw path. This mirrors ApiClient's
-    //     provider-mode behavior (an unregistered '/...' is treated as a raw path)
-    //     so a registry-less config — configureMinder({ apiUrl }) with no routes —
-    //     still lets useMinder('/users') work. Registered route NAMES never start
-    //     with '/', so this never shadows a real registry entry.
-    if (/^https?:\/\//i.test(route) || options.rawUrl || route.startsWith('/')) {
-      return { valid: true };
-    }
-    const config = context?.config || globalConfig;
-    if (config?.routes) {
-      const routeNames = Object.keys(config.routes);
-      if (!routeNames.includes(route)) {
-        console.log(`[useMinder Debug] Route "${route}" not found in:`, routeNames);
-        const suggestions = getRouteSuggestions(route, routeNames, 3);
-        return {
-          valid: false,
-          suggestions,
-          error: suggestions.length > 0
-            ? `Route "${route}" not found. Did you mean: ${suggestions.join(', ')}?`
-            : `Route "${route}" not found in configuration. Available routes: ${routeNames.slice(0, 5).join(', ')}${routeNames.length > 5 ? '...' : ''}`
-        };
-      }
-
-      // Check for unreplaced parameters
-      const routeConfig = config.routes[route];
-      if (routeConfig && hasUnreplacedParams(routeConfig.url)) {
-        if (!options.params) {
-          // If autoFetch is false, we might provide params later in refetch/mutate
-          if (options.autoFetch !== false) {
-            return {
-              valid: false,
-              error: `Route "${route}" requires parameters: ${routeConfig.url}. Please provide params option.`
-            };
-          }
-        } else {
-          // Try to replace params
-          const replacedUrl = replaceUrlParams(routeConfig.url, options.params);
-          if (hasUnreplacedParams(replacedUrl)) {
-            if (options.autoFetch !== false) {
-              return {
-                valid: false,
-                error: `Route "${route}" has unreplaced parameters. URL: ${replacedUrl}`
-              };
-            }
-          }
-        }
-      }
-    }
-    return { valid: true };
-  }, [route, context?.config, globalConfig, options.params, options.autoFetch, options.rawUrl]);
+  // Validate route and provide suggestions if invalid. The ad-hoc-bypass /
+  // registry-lookup / unreplaced-param logic is pure and lives in
+  // computeRouteValidation (useMinder.helpers.ts) — this just supplies the
+  // current hook-scoped inputs and memoizes on them.
+  const routeValidation = useMemo(
+    () => computeRouteValidation(
+      route,
+      options.rawUrl,
+      options.params,
+      options.autoFetch,
+      context?.config || globalConfig
+    ),
+    [route, context?.config, globalConfig, options.params, options.autoFetch, options.rawUrl]
+  );
 
   // Stabilize query key to prevent unnecessary refetches on every render
   // Allow custom query key or use [route, params]
   const queryKey = useMemo(
-    () => options.queryKey || [route, options.params],
+    () => deriveQueryKey(options.queryKey, route, options.params),
     [options.queryKey, route, JSON.stringify(options.params)]
   );
 
@@ -768,26 +683,21 @@ export function useMinder<TData = any>(
     let result: MinderResult<TData>;
 
     // Merge page param into options if infinite query
-    const requestParams = pageParam !== undefined
-      ? { ...options.params, ...pageParam }
-      : options.params;
+    const requestParams = mergeRequestParams(options.params, pageParam);
 
     // Wave I — local-first. The local key includes pageParam so paginated
     // local reads don't collide. `source` defaults to 'network' → the branches
     // below are skipped entirely and the existing code path runs unchanged.
     const source = options.source ?? 'network';
-    const localKey = pageParam !== undefined ? [...queryKey, pageParam] : queryKey;
+    const localKey = deriveLocalKey(queryKey, pageParam);
 
     // LOCAL: read only from local storage; never touch the network.
     if (source === 'local') {
       const localData = await getDefaultLocalStore().get<TData>(localKey);
-      return {
-        data: localData,
-        error: null,
-        status: 200,
-        success: true,
-        metadata: { method: HttpMethod.GET, url: route, duration: 0, cached: true },
-      };
+      return buildMinderResult<TData>({
+        data: localData, error: null, status: 200, success: true,
+        method: HttpMethod.GET, route, cached: true,
+      });
     }
 
     if (context?.apiClient) {
@@ -805,31 +715,15 @@ export function useMinder<TData = any>(
             ...options.axiosConfig
           } // Pass params as axios config for query string
         );
-        result = {
-          data: data as TData,
-          error: null,
-          status: 200,
-          success: true,
-          metadata: {
-            method: HttpMethod.GET,
-            url: route,
-            duration: 0,
-            cached: false,
-          },
-        };
+        result = buildMinderResult<TData>({
+          data: data as TData, error: null, status: 200, success: true,
+          method: HttpMethod.GET, route,
+        });
       } catch (error: any) {
-        result = {
-          data: null,
-          error,
-          status: error.status || 500,
-          success: false,
-          metadata: {
-            method: HttpMethod.GET,
-            url: route,
-            duration: 0,
-            cached: false,
-          },
-        };
+        result = buildMinderResult<TData>({
+          data: null, error, status: error.status || 500, success: false,
+          method: HttpMethod.GET, route,
+        });
       }
     } else {
       // Standalone mode — call minder() directly. minder() takes the request body
@@ -857,13 +751,10 @@ export function useMinder<TData = any>(
       } else {
         const fallback = await getDefaultLocalStore().get<TData>(localKey);
         if (fallback !== null) {
-          result = {
-            data: fallback,
-            error: null,
-            status: 200,
-            success: true,
-            metadata: { method: HttpMethod.GET, url: route, duration: 0, cached: true },
-          };
+          result = buildMinderResult<TData>({
+            data: fallback, error: null, status: 200, success: true,
+            method: HttpMethod.GET, route, cached: true,
+          });
         }
       }
     }
@@ -926,17 +817,12 @@ export function useMinder<TData = any>(
 
   const mutation = useMutation<MinderResult<TData>, any, any>({
     mutationFn: async (variables: any): Promise<MinderResult<TData>> => {
-      // Check if variables is our internal wrapper
-      const isInternalWrapper = variables && typeof variables === 'object' && '__minder_wrapper' in variables;
-      const data = isInternalWrapper ? variables.data : variables;
-      const runtimeOptions = isInternalWrapper ? variables.options : {};
-
-      // Merge runtime options with hook options
-      const mergedParams = { ...options.params, ...runtimeOptions.params };
-      const mergedHeaders = { ...options.headers, ...runtimeOptions.headers };
-      const mergedAxiosConfig = { ...options.axiosConfig, ...runtimeOptions.axiosConfig };
-
-
+      // Unwrap our internal `{ __minder_wrapper }` envelope (if present) and
+      // merge its per-call params/headers/axiosConfig with the hook options.
+      const { data, runtimeOptions } = unwrapMutationVariables(variables);
+      const { mergedParams, mergedHeaders, mergedAxiosConfig } =
+        mergeMutationRuntimeOptions(options, runtimeOptions);
+      const mutationMethod = options.method || HttpMethod.POST;
 
       // Check if request was cancelled
       if (cancelledRef.current) {
@@ -945,17 +831,7 @@ export function useMinder<TData = any>(
 
       // Re-validate route with dynamic params
       const config = context?.config || globalConfig;
-      if (config?.routes?.[route]) {
-        const routeConfig = config.routes[route];
-        if (hasUnreplacedParams(routeConfig.url)) {
-          const replacedUrl = replaceUrlParams(routeConfig.url, mergedParams);
-          if (hasUnreplacedParams(replacedUrl)) {
-            throw new Error(`Route "${route}" has unreplaced parameters. URL: ${replacedUrl}`);
-          }
-        }
-      } else if (!routeValidation.valid) {
-        throw new Error(routeValidation.error);
-      }
+      validateMutationRoute(route, config, mergedParams, routeValidation);
 
       // Validate data
       let validatedData = data;
@@ -963,18 +839,10 @@ export function useMinder<TData = any>(
         try {
           validatedData = await options.validate(data);
         } catch (validationError: any) {
-          return {
-            data: null,
-            error: validationError,
-            status: 400,
-            success: false,
-            metadata: {
-              method: options.method || HttpMethod.POST,
-              url: route,
-              duration: 0,
-              cached: false,
-            },
-          };
+          return buildMinderResult<TData>({
+            data: null, error: validationError, status: 400, success: false,
+            method: mutationMethod, route,
+          });
         }
       }
 
@@ -994,67 +862,35 @@ export function useMinder<TData = any>(
               ...mergedAxiosConfig
             }
           );
-          result = {
-            data: responseData as TData,
-            error: null,
-            status: 200,
-            success: true,
-            metadata: {
-              method: options.method || HttpMethod.POST,
-              url: route,
-              duration: 0,
-              cached: false,
-            },
-          };
+          result = buildMinderResult<TData>({
+            data: responseData as TData, error: null, status: 200, success: true,
+            method: mutationMethod, route,
+          });
         } catch (error: any) {
-          result = {
-            data: null,
-            error,
-            status: error.status || 500,
-            success: false,
-            metadata: {
-              method: options.method || HttpMethod.POST,
-              url: route,
-              duration: 0,
-              cached: false,
-            },
-          };
+          result = buildMinderResult<TData>({
+            data: null, error, status: error.status || 500, success: false,
+            method: mutationMethod, route,
+          });
         }
       } else {
         // Standalone
         try {
           const responseData = await minder<TData>(route, validatedData, {
             ...options,
-            method: options.method || HttpMethod.POST,
+            method: mutationMethod,
             params: mergedParams,
             headers: mergedHeaders,
             ...mergedAxiosConfig
           });
-          result = {
-            data: responseData as TData,
-            error: null,
-            status: 200,
-            success: true,
-            metadata: {
-              method: options.method || HttpMethod.POST,
-              url: route,
-              duration: 0,
-              cached: false,
-            }
-          };
+          result = buildMinderResult<TData>({
+            data: responseData as TData, error: null, status: 200, success: true,
+            method: mutationMethod, route,
+          });
         } catch (error: any) {
-          result = {
-            data: null,
-            error,
-            status: error.status || 500,
-            success: false,
-            metadata: {
-              method: options.method || HttpMethod.POST,
-              url: route,
-              duration: 0,
-              cached: false,
-            }
-          };
+          result = buildMinderResult<TData>({
+            data: null, error, status: error.status || 500, success: false,
+            method: mutationMethod, route,
+          });
         }
       }
       return result;
@@ -1442,67 +1278,10 @@ export function useMinder<TData = any>(
   // SELECTS which one to return, so the hook count never changes between
   // renders (react-hooks/rules-of-hooks safe). The shape mirrors the documented
   // invalid-route contract exactly.
-  const invalidRouteResult = useMemo<UseMinderReturn<TData>>(() => {
-    const validationError = new MinderError(routeValidation.error || 'Invalid route', 'ROUTE_VALIDATION_ERROR', 400);
-    return {
-      data: null,
-      items: null,
-      loading: false,
-      error: validationError,
-      success: false,
-      refetch: async () => ({
-        data: null,
-        error: validationError,
-        status: 400,
-        success: false,
-        metadata: { method: HttpMethod.GET, url: route, duration: 0, cached: false }
-      }),
-      mutate: async () => ({
-        data: null,
-        error: validationError,
-        status: 400,
-        success: false,
-        metadata: { method: HttpMethod.POST, url: route, duration: 0, cached: false }
-      }),
-      auth: {
-        setToken: async () => { },
-        getToken: () => null,
-        clearAuth: async () => { },
-        isAuthenticated: () => false,
-        setRefreshToken: async () => { },
-        getRefreshToken: () => null,
-        getCurrentUser: () => null,
-      },
-      cache: {
-        invalidate: async () => { },
-        prefetch: async () => { },
-        clear: () => { },
-        getStats: () => [],
-        isQueryFresh: () => false,
-      },
-      websocket: {
-        connect: () => { },
-        disconnect: () => { },
-        send: () => { },
-        subscribe: () => () => { },
-        isConnected: () => false,
-      },
-      upload: {
-        uploadFile: async () => { throw new Error(routeValidation.error); },
-        uploadMultiple: async () => { throw new Error(routeValidation.error); },
-        progress: { loaded: 0, total: 0, percentage: 0 },
-        isUploading: false,
-      },
-      isFetching: false,
-      isStale: false,
-      isMutating: false,
-      invalidate: async () => { },
-      cancel: async () => { },
-      isCancelled: false,
-      query: {},
-      mutation: {},
-    };
-  }, [routeValidation, route]);
+  const invalidRouteResult = useMemo<UseMinderReturn<TData>>(
+    () => buildInvalidRouteResult<TData>(routeValidation, route),
+    [routeValidation, route]
+  );
 
   // Valid-route container. Its identity only changes when meaningful data/state
   // changes — the callbacks and sub-objects are all stable, so re-renders with
