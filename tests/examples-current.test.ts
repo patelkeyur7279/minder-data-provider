@@ -53,3 +53,13 @@ describe('canonical example stays current with minder peer minimums', () => {
     expect(fs.existsSync(path.join(root, 'examples/nextjs'))).toBe(false);
   });
 });
+
+describe('A5 — dependency-automation config is valid', () => {
+  it('renovate preset is valid JSON with grouping rules', () => {
+    const p = path.join(root, '.github/renovate-preset.json');
+    const cfg = readJson(p);
+    expect(Array.isArray(cfg.packageRules)).toBe(true);
+    const groups = cfg.packageRules.map((r: { groupName?: string }) => r.groupName).filter(Boolean);
+    expect(groups).toEqual(expect.arrayContaining(['react', 'tanstack-query']));
+  });
+});

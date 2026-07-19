@@ -50,3 +50,20 @@ Each is an **optional** peer dependency, loaded on demand — installing minder 
 
 If `doctor` says everything is satisfied and something still breaks, please open an issue with its
 output — the error message is meant to be the documentation.
+
+## Staying up to date (automated)
+
+- **This repo** keeps its own dependencies current via Dependabot (`.github/dependabot.yml`).
+- **Your app** can get grouped, compatible bumps by extending the shared Renovate preset:
+
+  ```json
+  // renovate.json in your project
+  {
+    "extends": ["github>patelkeyur7279/minder-data-provider//.github/renovate-preset"]
+  }
+  ```
+
+  It groups the React and TanStack Query families (so `react`/`react-dom` never split, and Query
+  packages move together) and labels `minder-data-provider` bumps — which is where a new,
+  wider peer range arrives when a future React/react-query major is validated.
+
