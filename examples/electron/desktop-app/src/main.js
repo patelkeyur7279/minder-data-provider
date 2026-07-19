@@ -2,17 +2,17 @@ const { app, BrowserWindow, ipcMain, dialog } = require("electron");
 const path = require("path");
 const fs = require("fs").promises;
 
-// Import minder-data-provider for Electron
-const { minder, configureMinder } = require("minder-data-provider");
+// The Electron MAIN process is Node — import from the React-free `/node` entry
+// (the main entry re-exports the hooks and would require React here).
+const { minder, configureMinder } = require("minder-data-provider/node");
 
 let mainWindow;
 
 // Initialize Minder for main process
 function initializeMinder() {
+  // The /node configureMinder is the minimal { baseURL, timeout, headers } bag.
   configureMinder({
     baseURL: "http://localhost:3001",
-    platform: "electron",
-    debug: true,
   });
 
   console.log("✅ Minder initialized for main process");
