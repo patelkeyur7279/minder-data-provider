@@ -1,5 +1,19 @@
 # Project Status — updated 2026-07-19
 
+> **CURRENT STATE (2026-07-19, supersedes the milestone notes below, which are historical).**
+> All 6 initial providers Certified; M0 complete; CI green on Node 20+22 (Node 18 dropped — EOL +
+> webhook WebCrypto needs Node 20+). Backlog 51/61 done. Recent work (all committed locally; **NOT
+> pushed** per owner — "commit locally, push later"): fixed a real server-side crash (bare
+> `File`/`FileList` globals broke every `minder()` write in Node/SSR/edge — guarded + node-env
+> regression test); edge-safety + RSC audits; adoption DX (`minder doctor --fix`, precise
+> postinstall peer check, `init` framework auto-detect, `create-minder-app` starter, Dependabot +
+> shareable Renovate preset, published COMPATIBILITY matrix); refreshed all 5 legacy examples to
+> current API/deps (web + nodejs fully verified; electron/expo/react-native refreshed but stay
+> **Experimental** per RK-5 — no device/GUI CI). Open framework gap EXA-GAP-1 (no React-free path
+> to the non-deprecated configureMinder). Local gate: ~2265 tests / 0 fail, tsc + lint + build
+> clean. Owner-gated remainders: OSS-01 naming (analysis ready), OSS-07 funding, publish/release,
+> mobile/desktop/edge on-device CI (H-05).
+
 **STANDING OWNER AUTHORIZATION (2026-07-19):** continue the development cycle through all
 remaining roadmap tasks WITHOUT further owner interaction — wave order: Supabase (in flight) →
 Stripe → Clerk → Firebase → Razorpay + Sentry, plus tracked backlog items. Boundaries that

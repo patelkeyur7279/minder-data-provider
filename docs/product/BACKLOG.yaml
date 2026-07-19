@@ -455,9 +455,40 @@ tasks:
   - id: EXA-02
     title: Refresh legacy platform examples (web/electron/expo/nodejs/react-native) to current versions/APIs
     type: documentation
-    status: backlog
+    status: verified
     dependencies: [EXA-01]
+    evidence: >-
+      2026-07-19: all 5 refreshed to current deps + current API. FULLY VERIFIED: web/e-commerce
+      (Vite React 19 — install+tsc+vite build+vitest; fixed configureMinder baseURL->apiUrl +
+      performance.timeout) and nodejs/api (React-free /node entry — tsc+build+live minder() smoke
+      run; fixed moduleResolution node->node16 for exports subpaths). REFRESHED + Experimental
+      (grounded source fixes vs verified API; NOT device/GUI-run per RK-5): electron (main.js ->
+      /node, dropped non-MinderConfig keys, electron ^33, node --check ok), expo (useMinder
+      object-first -> positional string, isLoading -> loading, /expo entry, Expo ~52), react-native
+      (/native entry, RN 0.76). examples/README banner updated to honest per-example status.
+  - id: EXA-GAP-1
+    title: "Framework gap: no React-free access to the non-deprecated (unified) configureMinder"
+    type: bug
+    status: backlog
     notes: >-
-      The Nov-2025 platform examples pin React 18 / RQ 5.8 and predate the provider refactor.
-      Marked legacy in examples/README.md (EXA-01). Refresh to React 19 / RQ 5.90+ and current
-      APIs; mobile/desktop need the toolchain to runtime-verify (same class as H-05).
+      Surfaced by the nodejs example refresh. The React-free /node entry exports the core
+      configureMinder ({ baseURL,... }), which logs a deprecation pointing at the main
+      configureMinder ({ apiUrl, routes,... }) — but the main one is only reachable via entries
+      that re-export the hooks (require React). So a pure-Node/server app has no React-free path to
+      the current, non-deprecated config API. Fix candidate: export the unified configureMinder
+      React-free from /node and /server (compatibility-sensitive: /node's configureMinder currently
+      IS the baseURL one — needs the architecture skill + a migration note, owner-gated).
+  - id: ADOPTION-DX
+    title: Adoption DX — doctor --fix, precise postinstall notice, init framework auto-detect, create-minder-app, dependabot+renovate
+    type: implementation
+    status: verified
+    evidence: >-
+      2026-07-19: (A1) `minder doctor --fix` installs the exact versions to satisfy failing peers
+      (explicit consent; --dry-run preview; injectable installer) + tests. (A2) rewrote the
+      postinstall scripts/check-peer-deps.js: precise (not major-only) min checks across react/
+      react-dom/react-query/query-core, honors INIT_CWD, silent-on-success, non-blocking, tested.
+      (A3) `minder init` detects next/expo/react-native/electron/vite/react and prints the matching
+      entry, tested. (A4) packages/create-minder-app scaffolder + Vite/React 19 template — scaffold
+      + install + build verified, no secrets in template, tested. (A5) .github/dependabot.yml +
+      shareable .github/renovate-preset.json + COMPATIBILITY docs. Full gate: 2265 pass / 0 fail,
+      lint + type-check + build green. Commit-local (no push).
