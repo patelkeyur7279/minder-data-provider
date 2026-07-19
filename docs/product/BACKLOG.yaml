@@ -509,9 +509,11 @@ tasks:
       Node (no window/document/localStorage). PROVEN NON-VACUOUS: temporarily removing
       EnvironmentManager's `typeof window` guard makes it fail with "window is not defined", then
       restored (git clean). Confirmed EnvironmentManager + OfflineManager are already guarded (no
-      bug found). Full suite 2269/0, lint:check green, NO production code changed. Remaining:
-      AuthManager storage-guard test, crypto/webhook node paths already covered by
-      server-handlers/edge-safety; the CI job to run the node leg stays HELD (no-CI-change hold).
+      bug found). Increment 2 (2026-07-19): AuthManager localStorage/sessionStorage/cookie storage
+      guard-lock added to the same file — setToken/getToken no-throw in Node (5/5). crypto/webhook
+      node paths already covered by server-handlers/edge-safety. TEST LEG COMPLETE; the only
+      remaining piece is the CI job to run the node-env leg, which stays HELD (no-CI-change hold).
+      NO production code changed.
     evidence: >-
       jsdom default (package.json:288) provides File/FileList/Blob/crypto that Node/SSR/edge lack, so
       browser-global assumptions ship untested. This class already caused: FileList server-write crash

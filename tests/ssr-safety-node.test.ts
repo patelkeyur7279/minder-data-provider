@@ -48,6 +48,24 @@ describe('SSR/Node safety — core managers construct without browser globals', 
     expect(() => mgr?.destroy?.()).not.toThrow();
   });
 
+  it('AuthManager with browser storage types does not throw server-side (guards hold)', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { AuthManager } = require('../src/core/AuthManager');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { StorageType } = require('../src/constants/enums');
+    // localStorage/sessionStorage/cookie writes are each behind a typeof guard;
+    // configuring them and setting/reading a token must be a safe no-op in Node.
+    for (const storage of [StorageType.LOCAL_STORAGE, StorageType.SESSION_STORAGE, StorageType.COOKIE]) {
+      let auth: { setToken: (t: string) => void; getToken: () => unknown; clearAuth?: () => void };
+      expect(() => {
+        auth = new AuthManager({ storage, tokenKey: 'tk' });
+      }).not.toThrow();
+      expect(() => auth!.setToken('token-123')).not.toThrow();
+      expect(() => auth!.getToken()).not.toThrow();
+      expect(() => auth!.clearAuth?.()).not.toThrow();
+    }
+  });
+
   it('the core data path modules evaluate cleanly at import time in Node', () => {
     // Module-eval must not touch a browser global at the top level.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
