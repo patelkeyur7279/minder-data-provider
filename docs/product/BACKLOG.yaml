@@ -532,9 +532,10 @@ tasks:
     owner_decision: "DEC-6 (add node-env CI leg — cost); current task holds CI changes, so CI job lands when the hold lifts"
   - id: QR-R2
     title: Raise coverage gates on a published schedule
-    status: proposed
+    status: verified
     priority: P2
     milestone: M-Q0
+    progress: "2026-07-19: measured actual global coverage (stmts 64.6 / branch 58.3 / funcs 52.9 / lines 65.1) and raised package.json coverageThreshold from 50/45/56/56 (branches/functions/lines/statements) to 57/51/63/63 — ~1-2 pts below actuals so it locks in the gains without breaking (buffer for run-to-run branch variance). Verified: `npm test -- --coverage` (the CI command) passes the new gates; suite 2280/0. Local commit (effective on push). Next raise step when coverage climbs further."
     evidence: "coverageThreshold currently 50/45/56/56 (package.json jest) — low; real bugs slipped under it"
     problem: Low coverage gates let regressions and dead paths through.
     scope: Raise branches/functions/lines/statements in ~+5% steps per milestone; publish the schedule.
