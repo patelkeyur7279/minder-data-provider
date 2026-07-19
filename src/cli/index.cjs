@@ -595,6 +595,44 @@ function printKeySourceTable(stdout) {
   stdout.write('\n');
 }
 
+/**
+ * Detect the project's React framework from its package.json deps and map it to
+ * the matching minder entry point, so `init` can tell a beginner exactly which
+ * import to use. Detection only — nothing about the generated config changes.
+ * Returns { framework, entry } or null when no React framework is found.
+ */
+function detectFramework(cwd) {
+  let pkg;
+  try {
+    pkg = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8'));
+  } catch {
+    return null;
+  }
+  const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+  const has = (name) => Object.prototype.hasOwnProperty.call(deps, name);
+
+  // Order matters: the most specific framework wins (Next implies react; Expo
+  // implies react-native).
+  if (has('next')) return { framework: 'Next.js', entry: 'minder-data-provider/nextjs' };
+  if (has('expo')) return { framework: 'Expo', entry: 'minder-data-provider/expo' };
+  if (has('react-native')) return { framework: 'React Native', entry: 'minder-data-provider/native' };
+  if (has('electron')) return { framework: 'Electron', entry: 'minder-data-provider/electron' };
+  if (has('vite')) return { framework: 'Vite + React', entry: 'minder-data-provider/web' };
+  if (has('react')) return { framework: 'React', entry: 'minder-data-provider' };
+  return null;
+}
+
+function renderFrameworkHint(stdout, detected) {
+  if (detected) {
+    stdout.write(`\nDetected ${detected.framework} — import minder from '${detected.entry}'.\n`);
+  } else {
+    stdout.write(
+      "\nNo React framework detected in package.json — import from 'minder-data-provider'," +
+        ' or a platform entry: /web, /nextjs, /native, /expo, /electron, /node.\n'
+    );
+  }
+}
+
 function cmdInit(argv, ctx) {
   const { cwd, stdout } = ctx;
   const force = argv.includes('--force');
@@ -607,6 +645,7 @@ function cmdInit(argv, ctx) {
 
   if (!configWritten && !envWritten) {
     stdout.write('minder.config.ts and .env.example already exist — use --force to overwrite.\n');
+    renderFrameworkHint(stdout, detectFramework(cwd));
     printKeySourceTable(stdout);
     return 0;
   }
@@ -628,6 +667,7 @@ function cmdInit(argv, ctx) {
     stdout.write(`Wrote: ${wrote.join(', ')}\n`);
   }
 
+  renderFrameworkHint(stdout, detectFramework(cwd));
   printKeySourceTable(stdout);
   return 0;
 }
@@ -1154,6 +1194,7 @@ module.exports = {
   cmdHelp,
   checkPeerVersions,
   applyPeerFixes,
+  detectFramework,
   minVersionFromRange,
   versionGte,
   minderPeerMinimums,

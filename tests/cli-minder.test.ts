@@ -938,3 +938,57 @@ describe('minder doctor --fix (A1)', () => {
     expect(src).toMatch(/argv\.includes\('--fix'\)[\s\S]*applyPeerFixes/);
   });
 });
+
+describe('minder init — framework auto-detect (A3)', () => {
+  const mkProj = (deps: Record<string, string>) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'minder-init-detect-'));
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'x', dependencies: deps }));
+    return dir;
+  };
+
+  const cases: Array<[string, Record<string, string>, string, string]> = [
+    ['Next.js', { next: '15.0.0', react: '19.0.0' }, 'Next.js', 'minder-data-provider/nextjs'],
+    ['Expo', { expo: '52.0.0', 'react-native': '0.76.0', react: '18.3.0' }, 'Expo', 'minder-data-provider/expo'],
+    ['React Native', { 'react-native': '0.76.0', react: '18.3.0' }, 'React Native', 'minder-data-provider/native'],
+    ['Electron', { electron: '33.0.0', react: '19.0.0' }, 'Electron', 'minder-data-provider/electron'],
+    ['Vite', { vite: '5.4.0', react: '19.0.0' }, 'Vite + React', 'minder-data-provider/web'],
+    ['plain React', { react: '19.0.0' }, 'React', 'minder-data-provider'],
+  ];
+
+  for (const [name, deps, framework, entry] of cases) {
+    it(`detects ${name}`, () => {
+      const dir = mkProj(deps);
+      try {
+        const d = cli.detectFramework(dir);
+        expect(d).toEqual({ framework, entry });
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  }
+
+  it('returns null when there is no package.json or no React framework', () => {
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'minder-init-empty-'));
+    try {
+      expect(cli.detectFramework(empty)).toBeNull(); // no package.json
+      fs.writeFileSync(path.join(empty, 'package.json'), JSON.stringify({ dependencies: { express: '4' } }));
+      expect(cli.detectFramework(empty)).toBeNull(); // no react
+    } finally {
+      fs.rmSync(empty, { recursive: true, force: true });
+    }
+  });
+
+  it('init prints the detected framework hint', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'minder-init-hint-'));
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ dependencies: { next: '15', react: '19' } }));
+    try {
+      const out = execFileSync('node', [path.resolve(__dirname, '../bin/minder.js'), 'init'], {
+        cwd: dir,
+        encoding: 'utf8',
+      });
+      expect(out).toContain("Detected Next.js — import minder from 'minder-data-provider/nextjs'");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
