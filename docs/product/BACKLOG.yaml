@@ -500,9 +500,10 @@ tasks:
   # ============================================================================
   - id: QR-R1
     title: Node-environment test leg for server/edge/browser-global code paths
-    status: in_progress
+    status: verified
     priority: P0
     milestone: M-Q0
+    completion_note: "2026-07-19: node-env tests (ssr-safety-node, file-upload-detection-node, check-peer-deps) are collected by the standard `npx jest` (verified via --listTests) — Jest honors the per-file @jest-environment node docblock, so they ALREADY run in CI via `npm test`. No separate CI job needed; QR-R1 test leg complete + running in CI."
     progress: >-
       2026-07-19 increment 1: tests/ssr-safety-node.test.ts (@jest-environment node) added —
       constructs EnvironmentManager + OfflineManager and asserts core modules import cleanly in
@@ -637,7 +638,7 @@ tasks:
     status: in_progress
     priority: P2
     milestone: M-Q2
-    progress: "2026-07-19 increment 1 (Sonnet subagent, orchestrator-verified independently vs git HEAD): extracted sanitizeRequestData/applyRequestBody/buildUploadFormData/createUploadProgressHandler into src/core/apiClient/upload.ts (also de-duped the identical request()/requestRaw() body block). ApiClient 1210->1153 lines. VERIFIED: change scope = only ApiClient.ts + the new module (no test/other edits); ApiClient public method signatures byte-identical to HEAD; full suite 2275/0; type-check + build green; extracted helpers keep the edge-safe typeof File/Blob/FormData guards. Remaining: further ApiClient facets + useMinder.ts (1588) in future increments."
+    progress: "2026-07-19 increment 1 (Sonnet subagent, orchestrator-verified independently vs git HEAD): extracted sanitizeRequestData/applyRequestBody/buildUploadFormData/createUploadProgressHandler into src/core/apiClient/upload.ts (also de-duped the identical request()/requestRaw() body block). ApiClient 1210->1153 lines. VERIFIED: change scope = only ApiClient.ts + the new module (no test/other edits); ApiClient public method signatures byte-identical to HEAD; full suite 2275/0; type-check + build green; extracted helpers keep the edge-safe typeof File/Blob/FormData guards. Increment 2 (Sonnet, orchestrator-verified): extracted error-normalization (handleError/buildApiError/sanitizeHeaders, offlineManager now an explicit param, navigator guarded) to src/core/apiClient/errors.ts; ApiClient 1153->983 (now -227 from the original 1210); scope/public-signatures/suite(2275/0)/build all re-verified. Remaining: useMinder.ts (1588) in future increments."
     evidence: "wc -l: src/hooks/useMinder.ts = 1588, src/core/ApiClient.ts = 1210 (largest source files). Env-masked bugs (FileList) hid in large files."
     problem: Oversized modules are hard to review and hide bugs.
     scope: Behavior-preserving decomposition by responsibility (query/mutation/auth/cache/upload facets), no public-API change.

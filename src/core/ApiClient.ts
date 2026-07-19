@@ -8,11 +8,6 @@ import { OfflineManager } from './OfflineManager.js';
 import {
   MinderConfigError,
   MinderNetworkError,
-  MinderTimeoutError,
-  MinderOfflineError,
-  MinderValidationError,
-  MinderAuthError,
-  MinderAuthorizationError
 } from '../errors/index.js';
 import {
   CSRFTokenManager,
@@ -37,6 +32,7 @@ import {
 import type { InterceptableRequest, ShortCircuitResponse } from '../plugins/PluginSystem.js';
 import { redactSecrets } from '../security/secrets.js';
 import { applyRequestBody, buildUploadFormData, createUploadProgressHandler } from './apiClient/upload.js';
+import { normalizeApiError, sanitizeHeaders as sanitizeHeadersInternal } from './apiClient/errors.js';
 
 export class ApiClient {
   private axiosInstance: AxiosInstance;
@@ -707,181 +703,15 @@ export class ApiClient {
    * objects it returns (e.g. the 400 result object) and the MinderError subclasses
    * it throws. This guarantees every error a consumer eventually sees exposes the
    * untouched source error (typically the AxiosError) for `.raw` inspection.
+   *
+   * Delegates to `normalizeApiError` in `./apiClient/errors.js`.
    */
   private handleError(error: unknown): ApiError {
-    const attachRaw = (target: unknown): void => {
-      if (target && (typeof target === 'object' || typeof target === 'function')) {
-        try {
-          (target as { raw?: unknown }).raw = error;
-        } catch {
-          /* frozen/sealed target — best-effort only */
-        }
-      }
-    };
-
-    try {
-      const apiError = this.buildError(error);
-      attachRaw(apiError);
-      return apiError;
-    } catch (thrown) {
-      attachRaw(thrown);
-      throw thrown;
-    }
-  }
-
-  private buildError(error: unknown): ApiError {
-    // Check if it's an AxiosError
-    if (axios.isAxiosError(error)) {
-      const axiosError = error as AxiosError;
-
-      const status = axiosError.response?.status || 0;
-      const url = axiosError.config?.url;
-      const method = axiosError.config?.method?.toUpperCase();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const responseData = axiosError.response?.data as any;
-      const responseHeaders = axiosError.response?.headers as Record<string, string> | undefined;
-
-      switch (status) {
-        case 400:
-          return {
-            message: responseData?.message || 'Bad Request',
-            status,
-            code: 'BAD_REQUEST',
-            details: responseData,
-          };
-
-        case 401:
-          telemetry.recordAuthFailure();
-          throw new MinderAuthError(
-            responseData?.message || 'Authentication required'
-          );
-
-        case 403:
-          // Check if this is a CORS origin blocked error
-          if (responseHeaders?.['access-control-allow-origin'] === 'null') {
-            const corsMsg = responseData?.message || 'CORS origin blocked - request origin not allowed';
-            throw new MinderNetworkError(corsMsg, 403, responseData, url, method, 'CORS_ORIGIN_BLOCKED');
-          }
-          throw new MinderAuthorizationError(
-            responseData?.message || 'Permission denied'
-          );
-
-        case 404: {
-          const notFoundMsg = responseData?.message || `Resource not found: ${method} ${url}`;
-          throw new MinderNetworkError(notFoundMsg, 404, responseData, url, method);
-        }
-
-        case 405: {
-          // Check if this is a CORS preflight failed error
-          if (method === 'OPTIONS') {
-            const corsMsg = responseData?.message || 'CORS preflight request failed - server does not allow OPTIONS method';
-            throw new MinderNetworkError(corsMsg, 405, responseData, url, method, 'CORS_PREFLIGHT_FAILED');
-          }
-          const methodMsg = responseData?.message || `Method not allowed: ${method} ${url}`;
-          throw new MinderNetworkError(methodMsg, 405, responseData, url, method);
-        }
-
-        case 422: {
-          throw new MinderValidationError(
-            responseData?.message || 'Validation failed',
-            responseData?.errors
-          );
-        }
-
-        case 429: {
-          telemetry.recordRateLimitHit();
-          const rateLimitMsg = responseData?.message || 'Too many requests - rate limit exceeded';
-          throw new MinderNetworkError(rateLimitMsg, 429, responseData, url, method);
-        }
-
-        case 500:
-        case 502:
-        case 503:
-        case 504: {
-          const serverMsg = responseData?.message || 'Server error - please try again later';
-          throw new MinderNetworkError(serverMsg, status, responseData, url, method);
-        }
-
-        default:
-          throw new MinderNetworkError(
-            responseData?.message || axiosError.message || 'API error',
-            status,
-            responseData,
-            url,
-            method,
-            responseData?.code || 'API_ERROR'
-          );
-      }
-    }
-
-    // Network error (has request but no response)
-    if (error && typeof error === 'object' && 'request' in error) {
-      const networkError = error as {
-        request?: unknown;
-        code?: string;
-        config?: { url?: string; method?: string; timeout?: number };
-      };
-
-      // Check for timeout
-      if (networkError.code === 'ECONNABORTED') {
-        throw new MinderTimeoutError(
-          'Request timeout',
-          networkError.config?.timeout || 30000,
-          networkError.config?.url
-        );
-      }
-
-      // Check for offline
-      if (networkError.code === 'ERR_NETWORK' || typeof navigator !== 'undefined' && !navigator.onLine) {
-        // Queue request if offline manager is enabled
-        if (this.offlineManager && networkError.config?.url && networkError.config?.method) {
-          this.offlineManager.queueRequest({
-            url: networkError.config.url,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            method: networkError.config.method as any,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            body: (networkError.config as any).data,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            headers: (networkError.config as any).headers
-          });
-        }
-        throw new MinderOfflineError('No network connection', networkError.config?.url);
-      }
-
-      // Generic network error
-      throw new MinderNetworkError(
-        'Network error - please check your connection',
-        0,
-        undefined,
-        networkError.config?.url,
-        networkError.config?.method?.toUpperCase(),
-        'NETWORK_ERROR'
-      );
-    }
-
-    // Other errors
-    const errorMessage = error instanceof Error
-      ? error.message
-      : 'Unknown error occurred';
-
-    return {
-      message: errorMessage,
-      code: 'UNKNOWN_ERROR',
-      details: error,
-    };
+    return normalizeApiError(error, this.offlineManager);
   }
 
   private sanitizeHeaders(headers: any): any {
-    if (!headers) return headers;
-    const sanitized = { ...headers };
-    const sensitiveHeaders = ['Authorization', 'Cookie', 'Set-Cookie', 'X-CSRF-Token', 'x-csrf-token'];
-
-    Object.keys(sanitized).forEach(key => {
-      if (sensitiveHeaders.some(h => h.toLowerCase() === key.toLowerCase())) {
-        sanitized[key] = '[REDACTED]';
-      }
-    });
-    return sanitized;
+    return sanitizeHeadersInternal(headers);
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
