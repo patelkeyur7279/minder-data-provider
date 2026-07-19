@@ -36,7 +36,8 @@
 | TanStack Query caching | **Confirmed** | query-core based CacheManager, tested |
 | Auth (JWT presence/expiry, refresh) | **Confirmed** | Fail-closed since 2.2.0-beta.1; parity-tested |
 | Plugin bus (request/response/error/token hooks) | **Confirmed** | Emitters live in ApiClient + minder(); tested |
-| Plugin hooks `onUpload`/`onSync`/`onConnectivityChange` | **Not implemented** | Declared in interface, no emitters (audit) |
+| Plugin hooks `onUpload`/`onSync`/`onConnectivityChange` | **Partial — not reachable via public API** | Emitters exist + tested, but `onSync`/`onConnectivityChange` fire only from the internal `platform/offline` OfflineManager (not publicly exported), and `onUpload` fires only via `MediaUploadManager` (`/upload`), NOT the `useMinder`/`useMediaUpload` path (2026-07-19 release audit) |
+| Plugin hooks `onCacheHit`/`onCacheMiss` | **Not implemented (dead)** | Declared on interface; zero emit sites in `src/` — documented as roadmap only |
 | WebSocket | **Experimental** | 3 overlapping layers (core manager / client / adapters); tests exist for manager only |
 | Upload | **Experimental** | Works; re-render storm defect (perf audit A4) |
 | Offline | **Experimental** | Two competing implementations; 1s polling hooks |

@@ -210,9 +210,14 @@ function probeBundled(esmFile: string, expectKind: ExpectKind): unknown {
           `process.stdout.write(JSON.stringify({ ${expectKind}: typeof ${expectKind} }));`;
     fs.writeFileSync(entry, entrySource);
     const esbuildBin = require.resolve('esbuild/bin/esbuild');
+    // Run the esbuild launcher DIRECTLY, not via `node <esbuildBin>`. Under a clean
+    // install `esbuild/bin/esbuild` is the platform-native executable (Mach-O / ELF),
+    // so prefixing it with `process.execPath` makes node try to parse a binary as JS
+    // ("Invalid or unexpected token"). Executing it directly works for both the native
+    // binary and the shebang JS shim some platforms ship (npm marks it +x either way).
     execFileSync(
-      process.execPath,
-      [esbuildBin, entry, '--bundle', '--format=cjs', '--platform=node',
+      esbuildBin,
+      [entry, '--bundle', '--format=cjs', '--platform=node',
        '--tree-shaking=true', `--outfile=${out}`, '--log-level=silent'],
       { encoding: 'utf8' }
     );

@@ -173,7 +173,7 @@ function generateCatalogContent(certified, community) {
     "Don't see your SDK below? Any service — known or unknown to us — can be integrated directly in your app with the same public API; see the [custom-provider authoring guide](./CUSTOM.md).",
     '',
     '### Certified',
-    'Badged providers that have completed the certification process. Each includes a runnable example, comprehensive tests, and meets the 10-point certification checklist. Certified providers are production-ready and supported by the Minder team.',
+    'Badged providers that have completed the certification process. Each includes a runnable example, comprehensive mock-mode tests, and meets the 10-point certification checklist, and is supported by the Minder team. Note: certification verifies API/manifest correctness and mock-mode behavior; live third-party-service end-to-end runs are not yet part of CI.',
     '',
     '### Community',
     'Providers that ship the same API as Certified providers and are self-certified by their authors. Community providers are fully functional and follow Minder conventions, but certification is author-driven rather than team-verified.',

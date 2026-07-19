@@ -275,8 +275,8 @@ interface MinderPlugin {
   onRequest?(req: PluginRequest): void | Promise<void>;
   onResponse?(res: PluginResponse): void | Promise<void>;
   onError?(err: PluginError): void | Promise<void>;
-  onCacheHit?(e): void | Promise<void>;
-  onCacheMiss?(key: string): void | Promise<void>;
+  onCacheHit?(e): void | Promise<void>;                     // declared; NOT emitted yet (roadmap)
+  onCacheMiss?(key: string): void | Promise<void>;          // declared; NOT emitted yet (roadmap)
   onDestroy?(): void | Promise<void>;
 
   provideToken?(): string | null | Promise<string | null>;   // supplies auth token when the auth manager has none (Firebase/Auth0/Clerk)

@@ -332,7 +332,7 @@ Caching is backed by TanStack Query (the cache layer imports from `@tanstack/que
 - Config-level cache options via `configureMinder({ cache })`.
 - Result metadata reports `cached: boolean`.
 - The hook exposes `invalidate`, `cancel`, `isStale`, and a `cache` sub-object (stable identity).
-- Plugins observe cache activity via `onCacheHit(e)` / `onCacheMiss(key)`.
+- `onCacheHit`/`onCacheMiss` are declared on the plugin interface but are **not currently emitted** by the cache layer (no emit sites in `src/`) — treat them as roadmap, not working observability. Use `onRequest`/`onResponse` for request-level observation today.
 
 ```ts
 // Cache a GET for 30s
@@ -482,15 +482,15 @@ interface MinderPlugin {
   onRequest?(req: PluginRequest): void | Promise<void>;
   onResponse?(res: PluginResponse): void | Promise<void>;
   onError?(err: PluginError): void | Promise<void>;
-  onCacheHit?(e): void;
-  onCacheMiss?(key: string): void;
+  onCacheHit?(e): void;                                     // NOT emitted yet (roadmap)
+  onCacheMiss?(key: string): void;                          // NOT emitted yet (roadmap)
   onDestroy?(): void;
 
   provideToken?(): string | null | Promise<string | null>; // supplies a token when auth has none
   onAuthRefresh?(tokens): void;          // fired on token rotation
-  onUpload?(event: UploadLifecycleEvent): void;             // media pipeline
-  onSync?(event: SyncLifecycleEvent): void;                 // offline sync
-  onConnectivityChange?(online: boolean): void;
+  onUpload?(event: UploadLifecycleEvent): void;             // emitted only via MediaUploadManager (`minder-data-provider/upload`), NOT the useMinder/useMediaUpload path
+  onSync?(event: SyncLifecycleEvent): void;                 // emitted only by the internal platform OfflineManager (not yet publicly exported)
+  onConnectivityChange?(online: boolean): void;             // same internal OfflineManager — not reachable via the public API yet
 }
 ```
 

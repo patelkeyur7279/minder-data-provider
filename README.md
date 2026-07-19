@@ -232,8 +232,9 @@ Per-capability detail (auth, WebSocket, offline, uploads, …):
   `Access-Control-Allow-Credentials` with a wildcard origin.
 - **Secrets never enter the client bundle.** See Level 3 above.
 
-See the [Migration Guide](./docs/MIGRATION_GUIDE.md) for the full 2.2.0-beta.1 change
-list with before/after code for every behavior change.
+See the [Migration Guide](./docs/MIGRATION_GUIDE.md) for every behavior change — including the
+**breaking v2.x → v3.0 change (Redux integration removed)** and the 2.2.0-beta.1 changes, with
+before/after code.
 
 ## Documentation
 
