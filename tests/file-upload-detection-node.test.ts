@@ -11,7 +11,7 @@
  * reproduces the real server condition.
  */
 import { describe, it, expect } from '@jest/globals';
-import { isFileUpload } from '../src/core/minder/utils';
+import { isFileUpload, isEdgeRuntime } from '../src/core/minder/utils';
 
 describe('isFileUpload in a Node environment (no FileList global)', () => {
   it('FileList is genuinely undefined here (so this test exercises the real Node condition)', () => {
@@ -33,5 +33,26 @@ describe('isFileUpload in a Node environment (no FileList global)', () => {
     if (typeof Blob !== 'undefined') {
       expect(isFileUpload(new Blob(['x']))).toBe(true);
     }
+  });
+});
+
+describe('isEdgeRuntime — transport auto-selection (QR-E1)', () => {
+  it('is true only for edge: global fetch, not Node, not a classic browser', () => {
+    expect(isEdgeRuntime({ fetch: () => undefined })).toBe(true);
+    expect(isEdgeRuntime({ fetch: () => undefined, XMLHttpRequest: undefined })).toBe(true);
+  });
+  it('is false in Node (process.versions.node present)', () => {
+    expect(isEdgeRuntime({ fetch: () => undefined, process: { versions: { node: '22.0.0' } } })).toBe(false);
+  });
+  it('is false in a classic browser (XMLHttpRequest present)', () => {
+    expect(isEdgeRuntime({ fetch: () => undefined, XMLHttpRequest: class {} })).toBe(false);
+  });
+  it('is false when there is no global fetch', () => {
+    expect(isEdgeRuntime({})).toBe(false);
+    expect(isEdgeRuntime({ fetch: undefined })).toBe(false);
+  });
+  it('the real runtime here is NOT edge -> axios default is preserved', () => {
+    // This test file runs in the `node` env (process.versions.node present).
+    expect(isEdgeRuntime()).toBe(false);
   });
 });

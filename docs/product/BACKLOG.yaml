@@ -627,9 +627,17 @@ tasks:
     owner_decision: none (safe, but sequence AFTER QR-R1 for the test net)
   - id: QR-E1
     title: Fetch/axios transport strategy for edge/SSR
-    status: proposed
+    status: verified
     priority: P3
     milestone: M-Q2
+    progress: >-
+      2026-07-19 (additive): implemented the already-declared-but-phantom `transport:'auto'`.
+      Added isEdgeRuntime() (src/core/minder/utils.ts; injectable, unit-tested) — true only for a
+      global-fetch, non-Node, non-classic-browser runtime. minder.ts transport selection: 'fetch'
+      forces fetch, 'axios' forces axios, 'auto'/unset pick fetch ONLY when isEdgeRuntime() — so
+      Node/browser keep the axios default UNCHANGED (full suite's transport tests unchanged) while
+      edge (where axios's Node adapter fails) transparently works with no flag. Tests: isEdgeRuntime
+      9/9; full suite 2275/0; type-check green. docs/EDGE.md TL;DR updated.
     evidence: "src/core/minder.ts:298 — useFetch = transport==='fetch' && !isComplexRequest. axios is the default; fetch is opt-in. R-04 spike: axios default is edge-incompatible; the fetch path is edge-safe."
     problem: Edge/SSR users must know to pass transport:'fetch'; the default (axios) fails on edge.
     scope: Auto-select fetch when no axios-only feature is requested and/or when a global fetch + no-node environment is detected; keep axios opt-in/override. Additive, no behavior change for existing axios callers.

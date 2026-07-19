@@ -74,6 +74,29 @@ export function isFileUpload(data: unknown): boolean {
   );
 }
 
+/**
+ * True ONLY in an edge runtime (Cloudflare Workers / Vercel Edge / Deno Deploy):
+ * a global `fetch` exists, it is NOT Node (no `process.versions.node`), and it is
+ * NOT a classic browser (no `XMLHttpRequest`). Used to pick the native-fetch
+ * transport for `transport: 'auto'`/unset ONLY where axios's Node HTTP adapter is
+ * unavailable — so Node and browser behavior (axios default) is unchanged, while
+ * edge, where axios simply fails, transparently works. The env is injectable for
+ * testing. Deliberately conservative: any doubt -> false -> axios.
+ */
+export function isEdgeRuntime(
+  env: {
+    fetch?: unknown;
+    process?: { versions?: { node?: unknown } };
+    XMLHttpRequest?: unknown;
+  } = globalThis as unknown as { fetch?: unknown }
+): boolean {
+  return (
+    typeof env.fetch === 'function' &&
+    typeof env.process?.versions?.node === 'undefined' &&
+    typeof env.XMLHttpRequest === 'undefined'
+  );
+}
+
 // ============================================================================
 // MODEL INTEGRATION
 // ============================================================================

@@ -14,9 +14,15 @@ Edge runtimes have Web APIs (`fetch`, `atob`/`btoa`, `crypto.subtle`, `TextEncod
 ```ts
 import { minder } from 'minder-data-provider';
 
-// On edge, opt into the native-fetch transport. This bypasses axios entirely
-// for normal JSON requests, so nothing pulls in the Node HTTP stack.
-const { data } = await minder('users', { transport: 'fetch' });
+// On edge, minder now AUTO-selects the native-fetch transport — no flag needed
+// for normal JSON requests. (It detects an edge runtime: global fetch, not Node,
+// not a classic browser.) Node and browser keep the axios default unchanged.
+const { data } = await minder('users');
+
+// You can still force it either way:
+//   { transport: 'fetch' }  — always native fetch
+//   { transport: 'auto' }   — fetch on edge, axios on Node/browser (the default)
+//   { transport: 'axios' }  — always axios
 ```
 
 ## What works on edge

@@ -50,12 +50,13 @@ import type {
   MinderConfig,
   UploadProgress 
 } from './minder/types.js';
-import { 
-  detectMethod, 
-  isFileUpload, 
-  encodeWithModel, 
-  decodeWithModel, 
-  handleError 
+import {
+  detectMethod,
+  isFileUpload,
+  encodeWithModel,
+  decodeWithModel,
+  handleError,
+  isEdgeRuntime
 } from './minder/utils.js';
 
 // Re-export types for backward compatibility
@@ -292,12 +293,18 @@ export async function minder<TData = any>(
 
     // Transport selection:
     // - Complex requests (file uploads / progress) always use axios.
-    // - Otherwise default to axios for predictable, feature-complete behavior
-    //   (withCredentials/cookies, axiosConfig, consistent error shapes). The
-    //   faster native-fetch fast-path is OPT-IN via `transport: 'fetch'` so it
-    //   can never silently change request semantics for existing callers.
+    // - `transport: 'fetch'` forces the native-fetch fast-path; `'axios'` forces axios.
+    // - `'auto'` (and unset) pick fetch ONLY in an edge runtime (isEdgeRuntime),
+    //   where axios's Node HTTP adapter is unavailable and would otherwise fail.
+    //   Node and browser keep the axios default unchanged — so this can never
+    //   silently change request semantics for existing Node/browser callers; it
+    //   only makes edge (previously broken with the default) transparently work.
     const isComplexRequest = isFileUpload(data) || options?.onProgress || config.onUploadProgress;
-    const useFetch = options?.transport === 'fetch' && !isComplexRequest;
+    const transport = options?.transport;
+    const wantsFetch =
+      transport === 'fetch' ||
+      ((transport === 'auto' || transport === undefined) && isEdgeRuntime());
+    const useFetch = wantsFetch && !isComplexRequest;
 
     if (shortCircuited) {
       // A plugin already produced a synthetic response — skip the transport
