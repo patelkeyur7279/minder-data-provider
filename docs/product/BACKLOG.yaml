@@ -492,3 +492,141 @@ tasks:
       + install + build verified, no secrets in template, tested. (A5) .github/dependabot.yml +
       shareable .github/renovate-preset.json + COMPATIBILITY docs. Full gate: 2265 pass / 0 fail,
       lint + type-check + build green. Commit-local (no push).
+
+  # ============================================================================
+  # QUALITY ROADMAP (QR-*) — evidence-based plan; see docs/product/QUALITY_ROADMAP.md
+  # Planning only (2026-07-19). No production code changed. All statuses 'proposed'
+  # or 'ready' until owner sequences them. Decisions DEC-* are owner-gated.
+  # ============================================================================
+  - id: QR-R1
+    title: Node-environment test leg for server/edge/browser-global code paths
+    status: ready
+    priority: P0
+    milestone: M-Q0
+    evidence: >-
+      jsdom default (package.json:288) provides File/FileList/Blob/crypto that Node/SSR/edge lack, so
+      browser-global assumptions ship untested. This class already caused: FileList server-write crash
+      (fixed 4dbb94f), HttpMethod undefined, edge/RSC gaps — all jsdom-masked. Reference fix+test:
+      tests/file-upload-detection-node.test.ts (@jest-environment node).
+    problem: Real production bugs (server-side crashes) pass CI because the only test env is jsdom.
+    scope: Add @jest-environment node tests for src/server/**, src/core/minder.ts write/upload path, webhook crypto, and any src using a bare browser global. Add a CI job running the node-env leg.
+    non_goals: No runtime code changes; no new features; not fixing bugs found (file those separately).
+    dependencies: []
+    compat_impact: additive (tests + CI only) — patch
+    security_impact: positive — catches server-side crashes/redaction gaps earlier; no secrets in tests
+    acceptance: Every source module using a browser global or a server/edge path has a node-env test that FAILS if its guard is reverted (non-vacuous) and passes now; CI runs both jsdom + node legs green.
+    verification: "npx jest (both envs) green; revert one guard -> its node-env test fails; lint+type-check+build green"
+    docs_impact: note the node-env leg in CONTRIBUTING/testing docs
+    owner_decision: "DEC-6 (add node-env CI leg — cost); current task holds CI changes, so CI job lands when the hold lifts"
+  - id: QR-R2
+    title: Raise coverage gates on a published schedule
+    status: proposed
+    priority: P2
+    milestone: M-Q0
+    evidence: "coverageThreshold currently 50/45/56/56 (package.json jest) — low; real bugs slipped under it"
+    problem: Low coverage gates let regressions and dead paths through.
+    scope: Raise branches/functions/lines/statements in ~+5% steps per milestone; publish the schedule.
+    non_goals: No test-padding for coverage's sake; no gaming metrics.
+    dependencies: [QR-R1]
+    compat_impact: additive (CI gate) — patch
+    security_impact: neutral/positive
+    acceptance: gates raised per step with the suite still green; schedule documented
+    verification: "npx jest --coverage meets the new threshold; CI green"
+    docs_impact: document the coverage schedule
+    owner_decision: "DEC-6 (how high, CI cost)"
+  - id: QR-D1
+    title: Typed routes and inferred response types (opt-in, additive)
+    status: proposed
+    priority: P1
+    milestone: M-Q1
+    evidence: "src/hooks/useMinder.ts:599-600 — useMinder<TData = any>(route: string). No typed-route/inference mechanism exists (grep: no as-const routes / RouteMap)."
+    problem: Routes are bare strings and responses default to any — no autocomplete, no compile-time route/response safety (the biggest DX/reliability gap vs raw fetch/axios).
+    scope: Opt-in typed routes from `configureMinder({ routes } as const)` inferring route keys + response types into useMinder/minder, via an additive overload. Keep string + rawUrl + any escape hatches.
+    non_goals: Do NOT remove or change the existing string API; no runtime behavior change; no new provider APIs.
+    dependencies: [QR-R1]
+    compat_impact: additive (overload) — minor
+    security_impact: neutral
+    acceptance: "typed `useMinder('users')` autocompletes route keys and infers response type from config; `useMinder(anyString)` and rawUrl still compile+run unchanged; type-level tests (tsd/expectType) prove inference and the escape hatch"
+    verification: "type-level tests + runtime tests green; existing suite unchanged; tsc clean"
+    docs_impact: new typed-routes guide + example; README hook section
+    owner_decision: "DEC-3 (API design + escape hatches)"
+  - id: QR-D2
+    title: Unify configureMinder + close the React-free Node/server config gap (EXA-GAP-1)
+    status: blocked
+    priority: P1
+    milestone: M-Q1
+    evidence: "Two configureMinder: src/core/minder.ts:125 Partial<MinderConfig> {baseURL} (@deprecated :113) vs src/config/index.ts:167 UnifiedMinderConfig {apiUrl}. The React-free /node entry exports the DEPRECATED one; the non-deprecated one is only on entries that re-export hooks (require React). Tracked as EXA-GAP-1."
+    problem: Two config APIs with different shapes (one deprecated); a pure-Node/server app has no React-free path to the current config API.
+    scope: One documented config path incl. React-free. Likely expose the unified configureMinder React-free from /node and /server.
+    non_goals: No silent behavior change to the existing /node baseURL config without a deprecation cycle.
+    dependencies: [QR-R1]
+    compat_impact: "breaking IF /node's exported configureMinder changes shape -> 3.0; OR additive if a new React-free unified export is added alongside with the old deprecated"
+    security_impact: neutral
+    acceptance: a pure-Node app configures minder with the CURRENT (non-deprecated) API with no React installed and no deprecation warning; one documented config story
+    verification: "React-free install + tsc + runtime configure/minder() smoke run with no deprecation warning; suite green"
+    docs_impact: COMPATIBILITY + server/node guide; migration note if breaking
+    owner_decision: "DEC-2 (3.0 boundary), architecture skill review (changes an entry's config contract)"
+  - id: QR-P1
+    title: Lean, React-free pure-data import path (curate root exports)
+    status: proposed
+    priority: P2
+    milestone: M-Q2
+    evidence: "MEASURED 2026-07-19 (esbuild, minified, tree-shaken, import { minder } only): root=170.5 kB our-code + React; /core=116.8 kB no-React; /node=140.8 kB no-React. Root does 19 `export *` (src/index.ts). So a pure-data import from root pulls React + ~54 kB more than /core."
+    problem: Importing the pure-data `minder` from the root bundles React and materially more code — bad for edge/server/data-only consumers.
+    scope: Document + steer data/server users to /core|/node; curate root named exports to reduce accidental React pull; measure before/after. Additive first (docs + guidance); any root-export change is breaking -> 3.0.
+    non_goals: No giant re-architecture; no monorepo split in this item (DEC-1).
+    dependencies: [QR-R1, DEC-1]
+    compat_impact: "additive (docs/guidance) — patch; OR breaking if root exports are pruned -> 3.0"
+    security_impact: neutral
+    acceptance: a documented React-free data path whose MEASURED our-code size <= /core baseline and contains no React; before/after numbers recorded
+    verification: "re-run the bundle measurement; assert no-React + size target; suite green"
+    docs_impact: COMPATIBILITY + a 'lean/edge import' guide
+    owner_decision: "DEC-1 (evolve-in-place vs split), DEC-2 if root exports change"
+  - id: QR-P2
+    title: Prune deprecated/dead APIs (cors/corsHelper, /hook entry, Redux dead weight, phantom plugin hooks)
+    status: blocked
+    priority: P2
+    milestone: M-Q3
+    evidence: "7 @deprecated (src/core/minder.ts:113; src/core/types.ts:33,73; src/config/index.ts:76 'removed in v3.0'; src/hooks/index.ts:45; src/hook/index.ts:4). Redux slices generated (SliceGenerator.ts, MinderDataProvider.tsx) but NOT read by minder.ts/useMinder.ts main path. Plugin hooks onUpload/onSync/onConnectivityChange have no emit sites in src."
+    problem: Deprecated + dead surface inflates bundle, confuses the API, and (phantom hooks) advertises capabilities that do nothing.
+    scope: Remove deprecated cors/corsHelper + /hook entry; remove or gate unused Redux from the default path; either implement or delete the phantom plugin hooks.
+    non_goals: No removal without a deprecation cycle + migration note + codemod where feasible.
+    dependencies: [QR-R1, DEC-2, DEC-5]
+    compat_impact: breaking -> 3.0
+    security_impact: neutral/positive (less surface)
+    acceptance: deprecated/dead APIs removed in a 3.0 with migration notes; phantom hooks either emit + are tested, or are gone; bundle measurably smaller
+    verification: "suite green; bundle measurement shows reduction; migration notes present"
+    docs_impact: 3.0 migration guide; CHANGELOG
+    owner_decision: "DEC-2 (3.0 boundary), DEC-5 (removal policy)"
+  - id: QR-M1
+    title: Decompose oversized modules (useMinder.ts 1588, ApiClient.ts 1210)
+    status: proposed
+    priority: P2
+    milestone: M-Q2
+    evidence: "wc -l: src/hooks/useMinder.ts = 1588, src/core/ApiClient.ts = 1210 (largest source files). Env-masked bugs (FileList) hid in large files."
+    problem: Oversized modules are hard to review and hide bugs.
+    scope: Behavior-preserving decomposition by responsibility (query/mutation/auth/cache/upload facets), no public-API change.
+    non_goals: No behavior change; no public API change; not a rewrite.
+    dependencies: [QR-R1]
+    compat_impact: additive/internal — patch (public API unchanged)
+    security_impact: neutral
+    acceptance: modules split into focused files; public exports identical; full suite green incl. node-env leg; no diff in emitted d.ts public surface
+    verification: "before/after public d.ts diff empty; suite green; dist-entry-exports guard green"
+    docs_impact: none (internal)
+    owner_decision: none (safe, but sequence AFTER QR-R1 for the test net)
+  - id: QR-E1
+    title: Fetch/axios transport strategy for edge/SSR
+    status: proposed
+    priority: P3
+    milestone: M-Q2
+    evidence: "src/core/minder.ts:298 — useFetch = transport==='fetch' && !isComplexRequest. axios is the default; fetch is opt-in. R-04 spike: axios default is edge-incompatible; the fetch path is edge-safe."
+    problem: Edge/SSR users must know to pass transport:'fetch'; the default (axios) fails on edge.
+    scope: Auto-select fetch when no axios-only feature is requested and/or when a global fetch + no-node environment is detected; keep axios opt-in/override. Additive, no behavior change for existing axios callers.
+    non_goals: Do not remove axios; do not change semantics for callers who rely on axios features.
+    dependencies: [QR-R1]
+    compat_impact: additive (smart default) — minor
+    security_impact: neutral
+    acceptance: on edge/SSR (no axios feature used) minder() works WITHOUT an explicit transport flag; axios-feature callers unchanged; documented
+    verification: "node-env + edge-bundle tests; existing axios tests unchanged; suite green"
+    docs_impact: EDGE.md update
+    owner_decision: none

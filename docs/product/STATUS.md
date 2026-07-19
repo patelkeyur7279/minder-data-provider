@@ -13,6 +13,12 @@
 > to the non-deprecated configureMinder). Local gate: ~2265 tests / 0 fail, tsc + lint + build
 > clean. Owner-gated remainders: OSS-01 naming (analysis ready), OSS-07 funding, publish/release,
 > mobile/desktop/edge on-device CI (H-05).
+>
+> **Quality plan (2026-07-19):** the evidence-based reliability/DX/maintainability execution plan is
+> `docs/product/QUALITY_ROADMAP.md` (north-star bar, milestones M-Q0→M-Q3, decision register DEC-1→6,
+> first wave). Its work items are tracked in `BACKLOG.yaml` as `QR-R1, QR-R2, QR-D1, QR-D2, QR-P1,
+> QR-P2, QR-M1, QR-E1`. First wave = **M-Q0** (QR-R1 node-env test leg + measurement baselines) —
+> low-risk, additive, needs no owner decision to start.
 
 **STANDING OWNER AUTHORIZATION (2026-07-19):** continue the development cycle through all
 remaining roadmap tasks WITHOUT further owner interaction — wave order: Supabase (in flight) →
