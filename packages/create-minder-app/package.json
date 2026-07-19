@@ -1,0 +1,26 @@
+{
+  "name": "create-minder-app",
+  "version": "0.1.0",
+  "description": "Scaffold a new minder-data-provider app (Vite + React + TanStack Query) in one command.",
+  "bin": {
+    "create-minder-app": "index.js"
+  },
+  "files": [
+    "index.js",
+    "templates"
+  ],
+  "keywords": [
+    "minder",
+    "minder-data-provider",
+    "create",
+    "scaffold",
+    "starter",
+    "react",
+    "vite"
+  ],
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
