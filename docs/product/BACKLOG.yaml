@@ -561,6 +561,15 @@ tasks:
     verification: "type-level tests + runtime tests green; existing suite unchanged; tsc clean"
     docs_impact: new typed-routes guide + example; README hook section
     owner_decision: "DEC-3 (API design + escape hatches)"
+    design_note: >-
+      2026-07-19: NOT rushed at session-tail — needs DEC-3 (how routes DECLARE response types; this
+      is a published public API). Options for the owner: (A) phantom-type helper —
+      `routes: { users: route<User[]>('/users') } as const`, useMinder infers key + T from the
+      helper (most ergonomic; a tiny runtime helper). (B) separate type map — `configureMinder<{
+      users: User[] }>({ routes })`, keys/types from the generic (no runtime helper; more verbose).
+      (C) codegen from an OpenAPI/schema (most powerful; heaviest, new tooling). Recommended: A.
+      All keep `useMinder(anyString)` + `rawUrl` as escape hatches (non-breaking). Implementation is
+      a self-contained increment ONCE A/B/C is chosen; needs tsd/expectTypeOf type-level tests.
   - id: QR-D2
     title: Unify configureMinder + close the React-free Node/server config gap (EXA-GAP-1)
     status: blocked
@@ -639,7 +648,13 @@ tasks:
     verification: "before/after public d.ts diff empty; suite green; dist-entry-exports guard green"
     docs_impact: none (internal)
     owner_decision: none (safe, but sequence AFTER QR-R1 for the test net)
-  - id: QR-E1
+    design_note: >-
+      2026-07-19: QR-R1's SSR/node-env test net now exists (tests/ssr-safety-node.test.ts +
+      file-upload-detection-node), so this is unblocked. Deliberately NOT started at session-tail:
+      it refactors the two hottest/largest files (1588 + 1210 lines) and, against the standing
+      'nothing can break' rule, must be done as small behavior-preserving extractions each verified
+      by the FULL suite + a before/after public-.d.ts diff (must be empty). A focused session, not
+      a rushed one. Recommended first extraction: pull ApiClient's upload path into its own module.
     title: Fetch/axios transport strategy for edge/SSR
     status: verified
     priority: P3
