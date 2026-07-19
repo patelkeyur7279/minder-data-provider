@@ -312,7 +312,6 @@ interface MinderContextValue {
   environmentManager?: EnvironmentManager;
   proxyManager?: ProxyManager;
   debugManager?: DebugManager;
-  store: ReduxStore;               // Redux store
   queryClient: QueryClient;        // React Query client
   ReactQueryDevtools?: Component;  // Lazy-loaded DevTools
   dehydratedState?: DehydratedState;

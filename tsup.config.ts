@@ -71,8 +71,6 @@ export default defineConfig({
     '@tanstack/query-core',
     '@tanstack/react-query',
     '@tanstack/react-query-devtools',
-    '@reduxjs/toolkit',
-    'react-redux',
     'axios',
     'immer',
     'dompurify',

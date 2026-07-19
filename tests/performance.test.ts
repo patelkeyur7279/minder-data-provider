@@ -234,29 +234,6 @@ describe('Performance Utilities', () => {
       expect(result.estimatedSize).toBe(33); // 15 + 10 + 8
     });
 
-    it('should provide recommendations for large bundles', () => {
-      const result = getBundleSizeImpact([
-        'crud',
-        'auth',
-        'cache',
-        'websocket',
-        'upload',
-        'redux',
-        'tanstack-query',
-      ]);
-
-      expect(result.estimatedSize).toBeGreaterThan(90);
-      expect(result.recommendations.length).toBeGreaterThan(0);
-    });
-
-    it('should recommend against using multiple state managers', () => {
-      const result = getBundleSizeImpact(['redux', 'tanstack-query']);
-
-      expect(result.recommendations).toContain(
-        'Consider using only one state management solution'
-      );
-    });
-
     it('should handle empty features array', () => {
       const result = getBundleSizeImpact([]);
 

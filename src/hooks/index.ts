@@ -5,40 +5,6 @@ import { parseJWT as decodeJwt } from '../utils/jwt.js';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMinderContext } from '../core/MinderDataProvider.js';
 import type { CrudOperations, UploadProgress, MediaUploadResult } from '../core/types.js';
-import { MinderError } from '../errors/MinderError.js';
-
-// ---------------------------------------------------------------------------
-// react-redux is an OPTIONAL peer dependency. This module is re-exported from
-// every platform entry point (index.ts, web.ts, nextjs.ts - via the
-// auth/cache/websocket/upload barrels), so a static top-level `import ... from
-// 'react-redux'` here would break consumers who never touch Redux. Probe for
-// it once, at module load time, via `require()` inside try/catch (mirrors
-// AuthManager's optional-dependency pattern, src/core/AuthManager.ts) so
-// bundlers/Node never hard-resolve react-redux when it isn't installed.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type UseSelectorFn = <TState = any, TSelected = unknown>(
-  selector: (state: TState) => TSelected
-) => TSelected;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type UseDispatchFn = () => any;
-
-let useSelector: UseSelectorFn | undefined;
-let useDispatch: UseDispatchFn | undefined;
-
-try {
-  const reactRedux = require('react-redux');
-  useSelector = reactRedux.useSelector;
-  useDispatch = reactRedux.useDispatch;
-} catch {
-  // react-redux not installed - useReduxSlice/useStore will throw a clear
-  // MinderError when called instead of crashing at import time.
-  useSelector = undefined;
-  useDispatch = undefined;
-}
-
-const REDUX_NOT_ENABLED_MESSAGE =
-  'Redux is not enabled: install react-redux + @reduxjs/toolkit (optional peers) ' +
-  'and do not set `redux: false` in your MinderConfig to use this hook.';
 
 // Main hook for CRUD operations
 /**
@@ -208,43 +174,6 @@ export function useCache() {
     isQueryFresh: (queryKey: string | string[]) => cacheManager.isQueryFresh(queryKey),
     prefetchQuery: <T = any>(queryKey: string | string[], queryFn: () => Promise<T>, options?: any) =>
       cacheManager.prefetchQuery(queryKey, queryFn, options),
-  };
-}
-
-// Redux store hook
-export function useStore() {
-  const { store } = useMinderContext();
-
-  if (!store) {
-    throw new MinderError(REDUX_NOT_ENABLED_MESSAGE, 'REDUX_NOT_ENABLED', 500);
-  }
-
-  return {
-    getState: () => store.getState(),
-    dispatch: (action: any) => store.dispatch(action),
-    subscribe: (listener: () => void) => store.subscribe(listener),
-  };
-}
-
-// Redux slice hook
-export function useReduxSlice(routeName: string) {
-  const { store } = useMinderContext();
-
-  if (!store || !useDispatch || !useSelector) {
-    throw new MinderError(REDUX_NOT_ENABLED_MESSAGE, 'REDUX_NOT_ENABLED', 500);
-  }
-
-  const dispatch = useDispatch();
-  const state = useSelector((state: any) => state[routeName]);
-
-  // Get slice from store (this would be populated by sliceGenerator)
-  const slice = (store as any)._slices?.[routeName];
-
-  return {
-    state,
-    actions: slice?.actions || {},
-    selectors: slice?.selectors || {},
-    dispatch,
   };
 }
 

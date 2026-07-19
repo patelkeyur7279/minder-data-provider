@@ -2,7 +2,7 @@
 
 The single authoritative reference of everything **minder-data-provider** can do as of
 `2.2.0-beta.0`. The library is a data provider for React / Next.js / React Native / Electron
-built over **TanStack Query** + **Redux Toolkit** + **axios**, with first-class auth, caching,
+built over **TanStack Query** + **axios**, with first-class auth, caching,
 real-time, offline, file upload, a plugin/integration system, and secret-key safety.
 
 ---
@@ -258,7 +258,6 @@ configureMinder({
   cache,
   corsHelper,   // 'cors' is deprecated
   websocket,
-  redux,
   performance,
   debug,
   security,

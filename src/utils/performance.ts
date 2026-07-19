@@ -426,7 +426,6 @@ export function getBundleSizeImpact(features: string[]): {
     'upload': 7,
     'debug': 5,
     'ssr': 6,
-    'redux': 20,
     'tanstack-query': 25,
   };
 
@@ -435,10 +434,6 @@ export function getBundleSizeImpact(features: string[]): {
   }, 0);
 
   const recommendations: string[] = [];
-
-  if (features.includes('redux') && features.includes('tanstack-query')) {
-    recommendations.push('Consider using only one state management solution');
-  }
 
   if (estimatedSize > 100) {
     recommendations.push('Bundle size is large. Consider code splitting or removing unused features');

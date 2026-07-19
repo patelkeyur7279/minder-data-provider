@@ -25,18 +25,13 @@ const checks = [
   {
     name: "Conditional loading",
     test: () => {
-      const hasReduxCondition = loaderSource.includes(
-        "if (!this.config.redux)"
-      );
       const hasOptimisticCondition = loaderSource.includes(
         "if (!hasOptimistic)"
       );
       const hasSanitizationCondition = loaderSource.includes(
         "if (!this.config.security?.sanitization)"
       );
-      return (
-        hasReduxCondition && hasOptimisticCondition && hasSanitizationCondition
-      );
+      return hasOptimisticCondition && hasSanitizationCondition;
     },
     description: "Dependencies only load when config requires them",
   },

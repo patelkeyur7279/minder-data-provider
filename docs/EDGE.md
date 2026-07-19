@@ -56,9 +56,9 @@ edge breakage:
   `typeof process !== 'undefined'` (in `Logger`, `PlatformDetector`). No-ops on edge.
 - **`Buffer`** in `jwt.ts` and the Razorpay provider — reached only when `atob`/`btoa` are
   absent. Edge has both, so the Web path is taken.
-- **`require()`** in `FeatureLoader` (sync path), `MinderDataProvider` (Redux), `ProxyManager`
-  (express), and the native/expo storage adapters — all inside `try/catch` or platform guards,
-  and lazily (never at module-evaluation time), so importing the package on edge does not throw.
+- **`require()`** in `FeatureLoader` (sync path), `ProxyManager` (express), and the native/expo
+  storage adapters — all inside `try/catch` or platform guards, and lazily (never at
+  module-evaluation time), so importing the package on edge does not throw.
 - **`credentials.ts`** (`require('node:fs')` + `Buffer`) is **server/Node-only by design** and
   is dynamically imported, so it stays out of an edge bundle unless you resolve a file credential.
 

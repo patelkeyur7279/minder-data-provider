@@ -5,6 +5,27 @@ All notable changes to Minder Data Provider will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - Unreleased (planned — recommended MAJOR)
+
+### Removed (BREAKING)
+
+- **Redux integration removed entirely.** MDP no longer ships any Redux code or
+  optional peer dependency. Removed public API: the `useStore()` and
+  `useReduxSlice()` hooks, the `ReduxConfig` type, the `configureMinder({ redux })`
+  config field, `MinderDataProvider`'s Redux `<Provider>` wrapper and
+  `useMinderContext().store`, and `DynamicLoader`'s redux members
+  (`loadRedux`/`getStore`/`isReduxLoaded`/`addReducer`, the `'redux'` preload
+  option, and the `redux` field in `getLoadingStatus()`/`getBundleSavings()`).
+  The `@reduxjs/toolkit` and `react-redux` optional peers are dropped. Rationale:
+  the auto-generated Redux slices were read by nothing on the core data path
+  (dead weight in every consumer's bundle). TanStack Query remains the single
+  server-state layer. Migration: see docs/MIGRATION_GUIDE.md (v2.x → v3.0). Most
+  consumers were not using the Redux hooks/config and need no code changes.
+  Measured bundle effect (min+treeshake, `import { minder }`): our-code
+  170.56 kB → 166.20 kB; full bundle 323.05 kB → 280.80 kB (react-redux/@reduxjs
+  no longer inlined). **Version not yet bumped in-repo; this is the recommended
+  classification.**
+
 ## [2.2.0-beta.1] - Unreleased
 
 ### Changed (security — behavior changes)

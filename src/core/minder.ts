@@ -8,7 +8,6 @@
  * - Model class integration (encode/decode)
  * - Automatic error handling (never throws)
  * - TanStack Query integration (caching, deduplication)
- * - Redux Toolkit integration (state management)
  * - WebSocket support (realtime updates)
  * 
  * @example

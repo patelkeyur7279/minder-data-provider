@@ -181,7 +181,6 @@
   },
   "keywords": [
     "react",
-    "redux",
     "tanstack-query",
     "nextjs",
     "data-provider",
@@ -206,7 +205,6 @@
     "@babel/core": "^7.28.5",
     "@babel/plugin-transform-class-static-block": "^7.28.3",
     "@eslint/js": "^9.39.1",
-    "@reduxjs/toolkit": "^2.9.2",
     "@tanstack/query-core": "^5.90.6",
     "@tanstack/react-query": "^5.90.6",
     "@tanstack/react-query-devtools": "^5.90.2",
@@ -230,7 +228,6 @@
     "jiti": "^2.6.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-redux": "^9.2.0",
     "ts-jest": "^29.1.2",
     "tsup": "^8.0.2",
     "typescript": "^5.4.3",
@@ -238,7 +235,6 @@
   },
   "peerDependencies": {
     "@clerk/clerk-js": "^5.0.0",
-    "@reduxjs/toolkit": "^2.9.2",
     "@supabase/supabase-js": "^2.0.0",
     "@tanstack/query-core": "^5.90.6",
     "@tanstack/react-query": "^5.90.6",
@@ -248,14 +244,10 @@
     "@sentry/browser": "^8.0.0",
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0",
-    "react-redux": "^9.2.0",
     "stripe": "^14.0.0"
   },
   "peerDependenciesMeta": {
     "@clerk/clerk-js": {
-      "optional": true
-    },
-    "@reduxjs/toolkit": {
       "optional": true
     },
     "@supabase/supabase-js": {
@@ -271,9 +263,6 @@
       "optional": true
     },
     "@sentry/browser": {
-      "optional": true
-    },
-    "react-redux": {
       "optional": true
     },
     "stripe": {

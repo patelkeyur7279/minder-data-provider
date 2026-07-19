@@ -6,11 +6,11 @@
  * - No heavy deps loaded at init
  * - Only load what's needed based on config
  * - Reduces initial bundle by 60-70%
- * 
+ *
  * @example
- * // Redux only loaded when user actually uses Redux
+ * // Axios only loaded when the client actually makes a request
  * const loader = new LazyDependencyLoader(config);
- * const redux = await loader.loadRedux(); // Loads on first use
+ * const axios = await loader.loadAxios(); // Loads on first use
  */
 
 import type { MinderConfig } from './types.js';
@@ -53,27 +53,6 @@ export class LazyDependencyLoader {
     this.config = config;
     this.logger = new Logger('LazyDependencyLoader', {
       level: config.debug?.enabled ? LogLevel.DEBUG : LogLevel.WARN
-    });
-  }
-
-  /**
-   * Load Redux only if user has redux config
-   */
-  async loadRedux() {
-    if (!this.config.redux) {
-      return null; // Don't load if not configured
-    }
-
-    return this.loadModule('redux', async () => {
-      const [toolkit, reactRedux] = await Promise.all([
-        import('@reduxjs/toolkit'),
-        import('react-redux'),
-      ]);
-      
-      return {
-        toolkit,
-        reactRedux,
-      };
     });
   }
 
@@ -212,11 +191,6 @@ export class LazyDependencyLoader {
     promises.push(this.loadTanStackQuery());
     promises.push(this.loadAxios());
 
-    // Load based on config
-    if (this.config.redux) {
-      promises.push(this.loadRedux());
-    }
-
     // Load async (don't block)
     Promise.all(promises).catch((error) => {
       this.logger.error('Failed to preload dependencies:', error);
@@ -230,7 +204,6 @@ export class LazyDependencyLoader {
     const modules: DependencyModule[] = [];
 
     const deps = [
-      { name: 'redux', version: '^2.3.0', size: '~15KB', requiredBy: ['ReduxConfig'] },
       { name: 'tanstack-query', version: '^5.59.0', size: '~40KB', requiredBy: ['Cache', 'CRUD'] },
       { name: 'axios', version: '^1.7.0', size: '~13KB', requiredBy: ['HTTP'] },
       { name: 'immer', version: '^10.1.0', size: '~12KB', requiredBy: ['Optimistic Updates'] },
@@ -338,13 +311,6 @@ export class LazyDependencyLoader {
   getRecommendations(): string[] {
     const recommendations: string[] = [];
     const loaded = this.getLoadedModules();
-
-    // Check if Redux loaded but no redux config
-    if (loaded.find((m) => m.name === 'redux')?.loaded && !this.config.redux) {
-      recommendations.push(
-        'Redux is loaded but not configured. Consider removing redux dependency.'
-      );
-    }
 
     // Check if Immer loaded but no optimistic updates
     const hasOptimistic = Object.values(this.config.routes).some(

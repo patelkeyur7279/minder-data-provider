@@ -44,9 +44,7 @@ describe('Package Infrastructure', () => {
     // hard deps installs a second copy alongside the consumer's own, breaking
     // Redux/QueryClient context (fixed in 2.2.0-beta.1).
     expect(pkg.peerDependencies['@tanstack/react-query']).toBeDefined();
-    expect(pkg.peerDependencies['@reduxjs/toolkit']).toBeDefined();
     expect(pkg.dependencies['@tanstack/react-query']).toBeUndefined();
-    expect(pkg.dependencies['@reduxjs/toolkit']).toBeUndefined();
     // Non-context utilities stay bundled so users don't manage versions.
     expect(pkg.dependencies['axios']).toBeDefined();
     expect(pkg.dependencies['immer']).toBeDefined();

@@ -1,7 +1,35 @@
 # Migration Guide
 
-This guide covers two migrations: **2.2.0-beta.0 → 2.2.0-beta.1** (below — the current
-release) and the older **v1.x → v2.0** guide (further down).
+This guide covers: **v2.x → v3.0** (the Redux removal, below), **2.2.0-beta.0 → 2.2.0-beta.1**,
+and the older **v1.x → v2.0** guide (further down).
+
+## v2.x → v3.0 — Redux integration removed (BREAKING)
+
+**What changed:** MDP no longer ships any Redux integration. Redux was an optional peer used only
+for auto-generated per-route slices that nothing on the core data path read. It has been removed
+entirely — smaller bundle, one clear state model (TanStack Query for server state).
+
+**Removed public API:**
+
+| Removed | Replace with |
+|---|---|
+| `useStore()` hook | Use your app's own Redux store (`react-redux`'s `useStore`) if you still need Redux — MDP no longer provides one. |
+| `useReduxSlice(route)` hook | Use `useMinder(route)` for data (it already exposes `data`/`loading`/`error`/`mutate`); manage any extra UI state in your own store. |
+| `ReduxConfig` type + `configureMinder({ redux })` config field | Remove the `redux` field from your config — it is no longer read. |
+| `MinderDataProvider`'s Redux `<Provider>` wrapper + `useMinderContext().store` | `MinderDataProvider` renders the `QueryClientProvider` tree directly; `ctx.store` is gone. If you need a Redux `<Provider>`, add your own around `MinderDataProvider`. |
+| `DynamicLoader` redux members (`loadRedux`, `getStore`, `isReduxLoaded`, `addReducer`, the `'redux'` preload option, and the `redux` field in `getLoadingStatus()`/`getBundleSavings()`) | None — these lazy-loaded a store MDP no longer manages. |
+| `@reduxjs/toolkit` / `react-redux` optional peer dependencies | No longer declared. If your app uses Redux independently, keep them as your own direct dependencies. |
+
+**Migration steps:**
+1. Remove any `redux` field from your `configureMinder(...)` / `MinderDataProvider` config.
+2. Replace `useStore()` / `useReduxSlice()` calls — use `useMinder()` for data; use your own store for UI state.
+3. If you relied on MDP creating a Redux store, wrap your app in your own `<Provider>` from `react-redux`.
+4. No dependency changes are required unless you were relying on MDP to pull in Redux transitively (it never did — they were optional peers).
+
+If you were **not** using the Redux hooks/config (the common case — they were read by nothing on the
+main path), **no code changes are needed.**
+
+
 
 ## 2.2.0-beta.0 → 2.2.0-beta.1
 

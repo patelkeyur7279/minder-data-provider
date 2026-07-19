@@ -36,36 +36,6 @@ import { DevTools } from "../devtools/DevTools.js";
 import { DebugLogType } from "../constants/enums.js";
 import { setGlobalMinderConfig } from "./globalConfig.js";
 
-// ---------------------------------------------------------------------------
-// Redux is an OPTIONAL peer dependency: react-redux, @reduxjs/toolkit, and
-// SliceGenerator.ts (which statically imports @reduxjs/toolkit) must never be
-// hard-resolved when those packages aren't installed. Probe for them once, at
-// module load time, via `require()` inside try/catch — this mirrors
-// AuthManager's optional-dependency pattern (src/core/AuthManager.ts) and
-// keeps detection synchronous so the store can still be created inside the
-// render-time useMemo below when the packages ARE present.
-type ReduxStore = ReturnType<typeof import("@reduxjs/toolkit").configureStore>;
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let ReduxProviderComponent: ComponentType<{ store: any; children?: ReactNode }> | undefined;
-let configureStoreFn: typeof import("@reduxjs/toolkit").configureStore | undefined;
-let createApiSlicesFn: typeof import("./SliceGenerator.js").createApiSlices | undefined;
-
-try {
-  ReduxProviderComponent = require("react-redux").Provider;
-  configureStoreFn = require("@reduxjs/toolkit").configureStore;
-  createApiSlicesFn = require("./SliceGenerator.js").createApiSlices;
-} catch {
-  // react-redux / @reduxjs/toolkit not installed - Redux support is disabled.
-  ReduxProviderComponent = undefined;
-  configureStoreFn = undefined;
-  createApiSlicesFn = undefined;
-}
-
-const isReduxSupportAvailable = Boolean(
-  ReduxProviderComponent && configureStoreFn && createApiSlicesFn
-);
-
 interface MinderContextValue {
   config: MinderConfig;
   apiClient: ApiClient;
@@ -75,13 +45,6 @@ interface MinderContextValue {
   environmentManager?: EnvironmentManager;
   proxyManager?: ProxyManager;
   debugManager?: DebugManager;
-  /**
-   * Redux store. Only present when react-redux + @reduxjs/toolkit (optional
-   * peers) are installed AND `config.redux !== false`. Consumers must not
-   * assume this is always defined - see useReduxSlice/useStore for the
-   * "Redux not enabled" error thrown when it's absent.
-   */
-  store?: ReduxStore;
   queryClient: QueryClient;
   ReactQueryDevtools?: ComponentType<{ initialIsOpen?: boolean }>;
   dehydratedState?: DehydratedState;
@@ -234,36 +197,6 @@ export function MinderDataProvider({
       )
       : undefined;
 
-    // Redux is opt-out via `config.redux === false`, and only ever enabled
-    // when react-redux + @reduxjs/toolkit (optional peers) are installed.
-    const reduxExplicitlyDisabled = finalConfig.redux === false;
-    const reduxConfig = finalConfig.redux === false ? undefined : finalConfig.redux;
-    const reduxEnabled =
-      !reduxExplicitlyDisabled &&
-      isReduxSupportAvailable &&
-      !!createApiSlicesFn &&
-      !!configureStoreFn;
-
-    let store: ReduxStore | undefined;
-    if (reduxEnabled && createApiSlicesFn && configureStoreFn) {
-      // Generate Redux slices for all routes
-      const slices = createApiSlicesFn(finalConfig.routes, apiClient);
-
-      // Create Redux store
-      store = configureStoreFn({
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        reducer: slices.reducers as any,
-        middleware: (getDefaultMiddleware) =>
-          getDefaultMiddleware({
-            serializableCheck: {
-              ignoredActions: ["persist/PERSIST", "persist/REHYDRATE"],
-            },
-          }),
-        devTools: reduxConfig?.devTools ?? true,
-        preloadedState: reduxConfig?.preloadedState,
-      });
-    }
-
     let ReactQueryDevtools:
       | ComponentType<{ initialIsOpen?: boolean }>
       | undefined;
@@ -286,7 +219,6 @@ export function MinderDataProvider({
       environmentManager,
       proxyManager,
       debugManager,
-      store,
       queryClient: queryClientRef,
       ReactQueryDevtools,
     };
@@ -335,13 +267,7 @@ export function MinderDataProvider({
 
   return (
     <MinderContext.Provider value={contextValue}>
-      {contextValue.store && ReduxProviderComponent ? (
-        <ReduxProviderComponent store={contextValue.store}>
-          {queryClientProviderContent}
-        </ReduxProviderComponent>
-      ) : (
-        queryClientProviderContent
-      )}
+      {queryClientProviderContent}
     </MinderContext.Provider>
   );
 }

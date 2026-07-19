@@ -32,9 +32,7 @@ npm install minder-data-provider @tanstack/react-query
 ```
 
 `@tanstack/react-query` powers the caching layer and is a required peer dependency —
-install it yourself so your app controls the version. Redux support
-(`@reduxjs/toolkit`, `react-redux`) is optional; add it only if you use the
-Redux-backed hooks.
+install it yourself so your app controls the version.
 
 **Requirements:** Node ≥ 20, React 18 or 19, `@tanstack/react-query` ≥ 5.90.6. See the full
 [compatibility matrix](docs/COMPATIBILITY.md), or run **`npx minder doctor`** in your project — it

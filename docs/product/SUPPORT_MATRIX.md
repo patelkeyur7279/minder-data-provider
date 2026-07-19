@@ -40,7 +40,6 @@
 | WebSocket | **Experimental** | 3 overlapping layers (core manager / client / adapters); tests exist for manager only |
 | Upload | **Experimental** | Works; re-render storm defect (perf audit A4) |
 | Offline | **Experimental** | Two competing implementations; 1s polling hooks |
-| Redux slices | **Deprecated-candidate** | Built for every route, read by nothing on the main path (audit A8/A9) |
 
 ## Provider integrations
 
