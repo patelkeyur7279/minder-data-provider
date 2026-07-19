@@ -548,9 +548,10 @@ tasks:
     owner_decision: "DEC-6 (how high, CI cost)"
   - id: QR-D1
     title: Typed routes and inferred response types (opt-in, additive)
-    status: proposed
+    status: verified
     priority: P1
     milestone: M-Q1
+    progress: "2026-07-19 (Sonnet subagent, orchestrator-verified independently): DEC-3 resolved autonomously = the FACTORY variant of Option A. New src/core/typedRoutes.ts: route<T>(url,opts?) phantom helper + ResponseOf<T> + createTypedMinder(routes) returning a typed minder/useMinder that DELEGATE to the real ones (no re-implemented fetching). Additive exports from src/index.ts; minder/useMinder byte-untouched (escape hatches). tsconfig include adds ONLY the type-test file (no dist leak, verified). VERIFIED: type-check clean; inference PROVEN REAL via the type-challenges Equal idiom — breaking the expected type -> TS2344 'false does not satisfy true' (so .data is {id:number}[]|null, not any); wrong-key -> @ts-expect-error; string escape hatch still compiles; runtime delegation test + full suite 2280/0; build emits the public d.ts; lint 0 errors. README typed-routes section added. Casts (routes[key]!, HttpMethod enum->union bridge) are documented + not any."
     evidence: "src/hooks/useMinder.ts:599-600 — useMinder<TData = any>(route: string). No typed-route/inference mechanism exists (grep: no as-const routes / RouteMap)."
     problem: Routes are bare strings and responses default to any — no autocomplete, no compile-time route/response safety (the biggest DX/reliability gap vs raw fetch/axios).
     scope: Opt-in typed routes from `configureMinder({ routes } as const)` inferring route keys + response types into useMinder/minder, via an additive overload. Keep string + rawUrl + any escape hatches.

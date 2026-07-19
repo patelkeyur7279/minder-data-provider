@@ -48,5 +48,14 @@
     // Enum Preservation - Required for enums to be available at runtime
     "preserveConstEnums": true
   },
-  "include": ["src/**/*"]
+  "include": [
+    "src/**/*",
+    // QR-D1: compile-time type test for typed routes. `include` is otherwise
+    // scoped to `src/**/*` only, so this one file is named explicitly to put
+    // it under `npm run type-check` (its @ts-expect-error / inference
+    // assertions are the gate that proves createTypedMinder's typing works).
+    // Deliberately NOT `tests/**/*` — that would pull the whole suite (with
+    // its intentional `any`/loose-typing) into this strict, src-only check.
+    "tests/typed-routes-types.test.ts"
+  ]
 }

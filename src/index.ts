@@ -100,6 +100,11 @@ export type {
   PageData,
 } from './hooks/usePaginatedMinder.js';
 
+// 🆕 QR-D1 — Opt-in typed routes: inferred response types via a factory,
+// WITHOUT changing `minder`/`useMinder` (they remain untyped escape hatches).
+export { route, createTypedMinder } from './core/typedRoutes.js';
+export type { TypedRoute, ResponseOf } from './core/typedRoutes.js';
+
 // ============================================================================
 // LEGACY EXPORTS - For backward compatibility
 // ============================================================================

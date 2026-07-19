@@ -176,6 +176,24 @@ any secret-shaped string elsewhere in browser-reachable config — throws at
 serve it back when the network fails: `useMinder(route, { source: 'local-first' })`. Full
 guide: [**Local-first Guide**](./docs/LOCAL_FIRST.md).
 
+**Typed routes (optional)** — get route-name autocomplete and inferred response types without
+touching the string API. Declare routes with `route<T>()`, then `createTypedMinder()` returns a
+typed `minder`/`useMinder`:
+
+```ts
+import { createTypedMinder, route } from 'minder-data-provider';
+
+const api = createTypedMinder({
+  users: route<User[]>('/users'),
+  user: route<User>('/users/:id', { method: HttpMethod.GET }),
+});
+
+const { data } = api.useMinder('users'); // data: User[] | null — no manual generic
+```
+
+The plain `useMinder('/anything')` string call is unchanged and remains a fully-typed escape
+hatch — typed routes are purely additive.
+
 ## Platform Support
 
 | Environment | Status |
