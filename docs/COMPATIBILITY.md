@@ -67,3 +67,29 @@ output — the error message is meant to be the documentation.
   packages move together) and labels `minder-data-provider` bumps — which is where a new,
   wider peer range arrives when a future React/react-query major is validated.
 
+## Lean imports (avoid bundling React on the data/server/edge path)
+
+If you only need the data functions (not the React hooks) — a Node service, a Server Component,
+a Route Handler, an edge function — **import from `/core` or `/node`, not the package root.** The
+root entry re-exports the hooks, so it pulls React into your bundle even if you only use `minder()`.
+
+Measured (esbuild, minified + tree-shaken, `import { minder }` only, 2026-07-19):
+
+| import | our-code | pulls React? |
+|---|---|---|
+| `from 'minder-data-provider'` (root) | ~170 kB | **yes** |
+| `from 'minder-data-provider/core'` | ~117 kB | no |
+| `from 'minder-data-provider/node'` | ~141 kB (React-free) | no |
+
+```ts
+// Server / edge / data-only — no React in the bundle:
+import { minder } from 'minder-data-provider/node';   // pure Node
+// or 'minder-data-provider/core' for the lean isomorphic core.
+
+// React app (hooks) — the root entry is correct:
+import { useMinder } from 'minder-data-provider';
+```
+
+(Re-run the numbers any time with `node benchmarks/overhead.mjs`-style bundling; the guidance is
+"data/server/edge → a subpath entry; React UI → root".)
+

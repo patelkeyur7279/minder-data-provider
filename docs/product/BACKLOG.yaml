@@ -577,11 +577,25 @@ tasks:
     verification: "React-free install + tsc + runtime configure/minder() smoke run with no deprecation warning; suite green"
     docs_impact: COMPATIBILITY + server/node guide; migration note if breaking
     owner_decision: "DEC-2 (3.0 boundary), architecture skill review (changes an entry's config contract)"
+    design_note: >-
+      2026-07-19 investigation: config/index.ts (unified configureMinder) has 0 direct react imports
+      (react-free-capable), but every ADDITIVE placement has a wrinkle: (a) exporting it from /server
+      pulls config/index.ts's transitive deps (PlatformDetector/Logger/core-minder->axios) into the
+      EDGE-safe entry — risks edge-safety; (b) exporting from /node collides with the deprecated
+      configureMinder name already there; (c) making the core configureMinder accept the unified
+      shape risks a circular import (config/index.ts <-> core/minder.ts). NEEDS the architecture
+      pass before implementation — do NOT rush. Not attempted 2026-07-19 (would risk edge-safety).
   - id: QR-P1
     title: Lean, React-free pure-data import path (curate root exports)
-    status: proposed
+    status: in_progress
     priority: P2
     milestone: M-Q2
+    progress: >-
+      2026-07-19 (additive part done): docs/COMPATIBILITY.md "Lean imports" section added with the
+      MEASURED numbers (root import ~170 kB + React; /core ~117 kB no-React; /node ~141 kB
+      React-free) steering data/server/edge users to /core|/node. The remaining part — pruning the
+      root barrel's `export *` so a root import pulls less — is BREAKING (root export surface) and
+      stays deferred to an owner-greenlit 3.0 (DEC-1/DEC-2).
     evidence: "MEASURED 2026-07-19 (esbuild, minified, tree-shaken, import { minder } only): root=170.5 kB our-code + React; /core=116.8 kB no-React; /node=140.8 kB no-React. Root does 19 `export *` (src/index.ts). So a pure-data import from root pulls React + ~54 kB more than /core."
     problem: Importing the pure-data `minder` from the root bundles React and materially more code — bad for edge/server/data-only consumers.
     scope: Document + steer data/server users to /core|/node; curate root named exports to reduce accidental React pull; measure before/after. Additive first (docs + guidance); any root-export change is breaking -> 3.0.
