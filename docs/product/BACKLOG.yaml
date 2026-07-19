@@ -655,6 +655,7 @@ tasks:
       'nothing can break' rule, must be done as small behavior-preserving extractions each verified
       by the FULL suite + a before/after public-.d.ts diff (must be empty). A focused session, not
       a rushed one. Recommended first extraction: pull ApiClient's upload path into its own module.
+  - id: QR-E1
     title: Fetch/axios transport strategy for edge/SSR
     status: verified
     priority: P3
