@@ -83,12 +83,18 @@ Measured (esbuild, minified + tree-shaken, `import { minder }` only, 2026-07-19)
 
 ```ts
 // Server / edge / data-only — no React in the bundle:
-import { minder } from 'minder-data-provider/node';   // pure Node
+import { minder } from 'minder-data-provider/node';          // pure Node data fn
+import { configureMinder } from 'minder-data-provider/config'; // unified config (apiUrl), React-free
 // or 'minder-data-provider/core' for the lean isomorphic core.
 
 // React app (hooks) — the root entry is correct:
 import { useMinder } from 'minder-data-provider';
 ```
+
+> **Note (server config):** the current unified `configureMinder({ apiUrl, routes, … })` is
+> available React-free from **`minder-data-provider/config`** (measured: pulls no React, no
+> deprecation warning). `/node` also exports a `configureMinder`, but that is the older
+> `{ baseURL }` configurator — for a pure-Node/server app, prefer `/config`.
 
 (Re-run the numbers any time with `node benchmarks/overhead.mjs`-style bundling; the guidance is
 "data/server/edge → a subpath entry; React UI → root".)

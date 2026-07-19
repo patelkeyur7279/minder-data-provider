@@ -1,6 +1,12 @@
-// Pure-Node app: import from the React-free `/node` entry so nothing pulls in
-// React (the main entry re-exports the hooks, which require React as a peer).
-import { minder, configureMinder } from 'minder-data-provider/node';
+// Pure-Node app — both imports are React-free (the main entry re-exports the
+// hooks, which require React as a peer):
+//   - `minder` from `/node` (the data function).
+//   - `configureMinder` from `/config` — the CURRENT unified config API
+//     (`apiUrl` + routes), React-free and NOT deprecated. (Measured: /config
+//     pulls no React.) They share the same global config, so configuring via
+//     `/config` is picked up by `minder` from `/node`.
+import { minder } from 'minder-data-provider/node';
+import { configureMinder } from 'minder-data-provider/config';
 
 /**
  * API Configuration
@@ -33,22 +39,12 @@ const getApiBaseUrl = () => {
 /**
  * Configure Minder with default options
  */
-// The `/node` entry's configureMinder is the minimal, React-free URL-resolution
-// configurator: MinderConfig = { baseURL, timeout, headers }. (The main entry's
-// configureMinder takes the fuller UnifiedMinderConfig with `apiUrl` + routes,
-// but the main entry re-exports the hooks and therefore requires React — not
-// something a pure-Node API server should need.)
-//
-// Known gap (tracked as EXA-GAP-1): this core configurator logs a deprecation
-// notice pointing at the main `configureMinder`, yet that one isn't available
-// React-free. Until the framework exposes the unified config React-free from
-// `/node`, this is the correct React-free choice for a Node server.
+// The `/config` entry's configureMinder is the current UnifiedMinderConfig API
+// (`apiUrl` + routes + performance/auth/etc.), React-free and non-deprecated.
+// Content-Type/Accept are default request headers now, so no headers map needed.
 configureMinder({
-  baseURL: getApiBaseUrl(),
-  timeout: 10000, // 10 seconds
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  apiUrl: getApiBaseUrl(),
+  performance: { timeout: 10000 }, // 10 seconds
 });
 
 /**

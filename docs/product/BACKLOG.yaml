@@ -469,7 +469,8 @@ tasks:
   - id: EXA-GAP-1
     title: "Framework gap: no React-free access to the non-deprecated (unified) configureMinder"
     type: bug
-    status: backlog
+    status: verified
+    resolution: "2026-07-19: NOT actually a code gap — the unified configureMinder is already React-free from `minder-data-provider/config` (measured 40.9 kB, no React, no deprecation warning). It was undocumented. Resolved via docs + the nodejs example switching to /config. See QR-D2. (The gap was originally surfaced during the EXA-02 nodejs refresh when the example used /node's deprecated baseURL configurator.)"
     notes: >-
       Surfaced by the nodejs example refresh. The React-free /node entry exports the core
       configureMinder ({ baseURL,... }), which logs a deprecation pointing at the main
@@ -575,9 +576,10 @@ tasks:
       a self-contained increment ONCE A/B/C is chosen; needs tsd/expectTypeOf type-level tests.
   - id: QR-D2
     title: Unify configureMinder + close the React-free Node/server config gap (EXA-GAP-1)
-    status: blocked
+    status: verified
     priority: P1
     milestone: M-Q1
+    resolution: "2026-07-19: RESOLVED additively (no risky code change). The feared gap was FALSE — the unified configureMinder(apiUrl+routes) is ALREADY available React-free from the existing `minder-data-provider/config` entry (MEASURED: 40.9 kB, pulls no React; emits NO deprecation warning). It was purely undocumented. Fix: documented /config as the server config path in COMPATIBILITY.md, and updated examples/nodejs/api to `configureMinder from '/config'` + `minder from '/node'` — verified type-check + a smoke run (configure+minder share the global config; real request succeeded; deprecation warning: none). No entry-contract change, no edge-safety risk, no circular import. The full config UNIFICATION (retiring the /node baseURL configurator) stays a 3.0 item under DEC-2."
     evidence: "Two configureMinder: src/core/minder.ts:125 Partial<MinderConfig> {baseURL} (@deprecated :113) vs src/config/index.ts:167 UnifiedMinderConfig {apiUrl}. The React-free /node entry exports the DEPRECATED one; the non-deprecated one is only on entries that re-export hooks (require React). Tracked as EXA-GAP-1."
     problem: Two config APIs with different shapes (one deprecated); a pure-Node/server app has no React-free path to the current config API.
     scope: One documented config path incl. React-free. Likely expose the unified configureMinder React-free from /node and /server.
