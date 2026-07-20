@@ -88,7 +88,11 @@ import {
 import type { UploadProgress } from '../upload/uploadProgressStore.js';
 import { MinderError } from '../errors/MinderError.js';
 import { parseJWT as decodeJwt } from '../utils/jwt.js';
-import { getDefaultLocalStore } from '../core/LocalStore.js';
+// Local-first storage is opt-in (`source: 'local' | 'local-first'`); load it
+// lazily so the platform storage-adapter graph never ships to consumers that
+// don't use it. Module promise is cached — one dynamic import per session.
+let localStorePromise: Promise<typeof import('../core/LocalStore.js')> | null = null;
+const loadLocalStore = () => (localStorePromise ??= import('../core/LocalStore.js'));
 import {
   createRetryConfig,
   deriveQueryKey,
@@ -693,6 +697,7 @@ export function useMinder<TData = any>(
 
     // LOCAL: read only from local storage; never touch the network.
     if (source === 'local') {
+      const { getDefaultLocalStore } = await loadLocalStore();
       const localData = await getDefaultLocalStore().get<TData>(localKey);
       return buildMinderResult<TData>({
         data: localData, error: null, status: 200, success: true,
@@ -742,6 +747,7 @@ export function useMinder<TData = any>(
     // LOCAL-FIRST: persist a successful network read; on failure (e.g. offline)
     // fall back to the last persisted value so the UI keeps working.
     if (source === 'local-first') {
+      const { getDefaultLocalStore } = await loadLocalStore();
       if (result.success) {
         try {
           await getDefaultLocalStore().set(localKey, result.data);
