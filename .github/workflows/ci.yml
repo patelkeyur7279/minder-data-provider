@@ -51,6 +51,9 @@ jobs:
       - name: Check bundle budgets
         run: npm run budgets:check
 
+      - name: Run benchmarks (report-only — trend line, no thresholds yet)
+        run: npm run bench
+
       - name: Upload coverage
         if: matrix.node-version == 20
         uses: codecov/codecov-action@v3

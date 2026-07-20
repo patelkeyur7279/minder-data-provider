@@ -182,7 +182,8 @@
     "snapshot:api": "node scripts/verify-api-surface.mjs --update",
     "measure:bundles": "node scripts/measure-bundles.mjs",
     "budgets:check": "node scripts/measure-bundles.mjs --check",
-    "budgets:update": "node scripts/measure-bundles.mjs --write-budgets"
+    "budgets:update": "node scripts/measure-bundles.mjs --write-budgets",
+    "bench": "node benchmarks/run-benchmarks.mjs"
   },
   "keywords": [
     "react",
