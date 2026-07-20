@@ -164,7 +164,7 @@
     "type-check": "tsc --noEmit",
     "clean": "rm -rf dist",
     "postinstall": "node scripts/check-peer-deps.js || true",
-    "prepublishOnly": "npm run clean && npm run build && npm run test && npm run verify-build && npm run verify:treeshake",
+    "prepublishOnly": "npm run clean && npm run build && npm run generate:bundle-sizes && npm run test && npm run verify-build && npm run verify:treeshake",
     "verify-build": "node scripts/verify-build.js",
     "verify-lazy-loading": "node scripts/verify-lazy-loading.js",
     "security-audit": "npm audit --audit-level moderate",
@@ -183,7 +183,8 @@
     "measure:bundles": "node scripts/measure-bundles.mjs",
     "budgets:check": "node scripts/measure-bundles.mjs --check",
     "budgets:update": "node scripts/measure-bundles.mjs --write-budgets",
-    "bench": "node benchmarks/run-benchmarks.mjs"
+    "bench": "node benchmarks/run-benchmarks.mjs",
+    "generate:bundle-sizes": "node scripts/measure-bundles.mjs --json > dist/bundle-sizes.json"
   },
   "keywords": [
     "react",

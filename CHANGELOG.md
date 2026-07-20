@@ -64,6 +64,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.2.0-beta.1] - Unreleased
 
+### Added
+
+- **`minder doctor --bundle`**: scans your app for `minder-data-provider` imports and
+  reports what each imported subpath costs (min+gzip, from the size table shipped in
+  `dist/bundle-sizes.json`), with slimming tips (e.g. import from
+  `minder-data-provider/hook` instead of the main entry when you only use hooks).
+  Degrades gracefully to an import listing when the size table is absent.
+
 ### Performance (bundle surgery — no API change; surface verified by API-snapshot gate)
 
 - **Context split from provider**: `useMinderContext`/`useMinderContextSafe` moved to a
