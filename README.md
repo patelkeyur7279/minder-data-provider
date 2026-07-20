@@ -204,7 +204,7 @@ hatch — typed routes are purely additive.
 | React Native / Expo | Experimental |
 | Electron | Experimental |
 | Node (server) | Experimental |
-| Edge runtimes (Workers, Vercel Edge) | Unknown |
+| Edge runtimes (Workers, Vercel Edge) | Confirmed (Workers) |
 | Remix, Astro | Planned |
 
 **Confirmed** = runnable example app + CI tests. **Experimental** = built and working,

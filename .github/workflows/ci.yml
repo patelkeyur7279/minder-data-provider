@@ -150,3 +150,68 @@ jobs:
           sleep 5
           curl -sf http://127.0.0.1:4199/ | grep -q "<div id=\"root\""
           curl -sf http://127.0.0.1:4199/ | grep -q "Minder Shop"
+
+  # Support-Matrix evidence: Cloudflare Workers (real workerd via wrangler local dev).
+  # Packs the library tarball, installs it into the example exactly like a real
+  # consumer, starts a plain-Node mock upstream, boots the Worker under
+  # `wrangler dev` (no Cloudflare login — pure local/offline mode), and exercises
+  # the minder() JSON data path (native-fetch transport) plus HMAC webhook
+  # verification (accept + reject) against real workerd.
+  edge-worker-example:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install and build library
+        run: npm ci && npm run build
+
+      - name: Pack library tarball
+        run: npm pack
+
+      - name: Install example (tarball override)
+        working-directory: examples/edge-worker
+        run: |
+          npm install
+          npm install ../../minder-data-provider-2.2.0-beta.0.tgz
+
+      - name: Start mock upstream
+        working-directory: examples/edge-worker
+        run: node mock-upstream.mjs &
+
+      - name: Start Worker (wrangler dev, local mode)
+        working-directory: examples/edge-worker
+        run: npx wrangler dev --port 8787 &
+
+      - name: Wait for Worker readiness (workerd downloads on first run)
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8787/users > /dev/null 2>&1; then
+              echo "Worker is up after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Worker did not become ready in time" >&2
+          exit 1
+
+      - name: Runtime smoke (data path + webhook verify)
+        run: |
+          curl -sf http://127.0.0.1:8787/users | grep -q "Ada"
+
+          BODY='{"event":"ping"}'
+          SIG=$(node -e "const c=require('crypto');process.stdout.write(c.createHmac('sha256','edge-smoke-secret').update(process.argv[1]).digest('hex'))" "$BODY")
+
+          curl -sf -X POST http://127.0.0.1:8787/webhook \
+            -H "content-type: application/json" \
+            -H "x-minder-signature: $SIG" \
+            -d "$BODY" | grep -q '"verified":true'
+
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8787/webhook \
+            -H "content-type: application/json" \
+            -H "x-minder-signature: 0000000000000000000000000000000000000000000000000000000000000000" \
+            -d "$BODY")
+          test "$STATUS" = "401"

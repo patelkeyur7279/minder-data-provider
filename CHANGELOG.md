@@ -76,6 +76,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the example's vitest unit suite, and a runtime smoke of the built `vite preview`
   server. Support Matrix + README: Vite + React `Inferred-works` → `Confirmed`
   (closes C-02).
+- **`examples/edge-worker`**: a runnable Cloudflare Worker example, exercised on real
+  workerd via `wrangler dev` (no `nodejs_compat`, no Cloudflare login) in new CI job
+  `edge-worker-example` — proves the `minder()` native-fetch data path and
+  `createWebhookHandler`'s HMAC verification (accept + reject) on the edge runtime
+  itself. Support Matrix + EDGE.md + README: Edge runtimes `Inferred-works` →
+  `Confirmed (Cloudflare Workers/workerd)`; Vercel Edge/Deno/Bun remain inferred.
 
 ### Performance (bundle surgery — no API change; surface verified by API-snapshot gate)
 

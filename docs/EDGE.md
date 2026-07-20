@@ -1,10 +1,14 @@
 # Running on edge runtimes (Cloudflare Workers, Vercel Edge, Deno, Bun)
 
-> **Status (R-04 spike, 2026-07-19): Inferred-works for the core data path.** The pure
-> `minder()` data path with `transport: 'fetch'`, JWT auth, and webhook verification is
-> edge-compatible **by design** — the library's own code guards its Node-only fallbacks
-> behind runtime checks. It is not yet **Confirmed** (no runnable Worker example runs in CI
-> yet — see the follow-up task). Treat this as "should work, verify for your case."
+> **Status (2026-07-21): Confirmed for Cloudflare Workers/workerd.** The pure `minder()`
+> data path with `transport: 'fetch'`, JWT auth, and webhook verification now has runnable
+> evidence: [`examples/edge-worker`](../examples/edge-worker) runs on real workerd via
+> `wrangler dev` local mode — no `nodejs_compat` flag, no Node polyfills — and is exercised
+> in CI job `edge-worker-example`. Vercel Edge, Deno, and Bun remain **Inferred-works**
+> (the original R-04 spike, 2026-07-19): the library's own code guards its Node-only
+> fallbacks behind runtime checks, verified by bundling every entry with
+> `esbuild --platform=neutral`, but no runnable example exists yet on those runtimes.
+> Treat those three as "should work, verify for your case."
 
 Edge runtimes have Web APIs (`fetch`, `atob`/`btoa`, `crypto.subtle`, `TextEncoder`) but
 **no Node built-ins** (`Buffer`, `require`, `fs`, `process.stdout`, the Node `http` stack).
@@ -62,9 +66,12 @@ edge breakage:
 - **`credentials.ts`** (`require('node:fs')` + `Buffer`) is **server/Node-only by design** and
   is dynamically imported, so it stays out of an edge bundle unless you resolve a file credential.
 
-## Follow-up (to reach "Confirmed")
+## Follow-up (Cloudflare Workers done — other runtimes still open)
 
-A runnable Cloudflare Worker (or Vercel Edge) example that calls `minder(..., { transport: 'fetch' })`
-and verifies a webhook, exercised in CI, would upgrade this from **Inferred-works** to
-**Confirmed**. That needs the edge toolchain (wrangler) in CI — tracked in the backlog alongside
-the other runtime-example gaps (H-05).
+Cloudflare Workers reached **Confirmed**: [`examples/edge-worker`](../examples/edge-worker) calls
+`minder(..., { transport: 'fetch' })` and verifies a webhook via `createWebhookHandler`, exercised
+on real workerd in CI job `edge-worker-example`.
+
+Vercel Edge, Deno, and Bun remain **Inferred-works** — a runnable example on any of those runtimes,
+exercised in CI, would upgrade that runtime specifically. Tracked in the backlog alongside the
+other runtime-example gaps (H-05).
