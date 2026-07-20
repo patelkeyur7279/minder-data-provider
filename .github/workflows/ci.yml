@@ -112,3 +112,41 @@ jobs:
           sleep 5
           curl -sf http://127.0.0.1:3199/api/users | grep -q "Ada"
           curl -sf http://127.0.0.1:3199/ | grep -q "App Router example"
+
+  # Support-Matrix evidence: Vite + React (production consumer build).
+  # Builds the packed library, installs it into the example exactly like a real
+  # consumer (tarball, not the file: workspace link), builds it with tsc+vite,
+  # runs its vitest unit suite, and runtime-smokes the built preview server.
+  vite-example:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install and build library
+        run: npm ci && npm run build
+
+      - name: Pack library tarball
+        run: npm pack
+
+      - name: Install example (tarball override) and build
+        working-directory: examples/web/e-commerce
+        run: |
+          npm install
+          npm install ../../../minder-data-provider-2.2.0-beta.0.tgz
+          npm run build
+
+      - name: Unit tests
+        working-directory: examples/web/e-commerce
+        run: npm test
+
+      - name: Runtime smoke (preview server)
+        working-directory: examples/web/e-commerce
+        run: |
+          npx vite preview --port 4199 --host 127.0.0.1 &
+          sleep 5
+          curl -sf http://127.0.0.1:4199/ | grep -q "<div id=\"root\""
+          curl -sf http://127.0.0.1:4199/ | grep -q "Minder Shop"

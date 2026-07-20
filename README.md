@@ -199,7 +199,7 @@ hatch — typed routes are purely additive.
 | React 19 (web) | Confirmed |
 | Next.js (Pages Router) | Experimental |
 | Next.js (App Router / RSC) | Confirmed (provider-wrapper pattern) |
-| Vite + React | Inferred-works |
+| Vite + React | Confirmed |
 | React 18 | Confirmed (test-suite evidence) |
 | React Native / Expo | Experimental |
 | Electron | Experimental |

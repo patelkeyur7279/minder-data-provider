@@ -71,6 +71,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `dist/bundle-sizes.json`), with slimming tips (e.g. import from
   `minder-data-provider/hook` instead of the main entry when you only use hooks).
   Degrades gracefully to an import listing when the size table is absent.
+- **CI**: new `vite-example` job packs the library tarball and installs it into
+  `examples/web/e-commerce` exactly like a real consumer, then runs `tsc && vite build`,
+  the example's vitest unit suite, and a runtime smoke of the built `vite preview`
+  server. Support Matrix + README: Vite + React `Inferred-works` → `Confirmed`
+  (closes C-02).
 
 ### Performance (bundle surgery — no API change; surface verified by API-snapshot gate)
 
