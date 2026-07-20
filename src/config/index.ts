@@ -9,6 +9,7 @@ import { assertNoExposedSecrets } from '../security/secrets.js';
 import { validateMinderConfig } from './validateConfig.js';
 import { setGlobalMinderConfig } from '../core/globalConfig.js';
 import { setMinderGlobalConfig } from '../core/minder.js';
+import { pluginManager, type MinderPlugin } from '../plugins/PluginSystem.js';
 
 const logger = new Logger('Config', { level: LoggerLogLevel.DEBUG });
 
@@ -55,6 +56,15 @@ export interface UnifiedMinderConfig {
    * configureMinder({ apiUrl: '...', dynamic: dynamic })
    */
   dynamic?: any;
+
+  /**
+   * Plugins registered per-configure. Each is wired into the shared plugin
+   * manager (the same path `registerPlugins()` uses), so their hooks fire on
+   * `minder()` / `useMinder()` requests. Registration is idempotent across
+   * re-configure: plugins registered by a previous `configureMinder({ plugins })`
+   * call are replaced, so re-configuring does not double-register by name.
+   */
+  plugins?: MinderPlugin[];
 
   /** Authentication configuration */
   auth?: boolean | {
@@ -230,6 +240,12 @@ export function configureMinder(config: UnifiedMinderConfig): MinderConfig {
   setGlobalMinderConfig(fullConfig);
   setMinderGlobalConfig({ baseURL: fullConfig.apiBaseUrl });
 
+  // MDPD-10: register per-instance plugins from config through the shared plugin
+  // manager. Idempotent across re-configure — plugins registered by a prior
+  // configureMinder({ plugins }) call are unregistered first so a new plugins
+  // array replaces the old one instead of double-registering (or warning) by name.
+  registerConfigPlugins(config.plugins);
+
   logger.debug('Minder configured', {
     platform,
     environment: isDevelopment ? 'development' : 'production',
@@ -238,6 +254,42 @@ export function configureMinder(config: UnifiedMinderConfig): MinderConfig {
   });
 
   return fullConfig;
+}
+
+/**
+ * Names of plugins registered via a previous `configureMinder({ plugins })` call.
+ * Tracked so re-configuring replaces them rather than tripping the plugin
+ * manager's already-registered warning or leaking stale plugins.
+ */
+let configRegisteredPluginNames: string[] = [];
+
+/**
+ * Register per-instance plugins from `configureMinder({ plugins })` idempotently.
+ * Unregisters plugins from the previous configure call, then registers the new
+ * set through the shared plugin manager (the same path `registerPlugins` uses).
+ */
+function registerConfigPlugins(plugins: MinderPlugin[] | undefined): void {
+  // Remove plugins registered by the previous configure call.
+  for (const name of configRegisteredPluginNames) {
+    pluginManager.unregister(name);
+  }
+  configRegisteredPluginNames = [];
+
+  if (!plugins || plugins.length === 0) {
+    return;
+  }
+
+  for (const plugin of plugins) {
+    if (!plugin || typeof plugin.name !== 'string' || plugin.name.length === 0) {
+      logger.warn(
+        '[Minder config] plugins: ignored an entry with no string "name". ' +
+          'Fix: each plugin must be an object with a unique string `name`.'
+      );
+      continue;
+    }
+    pluginManager.register(plugin);
+    configRegisteredPluginNames.push(plugin.name);
+  }
 }
 
 /**

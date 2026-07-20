@@ -49,6 +49,7 @@ export const KNOWN_TOP_LEVEL_KEYS = [
   'apiBaseUrl',
   'routes',
   'dynamic',
+  'plugins',
   'auth',
   'cache',
   'cors',
