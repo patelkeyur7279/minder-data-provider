@@ -12,6 +12,7 @@ import { setMinderGlobalConfig, clearMinderCache } from '../core/minder.js';
 import { pluginManager, type MinderPlugin } from '../plugins/PluginSystem.js';
 import { OfflineManager } from '../platform/offline/OfflineManager.js';
 import type { OfflineConfig } from '../platform/offline/types.js';
+import { setActiveOfflineManager, getActiveOfflineManager } from '../platform/offline/registry.js';
 
 const logger = new Logger('Config', { level: LoggerLogLevel.DEBUG });
 
@@ -22,19 +23,16 @@ const logger = new Logger('Config', { level: LoggerLogLevel.DEBUG });
 export { OfflineManager } from '../platform/offline/OfflineManager.js';
 
 /**
- * The OfflineManager instance wired by the most recent
- * `configureMinder({ offline: { enabled: true } })` call, or `null` when offline
- * is disabled. Re-configuring destroys the previous instance first (so its window
- * listeners are removed — no duplicates/leaks).
- */
-let currentOfflineManager: OfflineManager | null = null;
-
-/**
  * Accessor for the OfflineManager instantiated by `configureMinder` when offline
  * support is enabled (MDPD-6). Returns `null` when offline is disabled.
+ *
+ * The instance itself lives in the neutral `platform/offline/registry` module so
+ * that `ApiClient` can reuse THIS SAME instance for auto-queueing failed
+ * requests without importing `config/` (which would form an import cycle). This
+ * accessor simply re-reads the registry, keeping the public export path stable.
  */
 export function getOfflineManager(): OfflineManager | null {
-  return currentOfflineManager;
+  return getActiveOfflineManager();
 }
 
 /**
@@ -361,9 +359,10 @@ function registerConfigPlugins(plugins: MinderPlugin[] | undefined): void {
  */
 function wireOfflineManager(offline: OfflineConfig | undefined): void {
   // Destroy the previous instance's listeners before replacing it.
-  if (currentOfflineManager) {
-    void currentOfflineManager.destroy();
-    currentOfflineManager = null;
+  const previous = getActiveOfflineManager();
+  if (previous) {
+    void previous.destroy();
+    setActiveOfflineManager(null);
   }
 
   if (!offline?.enabled) {
@@ -371,7 +370,9 @@ function wireOfflineManager(offline: OfflineConfig | undefined): void {
   }
 
   const manager = new OfflineManager(offline);
-  currentOfflineManager = manager;
+  // Publish through the neutral registry so ApiClient (which must NOT import
+  // config/) reuses THIS instance for auto-queued failed requests.
+  setActiveOfflineManager(manager);
   // Kick off listener setup; errors are isolated (never break configureMinder).
   void manager.initialize().catch((err) => {
     logger.warn(`[Minder config] offline: initialize failed: ${String(err)}`);

@@ -173,6 +173,55 @@ describe('WebSocketClient (public /websocket layer)', () => {
     expect(client.isConnected()).toBe(false);
   });
 
+  it('gives up after maxReconnectAttempts and stops scheduling reconnects', async () => {
+    const client = new WebSocketClient({ url: 'wss://x/ws', reconnect: true, heartbeat: 0 });
+    const p = client.connect();
+    MockWebSocket.latest()._open(); // resets reconnectAttempts to 0
+    await p;
+
+    // Drive many close cycles. The internal cap is 10 (private maxReconnectAttempts);
+    // the reconnect socket never opens, so backoff never resets. Advancing 30s (the
+    // max backoff) each cycle fires whichever reconnect timer is pending.
+    for (let i = 0; i < 15; i++) {
+      MockWebSocket.latest()._serverClose();
+      act(() => {
+        jest.advanceTimersByTime(30_000);
+      });
+    }
+
+    // 1 initial socket + exactly 10 reconnect sockets = 11; then it gave up.
+    expect(MockWebSocket.instances).toHaveLength(11);
+    expect(client.getInfo().reconnectAttempts).toBe(10);
+
+    // Further time passes with no new socket — proves it stopped scheduling.
+    act(() => {
+      jest.advanceTimersByTime(120_000);
+    });
+    expect(MockWebSocket.instances).toHaveLength(11);
+  });
+
+  it('destroy() while a reconnect is SCHEDULED cancels the pending timer (no reconnect fires)', async () => {
+    const client = new WebSocketClient({ url: 'wss://x/ws', reconnect: true, heartbeat: 0 });
+    const p = client.connect();
+    MockWebSocket.latest()._open();
+    await p;
+    expect(MockWebSocket.instances).toHaveLength(1);
+
+    // Unexpected close schedules a reconnect timer (1000ms) but does not fire yet.
+    MockWebSocket.latest()._serverClose();
+    expect(MockWebSocket.instances).toHaveLength(1);
+
+    // Destroy BEFORE the scheduled timer elapses — it must clear the pending timer.
+    client.destroy();
+    act(() => {
+      jest.advanceTimersByTime(120_000);
+    });
+
+    // No reconnect socket was ever created after destroy.
+    expect(MockWebSocket.instances).toHaveLength(1);
+    expect(client.isConnected()).toBe(false);
+  });
+
   it('surfaces the error path (connect rejects on socket error)', async () => {
     const client = new WebSocketClient({ url: 'wss://x/ws', reconnect: false, heartbeat: 0 });
     const p = client.connect();

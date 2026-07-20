@@ -9,7 +9,8 @@ import {
   MinderAuthorizationError
 } from '../../errors/index.js';
 import { telemetry } from '../../utils/TelemetryTracker.js';
-import type { OfflineManager } from '../OfflineManager.js';
+import type { OfflineManager } from '../../platform/offline/OfflineManager.js';
+import type { QueuedRequest } from '../../platform/offline/types.js';
 
 /**
  * Redact sensitive header values before they reach debug logs.
@@ -143,17 +144,28 @@ export function buildApiError(error: unknown, offlineManager?: OfflineManager): 
 
     // Check for offline
     if (networkError.code === 'ERR_NETWORK' || typeof navigator !== 'undefined' && !navigator.onLine) {
-      // Queue request if offline manager is enabled
-      if (offlineManager && networkError.config?.url && networkError.config?.method) {
-        offlineManager.queueRequest({
-          url: networkError.config.url,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          method: networkError.config.method as any,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          body: (networkError.config as any).data,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          headers: (networkError.config as any).headers
-        });
+      // Auto-queue the failed request into the UNIFIED (platform) OfflineManager
+      // so it replays on reconnect AND drives onSync / onConnectivityChange.
+      // Only mutations are queued (GET/HEAD/OPTIONS are safe to simply re-issue
+      // and were never queued by the previous manager either). addToQueue is
+      // async and may reject (queue full / disabled); fire-and-forget so error
+      // normalization stays synchronous.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const isReplay = (networkError.config as any)?.__minderReplay === true;
+      if (!isReplay && offlineManager && networkError.config?.url && networkError.config?.method) {
+        const method = networkError.config.method.toUpperCase();
+        if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+          void offlineManager
+            .addToQueue(method as QueuedRequest['method'], networkError.config.url, {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              body: (networkError.config as any).data,
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              headers: (networkError.config as any).headers,
+            })
+            .catch(() => {
+              /* queue full / disabled — best-effort auto-queue only */
+            });
+        }
       }
       throw new MinderOfflineError('No network connection', networkError.config?.url);
     }

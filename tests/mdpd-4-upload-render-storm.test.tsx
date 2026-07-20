@@ -97,3 +97,93 @@ describe('MDPD-4: upload progress does not cause a re-render storm', () => {
     expect(hookApi!.uploadFile).toBe(uploadFileRef);
   });
 });
+
+// ============================================================================
+// MDPD fix 3 — throttle reset on new upload + overlapping-upload serialization.
+// Uses REAL timers (the reset path is synchronous; serialization is promise-based).
+// ============================================================================
+describe('MDPD-3: useMediaUpload resets progress + serializes overlapping uploads', () => {
+  let hookApi2: ReturnType<typeof useMediaUpload> | null = null;
+
+  function Consumer2() {
+    hookApi2 = useMediaUpload('avatar', { throttleMs: 100 });
+    return null;
+  }
+
+  beforeEach(() => {
+    hookApi2 = null;
+    mockUploadFile.mockReset();
+  });
+
+  it('a second upload starts from fresh progress (no stale 100% from the first)', async () => {
+    let onProgressA: ((p: any) => void) | null = null;
+    let resolveA: ((v: any) => void) | null = null;
+    // First upload: capture its progress cb, stay pending until we resolve it.
+    mockUploadFile.mockImplementationOnce((_r: string, _f: any, onP: any) => {
+      onProgressA = onP;
+      return new Promise((res) => {
+        resolveA = res;
+      });
+    });
+
+    render(<Consumer2 />);
+
+    await act(async () => {
+      void hookApi2!.uploadFile(new File(['a'], 'a.png', { type: 'image/png' }));
+    });
+    // Drive the first upload to a terminal 100% (commits immediately).
+    act(() => {
+      onProgressA!({ loaded: 100, total: 100, percentage: 100 });
+    });
+    expect(hookApi2!.progress.percentage).toBe(100);
+
+    // Finish the first upload so the serialization chain clears.
+    await act(async () => {
+      resolveA!({ url: 'a' });
+    });
+
+    // Second upload: pending, no progress events yet.
+    mockUploadFile.mockImplementationOnce(() => new Promise(() => {}));
+    await act(async () => {
+      void hookApi2!.uploadFile(new File(['b'], 'b.png', { type: 'image/png' }));
+    });
+
+    // The stale 100% must be gone — reset() ran at the start of the 2nd upload.
+    expect(hookApi2!.progress.percentage).toBe(0);
+    expect(hookApi2!.isUploading).toBe(false);
+  });
+
+  it('overlapping uploadFile calls are serialized: the 2nd dispatches only after the 1st settles', async () => {
+    const dispatched: string[] = [];
+    let resolveA: ((v: any) => void) | null = null;
+
+    mockUploadFile.mockImplementation((_r: string, file: any) => {
+      dispatched.push(file.name);
+      if (file.name === 'a') {
+        return new Promise((res) => {
+          resolveA = res;
+        });
+      }
+      return Promise.resolve({ url: file.name });
+    });
+
+    render(<Consumer2 />);
+
+    // Fire two uploads back-to-back while the first is still in flight.
+    let pB: Promise<unknown> | undefined;
+    await act(async () => {
+      void hookApi2!.uploadFile(new File(['a'], 'a', { type: 'image/png' }));
+      pB = hookApi2!.uploadFile(new File(['b'], 'b', { type: 'image/png' }));
+    });
+
+    // Only the first has been dispatched to apiClient; the second is queued.
+    expect(dispatched).toEqual(['a']);
+
+    // Settle the first — the second now dispatches behind it.
+    await act(async () => {
+      resolveA!({ url: 'a' });
+      await pB;
+    });
+    expect(dispatched).toEqual(['a', 'b']);
+  });
+});

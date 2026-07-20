@@ -36,15 +36,17 @@ describe('SSR/Node safety — core managers construct without browser globals', 
     expect(env).toBeTruthy();
   });
 
-  it('OfflineManager constructs + destroys without window/navigator', () => {
+  it('OfflineManager (unified/platform) constructs + destroys without window/navigator', () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { OfflineManager } = require('../src/core/OfflineManager');
-    let mgr: { destroy?: () => void } | undefined;
-    // Constructor guards navigator.onLine + addEventListener behind `typeof window`.
+    const { OfflineManager } = require('../src/platform/offline/OfflineManager');
+    let mgr: { destroy?: () => Promise<void> } | undefined;
+    // The platform manager's constructor is pure (no browser-global access);
+    // window/navigator are only touched inside initialize()'s fallback listener,
+    // which is guarded by `typeof window`/`typeof navigator`.
     expect(() => {
       mgr = new OfflineManager({ enabled: true });
     }).not.toThrow();
-    // destroy() removes listeners — also guarded; must be a no-op server-side.
+    // destroy() unsubscribes + saves; a no-op with no listener/storage server-side.
     expect(() => mgr?.destroy?.()).not.toThrow();
   });
 
@@ -71,7 +73,7 @@ describe('SSR/Node safety — core managers construct without browser globals', 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     expect(() => require('../src/core/EnvironmentManager')).not.toThrow();
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    expect(() => require('../src/core/OfflineManager')).not.toThrow();
+    expect(() => require('../src/platform/offline/OfflineManager')).not.toThrow();
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     expect(() => require('../src/core/SmartConfig')).not.toThrow();
   });

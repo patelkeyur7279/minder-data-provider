@@ -76,6 +76,7 @@ export class OfflineManager {
   private netInfoUnsubscribe?: () => void;
   private listeners = new Set<OfflineManagerListener>();
   private initPromise: Promise<void> | null = null;
+  private requestExecutor?: (request: QueuedRequest) => Promise<unknown>;
 
   constructor(config: OfflineConfig = {}) {
     this.config = {
@@ -97,6 +98,24 @@ export class OfflineManager {
       onNetworkChange: config.onNetworkChange ?? (() => {}),
       onConflict: config.onConflict,
     };
+  }
+
+  /**
+   * Inject the transport used to replay a queued request during {@link sync}.
+   *
+   * This is the unified-manager equivalent of the old core manager's
+   * `setProcessQueueCallback`: {@link ApiClient} hooks its own axios instance in
+   * here so replayed requests carry auth/CSRF/CORS/interceptors exactly like a
+   * live call, instead of the bare `fetch` fallback (which would drop all of
+   * that). The executor should resolve with the response payload and reject on
+   * failure (axios rejects on non-2xx), which drives onRequestSuccess /
+   * onRequestError and the retry accounting in {@link handleRequestError}.
+   *
+   * When no executor is set, {@link executeRequest} falls back to a plain
+   * `fetch` (React Native / standalone-without-ApiClient scenarios).
+   */
+  setRequestExecutor(executor: (request: QueuedRequest) => Promise<unknown>): void {
+    this.requestExecutor = executor;
   }
 
   /**
@@ -177,7 +196,7 @@ Web: Using basic online/offline detection
    */
   private setupFallbackNetworkListener(): void {
     // Use navigator.onLine for basic online/offline detection
-    if (typeof window !== 'undefined' && 'onLine' in navigator) {
+    if (typeof window !== 'undefined' && typeof navigator !== 'undefined' && 'onLine' in navigator) {
       const updateOnlineStatus = () => {
         const isOnline = navigator.onLine;
         const networkState: NetworkState = {
@@ -460,10 +479,25 @@ Web: Using basic online/offline detection
 
     try {
       const result = await this.syncPromise;
-      this.emitSyncHook('success', {
-        processed: result.successful,
-        pending: this.getQueueSize(),
-      });
+      // A replay failure is caught per-request inside performSync (so a partial
+      // batch still commits its successes), but the sync as a whole must still
+      // surface an 'error' phase to onSync observers when any request failed to
+      // replay — otherwise a plugin watching sync health sees only 'success'.
+      if (result.failed > 0) {
+        this.emitSyncHook('error', {
+          processed: result.successful,
+          pending: this.getQueueSize(),
+          error: {
+            message: `${result.failed} queued request(s) failed to sync`,
+            code: 'OFFLINE_SYNC_PARTIAL_FAILURE',
+          },
+        });
+      } else {
+        this.emitSyncHook('success', {
+          processed: result.successful,
+          pending: this.getQueueSize(),
+        });
+      }
       return result;
     } catch (error) {
       this.emitSyncHook('error', {
@@ -531,6 +565,15 @@ Web: Using basic online/offline detection
    * Execute a queued request
    */
   private async executeRequest(request: QueuedRequest): Promise<any> {
+    // Preferred path: replay through the injected executor (ApiClient's axios
+    // instance) so auth/CSRF/CORS/interceptors apply to the re-dispatch.
+    if (this.requestExecutor) {
+      const data = await this.requestExecutor(request);
+      this.config.onRequestSuccess(request, data);
+      return data;
+    }
+
+    // Fallback: bare fetch (no ApiClient wired — RN / standalone).
     const response = await fetch(request.url, {
       method: request.method,
       headers: request.headers,

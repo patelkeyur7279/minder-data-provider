@@ -17,7 +17,7 @@ real-time, offline, file upload, a plugin/integration system, and secret-key saf
 | Auth | token lifecycle + `provideToken()` plugins (Firebase/Auth0/Clerk) | `/auth` |
 | Caching | TanStack-backed query cache, TTL, invalidation, hydration | `/cache` |
 | Real-time | WebSocket subscriptions + SSE stream | `/websocket` |
-| Offline | offline manager, IndexedDB→localStorage fallback, sync events | `/config`, plugins |
+| Offline | unified offline manager, auto-queue of failed requests, opt-in persistence, sync events | `/config`, plugins |
 | File upload | media upload manager + progress + upload lifecycle plugin hook | `/upload` |
 | CRUD | `operations.create/read/update/delete` on the hook | `/crud` |
 | Plugins | request/response/error/auth/upload/sync hooks, isolation guarantee | full surface |
@@ -394,14 +394,23 @@ const stream = minder.stream('/events', {
 
 ## Offline
 
-- An offline manager queues work and syncs when connectivity returns.
-- **IndexedDB storage falls back to localStorage** when IndexedDB is unavailable.
-- The offline manager **removes its window listeners on destroy** (no leaks).
+- A single **unified** offline manager queues work and syncs when connectivity returns.
+- **Requests that fail with a network error are auto-queued into this SAME manager**, and are
+  replayed through the ApiClient's own axios instance on reconnect (so auth/CSRF/CORS/interceptors
+  all still apply). Because there is now one manager, `onSync` / `onConnectivityChange` fire for
+  these genuinely-failed auto-queued requests — not only for items pushed manually via
+  `getOfflineManager().addToQueue(...)`.
+- **Persistence is opt-in.** Without a `storage` adapter (`offline: { storage }`) the queue is
+  **in-memory only and is lost on reload/restart**. Provide a `StorageAdapter` to persist it.
+- The offline manager **removes its window listeners on destroy** (no leaks); exactly one
+  online/offline listener pair is registered per active manager.
 - Plugins observe offline behavior through `onConnectivityChange(online)` and `onSync(event)`.
 - `configureMinder({ offline: { enabled: true } })` instantiates and wires the OfflineManager
   (MDPD-6): it drives those hooks and is reachable via `getOfflineManager()` (exported from the
-  package root and `minder-data-provider/config`). Re-configuring destroys the prior manager first,
-  so its window listeners are removed (no duplicate emissions).
+  package root and `minder-data-provider/config`). A standalone `new ApiClient(...)` with offline
+  enabled reuses that wired instance when present, or creates+owns its own when there is none.
+  Re-configuring destroys the prior manager first, so its window listeners are removed (no
+  duplicate emissions).
 
 ```ts
 configureMinder({

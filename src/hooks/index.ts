@@ -267,21 +267,68 @@ function useThrottledProgress(
   return { progress, push, reset };
 }
 
-// Media upload hook
+/**
+ * Media upload hook.
+ *
+ * Progress semantics (single shared `progress` value):
+ * - Progress commits are throttled (see {@link useThrottledProgress}) to avoid a
+ *   re-render storm; the terminal 100% value always commits.
+ * - Each `uploadFile` / `uploadMultiple` call RESETS progress to zero at its
+ *   start, so a subsequent upload never briefly shows the previous upload's
+ *   stale 100%.
+ * - Concurrent `uploadFile` calls on the SAME hook instance are SERIALIZED: a
+ *   second call issued while the first is still in flight is queued behind it
+ *   and only begins (resetting progress and dispatching) once the first
+ *   settles. This deliberately avoids two overlapping uploads sharing — and
+ *   corrupting — the single throttle timer / progress state (upload A's terminal
+ *   flush would otherwise clear the shared pending timer and drop upload B's
+ *   coalesced update). `uploadMultiple` was already sequential and inherits the
+ *   per-file reset.
+ */
 export function useMediaUpload(
   routeName: string,
   options?: { throttleMs?: number }
 ) {
   const { apiClient } = useMinderContext();
   const throttleMs = options?.throttleMs ?? DEFAULT_UPLOAD_PROGRESS_THROTTLE_MS;
-  const { progress, push: pushProgress } = useThrottledProgress(throttleMs);
+  const { progress, push: pushProgress, reset: resetProgress } = useThrottledProgress(throttleMs);
 
-  const uploadFile = useCallback(
-    async (file: File): Promise<MediaUploadResult> => {
+  // Tail of the serialized-upload chain. `null` means no upload is in flight, so
+  // the next call runs SYNCHRONOUSLY (preserving eager progress-callback wiring);
+  // a non-null tail means a call is active and the next one queues behind it.
+  const chainTailRef = useRef<Promise<unknown> | null>(null);
+
+  const runUpload = useCallback(
+    (file: File): Promise<MediaUploadResult> => {
+      // Fresh progress for every upload — no stale 100% carried over.
+      resetProgress();
       // MDPD-4: commit progress through the throttle instead of setState-per-event.
       return apiClient.uploadFile(routeName, file, pushProgress);
     },
-    [apiClient, routeName, pushProgress]
+    [apiClient, routeName, pushProgress, resetProgress]
+  );
+
+  const uploadFile = useCallback(
+    (file: File): Promise<MediaUploadResult> => {
+      const prior = chainTailRef.current;
+      // No upload in flight: start immediately. Otherwise serialize behind it.
+      const result: Promise<MediaUploadResult> = prior
+        ? prior.then(() => runUpload(file))
+        : runUpload(file);
+
+      // Track this call as the new tail; swallow rejection for chaining only
+      // (callers still receive the real `result` promise, rejection intact).
+      const tail = result.catch(() => undefined);
+      chainTailRef.current = tail;
+      void tail.then(() => {
+        if (chainTailRef.current === tail) {
+          chainTailRef.current = null;
+        }
+      });
+
+      return result;
+    },
+    [runUpload]
   );
 
   const uploadMultiple = useCallback(

@@ -4,7 +4,9 @@ import type { MinderConfig, ApiRoute, ApiError } from './types.js';
 import { HttpMethod, DebugLogType } from '../constants/enums.js';
 import { AuthManager } from './AuthManager.js';
 import { ProxyManager } from './ProxyManager.js';
-import { OfflineManager } from './OfflineManager.js';
+import { OfflineManager } from '../platform/offline/OfflineManager.js';
+import { getActiveOfflineManager } from '../platform/offline/registry.js';
+import type { QueuedRequest } from '../platform/offline/types.js';
 import {
   MinderConfigError,
   MinderNetworkError,
@@ -52,6 +54,10 @@ export class ApiClient {
   private telemetryManager?: TelemetryManager;
   private corsManager?: CorsManager;
   private offlineManager?: OfflineManager;
+  // True only when THIS client constructed its own OfflineManager (standalone,
+  // no configureMinder-wired instance). A wired manager is owned by the config
+  // lifecycle, so destroy() must NOT tear it down.
+  private ownsOfflineManager = false;
 
   // Background timers — stored so destroy() can clear them (otherwise they leak
   // and keep firing after the owning provider unmounts / on HMR).
@@ -156,17 +162,41 @@ export class ApiClient {
       }
     }
 
-    // Initialize Offline Manager
+    // Initialize Offline Manager (MDPD unified-manager fix).
+    //
+    // There is exactly ONE OfflineManager per configuration. When
+    // configureMinder wired one (getActiveOfflineManager()), reuse THAT
+    // instance — it is the manager whose sync engine emits onSync /
+    // onConnectivityChange — so genuinely-failed auto-queued requests replay
+    // through it and those hooks fire. Only when running standalone (a bare
+    // `new ApiClient(...)` with offline enabled and no wired manager) do we
+    // construct our own, and then we own its teardown.
     if (config.offline?.enabled) {
-      this.offlineManager = new OfflineManager(config.offline);
-      this.offlineManager.setProcessQueueCallback(async (request) => {
-        // Replay request
-        await this.axiosInstance.request({
+      const wired = getActiveOfflineManager();
+      if (wired) {
+        this.offlineManager = wired;
+        this.ownsOfflineManager = false;
+      } else {
+        this.offlineManager = new OfflineManager(config.offline);
+        this.ownsOfflineManager = true;
+        // Async listener setup; isolated so it never breaks construction.
+        void this.offlineManager.initialize().catch(() => { /* isolated */ });
+      }
+      // Inject our axios instance as the replay transport (the unified-manager
+      // equivalent of the old setProcessQueueCallback). Replayed requests then
+      // carry auth/CSRF/CORS/interceptors, and sync() emits onSync around them.
+      this.offlineManager.setRequestExecutor(async (request: QueuedRequest) => {
+        const response = await this.axiosInstance.request({
           method: request.method,
           url: request.url,
           data: request.body,
-          headers: request.headers
+          headers: request.headers,
+          // Mark the re-dispatch so a replay that fails again is NOT re-captured
+          // by the auto-queue path in apiClient/errors.ts (which would duplicate
+          // the request). The manager's own retry accounting owns replay failures.
+          ...( { __minderReplay: true } as Record<string, unknown> ),
         });
+        return response.data;
       });
     }
 
@@ -238,8 +268,13 @@ export class ApiClient {
     if (this.ownsPluginManager) {
       void this.pluginManager.destroy();
     }
-    // OfflineManager (core) registers window listeners; release them if it can.
-    (this.offlineManager as unknown as { destroy?: () => void })?.destroy?.();
+    // OfflineManager registers window listeners; release them ONLY when this
+    // client owns the manager. A configureMinder-wired manager is shared and
+    // owned by the config lifecycle (re-configure/destroy handle it there), so
+    // tearing it down here would kill offline support for other consumers.
+    if (this.ownsOfflineManager) {
+      void this.offlineManager?.destroy();
+    }
   }
 
   // ── Plugin bus emitters (observability; fire-and-forget, never block I/O) ──
@@ -977,7 +1012,9 @@ export class ApiClient {
           onProgress?.(progress);
         }),
       });
-      this.emitUploadHook({ phase: 'complete', uploadId, url, file, result });
+      // Standardized on 'success' for parity with MediaUploadManager (both
+      // emitters are unreleased-new; the type union still allows 'complete').
+      this.emitUploadHook({ phase: 'success', uploadId, url, file, result });
       return result;
     } catch (error) {
       this.emitUploadHook({
