@@ -55,6 +55,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `createCorsMiddleware({ origin: ['https://app.example.com'], credentials: true })`
   or `cors: { origin: [...], credentials: true }` in the proxy config.
 
+### Fixed (MDPD workspace findings)
+
+- **MDPD-32** — `PlatformDetector.isNextJs()` no longer throws `ReferenceError:
+  document is not defined` on React Native (where `global.window = global` but
+  `document` is undefined); the bare `document` access is now `typeof`-guarded.
+- **MDPD-9** — `configureMinder({ cache: { ttl } })` now typechecks and works:
+  the config cache type accepts `ttl`/`type`/`maxSize` (matching the presets and
+  docs) and `ttl` is normalized to `staleTime` when `staleTime` is absent.
+- **MDPD-10** — `configureMinder({ plugins: [...] })` is now supported and wired
+  into the plugin manager (idempotent across re-configure), so the documented
+  per-instance plugin registration actually fires hooks instead of being dropped.
+- **MDPD-30** — `registerPlugins([a, b])` (array form) now flattens and registers
+  each plugin; entries lacking a string `name` are warned and skipped instead of
+  the array being silently registered as one nameless plugin.
+- **MDPD-11** — a Next.js app without a `dynamic` import now emits a single
+  actionable warning and continues with a working default, instead of hard-
+  throwing `NEXTJS_DYNAMIC_REQUIRED` and crashing `next build`.
+- **MDPD-18** — `transport: 'fetch'` no longer double-prefixes the configured
+  `apiUrl` onto absolute `http(s)` URLs; absolute URLs are used verbatim,
+  matching the axios path.
+- **MDPD-23** — the `retries` option now works on the standalone `minder()`
+  path: retryable failures (network / 5xx / 429; never 4xx) are retried with a
+  small capped backoff, preserving the never-throws contract.
+- **MDPD-24** — `minder()`'s `cache`/`cacheTTL` options now work: with
+  `cache: true`, successful GET results are cached for the TTL and reported with
+  `metadata.cached=true` on subsequent hits (non-GET/`cache:false` unchanged).
+
 ### Fixed
 
 - `corsMiddleware` imported the `cors` package, which was never declared as a
