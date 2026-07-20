@@ -8,7 +8,7 @@ import { MinderConfigError } from '../errors/MinderError.js';
 import { assertNoExposedSecrets } from '../security/secrets.js';
 import { validateMinderConfig } from './validateConfig.js';
 import { setGlobalMinderConfig } from '../core/globalConfig.js';
-import { setMinderGlobalConfig } from '../core/minder.js';
+import { setMinderGlobalConfig, clearMinderCache } from '../core/minder.js';
 import { pluginManager, type MinderPlugin } from '../plugins/PluginSystem.js';
 
 const logger = new Logger('Config', { level: LoggerLogLevel.DEBUG });
@@ -239,6 +239,10 @@ export function configureMinder(config: UnifiedMinderConfig): MinderConfig {
   // (MinderDataProvider still sets the registry too when a provider is used.)
   setGlobalMinderConfig(fullConfig);
   setMinderGlobalConfig({ baseURL: fullConfig.apiBaseUrl });
+
+  // MDPD-24: reset the standalone minder() response cache on (re)configuration so
+  // stale entries from a previous baseURL/config never bleed into the new one.
+  clearMinderCache();
 
   // MDPD-10: register per-instance plugins from config through the shared plugin
   // manager. Idempotent across re-configure — plugins registered by a prior

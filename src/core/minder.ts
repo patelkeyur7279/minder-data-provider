@@ -175,6 +175,77 @@ function retryBackoffMs(attempt: number): number {
 }
 
 // ============================================================================
+// RESPONSE CACHE (MDPD-24)
+// ============================================================================
+
+/** Default response-cache TTL when neither options.cacheTTL nor config supplies one. */
+const DEFAULT_CACHE_TTL_MS = 60_000;
+
+interface CacheEntry {
+  /** Deep-copied successful MinderResult (data/status/headers). */
+  result: MinderResult;
+  /** Epoch ms after which this entry is stale. */
+  expiresAt: number;
+}
+
+/**
+ * Module-level TTL cache for standalone minder() GET results. Only populated
+ * when a caller opts in with `{ cache: true }`. Keyed by method+URL+params.
+ * @internal
+ */
+const responseCache = new Map<string, CacheEntry>();
+
+/**
+ * Clear the standalone minder() response cache. Called on (re)configuration and
+ * exposed for tests.
+ * @internal
+ */
+export function clearMinderCache(): void {
+  responseCache.clear();
+}
+
+/** Structured deep copy so cached results can't be mutated through aliasing. */
+function deepCopyResult<T>(value: T): T {
+  const sc = (globalThis as { structuredClone?: <V>(v: V) => V }).structuredClone;
+  if (typeof sc === 'function') {
+    try {
+      return sc(value);
+    } catch {
+      /* fall through to JSON clone */
+    }
+  }
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+/** Build the cache key from method, resolved URL, and serialized params. */
+function buildCacheKey(
+  method: string,
+  resolvedUrl: string,
+  params: unknown
+): string {
+  let serializedParams = '';
+  if (params && typeof params === 'object') {
+    const entries = Object.entries(params as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined && v !== null)
+      .sort(([a], [b]) => a.localeCompare(b));
+    serializedParams = JSON.stringify(entries);
+  }
+  return `${method} ${resolvedUrl} ${serializedParams}`;
+}
+
+/**
+ * Resolve the effective cache TTL: explicit option wins, then the global config
+ * cache's staleTime/ttl, then a 60s default.
+ */
+function resolveCacheTtl(optionTtl: number | undefined): number {
+  if (typeof optionTtl === 'number') return optionTtl;
+  const cfg = getGlobalMinderConfig() as
+    | { cache?: { staleTime?: number; ttl?: number } }
+    | undefined;
+  return cfg?.cache?.staleTime ?? cfg?.cache?.ttl ?? DEFAULT_CACHE_TTL_MS;
+}
+
+// ============================================================================
 // CORE MINDER FUNCTION
 // ============================================================================
 
@@ -286,6 +357,37 @@ export async function minder<TData = any>(
     let responseStatus = 0;
     let responseHeaders: Record<string, string> = {};
     let shortCircuited = false;
+
+    // MDPD-24: opt-in response cache for standalone minder() GETs. Only active
+    // when the caller passes `{ cache: true }` — the default and cache:false
+    // paths are unchanged. A fresh cache hit returns a deep copy with
+    // metadata.cached=true and never touches the transport.
+    const cacheEnabled = options?.cache === true && method === 'GET';
+    let cacheKey: string | null = null;
+    if (cacheEnabled) {
+      const requestUrlForKey = config.url || '';
+      const resolvedUrl = /^https?:\/\//i.test(requestUrlForKey)
+        ? requestUrlForKey
+        : (config.baseURL || '') + requestUrlForKey;
+      cacheKey = buildCacheKey(method, resolvedUrl, config.params);
+      const entry = responseCache.get(cacheKey);
+      if (entry && entry.expiresAt > Date.now()) {
+        const cached = deepCopyResult(entry.result) as MinderResult<TData>;
+        cached.metadata = {
+          ...(cached.metadata as NonNullable<MinderResult['metadata']>),
+          duration: Date.now() - startTime,
+          cached: true,
+        };
+        if (options?.onSuccess) {
+          options.onSuccess(cached.data);
+        }
+        return cached;
+      }
+      if (entry) {
+        // Stale — drop it so the map doesn't grow unbounded with dead entries.
+        responseCache.delete(cacheKey);
+      }
+    }
 
     // Mutating request middleware: registered plugins may rewrite the outgoing
     // config or short-circuit the request with a synthetic response. Runs after
@@ -465,7 +567,7 @@ export async function minder<TData = any>(
     }
     
     // 10. Return success result
-    return {
+    const successResult: MinderResult<TData> = {
       data: decodedData,
       error: null,
       status: responseStatus,
@@ -478,7 +580,18 @@ export async function minder<TData = any>(
         cached: false,
       },
     };
-    
+
+    // MDPD-24: store the fresh (non-short-circuited) GET result when caching was
+    // opted into. A deep copy is stored so later callers can't mutate the entry.
+    if (cacheEnabled && cacheKey && !shortCircuited) {
+      responseCache.set(cacheKey, {
+        result: deepCopyResult(successResult),
+        expiresAt: Date.now() + resolveCacheTtl(options?.cacheTTL),
+      });
+    }
+
+    return successResult;
+
   } catch (error: unknown) {
     // Handle error - NEVER throw
     const minderError = handleError(error);
