@@ -41,14 +41,15 @@
 
 import axios from 'axios';
 import type { AxiosRequestConfig, AxiosProgressEvent } from 'axios';
-import type { 
-  HttpMethod, 
-  MinderOptions, 
-  MinderResult, 
+import type {
+  HttpMethod,
+  MinderOptions,
+  MinderResult,
   MinderError,
   MinderConfig,
-  UploadProgress 
+  UploadProgress
 } from './minder/types.js';
+import type { InferOutput, StandardSchemaV1 } from '../types/standard-schema.js';
 import {
   detectMethod,
   isFileUpload,
@@ -331,10 +332,24 @@ function resolveCacheTtl(optionTtl: number | undefined): number {
 
 /**
  * 🎯 MINDER - The universal data provider function
- * 
+ *
  * Handles all HTTP operations with smart detection
  * NEVER throws errors - always returns structured result
  */
+// Task 3.1: when a per-call `options.schema` is present, infer `data`'s type
+// from the validator instead of the caller-supplied `TData` generic — the
+// route-def `ApiRoute.schema` (registry-only) stays runtime-only, matching
+// the rest of the untyped string-route registry.
+export async function minder<S extends StandardSchemaV1<any, any>>(
+  route: string,
+  data: any,
+  options: MinderOptions & { schema: S }
+): Promise<MinderResult<InferOutput<S>>>;
+export async function minder<TData = any>(
+  route: string,
+  data?: any,
+  options?: MinderOptions
+): Promise<MinderResult<TData>>;
 export async function minder<TData = any>(
   route: string,
   data?: any,
@@ -651,6 +666,26 @@ export async function minder<TData = any>(
         // the terminal handler so onError/plugin hooks fire exactly once.
         throw transportError;
       }
+    }
+
+    // Task 3.1: opt-in runtime response validation via Standard Schema.
+    // Per-call `options.schema` wins over the route-def `registryRoute.schema`
+    // — the same "explicit option > registry entry" precedence used for
+    // method/timeout/headers above. Validates the RAW wire body (pre-model
+    // decode), since schemas describe JSON shape, not a decoded model
+    // instance. The validator, the error class, AND the throw/message logic
+    // all live in the deferred `responseValidation.js` chunk, so callers who
+    // never configure a schema pay only the bare presence-guard below.
+    const effSchema = options?.schema ?? registryRoute?.schema;
+    if (effSchema) {
+      const { validateResponseOrThrow } = await import('./responseValidation.js');
+      // Throws MinderResponseValidationError on mismatch → falls into the
+      // existing terminal `catch` below (the SAME path a transport failure
+      // takes), which gives this feature the never-throws contract (unless
+      // `throwOnError`), the `onError`/plugin-onError hooks, and the `.raw`
+      // attachment for free. On success `responseData` is replaced with the
+      // validator's (possibly transformed) output before model decode.
+      responseData = await validateResponseOrThrow(responseData, effSchema, responseStatus);
     }
 
     // 7. Decode response with model if provided

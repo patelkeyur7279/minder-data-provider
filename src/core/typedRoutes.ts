@@ -27,6 +27,7 @@ import type { MinderOptions, MinderResult } from '../core/minder.js';
 import { useMinder } from '../hooks/useMinder.js';
 import type { UseMinderOptions, UseMinderReturn } from '../hooks/useMinder.js';
 import type { HttpMethod } from '../constants/enums.js';
+import type { InferOutput, StandardSchemaV1 } from '../types/standard-schema.js';
 
 // ============================================================================
 // ROUTE DESCRIPTOR
@@ -65,6 +66,27 @@ export function route<TResponse>(
  */
 export type ResponseOf<T> = T extends TypedRoute<infer U> ? U : unknown;
 
+/**
+ * Overloaded call signature for `createTypedMinder(...).minder` (Task 3.1):
+ * when the caller passes a per-call `schema`, the response type is inferred
+ * from the Standard Schema validator (`InferOutput<S>`) instead of the
+ * route's own `TypedRoute<TResponse>` — mirroring the overload added to
+ * `minder()` itself. The general (no-schema) signature is unchanged and stays
+ * the first match for every existing call site.
+ */
+export interface TypedMinderFn<R extends Record<string, TypedRoute<any>>> {
+  <K extends keyof R, S extends StandardSchemaV1<any, any>>(
+    key: K,
+    data: unknown,
+    options: MinderOptions & { schema: S }
+  ): Promise<MinderResult<InferOutput<S>>>;
+  <K extends keyof R>(
+    key: K,
+    data?: unknown,
+    options?: MinderOptions
+  ): Promise<MinderResult<ResponseOf<R[K]>>>;
+}
+
 // ============================================================================
 // FACTORY
 // ============================================================================
@@ -78,26 +100,23 @@ export type ResponseOf<T> = T extends TypedRoute<infer U> ? U : unknown;
  * options (an explicit `options.method` from the caller still wins, matching
  * how `minder()` itself prioritizes an explicit option over a registry/route
  * default). The only thing added here is compile-time inference of the
- * response type via `ResponseOf<R[K]>`.
+ * response type via `ResponseOf<R[K]>` (or, with a per-call `schema`, via
+ * `InferOutput<S>` — see {@link TypedMinderFn}).
  */
 export function createTypedMinder<R extends Record<string, TypedRoute<any>>>(
   routes: R
 ): {
-  minder: <K extends keyof R>(
-    key: K,
-    data?: unknown,
-    options?: MinderOptions
-  ) => Promise<MinderResult<ResponseOf<R[K]>>>;
+  minder: TypedMinderFn<R>;
   useMinder: <K extends keyof R>(
     key: K,
     options?: UseMinderOptions
   ) => UseMinderReturn<ResponseOf<R[K]>>;
 } {
-  const typedMinder = <K extends keyof R>(
-    key: K,
+  const typedMinder = (
+    key: keyof R,
     data?: unknown,
     options?: MinderOptions
-  ): Promise<MinderResult<ResponseOf<R[K]>>> => {
+  ): Promise<MinderResult<any>> => {
     // Non-null: `key` is constrained to `keyof R`, so `routes[key]` is always
     // present — `noUncheckedIndexedAccess` can't see that through the generic.
     const entry = routes[key]!;
@@ -110,7 +129,7 @@ export function createTypedMinder<R extends Record<string, TypedRoute<any>>>(
     const mergedOptions: MinderOptions = entry.method
       ? { ...options, method }
       : (options ?? {});
-    return minder<ResponseOf<R[K]>>(entry.url, data, mergedOptions);
+    return minder(entry.url, data, mergedOptions);
   };
 
   // Named `useTypedMinder` (not `typedUseMinder`) so eslint-plugin-react-hooks
@@ -129,5 +148,10 @@ export function createTypedMinder<R extends Record<string, TypedRoute<any>>>(
     return useMinder<ResponseOf<R[K]>>(entry.url, mergedOptions);
   };
 
-  return { minder: typedMinder, useMinder: useTypedMinder };
+  // `typedMinder`'s own (non-overloaded) implementation signature is a subset
+  // of `TypedMinderFn<R>`'s two call signatures — the cast is the standard
+  // pattern for exposing an overloaded call signature on a single internal
+  // implementation (mirrors what TS's own `function` overload sugar does
+  // implicitly for named function declarations).
+  return { minder: typedMinder as TypedMinderFn<R>, useMinder: useTypedMinder };
 }

@@ -66,6 +66,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Response validation via Standard Schema** (semver-minor, additive): opt-in runtime
+  validation of the response body against any [Standard Schema](https://standardschema.dev)
+  validator (Zod ≥3.24, Valibot, ArkType, Effect Schema) — new `ApiRoute.schema` (route-def)
+  and `MinderOptions.schema` (per-call, overrides the route-def) fields, a new
+  `minder()` overload inferring `data` as `InferOutput<S>` when a per-call `schema` is
+  passed, and a new `RESPONSE_VALIDATION_FAILED` error code — surfaced on the structured
+  result as `error.code` with `error.issues` (branch on the code; the
+  `MinderResponseValidationError` class is exported type-only so it stays in the
+  lazy-loaded validation chunk), distinct from the existing input-side
+  `MinderValidationError`/`VALIDATION_ERROR`. Fail-closed: a mismatch — or a validator that itself throws —
+  never passes as valid data, and never counts toward `retries` (deterministic, not
+  transient). Zero new dependency (the `StandardSchemaV1` interface is vendored,
+  type-only) and zero added bytes when unused (the validator is lazy-loaded only when a
+  `schema` is actually configured). See README "Response Validation (Standard Schema)"
+  and `docs/API_REFERENCE.md`.
 - **`minder doctor --bundle`**: scans your app for `minder-data-provider` imports and
   reports what each imported subpath costs (min+gzip, from the size table shipped in
   `dist/bundle-sizes.json`), with slimming tips (e.g. import from

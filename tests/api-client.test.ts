@@ -8,6 +8,7 @@ import { AuthManager } from '../src/core/AuthManager';
 import { ProxyManager } from '../src/core/ProxyManager';
 import { HttpMethod } from '../src/constants/enums';
 import type { MinderConfig } from '../src/core/types';
+import type { StandardSchemaV1 } from '../src/types/standard-schema';
 
 // Mock axios
 jest.mock('axios');
@@ -739,6 +740,98 @@ describe('ApiClient', () => {
       expect(Array.isArray(result)).toBe(true);
       expect(result[0]).toHaveProperty('transformed', true);
       expect(result[1]).toHaveProperty('transformed', true);
+    });
+  });
+
+  describe('Response validation (Standard Schema) - Task 3.1', () => {
+    const userSchema: StandardSchemaV1<any, { id: number; name: string }> = {
+      '~standard': {
+        version: 1,
+        vendor: 'test',
+        validate: (v: any) =>
+          v && typeof v.id !== 'undefined' && typeof v.name === 'string'
+            ? { value: { id: Number(v.id), name: v.name } }
+            : { issues: [{ message: 'invalid user shape', path: ['name'] }] },
+      },
+    };
+
+    it('applies a route-def schema and replaces data with the validated value', async () => {
+      const schemaConfig = {
+        ...config,
+        routes: {
+          getUser: { url: '/users/:id', method: HttpMethod.GET, schema: userSchema },
+        },
+      };
+      const apiClient = new ApiClient(schemaConfig as any, mockAuthManager);
+      mockAxiosInstance.request.mockResolvedValueOnce({
+        data: { id: '1', name: 'Ada' },
+        status: 200,
+      });
+
+      const result = await apiClient.request('getUser', undefined, { id: '1' });
+
+      expect(result).toEqual({ id: 1, name: 'Ada' });
+    });
+
+    it('throws MinderResponseValidationError (surfaced via the hook path) on a mismatch', async () => {
+      const schemaConfig = {
+        ...config,
+        routes: {
+          getUser: { url: '/users/:id', method: HttpMethod.GET, schema: userSchema },
+        },
+      };
+      const apiClient = new ApiClient(schemaConfig as any, mockAuthManager);
+      mockAxiosInstance.request.mockResolvedValueOnce({
+        data: { id: '1' }, // missing `name`
+        status: 200,
+      });
+
+      await expect(apiClient.request('getUser', undefined, { id: '1' })).rejects.toMatchObject({
+        name: 'MinderResponseValidationError',
+        code: 'RESPONSE_VALIDATION_FAILED',
+        status: 200,
+        issues: [{ message: 'invalid user shape', path: ['name'] }],
+      });
+    });
+
+    it('a per-call options.schema overrides the route-def schema', async () => {
+      const routeSchema: StandardSchemaV1<any, any> = {
+        '~standard': {
+          version: 1,
+          vendor: 'test',
+          validate: () => ({ issues: [{ message: 'route schema always fails' }] }),
+        },
+      };
+      const schemaConfig = {
+        ...config,
+        routes: {
+          getUser: { url: '/users/:id', method: HttpMethod.GET, schema: routeSchema },
+        },
+      };
+      const apiClient = new ApiClient(schemaConfig as any, mockAuthManager);
+      mockAxiosInstance.request.mockResolvedValueOnce({
+        data: { id: '1', name: 'Ada' },
+        status: 200,
+      });
+
+      const result = await apiClient.request(
+        'getUser',
+        undefined,
+        { id: '1' },
+        { schema: userSchema } as any
+      );
+
+      expect(result).toEqual({ id: 1, name: 'Ada' });
+    });
+
+    it('leaves the no-schema path byte-identical (pass-through)', async () => {
+      const apiClient = new ApiClient(config, mockAuthManager);
+      const raw = { id: 1, name: 'John' };
+      mockAxiosInstance.request.mockResolvedValueOnce({ data: raw, status: 200 });
+
+      const result = await apiClient.request('getUser', undefined, { id: '1' });
+
+      expect(result).toEqual(raw);
     });
   });
 });

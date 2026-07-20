@@ -1,6 +1,7 @@
 import axios, { AxiosError } from 'axios';
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import type { MinderConfig, ApiRoute, ApiError } from './types.js';
+import type { StandardSchemaV1 } from '../types/standard-schema.js';
 import { HttpMethod, DebugLogType } from '../constants/enums.js';
 import { AuthManager } from './AuthManager.js';
 import { ProxyManager } from './ProxyManager.js';
@@ -889,6 +890,21 @@ export class ApiClient {
       this.performanceMonitor.recordLatency(routeName, duration);
     }
 
+    // Task 3.1: opt-in runtime response validation via Standard Schema.
+    // `schema` isn't part of AxiosRequestConfig — it arrives as an ad-hoc
+    // property on `options`, mirroring how `rawUrl` is threaded through.
+    // Per-call `options.schema` wins over the route-def `route.schema`.
+    // Validates the RAW response body before the model transform below,
+    // since schemas describe wire JSON, not a decoded model instance. The
+    // validator, error class, and throw logic all live in the deferred
+    // responseValidation.js chunk, so callers who never configure a schema
+    // pay only the bare presence-guard here.
+    const effSchema = (options as { schema?: StandardSchemaV1 } | undefined)?.schema ?? route.schema;
+    if (effSchema) {
+      const { validateResponseOrThrow } = await import('./responseValidation.js');
+      response.data = await validateResponseOrThrow<any>(response.data, effSchema, response.status);
+    }
+
     // Transform response using model if specified
     if (route.model && response.data) {
       if (Array.isArray(response.data)) {
@@ -969,6 +985,17 @@ export class ApiClient {
     }
 
     const response: AxiosResponse<T> = await this.axiosInstance.request(requestConfig);
+
+    // Task 3.1: opt-in runtime response validation via Standard Schema. No
+    // registry route exists for this ad-hoc/raw path (absolute URL or
+    // `rawUrl`/leading-slash escape hatch), so only the per-call
+    // `options.schema` applies here — there is no route-def to fall back to.
+    const effSchema = (options as { schema?: StandardSchemaV1 } | undefined)?.schema;
+    if (effSchema) {
+      const { validateResponseOrThrow } = await import('./responseValidation.js');
+      return (await validateResponseOrThrow(response.data, effSchema, response.status)) as T;
+    }
+
     return response.data;
   }
 

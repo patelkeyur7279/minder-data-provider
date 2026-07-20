@@ -1,6 +1,6 @@
 /**
  * Custom Error Classes for Minder Data Provider
- * 
+ *
  * Provides typed, structured errors with error codes for better error handling
  */
 
@@ -247,6 +247,13 @@ export class MinderValidationError extends MinderError {
     }
   }
 }
+
+/**
+ * Response validation errors (Task 3.1 — Standard Schema) live in the
+ * lazy-loaded validation chunk, not here, so they cost zero bytes for
+ * consumers who never configure a schema. See
+ * {@link MinderResponseValidationError} in `../core/responseValidation.ts`.
+ */
 
 /**
  * Authentication errors

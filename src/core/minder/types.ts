@@ -2,6 +2,8 @@
  * Type definitions for Minder data provider
  */
 
+import type { StandardSchemaV1, StandardSchemaIssue } from '../../types/standard-schema.js';
+
 // ============================================================================
 // PUBLIC TYPES
 // ============================================================================
@@ -37,6 +39,20 @@ export interface MinderOptions<TModel = any> {
    * model: UserModel
    */
   model?: new (...args: any[]) => TModel;
+
+  /**
+   * Opt-in runtime validation of the response body against any Standard
+   * Schema validator (Zod >=3.24, Valibot, ArkType, Effect Schema, or any
+   * object implementing the `~standard` interface). Distinct from `validate`
+   * (client-side pre-flight over the OUTGOING data on mutations): `schema`
+   * checks what the server sent back, AFTER the network round-trip. On
+   * success `data` is typed as `InferOutput<S>` and replaced with the
+   * validator's (possibly transformed) output; on failure `minder()` returns
+   * `{ success: false, error }` with `error.code ===
+   * 'RESPONSE_VALIDATION_FAILED'` — it never silently lets bad data through.
+   * Wins over a route-def `schema` when both are set.
+   */
+  schema?: StandardSchemaV1<any, any>;
 
   /**
    * Upload progress callback
@@ -222,6 +238,13 @@ export interface MinderError {
    * Suggested solution
    */
   solution?: string;
+
+  /**
+   * Standard Schema validation issues. Populated only when `code ===
+   * 'RESPONSE_VALIDATION_FAILED'` (see `MinderOptions.schema` /
+   * `ApiRoute.schema`); absent otherwise.
+   */
+  issues?: readonly StandardSchemaIssue[];
 }
 
 // ============================================================================

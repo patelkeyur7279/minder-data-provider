@@ -9,6 +9,12 @@ import {
 } from '../constants/enums.js';
 import type { OfflineConfig } from '../platform/offline/types.js';
 import type { MinderPlugin } from '../plugins/PluginSystem.js';
+import type { StandardSchemaV1 } from '../types/standard-schema.js';
+
+// Re-export the vendored Standard Schema interface so route-def / per-call
+// response validation (`ApiRoute.schema`, `MinderOptions.schema` — Task 3.1)
+// is reachable from the `core` type surface without a second import.
+export type { StandardSchemaV1, InferOutput, InferInput } from '../types/standard-schema.js';
 
 // Core configuration types
 export interface MinderConfig {
@@ -78,6 +84,15 @@ export interface ApiRoute {
   optimistic?: boolean;
   cache?: boolean;
   timeout?: number;
+  /**
+   * Opt-in runtime validation of the response body against any Standard
+   * Schema validator (Zod >=3.24, Valibot, ArkType, Effect Schema, or any
+   * object implementing the `~standard` interface). Fail-closed: a mismatch
+   * (or a validator that itself throws) never passes as a valid response — it
+   * surfaces as a `RESPONSE_VALIDATION_FAILED` error instead. A per-call
+   * `MinderOptions.schema` overrides this when both are set.
+   */
+  schema?: StandardSchemaV1;
 }
 
 export interface AuthConfig {

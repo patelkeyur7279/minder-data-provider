@@ -213,6 +213,7 @@ Minimal surface for smaller bundles.
 ```ts
 transport?: 'auto' | 'axios' | 'fetch'   // default: 'axios'
 throwOnError?: boolean                    // default: false
+schema?: StandardSchemaV1<any, any>       // default: undefined (no validation)
 ```
 
 - `transport` — selects the request engine. `'fetch'` opts into a faster native-fetch
@@ -220,6 +221,35 @@ throwOnError?: boolean                    // default: false
   use it only for plain requests.
 - `throwOnError` — when `true`, `minder()` **throws** the `MinderError` instead of
   returning it inside the structured `MinderResult`. Defaults to `false` (never throws).
+- `schema` — see [Response validation (Standard Schema)](#response-validation-standard-schema) below.
+
+### Response validation (Standard Schema)
+
+`ApiRoute.schema` (route-def) and `MinderOptions.schema` (per-call, overrides the
+route-def) accept any [Standard Schema](https://standardschema.dev) validator — Zod
+≥3.24, Valibot, ArkType, Effect Schema, or a hand-written object implementing the
+`~standard` interface. Zero runtime dependency: `StandardSchemaV1` is a vendored,
+type-only interface (`minder-data-provider/core` and the main entry both export it).
+
+```ts
+import { minder } from "minder-data-provider";
+import type { StandardSchemaV1 } from "minder-data-provider/core";
+
+const { data, error } = await minder("users/1", undefined, { schema: userSchema });
+// data: InferOutput<typeof userSchema> | null
+```
+
+Validates the raw response body (before any `model` decode) and, on success, replaces
+`data` with the validator's output — honoring transforms. On failure, `minder()`
+returns `{ success: false, error }` with `error.code === 'RESPONSE_VALIDATION_FAILED'`,
+`error.status` set to the real HTTP status (often `200` — the request succeeded, the
+payload didn't), and `error.issues: readonly { message: string; path?: (PropertyKey |
+{ key: PropertyKey })[] }[]` populated. Distinct from the existing input `validate`
+option (client-side, pre-flight over OUTGOING mutation data — see the README's
+[Response Validation](../README.md#response-validation-standard-schema) section for the
+full contrast). A validator that itself throws is treated as a failure, never a pass
+(fail-closed). Does not count toward `retries` (deterministic, not transient) and does
+not affect `retries`/short-circuit plugin logic.
 
 ### New `useMinder` options
 

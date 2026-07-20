@@ -241,6 +241,44 @@ Minder solves everything between your UI and your data — and deliberately noth
 
 If a tool above already does the job, Minder integrates with it instead of replacing it.
 
+## Response Validation (Standard Schema)
+
+Two independent, opt-in validation hooks — don't confuse them:
+
+- **`validate` (existing, input)** — a per-call function that pre-flights the OUTGOING
+  data on a mutation, before it's sent. Runs client-side, on your request payload.
+- **`schema` (new, response)** — an opt-in Standard Schema validator (any [Standard
+  Schema](https://standardschema.dev) implementation — Zod ≥3.24, Valibot, ArkType,
+  Effect Schema, or your own) checked against the INCOMING response body, AFTER the
+  network round-trip succeeds. Fail-closed: a mismatch (or a validator that itself
+  throws) never passes as valid data.
+
+```ts
+import { minder } from "minder-data-provider";
+import { z } from "zod";
+
+const userSchema = z.object({ id: z.number(), name: z.string() });
+
+// data: { id: number; name: string } | null — inferred from the schema
+const { data, error } = await minder("users/1", undefined, { schema: userSchema });
+
+if (error?.code === "RESPONSE_VALIDATION_FAILED") {
+  console.error(error.issues); // [{ message, path }, ...]
+}
+```
+
+Set it once on a route definition (`schema` on the route config) and every call to
+that route is checked; pass `options.schema` per-call to override the route default
+(or to validate an ad-hoc/raw-URL call that has no registered route). On success,
+`data` is replaced by the validator's output — so a Zod `.transform()` (or
+equivalent) is honored. `minder()` still never throws by default: a validation
+failure returns `{ success: false, error }` like any other error, unless
+`throwOnError: true`.
+
+Zero cost when unused: the vendored `StandardSchemaV1` type is type-only (erased at
+compile time — no dependency installed), and the validator/error-handling code is
+lazy-loaded only when a `schema` is actually configured.
+
 ## Security Model
 
 - **Client-side auth checks are presence + expiry only.** `isAuthenticated()` inspects

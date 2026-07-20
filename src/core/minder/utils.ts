@@ -259,13 +259,45 @@ export function handleError(error: unknown): MinderError {
     };
   }
   
+  // Task 3.1 adaptation: a thrown MinderError-shaped value (e.g.
+  // MinderResponseValidationError from schema validation) already carries its
+  // own code/status/issues — preserve them instead of flattening to
+  // UNKNOWN_ERROR below. Checked ONLY here, after the axios-shaped branches
+  // above: a real (thrown-by-axios) AxiosError also has top-level `.code`/
+  // `.status`, but it ALWAYS carries `.request` too (set by every axios
+  // adapter), so it is already caught by `hasResponse`/`hasRequest` and never
+  // reaches this point — this duck-type can only match our own errors.
+  // Duck-typed (not `instanceof`) so this file never statically imports the
+  // errors module, keeping the lazy-loaded response-validation feature's
+  // synchronous bundle cost at zero for callers who never configure a schema.
+  if (
+    error instanceof Error &&
+    typeof (error as { code?: unknown }).code === 'string' &&
+    typeof (error as { status?: unknown }).status === 'number'
+  ) {
+    const minderLike = error as Error & {
+      code: string;
+      status: number;
+      context?: Record<string, unknown>;
+      issues?: unknown;
+    };
+    return {
+      message: minderLike.message,
+      code: minderLike.code,
+      status: minderLike.status,
+      details: minderLike.context,
+      issues: minderLike.issues as MinderError['issues'],
+      solution: 'See error.issues (if present) or error.details for more information',
+    };
+  }
+
   // Other errors (Error instances or plain objects)
-  const errorMessage = error instanceof Error 
-    ? error.message 
+  const errorMessage = error instanceof Error
+    ? error.message
     : (error && typeof error === 'object' && 'message' in error)
       ? String((error as { message: unknown }).message)
       : 'Unknown error';
-      
+
   return {
     message: errorMessage,
     code: 'UNKNOWN_ERROR',

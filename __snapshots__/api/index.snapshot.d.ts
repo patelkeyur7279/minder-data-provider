@@ -249,7 +249,7 @@ export declare function createLightConfig(_: LightConfig): MinderConfig & {
 export declare function createNextRateLimiter(_?: RateLimitConfig): (_: any, _: any, _?: () => void) => Promise<any>;
 export declare function createRateLimiter(_?: RateLimitConfig): RateLimiter;
 export declare function createTypedMinder<R extends Record<string, TypedRoute<any>>>(_: R): {
-    minder: <K extends keyof R>(_: K, _?: unknown, _?: MinderOptions) => Promise<MinderResult<ResponseOf<R[K]>>>;
+    minder: TypedMinderFn<R>;
     useMinder: <K extends keyof R>(_: K, _?: UseMinderOptions) => UseMinderReturn<ResponseOf<R[K]>>;
 };
 export declare function debounce<T extends (...args: any[]) => any>(_: T, _: number): (..._: Parameters<T>) => void;
@@ -365,7 +365,7 @@ export declare const RateLimitPresets: {
 // #endregion
 
 // #region Re-exports
-export { _ as AnalyticsConfig, _ as AnalyticsPlugin, _ as ApiError, _ as AuthConfig, _ as BaseModel, _ as CacheConfig, _ as CacheEntry, _ as CacheHitEvent, _ as CacheWarmupPlugin, _ as CorsConfig, _ as CorsHelperConfig, _ as CrudOperations, _ as DebugConfig, _ as LoggerPlugin, _ as MediaUploadResult, _ as MinderPlugin, _ as Notification, _ as PerformanceConfig, _ as PerformanceMonitorPlugin, _ as PluginError, _ as PluginManager, _ as PluginRequest, _ as PluginResponse, _ as QueryState, _ as RetryConfig, _ as RetryPlugin, _ as SSRConfig, _ as SecurityConfig, _ as ServerState, _ as SessionData, _ as TelemetryConfig, _ as UIState, _ as UserState, _ as WebSocketConfig, _ as createPlugin, _ as pluginManager, _ as registerPlugins } from './types-HASH.js';
+export { _ as AnalyticsConfig, _ as AnalyticsPlugin, _ as ApiError, _ as AuthConfig, _ as BaseModel, _ as CacheConfig, _ as CacheEntry, _ as CacheHitEvent, _ as CacheWarmupPlugin, _ as CorsConfig, _ as CorsHelperConfig, _ as CrudOperations, _ as DebugConfig, _ as InferInput, _ as LoggerPlugin, _ as MediaUploadResult, _ as MinderPlugin, _ as Notification, _ as PerformanceConfig, _ as PerformanceMonitorPlugin, _ as PluginError, _ as PluginManager, _ as PluginRequest, _ as PluginResponse, _ as QueryState, _ as RetryConfig, _ as RetryPlugin, _ as SSRConfig, _ as SecurityConfig, _ as ServerState, _ as SessionData, _ as TelemetryConfig, _ as UIState, _ as UserState, _ as WebSocketConfig, _ as createPlugin, _ as pluginManager, _ as registerPlugins } from './types-HASH.js';
 export { _ as AuthManager } from './AuthManager-HASH.js';
 export { _ as AuthState, _ as CacheRequirements, _ as CacheType, _ as ConfigPreset, _ as ConfigPresetType, _ as CrudOperation, _ as DEFAULT_VALUES, _ as DataSize, _ as DataSizeType, _ as EVENTS, _ as Environment, _ as ErrorCode, _ as HTTP_STATUS, _ as HttpMethodType, _ as LogLevel, _ as LogLevelType, _ as MIME_TYPES, _ as NetworkState, _ as NotificationType, _ as NotificationTypeType, _ as PaginationType, _ as Platform, _ as PlatformType, _ as PrefetchStrategy, _ as QueryStatus, _ as QueryStatusType, _ as RetryStrategy, _ as STORAGE_KEYS, _ as SecurityLevel, _ as SecurityLevelType, _ as SortOrder, _ as StorageType, _ as StorageTypeType, _ as TokenType, _ as UploadState, _ as WebSocketState, _ as isConfigPreset, _ as isDataSize, _ as isHttpMethod, _ as isLogLevel, _ as isPlatform, _ as isQueryStatus, _ as isSecurityLevel, _ as isStorageType } from './enums-HASH.js';
 export { _ as BatchedRequest, _ as PendingRequest, _ as ProxyConfig, _ as ProxyManager } from './ApiClient-HASH.js';
@@ -383,6 +383,7 @@ export { _ as Logger, _ as LoggerConfig, _ as createLogger, _ as defaultLogger }
 export { MediaUploadManager, UploadOptions, UploadProgressDetails, createUploadManager } from './upload/index.js';
 export { _ as minder } from './minder-HASH.js';
 export { _ as MinderAuthError, _ as MinderAuthorizationError, _ as MinderConfigError, _ as MinderError, _ as MinderNetworkError, _ as MinderOfflineError, _ as MinderPlatformError, _ as MinderPluginError, _ as MinderRequestError, _ as MinderSecurityError, _ as MinderStorageError, _ as MinderTimeoutError, _ as MinderUploadError, _ as MinderValidationError, _ as MinderWebSocketError, _ as UploadProgress, _ as getErrorCode, _ as getErrorMessage, _ as isMinderError } from './MinderError-HASH.js';
+export { MinderResponseValidationError } from './core.js';
 export { OfflineManager, __resetNextjsDynamicWarning, configureMinder, createConfigFromPreset, getOfflineManager, getPresetInfo } from './config/index.js';
 export { _ as PROVIDER_CATEGORIES, _ as PROVIDER_FRAMEWORKS, _ as PROVIDER_RUNTIMES, _ as ProviderCapability, _ as ProviderCategory, _ as ProviderConfigSplit, _ as ProviderDocs, _ as ProviderFramework, _ as ProviderManifest, _ as ProviderRuntime, _ as ProviderScope, _ as ValidationResult, _ as defineProviderManifest, _ as providerManifestSchema, _ as validateProviderManifest } from './manifest-HASH.js';
 export { SSROptions, createSSRConfig, getDehydratedState, prefetchData, withCSR, withSSR } from './ssr/index.js';
@@ -394,10 +395,12 @@ export { WebSocketClient, WebSocketEventHandler, WebSocketMessage, createWebSock
 // #region Other
 export { ApiRoute }
 export { EnvironmentOverride }
+export { InferOutput }
 export { MinderConfig }
 export { MinderOptions }
 export { MinderResult }
 export { PerformanceMetrics }
+export { StandardSchemaV1 }
 export { UnifiedMinderConfig }
 export { UseMinderOptions }
 export { UseMinderReturn }

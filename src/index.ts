@@ -236,6 +236,13 @@ export {
   getErrorCode,
 } from './errors/index.js';
 
+// Response-validation error (Task 3.1). Exported TYPE-ONLY on purpose: the class
+// lives in the lazy validation chunk (responseValidation.ts) so it costs zero
+// eager bytes for consumers who never configure a `schema` (design §5 / P4).
+// Runtime consumers branch on `error.code === 'RESPONSE_VALIDATION_FAILED'`
+// (+ `error.issues`); the thrown instance is reachable at `result.error.raw`.
+export type { MinderResponseValidationError } from './core/responseValidation.js';
+
 // ============================================================================
 // MIDDLEWARE EXPORTS
 // ============================================================================
