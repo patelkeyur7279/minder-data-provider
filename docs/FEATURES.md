@@ -363,6 +363,22 @@ const { data, websocket } = useMinder('messages', { realtime: true });
 websocket.subscribe?.('messages');
 ```
 
+**Canonical public path.** Three WebSocket layers exist; the supported public surface is:
+
+- **`WebSocketClient`** from `minder-data-provider/websocket` — a standalone client with
+  connect/disconnect, event subscribe/dispatch, an offline send-queue, heartbeat, and
+  auto-reconnect with exponential backoff (`reconnect` on by default; `heartbeat` in ms). Use it
+  when you want a socket independent of a provider/route.
+- **`useWebSocket()`** and **`useMinder().websocket`** — thin hooks that delegate to the provider's
+  WebSocket manager (require `MinderDataProvider`). They add no lifecycle side effects of their own,
+  so there is nothing to leak across mount/unmount; `subscribe(event, cb)` returns the manager's
+  unsubscribe function for your own cleanup.
+
+The core `WebSocketManager` (`src/core/WebSocketManager.ts`) is **internal plumbing** for
+`MinderDataProvider` (platform-adapter selection, auth-token URL) — not a public API. All three
+layers remain live; they are intentionally not consolidated (high-risk), only the public path above
+is supported/tested.
+
 ### Server-Sent Events
 
 ```ts
