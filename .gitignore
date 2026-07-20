@@ -71,3 +71,7 @@ temp/
 demo/dist/
 demo/.next/
 demo/node_modules/
+
+# Claude operating kit — LOCAL ONLY, never committed
+CLAUDE.md
+.claude/
