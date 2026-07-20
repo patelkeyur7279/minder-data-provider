@@ -82,6 +82,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `createWebhookHandler`'s HMAC verification (accept + reject) on the edge runtime
   itself. Support Matrix + EDGE.md + README: Edge runtimes `Inferred-works` →
   `Confirmed (Cloudflare Workers/workerd)`; Vercel Edge/Deno/Bun remain inferred.
+- **CI**: new weekly `canary.yml` workflow (Monday cron + manual dispatch only, never
+  runs on push/PR) — installs React `@next`, the best available `@tanstack/react-query`
+  pre-release dist-tag, and the latest stable of each provider peer SDK, then runs the
+  suite. Report-only (`continue-on-error: true` per job); an early warning if upstream
+  breaks us before their stable release, not a merge gate.
 
 ### Performance (bundle surgery — no API change; surface verified by API-snapshot gate)
 
