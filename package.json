@@ -164,7 +164,7 @@
     "type-check": "tsc --noEmit",
     "clean": "rm -rf dist",
     "postinstall": "node scripts/check-peer-deps.js || true",
-    "prepublishOnly": "npm run clean && npm run build && npm run test && npm run verify-build",
+    "prepublishOnly": "npm run clean && npm run build && npm run test && npm run verify-build && npm run verify:treeshake",
     "analyze": "npm run build && npx bundlesize",
     "analyze-bundle": "npm run build && node scripts/analyze-bundle.js",
     "verify-build": "node scripts/verify-build.js",
@@ -178,7 +178,8 @@
     "release:patch": "npm version patch && git push --follow-tags",
     "release:minor": "npm version minor && git push --follow-tags",
     "release:major": "npm version major && git push --follow-tags",
-    "release:check": "npm run clean && npm run build && npm run test && npm run verify-build && npm pack --dry-run"
+    "release:check": "npm run clean && npm run build && npm run test && npm run verify-build && npm pack --dry-run && npm run verify:treeshake",
+    "verify:treeshake": "node scripts/verify-consumer-treeshake.mjs"
   },
   "keywords": [
     "react",
@@ -195,7 +196,7 @@
   ],
   "author": "Minder Data Provider Team",
   "license": "MIT",
-  "sideEffects": false,
+  "sideEffects": true,
   "packageManager": "npm@11.6.2",
   "dependencies": {
     "axios": "^1.18.1",
@@ -206,6 +207,7 @@
     "@babel/core": "^7.28.5",
     "@babel/plugin-transform-class-static-block": "^7.28.3",
     "@eslint/js": "^9.39.1",
+    "@rollup/plugin-node-resolve": "^15.3.1",
     "@tanstack/query-core": "^5.90.6",
     "@tanstack/react-query": "^5.90.6",
     "@tanstack/react-query-devtools": "^5.90.2",
@@ -229,6 +231,7 @@
     "jiti": "^2.6.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "rollup": "^4.62.2",
     "ts-jest": "^29.1.2",
     "tsup": "^8.0.2",
     "typescript": "^5.4.3",
@@ -236,13 +239,13 @@
   },
   "peerDependencies": {
     "@clerk/clerk-js": "^5.0.0",
+    "@sentry/browser": "^8.0.0",
     "@supabase/supabase-js": "^2.0.0",
     "@tanstack/query-core": "^5.90.6",
     "@tanstack/react-query": "^5.90.6",
     "@tanstack/react-query-devtools": "^5.90.2",
     "firebase": "^10.0.0",
     "razorpay": "^2.9.0",
-    "@sentry/browser": "^8.0.0",
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0",
     "stripe": "^14.0.0"

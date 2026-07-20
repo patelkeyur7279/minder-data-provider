@@ -52,6 +52,18 @@ export default defineConfig({
   dts: true,
   sourcemap: process.env.NODE_ENV !== 'production', // Only in development
   clean: true,
+  // INVARIANT: splitting:true is only safe because package.json declares
+  // "sideEffects": true. Splitting moves shared state (React context creation,
+  // class/enum definitions) into cross-entry chunks initialized by lazy __esm
+  // thunks; if the package ever claims to be side-effect-free again, consumer
+  // bundlers (Rollup/Vite, webpack, Rspack) will drop the imports that run
+  // those thunks and every useMinder() call will throw in PRODUCTION builds
+  // only ("Cannot read properties of undefined (reading '_currentValue')")
+  // while dev mode keeps working. Verified across 8 bundler configurations
+  // (MDPD-17, demo-workspace audit 2026-07-20); the same mechanism shipped the
+  // HttpMethod-undefined crash fixed in dabd92d. Guarded by
+  // scripts/verify-consumer-treeshake.mjs — run `npm run verify:treeshake`
+  // after any packaging change.
   splitting: true,
   treeshake: true,
   minify: true, // Enable minification to reduce bundle size
