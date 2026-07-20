@@ -55,8 +55,40 @@ jobs:
         run: npm run bench
 
       - name: Upload coverage
+        id: coverage
         if: matrix.node-version == 20
         uses: codecov/codecov-action@v3
         with:
           files: ./coverage/lcov.info
           fail_ci_if_error: false
+
+  # Support-Matrix evidence: Next.js App Router (provider-wrapper pattern).
+  # Builds the packed library, installs it into the example exactly like a real
+  # consumer, next-builds it (incl. static prerender), and runtime-smokes both
+  # the page and the API route.
+  app-router-example:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install and build library
+        run: npm ci && npm run build
+
+      - name: Pack library tarball
+        run: npm pack
+
+      - name: Install and build example
+        working-directory: examples/nextjs-app-router
+        run: npm install && npm run build
+
+      - name: Runtime smoke (page + API route)
+        working-directory: examples/nextjs-app-router
+        run: |
+          npx next start -p 3199 &
+          sleep 5
+          curl -sf http://127.0.0.1:3199/api/users | grep -q "Ada"
+          curl -sf http://127.0.0.1:3199/ | grep -q "App Router example"

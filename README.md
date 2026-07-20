@@ -198,7 +198,7 @@ hatch — typed routes are purely additive.
 | --- | --- |
 | React 19 (web) | Confirmed |
 | Next.js (Pages Router) | Experimental |
-| Next.js (App Router / RSC) | Unknown |
+| Next.js (App Router / RSC) | Confirmed (provider-wrapper pattern) |
 | Vite + React | Inferred-works |
 | React 18 | Unknown |
 | React Native / Expo | Experimental |
@@ -212,6 +212,34 @@ without that evidence bar yet. **Unknown** = no evidence either way. **Inferred-
 = should work on general principle, unverified. **Planned** = roadmap only, no code.
 Per-capability detail (auth, WebSocket, offline, uploads, …):
 [**Support Matrix**](./docs/product/SUPPORT_MATRIX.md).
+
+## Bundle Cost — measured, budgeted, enforced
+
+Real numbers from consumer-level bundling (entry + shared chunks, min+gzip), not
+entry-file marketing math:
+
+- `import { useMinder }` initial load: **~13 KB** (local-first storage, DevTools, and
+  provider machinery load only if and when used)
+- Feature subpaths (`/crud`, `/cache`, `/websocket`, `/upload`, `/auth`): **17–23 KB** each
+- Certified providers: **5–7.5 KB** each · `/ssr` 1.4 KB · `/logger` &lt;1 KB
+
+Every number above is enforced by CI bundle budgets (`npm run budgets:check`) — a PR
+that regresses them fails. Run **`npx minder doctor --bundle`** in your own app to see
+exactly which subpaths you import and what each costs. Pipeline overhead is benchmarked
+in CI too: `minder()` adds **~0 ms** p50 over a raw axios call (`npm run bench`).
+
+## What Minder is NOT
+
+Minder solves everything between your UI and your data — and deliberately nothing else:
+
+- **No GraphQL client.** The pipeline is REST/HTTP-shaped; use Apollo or urql for GraphQL.
+- **No UI components.** Pair with shadcn/ui, Material UI, or your design system.
+- **No form state.** Pair with react-hook-form (Minder handles the submit's data flight).
+- **No global client-state store.** TanStack Query cache + your framework's state cover
+  it; the legacy Redux integration is removed in v3.0.
+- **No i18n, routing, or styling.** Your framework already does this better.
+
+If a tool above already does the job, Minder integrates with it instead of replacing it.
 
 ## Security Model
 
