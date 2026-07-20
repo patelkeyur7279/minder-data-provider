@@ -200,7 +200,7 @@ hatch — typed routes are purely additive.
 | Next.js (Pages Router) | Experimental |
 | Next.js (App Router / RSC) | Confirmed (provider-wrapper pattern) |
 | Vite + React | Inferred-works |
-| React 18 | Unknown |
+| React 18 | Confirmed (test-suite evidence) |
 | React Native / Expo | Experimental |
 | Electron | Experimental |
 | Node (server) | Experimental |

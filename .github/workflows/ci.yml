@@ -62,6 +62,26 @@ jobs:
           files: ./coverage/lcov.info
           fail_ci_if_error: false
 
+  # Support-Matrix evidence: React 18 compatibility (Phase 7.1 matrix leg).
+  # Peer range allows 18 — this proves it with the full suite, not hope.
+  react-18-compat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Swap in React 18
+        run: npm install --no-save react@18 react-dom@18
+
+      - name: Run full test suite under React 18
+        run: npx jest
+
   # Support-Matrix evidence: Next.js App Router (provider-wrapper pattern).
   # Builds the packed library, installs it into the example exactly like a real
   # consumer, next-builds it (incl. static prerender), and runtime-smokes both
