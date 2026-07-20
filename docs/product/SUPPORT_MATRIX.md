@@ -48,11 +48,11 @@
 | TanStack Query caching | **Confirmed** | query-core based CacheManager, tested |
 | Auth (JWT presence/expiry, refresh) | **Confirmed** | Fail-closed since 2.2.0-beta.1; parity-tested |
 | Plugin bus (request/response/error/token hooks) | **Confirmed** | Emitters live in ApiClient + minder(); tested |
-| Plugin hooks `onUpload`/`onSync`/`onConnectivityChange` | **Reachable via public API** | MDPD-6: `onUpload` now fires from the `useMinder`/`useMediaUpload` path (`ApiClient.uploadFile`) as well as `MediaUploadManager`; `onSync`/`onConnectivityChange` fire from the `OfflineManager` wired by `configureMinder({ offline:{enabled:true} })` (now exported + `getOfflineManager()`). Unit+integration tested on branch; no cross-browser/device soak |
-| Plugin hooks `onCacheHit`/`onCacheMiss` | **Implemented** | MDPD-5: emitted from `minder()`'s opt-in `{ cache: true }` response cache (miss on first/expired, hit on fresh). Unit tested on branch |
+| Plugin hooks `onUpload`/`onSync`/`onConnectivityChange` | **Implemented & reachable** | Unified OfflineManager (2026-07-20) auto-queue fires onSync for automatically-queued failed requests (tests/mdpd-unified-offline-manager.test.ts); onUpload fires from both useMinder/useMediaUpload path and MediaUploadManager, terminal phase 'success'. Unit+integration tested on branch; no cross-browser/device soak |
+| Plugin hooks `onCacheHit`/`onCacheMiss` | **Implemented** | Emitted from `minder()`'s opt-in `{ cache: true }` response cache (miss on first/expired, hit on fresh). Unit tested on branch |
 | WebSocket | **Experimental** | 3 overlapping layers (core manager / client / adapters) intentionally NOT consolidated (high-risk). Canonical public path documented (`/websocket` `WebSocketClient` + `useWebSocket` + `useMinder().websocket`); both public layers now unit tested (connect/subscribe/reconnect-backoff/cleanup). Unit tested on branch; no cross-browser/device soak |
 | Upload | **Experimental** | Works; MDPD-4 re-render storm fixed — `useMediaUpload` progress commits throttled (50-event upload: ~50→~5 renders). Unit tested on branch; no cross-browser/device soak |
-| Offline | **Experimental** | Two competing implementations (core + platform) — NOT consolidated (high-risk); platform `OfflineManager` now publicly wired via `configureMinder`/`getOfflineManager` for the sync/connectivity hooks (MDPD-6). Unit+integration tested on branch; no cross-browser/device soak |
+| Offline | **Implemented (unified)** | CONSOLIDATED 2026-07-20: `core/OfflineManager` deleted; ONE platform `OfflineManager` shared by `configureMinder`/`getOfflineManager` AND ApiClient's auto-queue (replay via the client's axios instance; `onSync`/`onConnectivityChange` fire for real auto-queued failures — tests/mdpd-unified-offline-manager.test.ts). Queue is in-memory unless `config.storage` supplied. Unit+integration tested on branch; no cross-browser/device soak |
 
 ## Provider integrations
 

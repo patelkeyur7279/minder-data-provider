@@ -26,6 +26,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no longer inlined). **Version not yet bumped in-repo; this is the recommended
   classification.**
 
+### Changed (BREAKING)
+
+- **sideEffects: true** (MDPD-17): the packed library previously crashed
+  `useMinder()` in production builds under most consumer bundlers (Vite/Rollup,
+  webpack/Next, CRA, etc.) because `"sideEffects": false` let bundlers drop lazy
+  chunk-init imports; declaring `sideEffects: true` fixes it. Guarded by
+  `scripts/verify-consumer-treeshake.mjs` (real-Rollup consumer bundle) wired
+  into `release:check`/`prepublishOnly`. Bundle cost ~+10 kB on a minimal consumer.
+- **detectMethod re-contract**: only genuinely ID-shaped final route segments
+  (numeric, UUID, 24-hex ObjectId) auto-detect as PUT; word/slug segments are
+  collection names → creates now send POST (previously `/api/orders` with data
+  sent PUT). Slug-id updates: pass `options.method` or an `id`/`_id` field in data.
+- **minder() retries are idempotent-only**: retries now apply only to
+  GET/HEAD/OPTIONS/PUT/DELETE; POST/PATCH retry only with new option
+  `retryNonIdempotent: true` (duplicate-write protection).
+
+### Fixed (MDPD workspace findings)
+
+- **Response-cache identity partitioning**: `minder()`'s opt-in `{cache:true}`
+  cache is now keyed per credential (hashed token/Authorization) — fixes a
+  cross-user cached-response disclosure on shared SSR/Node processes; also: raw
+  pre-decode data cached so `options.model` instances keep their prototype on
+  hits; 200-entry cap.
+- **Unified OfflineManager** (MDPD-6 follow-up): `configureMinder({offline:{enabled:true}})`
+  + ApiClient now share ONE manager; `onSync`/`onConnectivityChange` fire for
+  automatically-queued failed requests; replay goes through the ApiClient axios
+  instance; `core/OfflineManager` deleted.
+- **configureMinder({plugins}) per-instance**: plugins now forward into the
+  returned config (ApiClient per-instance isolation as documented); ownership
+  bookkeeping no longer unregisters plugins owned by other callers;
+  `register()` returns a boolean.
+- **PlatformDetector guards** (MDPD-34 + follow-up): `navigator` (Hermes) and
+  bare `process` access guarded.
+- **useMediaUpload**: progress resets per upload; overlapping uploads serialized;
+  upload lifecycle terminal phase unified to `'success'`.
+
 ## [2.2.0-beta.1] - Unreleased
 
 ### Changed (security — behavior changes)

@@ -529,9 +529,9 @@ interface MinderPlugin {
 
   provideToken?(): string | null | Promise<string | null>; // supplies a token when auth has none
   onAuthRefresh?(tokens): void;          // fired on token rotation
-  onUpload?(event: UploadLifecycleEvent): void;             // emitted via BOTH MediaUploadManager (`/upload`) AND the useMinder/useMediaUpload path (ApiClient.uploadFile) — MDPD-6
-  onSync?(event: SyncLifecycleEvent): void;                 // fired by the OfflineManager wired by configureMinder({ offline:{enabled:true} }) — MDPD-6
-  onConnectivityChange?(online: boolean): void;             // same OfflineManager — reachable via the public config; see getOfflineManager()
+  onUpload?(event: UploadLifecycleEvent): void;             // fired by both useMinder/useMediaUpload path and MediaUploadManager; terminal phase 'success'
+  onSync?(event: SyncLifecycleEvent): void;                 // fired by the unified OfflineManager, including automatically-queued failed requests
+  onConnectivityChange?(online: boolean): void;             // fired by the unified OfflineManager on connectivity changes
 }
 ```
 

@@ -275,16 +275,16 @@ interface MinderPlugin {
   onRequest?(req: PluginRequest): void | Promise<void>;
   onResponse?(res: PluginResponse): void | Promise<void>;
   onError?(err: PluginError): void | Promise<void>;
-  onCacheHit?(e): void | Promise<void>;                     // declared; NOT emitted yet (roadmap)
-  onCacheMiss?(key: string): void | Promise<void>;          // declared; NOT emitted yet (roadmap)
+  onCacheHit?(e): void | Promise<void>;                     // fired by minder()'s opt-in {cache:true} response cache (hit on fresh)
+  onCacheMiss?(key: string): void | Promise<void>;          // fired by minder()'s opt-in {cache:true} response cache (miss on first/expired call)
   onDestroy?(): void | Promise<void>;
 
   provideToken?(): string | null | Promise<string | null>;   // supplies auth token when the auth manager has none (Firebase/Auth0/Clerk)
   onAuthRefresh?(tokens): void | Promise<void>;              // fired on token rotation
 
-  onUpload?(event: UploadLifecycleEvent): void | Promise<void>;   // media pipeline
-  onSync?(event: SyncLifecycleEvent): void | Promise<void>;       // offline-sync
-  onConnectivityChange?(online: boolean): void | Promise<void>;
+  onUpload?(event: UploadLifecycleEvent): void | Promise<void>;   // fired by both useMinder/useMediaUpload path and MediaUploadManager; terminal phase 'success'
+  onSync?(event: SyncLifecycleEvent): void | Promise<void>;       // fired by the unified OfflineManager, including automatically-queued failed requests
+  onConnectivityChange?(online: boolean): void | Promise<void>;   // fired by the unified OfflineManager on connectivity changes
 }
 ```
 

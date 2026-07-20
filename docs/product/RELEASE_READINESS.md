@@ -1,5 +1,27 @@
 # Release-Readiness Report — minder-data-provider
 
+> ## Update — 2026-07-20 (post-review fix program, branch `fix/mdpd-workspace-findings`)
+> A follow-up review of 18 subsequent commits found and FIXED (all parent-verified, committed
+> locally `cec62b2` + `8b1a9bb`):
+> - **3 criticals:** minder() response-cache cross-user disclosure (now identity-keyed per hashed
+>   credential + 200-entry cap + raw-data storage so `options.model` prototypes survive hits);
+>   non-idempotent retry resubmission (idempotent-only default + `retryNonIdempotent` opt-in);
+>   `configureMinder({plugins})` global mutation documented as per-instance (now forwarded
+>   per-instance + collision-safe ownership).
+> - **1 high:** two unrelated OfflineManagers — unified; `onSync`/`onConnectivityChange` now fire
+>   for REAL auto-queued failed requests; `core/OfflineManager` deleted.
+> - **detectMethod re-contract (breaking):** only ID-shaped final segments (numeric/UUID/ObjectId)
+>   auto-detect as PUT — creates on collection routes now correctly send POST.
+> - Earlier in the same branch (other agent, verified): `sideEffects: true` fixes a production
+>   crash under 8/9 consumer bundlers, guarded by a real-Rollup treeshake check in `release:check`.
+> - Items #5 (immer removed? no — still pending) — see §7; **hook items #6 are now RESOLVED**
+>   (onCacheHit/onCacheMiss implemented; offline hooks reachable; onUpload on both paths).
+> - Gate at this state: **suite 2357 passed / 0 failed**, tsc clean, lint 0 errors, build OK,
+>   Rollup treeshake guard OK. Version still `2.2.0-beta.0` (bump awaits owner approval).
+>
+> The sections below are the original report snapshot (branch `dev`, commit `98e1e76`) and remain
+> accurate for that baseline except where this update supersedes them.
+
 **Program:** full release-readiness + end-to-end package-consumer validation.
 **Decision: READY AFTER BLOCKERS** — code, package, and security are release-worthy (all quality
 gates green, the packed tarball installs and works in clean consumer fixtures, security clean). The
