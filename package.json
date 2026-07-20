@@ -180,7 +180,9 @@
     "verify:treeshake": "node scripts/verify-consumer-treeshake.mjs",
     "verify:api": "node scripts/verify-api-surface.mjs",
     "snapshot:api": "node scripts/verify-api-surface.mjs --update",
-    "measure:bundles": "node scripts/measure-bundles.mjs"
+    "measure:bundles": "node scripts/measure-bundles.mjs",
+    "budgets:check": "node scripts/measure-bundles.mjs --check",
+    "budgets:update": "node scripts/measure-bundles.mjs --write-budgets"
   },
   "keywords": [
     "react",

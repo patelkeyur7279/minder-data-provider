@@ -48,6 +48,9 @@ jobs:
       - name: Verify consumer tree-shaking
         run: npm run verify:treeshake
 
+      - name: Check bundle budgets
+        run: npm run budgets:check
+
       - name: Upload coverage
         if: matrix.node-version == 20
         uses: codecov/codecov-action@v3

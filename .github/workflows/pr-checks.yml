@@ -31,8 +31,8 @@ jobs:
       - name: Build
         run: npm run build
       
-      - name: Measure bundle sizes (consumer-level, per subpath)
-        run: npm run measure:bundles
+      - name: Check bundle budgets (consumer-level, per subpath + scenarios)
+        run: npm run budgets:check
       
       - name: Security audit
         run: npm audit --audit-level high
