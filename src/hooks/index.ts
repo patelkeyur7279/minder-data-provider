@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { parseJWT as decodeJwt } from '../utils/jwt.js';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useMinderContext } from '../core/MinderDataProvider.js';
+import { useMinderContext } from '../core/MinderContext.js';
 import type { CrudOperations, UploadProgress, MediaUploadResult } from '../core/types.js';
 
 // Main hook for CRUD operations

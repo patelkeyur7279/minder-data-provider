@@ -15,8 +15,8 @@ jest.mock('../src/core/CacheManager');
 jest.mock('../src/core/WebSocketManager');
 
 // Mock useMinderContext
-jest.mock('../src/core/MinderDataProvider', () => {
-    const actual = jest.requireActual('../src/core/MinderDataProvider');
+jest.mock('../src/core/MinderContext', () => {
+    const actual = jest.requireActual('../src/core/MinderContext');
     const useMinderContext = jest.fn();
     return {
         ...actual,

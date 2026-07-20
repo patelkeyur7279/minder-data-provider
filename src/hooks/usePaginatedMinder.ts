@@ -84,7 +84,7 @@ import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import type { UseInfiniteQueryOptions } from '@tanstack/react-query';
 import { minder } from '../core/minder.js';
 import type { MinderOptions, MinderResult } from '../core/minder.js';
-import { useMinderContextSafe } from '../core/MinderDataProvider.js';
+import { useMinderContextSafe } from '../core/MinderContext.js';
 import { HttpMethod } from '../constants/enums.js';
 
 // ============================================================================

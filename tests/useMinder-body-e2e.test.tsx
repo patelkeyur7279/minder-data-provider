@@ -16,8 +16,8 @@ const mockedAxios = axios as jest.Mocked<typeof axios>;
 jest.mock('../src/core/ApiClient');
 
 // Mock useMinderContext
-jest.mock('../src/core/MinderDataProvider', () => {
-    const actual = jest.requireActual('../src/core/MinderDataProvider');
+jest.mock('../src/core/MinderContext', () => {
+    const actual = jest.requireActual('../src/core/MinderContext');
     const useMinderContext = jest.fn();
     return {
         ...actual,

@@ -4,8 +4,7 @@
 // When using namespace imports (import * as React), bundlers can sometimes
 // create invalid references causing "Cannot read properties of null" errors
 import React, {
-  createContext,
-  useContext,
+  lazy,
   useEffect,
   useMemo,
   useState,
@@ -32,25 +31,23 @@ import { WebSocketManager } from "./WebSocketManager.js";
 import { EnvironmentManager } from "./EnvironmentManager.js";
 import { ProxyManager } from "./ProxyManager.js";
 import { DebugManager } from "../debug/DebugManager.js";
-import { DevTools } from "../devtools/DevTools.js";
 import { DebugLogType } from "../constants/enums.js";
 import { setGlobalMinderConfig } from "./globalConfig.js";
+import { MinderContext } from "./MinderContext.js";
+import type { MinderContextValue } from "./MinderContext.js";
 
-interface MinderContextValue {
-  config: MinderConfig;
-  apiClient: ApiClient;
-  authManager: AuthManager;
-  cacheManager: CacheManager;
-  websocketManager?: WebSocketManager;
-  environmentManager?: EnvironmentManager;
-  proxyManager?: ProxyManager;
-  debugManager?: DebugManager;
-  queryClient: QueryClient;
-  ReactQueryDevtools?: ComponentType<{ initialIsOpen?: boolean }>;
-  dehydratedState?: DehydratedState;
-}
+// Context accessors live in MinderContext.tsx (kept import-light so hooks
+// don't pull the provider's manager construction into consumer bundles).
+// Re-exported here so the public surface is unchanged.
+export { useMinderContext, useMinderContextSafe } from "./MinderContext.js";
+export type { MinderContextValue } from "./MinderContext.js";
 
-const MinderContext = createContext<MinderContextValue | null>(null);
+// DevTools is dev-only UI — loaded lazily so it lands in its own chunk and
+// production bundles never carry it. May appear a tick later than the sync
+// version did; it is gated to non-production + debug.devTools anyway.
+const LazyDevTools = lazy(() =>
+  import("../devtools/DevTools.js").then((m) => ({ default: m.DevTools }))
+);
 
 interface MinderDataProviderProps {
   config: MinderConfig;
@@ -256,11 +253,13 @@ export function MinderDataProvider({
           <contextValue.ReactQueryDevtools initialIsOpen={false} />
         )}
 
-      {/* Custom DevTools */}
+      {/* Custom DevTools (lazy: own chunk, never in production bundles) */}
       {process.env.NODE_ENV !== "production" &&
         contextValue.config.debug?.enabled !== false &&
         contextValue.config.debug?.devTools && (
-          <DevTools config={contextValue.config.debug} />
+          <Suspense fallback={null}>
+            <LazyDevTools config={contextValue.config.debug} />
+          </Suspense>
         )}
     </QueryClientProvider>
   );
@@ -272,20 +271,3 @@ export function MinderDataProvider({
   );
 }
 
-export function useMinderContext(): MinderContextValue {
-  const context = useContext(MinderContext);
-  if (!context) {
-    throw new Error("useMinderContext must be used within MinderDataProvider");
-  }
-  return context;
-}
-
-/**
- * Non-throwing variant for hooks that support standalone (no-provider) mode.
- * Returns `null` outside a MinderDataProvider instead of throwing, so callers
- * don't need to wrap a hook call in try/catch (which violates the Rules of
- * Hooks and breaks hook-order guarantees if the accessor ever grows).
- */
-export function useMinderContextSafe(): MinderContextValue | null {
-  return useContext(MinderContext);
-}

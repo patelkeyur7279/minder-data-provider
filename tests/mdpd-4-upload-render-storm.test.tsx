@@ -27,7 +27,7 @@ const mockUploadFile = jest.fn((_route: string, _file: any, onProgress: any) => 
 // Stable context value (React context returns a stable reference in real usage),
 // so apiClient identity does not churn across renders.
 const stableContext = { apiClient: { uploadFile: mockUploadFile } };
-jest.mock('../src/core/MinderDataProvider', () => ({
+jest.mock('../src/core/MinderContext', () => ({
   useMinderContext: () => stableContext,
 }));
 

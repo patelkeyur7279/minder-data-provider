@@ -62,8 +62,8 @@ jest.mock('../src/utils/performance', () => ({
 
 // Inject a controllable context for the provider-mode useMinder tests without
 // constructing a real ApiClient (mirrors tests/useMinder-params.test.tsx).
-jest.mock('../src/core/MinderDataProvider', () => {
-  const actual = jest.requireActual('../src/core/MinderDataProvider');
+jest.mock('../src/core/MinderContext', () => {
+  const actual = jest.requireActual('../src/core/MinderContext');
   const useMinderContext = jest.fn();
   return {
     ...actual,

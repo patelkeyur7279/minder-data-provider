@@ -259,7 +259,7 @@ const mockManager = {
   subscribe: jest.fn(() => jest.fn()),
   isConnected: jest.fn(() => true),
 };
-jest.mock('../src/core/MinderDataProvider', () => ({
+jest.mock('../src/core/MinderContext', () => ({
   useMinderContext: () => ({ websocketManager: mockManager }),
 }));
 

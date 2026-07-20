@@ -14,8 +14,8 @@ import { LocalStore, __setDefaultLocalStore } from '../src/core/LocalStore';
 import { MemoryStorageAdapter } from '../src/platform/adapters/storage/MemoryStorageAdapter';
 
 jest.mock('../src/core/ApiClient');
-jest.mock('../src/core/MinderDataProvider', () => {
-  const actual = jest.requireActual('../src/core/MinderDataProvider');
+jest.mock('../src/core/MinderContext', () => {
+  const actual = jest.requireActual('../src/core/MinderContext');
   const useMinderContext = jest.fn();
   return {
     ...actual,

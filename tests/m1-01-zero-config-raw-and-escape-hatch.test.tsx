@@ -56,8 +56,8 @@ jest.mock('../src/utils/performance', () => ({
 }));
 
 // Controllable provider context (mirrors tests/raw-url-and-config-unification.test.tsx).
-jest.mock('../src/core/MinderDataProvider', () => {
-  const actual = jest.requireActual('../src/core/MinderDataProvider');
+jest.mock('../src/core/MinderContext', () => {
+  const actual = jest.requireActual('../src/core/MinderContext');
   const useMinderContext = jest.fn();
   return {
     ...actual,
