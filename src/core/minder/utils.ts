@@ -39,9 +39,16 @@ export function detectMethod(
     return 'DELETE';
   }
   
-  // 4. Route pattern detection
-  // /users/123 or /users/abc-def-ghi = UPDATE
-  const hasIdInRoute = /\/[a-zA-Z0-9-_]+$/.test(route);
+  // 4. Route pattern detection — the final segment must actually LOOK like an
+  // entity id: purely numeric (/users/123), a UUID, or a 24-hex Mongo ObjectId.
+  // The previous pattern (/\/[a-zA-Z0-9-_]+$/) matched ANY final segment, so a
+  // plain collection route like /api/orders was mis-detected as UPDATE and
+  // creates were sent as PUT instead of POST (release-audit fix). Callers with
+  // non-standard id shapes can always pass options.method explicitly.
+  const hasIdInRoute =
+    /\/\d+$/.test(route) ||
+    /\/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(route) ||
+    /\/[0-9a-fA-F]{24}$/.test(route);
   
   // 5. Data has ID field = UPDATE
   const hasIdInData = typeof data === 'object' && 

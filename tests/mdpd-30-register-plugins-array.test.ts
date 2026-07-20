@@ -80,4 +80,28 @@ describe('MDPD-30: registerPlugins array flattening', () => {
     expect(warnSpy.mock.calls.length).toBeGreaterThan(0);
     warnSpy.mockRestore();
   });
+
+  // MDPD fix: registerPlugins previously flattened only ONE level, so a
+  // nested array (e.g. from spreading two already-grouped plugin lists) was
+  // dropped with a misleading "no string name" warning instead of being
+  // registered. Flattening must now go to any depth.
+  it('deep-flattens nested arrays: registerPlugins([[a, b], c]) registers all three', () => {
+    const a: MinderPlugin = { name: 'deep-a', onRequest: () => {} };
+    const b: MinderPlugin = { name: 'deep-b', onRequest: () => {} };
+    const c: MinderPlugin = { name: 'deep-c', onRequest: () => {} };
+
+    registerPlugins([[a, b], c] as unknown as MinderPlugin);
+
+    const names = pluginManager.getPlugins().map((p) => p.name);
+    expect(names).toEqual(expect.arrayContaining(['deep-a', 'deep-b', 'deep-c']));
+  });
+
+  it('deep-flattens arbitrarily deep nesting: registerPlugins([[[a]]]) registers a', () => {
+    const a: MinderPlugin = { name: 'triple-nested-a', onRequest: () => {} };
+
+    registerPlugins([[[a]]] as unknown as MinderPlugin);
+
+    const names = pluginManager.getPlugins().map((p) => p.name);
+    expect(names).toContain('triple-nested-a');
+  });
 });

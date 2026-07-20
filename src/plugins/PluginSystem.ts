@@ -198,16 +198,26 @@ export class PluginManager {
   }
 
   /**
-   * Register a plugin
+   * Register a plugin.
+   *
+   * Returns `true` when the plugin was newly registered, `false` when it was
+   * skipped because a plugin with the same name is already registered (the
+   * existing warning still fires). Callers that track ownership of the names
+   * they register (e.g. `configureMinder`'s config-plugin bookkeeping) MUST
+   * check this return value rather than assuming registration always
+   * succeeds — otherwise they can end up believing they own a name actually
+   * registered by a different caller, and later unregister it out from under
+   * that caller.
    */
-  register(plugin: MinderPlugin): void {
+  register(plugin: MinderPlugin): boolean {
     if (this.plugins.has(plugin.name)) {
       this.logger.warn(`Plugin "${plugin.name}" is already registered`);
-      return;
+      return false;
     }
 
     this.plugins.set(plugin.name, plugin);
     this.logger.info(`✓ Plugin registered: ${plugin.name}${plugin.version ? ` v${plugin.version}` : ''}`);
+    return true;
   }
 
   /**
@@ -627,21 +637,17 @@ export function createPlugin(plugin: MinderPlugin): MinderPlugin {
  *
  * Accepts both the variadic form `registerPlugins(a, b)` and — MDPD-30 — the
  * array form `registerPlugins([a, b])`, which previously registered the array
- * object itself as a (nameless) plugin. Array arguments are flattened one level,
- * and any entry lacking a string `name` is warned and skipped rather than
- * silently registered under an `undefined` key.
+ * object itself as a (nameless) plugin. Array arguments are flattened to ANY
+ * depth (`registerPlugins([[a, b], c])`, `registerPlugins([[[a]]])`, etc.) —
+ * a one-level-only flatten silently dropped a nested array with a misleading
+ * "no string name" warning instead of registering the plugins inside it. Any
+ * entry lacking a string `name` is warned and skipped rather than silently
+ * registered under an `undefined` key.
  */
 export function registerPlugins(
   ...plugins: Array<MinderPlugin | MinderPlugin[]>
 ): void {
-  const flattened: unknown[] = [];
-  for (const entry of plugins) {
-    if (Array.isArray(entry)) {
-      flattened.push(...entry);
-    } else {
-      flattened.push(entry);
-    }
-  }
+  const flattened: unknown[] = (plugins as unknown[]).flat(Infinity);
 
   const logger = new Logger('PluginSystem', { level: LogLevel.WARN });
   for (const candidate of flattened) {

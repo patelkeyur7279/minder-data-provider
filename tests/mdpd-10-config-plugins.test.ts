@@ -14,7 +14,7 @@ import axios from 'axios';
 
 import { configureMinder } from '../src/config/index';
 import { minder } from '../src/core/minder';
-import { pluginManager } from '../src/plugins/PluginSystem';
+import { pluginManager, registerPlugins, PluginManager } from '../src/plugins/PluginSystem';
 import type { MinderPlugin } from '../src/plugins/PluginSystem';
 
 jest.mock('axios');
@@ -87,5 +87,58 @@ describe('MDPD-10: configureMinder({ plugins })', () => {
     const names = pluginManager.getPlugins().map((p) => p.name);
     expect(names).toContain('plugin-b');
     expect(names).not.toContain('plugin-a');
+  });
+
+  // MDPD fix: forward userConfig.plugins onto the returned config so
+  // ApiClient/MinderDataProvider instances built from it get their own
+  // per-instance PluginManager, as docs/CONFIG_GUIDE.md documents.
+  it('forwards config.plugins onto the returned config object (per-instance path)', () => {
+    const plugin: MinderPlugin = { name: 'forwarded', onRequest: () => {} };
+
+    const config = configureMinder({
+      apiUrl: 'http://api.example.com',
+      plugins: [plugin],
+    });
+
+    expect(config.plugins).toBeDefined();
+    expect(config.plugins).toContain(plugin);
+  });
+
+  // MDPD fix: collision safety. A plugin registered directly via
+  // registerPlugins() is owned by that caller, not by configureMinder's
+  // config-plugin bookkeeping. A same-named entry in config.plugins must be
+  // skipped (with the existing "already registered" warning) rather than
+  // being recorded as config-owned — otherwise a later re-configure would
+  // unregister a plugin it never actually registered, deleting it out from
+  // under the original owner.
+  it('does not let config.plugins bookkeeping delete a plugin owned by a different registerPlugins() caller', () => {
+    const original: MinderPlugin = { name: 'shared-name', onRequest: () => {} };
+    const impostor: MinderPlugin = { name: 'shared-name', onRequest: () => {} };
+
+    // A different owner registers first, directly on the global manager.
+    registerPlugins(original);
+    expect(pluginManager.getPlugin('shared-name')).toBe(original);
+
+    // configureMinder tries to register a same-named plugin — should be
+    // skipped as a duplicate, not claimed as config-owned.
+    configureMinder({ apiUrl: 'http://api.example.com', plugins: [impostor] });
+    expect(pluginManager.getPlugin('shared-name')).toBe(original);
+
+    // A subsequent re-configure (even with an empty plugins list) must NOT
+    // unregister the original owner's plugin.
+    configureMinder({ apiUrl: 'http://api.example.com', plugins: [] });
+    expect(pluginManager.getPlugin('shared-name')).toBe(original);
+  });
+});
+
+describe('PluginManager.register() return value', () => {
+  it('returns true the first time a plugin is registered, false for a duplicate name', () => {
+    const manager = new PluginManager();
+    const plugin: MinderPlugin = { name: 'dup-check', onRequest: () => {} };
+    const duplicate: MinderPlugin = { name: 'dup-check', onRequest: () => {} };
+
+    expect(manager.register(plugin)).toBe(true);
+    expect(manager.register(duplicate)).toBe(false);
+    expect(manager.getPlugin('dup-check')).toBe(plugin);
   });
 });

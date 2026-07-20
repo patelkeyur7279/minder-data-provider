@@ -300,9 +300,11 @@ export function configureMinder(config: UnifiedMinderConfig): MinderConfig {
 }
 
 /**
- * Names of plugins registered via a previous `configureMinder({ plugins })` call.
- * Tracked so re-configuring replaces them rather than tripping the plugin
- * manager's already-registered warning or leaking stale plugins.
+ * Names of plugins registered via a previous `configureMinder({ plugins })` call
+ * that THIS bookkeeping actually owns (i.e. `pluginManager.register()` returned
+ * `true` for them — see below). Tracked so re-configuring replaces them rather
+ * than tripping the plugin manager's already-registered warning or leaking
+ * stale plugins.
  */
 let configRegisteredPluginNames: string[] = [];
 
@@ -310,9 +312,20 @@ let configRegisteredPluginNames: string[] = [];
  * Register per-instance plugins from `configureMinder({ plugins })` idempotently.
  * Unregisters plugins from the previous configure call, then registers the new
  * set through the shared plugin manager (the same path `registerPlugins` uses).
+ *
+ * Ownership bookkeeping: a name is only added to `configRegisteredPluginNames`
+ * when `pluginManager.register()` returns `true` (newly registered). If a
+ * config plugin's name collides with one registered by a DIFFERENT owner
+ * (e.g. a direct `registerPlugins()` call from app bootstrap), `register()`
+ * returns `false` and skips it with its existing warning — and, crucially,
+ * this function does NOT claim ownership of that name. Without this check, a
+ * later re-configure (or a configure with an empty `plugins` list) would
+ * unregister a plugin this code never actually registered, deleting another
+ * owner's plugin out from under it.
  */
 function registerConfigPlugins(plugins: MinderPlugin[] | undefined): void {
-  // Remove plugins registered by the previous configure call.
+  // Remove plugins registered by the previous configure call (only ones we
+  // actually own — see ownership bookkeeping above).
   for (const name of configRegisteredPluginNames) {
     pluginManager.unregister(name);
   }
@@ -330,8 +343,10 @@ function registerConfigPlugins(plugins: MinderPlugin[] | undefined): void {
       );
       continue;
     }
-    pluginManager.register(plugin);
-    configRegisteredPluginNames.push(plugin.name);
+    const wasRegistered = pluginManager.register(plugin);
+    if (wasRegistered) {
+      configRegisteredPluginNames.push(plugin.name);
+    }
   }
 }
 
@@ -577,6 +592,27 @@ function applyUserConfig(
     baseConfig.offline = userConfig.offline;
   }
 
+  // MDPD (config.plugins never forwarded): `userConfig.plugins` was never
+  // copied onto the returned config, so `fullConfig.plugins` was always
+  // undefined and ApiClient's per-instance PluginManager path
+  // (config.plugins && config.plugins.length > 0 — see ApiClient.ts) was
+  // unreachable, contradicting docs/CONFIG_GUIDE.md's "scoped to that
+  // instance" contract. Replace semantics: this call's array (including
+  // `undefined`, which leaves any platform default alone since there is
+  // none) wins — it does not merge with a previous call's plugins array.
+  if (userConfig.plugins !== undefined) {
+    baseConfig.plugins = userConfig.plugins;
+  }
+
+  // MDPD (config.dynamic never forwarded): `userConfig.dynamic` was never
+  // copied onto the returned config either, so MinderDataProvider.tsx's
+  // `config.dynamic` read was always undefined and the MDPD-11 warning's own
+  // remediation advice ("pass `dynamic` from next/dynamic") could not
+  // actually work even when a caller followed it.
+  if (userConfig.dynamic !== undefined) {
+    baseConfig.dynamic = userConfig.dynamic;
+  }
+
   // Auth configuration
   if (userConfig.auth !== undefined) {
     if (userConfig.auth === true) {
@@ -765,12 +801,31 @@ function getEnabledFeatures(config: Partial<MinderConfig>): string[] {
 }
 
 /**
+ * Whether the MDPD-11 Next.js-missing-`dynamic` warning has already fired in
+ * this process. `configureMinder` can legitimately be called many times
+ * (re-configuring, tests, HMR) — without this flag, every single call in a
+ * Next.js app without `dynamic` re-emitted the same multi-line warning,
+ * spamming the console. Reset via `__resetNextjsDynamicWarning` (test-only).
+ */
+let nextjsDynamicWarningShown = false;
+
+/**
+ * Test-only: reset the MDPD-11 warn-once flag so a fresh test can observe the
+ * warning firing again.
+ * @internal
+ */
+export function __resetNextjsDynamicWarning(): void {
+  nextjsDynamicWarningShown = false;
+}
+
+/**
  * Validate Next.js specific configuration.
  *
  * `dynamic` (from `next/dynamic`) lets Minder lazy-load its dev-only devtools in
  * a Next.js app. MDPD-11: this used to hard-throw NEXTJS_DYNAMIC_REQUIRED when
  * `dynamic` was absent — but docs/NEXTJS_APP_ROUTER.md never documents `dynamic`,
- * so following the docs crashed `next build`. It is now a single warning and the
+ * so following the docs crashed `next build`. It is now a single warning (fired
+ * at most once per process — see `nextjsDynamicWarningShown` above) and the
  * config continues with a working default (no dynamic-import devtools).
  */
 function validateNextJsConfig(config: UnifiedMinderConfig): void {
@@ -778,7 +833,8 @@ function validateNextJsConfig(config: UnifiedMinderConfig): void {
   const dynamicConfig = (config as any).dynamic;
 
   if (!dynamicConfig || typeof dynamicConfig !== 'function') {
-    if (typeof console !== 'undefined' && console.warn) {
+    if (!nextjsDynamicWarningShown && typeof console !== 'undefined' && console.warn) {
+      nextjsDynamicWarningShown = true;
       console.warn(
         '[Minder] Next.js detected without a "dynamic" import. Minder will run ' +
           'with its dynamic-import devtools disabled. To enable them, pass ' +

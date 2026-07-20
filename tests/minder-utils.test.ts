@@ -50,11 +50,22 @@ describe('Minder Utils', () => {
       expect(detectMethod('/items', { delete: 'yes' })).toBe('DELETE');
     });
 
-    it('should return PUT when route has ID pattern', () => {
+    it('should return PUT only when the final segment is genuinely ID-shaped', () => {
+      // Release-audit re-contract: the old pattern treated ANY final segment as
+      // an ID, so plain collection routes (/api/orders) sent creates as PUT.
+      // Now only numeric, UUID, or 24-hex (ObjectId) segments count as IDs.
       expect(detectMethod('/users/123', { name: 'John' })).toBe('PUT');
-      expect(detectMethod('/posts/abc-def-ghi', { title: 'Test' })).toBe('PUT');
-      expect(detectMethod('/items/user_123', { value: 100 })).toBe('PUT');
-      expect(detectMethod('/data/a1b2c3', {})).toBe('PUT');
+      expect(
+        detectMethod('/posts/6f9619ff-8b86-d011-b42d-00c04fc964ff', { title: 'T' })
+      ).toBe('PUT');
+      expect(
+        detectMethod('/posts/507f1f77bcf86cd799439011', { title: 'T' })
+      ).toBe('PUT');
+      // Slug/word segments are ambiguous with collection names → POST default.
+      // Slug-id updates pass options.method or an id field in data explicitly.
+      expect(detectMethod('/posts/abc-def-ghi', { title: 'Test' })).toBe('POST');
+      expect(detectMethod('/items/user_123', { value: 100 })).toBe('POST');
+      expect(detectMethod('/data/a1b2c3', {})).toBe('POST');
     });
 
     it('should return PUT when data has id field', () => {
@@ -87,19 +98,23 @@ describe('Minder Utils', () => {
     });
 
     it('should handle route patterns correctly', () => {
-      // Should detect as PUT (has ID in route)
+      // Numeric final segment → PUT (entity update).
       expect(detectMethod('/api/users/123', { name: 'John' })).toBe('PUT');
-      expect(detectMethod('/v1/posts/abc', { title: 'Test' })).toBe('PUT');
-      
+      // Word final segment is a collection name, not an ID → POST (create).
+      expect(detectMethod('/v1/posts/abc', { title: 'Test' })).toBe('POST');
+
       // Should detect as POST (route ending with /)
       expect(detectMethod('/api/users/', { name: 'John' })).toBe('POST');
       expect(detectMethod('/users/', { name: 'John' })).toBe('POST');
     });
 
     it('should handle complex route patterns', () => {
-      expect(detectMethod('/users/123/posts', { title: 'Test' })).toBe('PUT');
-      expect(detectMethod('/users/abc-123-def', { name: 'John' })).toBe('PUT');
-      expect(detectMethod('/items/user_456', { value: 100 })).toBe('PUT');
+      // Nested-collection create: ends in a collection segment → POST (the old
+      // heuristic wrongly returned PUT because an ID appears mid-route).
+      expect(detectMethod('/users/123/posts', { title: 'Test' })).toBe('POST');
+      // Slug-shaped segments are not treated as IDs → POST default.
+      expect(detectMethod('/users/abc-123-def', { name: 'John' })).toBe('POST');
+      expect(detectMethod('/items/user_456', { value: 100 })).toBe('POST');
     });
 
     it('should handle empty objects as POST', () => {

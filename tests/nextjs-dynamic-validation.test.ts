@@ -6,10 +6,21 @@
  * docs/NEXTJS_APP_ROUTER.md never documents `dynamic`. It now emits a single
  * warning and continues with a working default. These tests assert the
  * warn-and-continue contract.
+ *
+ * MDPD fix: the warning itself is now warn-ONCE-per-process (previously it
+ * fired on every single configureMinder call, spamming the console). Each
+ * test below resets the warn-once flag via `__resetNextjsDynamicWarning()` so
+ * it can independently observe "does this specific call warn?" — without the
+ * reset, only the first test in this file would ever see a warning and every
+ * later test asserting `dynamicWarnings().length > 0` would incorrectly fail,
+ * since the process-wide flag would already be tripped. This was previously
+ * the actual (bugged) behavior these tests exercised: every configureMinder
+ * call re-warned, so no reset was needed. That is the defect the warn-once
+ * fix (src/config/index.ts) resolves.
  */
 
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
-import { configureMinder } from '../src/config/index.js';
+import { configureMinder, __resetNextjsDynamicWarning } from '../src/config/index.js';
 import { PlatformDetector } from '../src/platform/PlatformDetector.js';
 import { Platform } from '../src/constants/enums.js';
 
@@ -21,6 +32,7 @@ describe('Next.js Dynamic Import Handling', () => {
     originalDetect = PlatformDetector.detect;
     PlatformDetector.reset();
     warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    __resetNextjsDynamicWarning();
   });
 
   afterEach(() => {

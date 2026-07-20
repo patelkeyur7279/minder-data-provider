@@ -169,6 +169,23 @@ function isRetryableFailure(status: number): boolean {
   return status === 0 || status === 429 || status >= 500;
 }
 
+/**
+ * Methods safe to retry by default. Per RFC 7231 these are idempotent — resending
+ * them cannot produce duplicate side effects — matching axios-retry's convention.
+ * POST/PATCH are deliberately excluded so a transient 502/503/429 never silently
+ * resubmits a non-idempotent write; callers opt those in with
+ * `retryNonIdempotent: true`.
+ */
+const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE']);
+
+/**
+ * Whether the given method may be retried. Idempotent methods always may; POST
+ * and PATCH only when the caller explicitly opts in via `retryNonIdempotent`.
+ */
+function isRetryableMethod(method: string, retryNonIdempotent: boolean): boolean {
+  return retryNonIdempotent || IDEMPOTENT_METHODS.has(method.toUpperCase());
+}
+
 /** Backoff delay for a given (1-based) attempt: 100ms * attempt, capped at 1s. */
 function retryBackoffMs(attempt: number): number {
   return Math.min(100 * attempt, 1000);
@@ -192,10 +209,67 @@ interface CacheEntry {
 
 /**
  * Module-level TTL cache for standalone minder() GET results. Only populated
- * when a caller opts in with `{ cache: true }`. Keyed by method+URL+params.
+ * when a caller opts in with `{ cache: true }`. Keyed by
+ * method+URL+params+auth-identity — the auth component (a short hash of
+ * `options.token` / the Authorization header, never the raw value) partitions
+ * entries per credential so one user's cached authenticated response can never
+ * be served to a different user on a shared (SSR/Node) process. Capped at
+ * MAX_RESPONSE_CACHE_ENTRIES; the oldest entry is evicted on overflow.
  * @internal
  */
 const responseCache = new Map<string, CacheEntry>();
+
+/** Hard cap on cached entries; oldest (insertion order) evicted on overflow. */
+const MAX_RESPONSE_CACHE_ENTRIES = 200;
+
+/**
+ * djb2 hash, hex-encoded — a tiny non-cryptographic fingerprint used ONLY to
+ * partition cache keys by credential without embedding the raw token/header
+ * value in the key string (keys can surface in debug output). Edge-safe.
+ */
+function hashAuthIdentity(value: string): string {
+  let h = 5381;
+  for (let i = 0; i < value.length; i++) {
+    h = ((h << 5) + h + value.charCodeAt(i)) | 0;
+  }
+  return (h >>> 0).toString(16);
+}
+
+/**
+ * Derive the cache key's auth-identity component from the per-request
+ * credentials: `options.token` and/or an Authorization header. No credentials →
+ * the stable constant 'anon'.
+ */
+function cacheAuthIdentity(
+  token: string | undefined,
+  headers: Record<string, unknown> | undefined
+): string {
+  const authHeader = headers
+    ? Object.entries(headers).find(([k]) => k.toLowerCase() === 'authorization')?.[1]
+    : undefined;
+  if (!token && authHeader === undefined) return 'anon';
+  return hashAuthIdentity(`${token ?? ''}\u0000${String(authHeader ?? '')}`);
+}
+
+/**
+ * Absolute-URL test with axios parity (axios's own isAbsoluteURL): a scheme
+ * (`https://`, `custom-scheme:`) OR a protocol-relative `//host/...` prefix
+ * bypasses baseURL. Keeping the cache key and the fetch transport on the same
+ * regex axios uses means keys always match what is actually dispatched.
+ */
+const ABSOLUTE_URL_RE = /^(?:[a-z][a-z\d+\-.]*:)?\/\//i;
+
+/** Store a cache entry, evicting the oldest entry when the cap is exceeded. */
+function setCacheEntry(key: string, entry: CacheEntry): void {
+  // Delete-first so a re-set refreshes the key's insertion position.
+  responseCache.delete(key);
+  responseCache.set(key, entry);
+  if (responseCache.size > MAX_RESPONSE_CACHE_ENTRIES) {
+    // Maps iterate in insertion order — the first key is the oldest entry.
+    const oldest = responseCache.keys().next().value;
+    if (oldest !== undefined) responseCache.delete(oldest);
+  }
+}
 
 /**
  * Clear the standalone minder() response cache. Called on (re)configuration and
@@ -219,11 +293,15 @@ function deepCopyResult<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-/** Build the cache key from method, resolved URL, and serialized params. */
+/**
+ * Build the cache key from method, resolved URL, serialized params, and the
+ * auth-identity fingerprint (see cacheAuthIdentity — never the raw credential).
+ */
 function buildCacheKey(
   method: string,
   resolvedUrl: string,
-  params: unknown
+  params: unknown,
+  authIdentity: string
 ): string {
   let serializedParams = '';
   if (params && typeof params === 'object') {
@@ -232,7 +310,7 @@ function buildCacheKey(
       .sort(([a], [b]) => a.localeCompare(b));
     serializedParams = JSON.stringify(entries);
   }
-  return `${method} ${resolvedUrl} ${serializedParams}`;
+  return `${method} ${resolvedUrl} ${serializedParams} ${authIdentity}`;
 }
 
 /**
@@ -368,13 +446,22 @@ export async function minder<TData = any>(
     let cacheKey: string | null = null;
     if (cacheEnabled) {
       const requestUrlForKey = config.url || '';
-      const resolvedUrl = /^https?:\/\//i.test(requestUrlForKey)
+      const resolvedUrl = ABSOLUTE_URL_RE.test(requestUrlForKey)
         ? requestUrlForKey
         : (config.baseURL || '') + requestUrlForKey;
-      cacheKey = buildCacheKey(method, resolvedUrl, config.params);
+      const authIdentity = cacheAuthIdentity(
+        options?.token,
+        (options?.headers ?? config.headers) as Record<string, unknown> | undefined
+      );
+      cacheKey = buildCacheKey(method, resolvedUrl, config.params, authIdentity);
       const entry = responseCache.get(cacheKey);
       if (entry && entry.expiresAt > Date.now()) {
         const cached = deepCopyResult(entry.result) as MinderResult<TData>;
+        // Entries store the RAW (pre-model-decode) response data; decode per hit
+        // so `options.model` consumers get a fresh instance with its prototype
+        // intact (structuredClone would strip class prototypes if we cached the
+        // decoded object). Without a model this is a pass-through.
+        cached.data = decodeWithModel<TData>(cached.data, options?.model);
         cached.metadata = {
           ...(cached.metadata as NonNullable<MinderResult['metadata']>),
           duration: Date.now() - startTime,
@@ -488,7 +575,7 @@ export async function minder<TData = any>(
           // the axios path — otherwise baseURL is double-prefixed onto the absolute
           // URL (e.g. 'http://BASEhttp://x/api').
           const requestUrl = config.url || '';
-          let fullUrl = /^https?:\/\//i.test(requestUrl)
+          let fullUrl = ABSOLUTE_URL_RE.test(requestUrl)
             ? requestUrl
             : (config.baseURL || '') + requestUrl;
       
@@ -549,7 +636,12 @@ export async function minder<TData = any>(
           !shortCircuited &&
           maxRetries > 0 &&
           retryAttempt < maxRetries &&
-          isRetryableFailure(failure.status)
+          isRetryableFailure(failure.status) &&
+          // Never resubmit non-idempotent methods (POST/PATCH) unless the caller
+          // explicitly accepts the duplicate-write risk via retryNonIdempotent.
+          // Judge config.method — request-intercept plugins may have rewritten
+          // the method after `method` was derived, and config is what dispatches.
+          isRetryableMethod(String(config.method ?? method), options?.retryNonIdempotent === true)
         ) {
           retryAttempt++;
           await retrySleep(retryBackoffMs(retryAttempt));
@@ -599,10 +691,13 @@ export async function minder<TData = any>(
     };
 
     // MDPD-24: store the fresh (non-short-circuited) GET result when caching was
-    // opted into. A deep copy is stored so later callers can't mutate the entry.
+    // opted into. The entry holds the RAW (pre-model-decode) response data — the
+    // hit path re-decodes per call so model prototypes survive — and a deep copy
+    // is stored so later callers can't mutate the entry. setCacheEntry enforces
+    // the size cap (oldest evicted).
     if (cacheEnabled && cacheKey && !shortCircuited) {
-      responseCache.set(cacheKey, {
-        result: deepCopyResult(successResult),
+      setCacheEntry(cacheKey, {
+        result: deepCopyResult({ ...successResult, data: responseData }),
         expiresAt: Date.now() + resolveCacheTtl(options?.cacheTTL),
         storedAt: Date.now(),
       });

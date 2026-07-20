@@ -53,3 +53,44 @@ describe('MDPD-9: cache.ttl config support', () => {
     expect(config.cache?.maxSize).toBe(100);
   });
 });
+
+describe('MDPD: cache.ttl / staleTime / gcTime / maxSize validation', () => {
+  it('rejects a negative cache.ttl', () => {
+    expect(() =>
+      configureMinder({ apiUrl: 'https://api.example.com', cache: { ttl: -500 } })
+    ).toThrow(/cache\.ttl/);
+  });
+
+  it('rejects a non-numeric cache.ttl', () => {
+    expect(() =>
+      configureMinder({
+        apiUrl: 'https://api.example.com',
+        // @ts-expect-error — deliberately wrong type under test
+        cache: { ttl: '5000' },
+      })
+    ).toThrow(/cache\.ttl/);
+  });
+
+  it('accepts cache.ttl of 0 (valid, not falsy-rejected)', () => {
+    const config = configureMinder({
+      apiUrl: 'https://api.example.com',
+      cache: { ttl: 0 },
+    });
+    expect(config.cache?.staleTime).toBe(0);
+  });
+
+  it('rejects a negative cache.maxSize', () => {
+    expect(() =>
+      configureMinder({ apiUrl: 'https://api.example.com', cache: { maxSize: -1 } })
+    ).toThrow(/cache\.maxSize/);
+  });
+
+  it('rejects a negative cache.staleTime and cache.gcTime', () => {
+    expect(() =>
+      configureMinder({ apiUrl: 'https://api.example.com', cache: { staleTime: -1 } })
+    ).toThrow(/cache\.staleTime/);
+    expect(() =>
+      configureMinder({ apiUrl: 'https://api.example.com', cache: { gcTime: -1 } })
+    ).toThrow(/cache\.gcTime/);
+  });
+});

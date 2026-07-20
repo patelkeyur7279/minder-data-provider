@@ -405,6 +405,21 @@ export function validateMinderConfig(config: unknown): ValidateConfigResult {
     if (err) errors.push(err);
   }
 
+  // 3a. cache.ttl / staleTime / gcTime / maxSize must be non-negative numbers
+  // when present — same style/pipeline as performance.timeout/retries above.
+  // Previously unvalidated: negatives and non-numbers were silently normalized
+  // by configureMinder (src/config/index.ts) instead of being rejected. `0`
+  // remains valid (e.g. `gcTime: 0` to disable garbage-collection delay).
+  if (cfg.cache !== undefined && cfg.cache !== null && typeof cfg.cache === 'object' && !Array.isArray(cfg.cache)) {
+    const cache = cfg.cache as Record<string, unknown>;
+    for (const field of ['ttl', 'staleTime', 'gcTime', 'maxSize'] as const) {
+      if (cache[field] !== undefined) {
+        const err = validateNonNegativeNumber(cache[field], `cache.${field}`);
+        if (err) errors.push(err);
+      }
+    }
+  }
+
   // 3b. providers.<name>.mock must be a boolean when present — every environment.
   errors.push(...findProviderMockFlagViolations(cfg));
 

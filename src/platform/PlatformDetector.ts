@@ -52,13 +52,19 @@ export class PlatformDetector {
    * Detect platform on server-side
    */
   private static detectServerPlatform(): Platform {
-    // Next.js server detection
-    if (process.env.NEXT_RUNTIME ||
-        process.env.__NEXT_PROCESSED_ENV ||
-        typeof __NEXT_DATA__ !== 'undefined') {
+    // Next.js server detection.
+    // MDPD: `process` is bare-accessed here, but environments without
+    // `window` AND without `process` exist (browser Web Workers, some edge
+    // runtimes) — a bare `process.env` reference throws ReferenceError there.
+    // Guarded the same way `isElectron()` guards `process.versions?.electron`.
+    if (
+      (typeof process !== 'undefined' &&
+        (process.env?.NEXT_RUNTIME || process.env?.__NEXT_PROCESSED_ENV)) ||
+      typeof __NEXT_DATA__ !== 'undefined'
+    ) {
       return Platform.NEXT_JS;
     }
-    
+
     // Default to Node.js for server-side
     return Platform.NODE;
   }
