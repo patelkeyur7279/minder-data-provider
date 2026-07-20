@@ -46,7 +46,18 @@
     "allowSyntheticDefaultImports": true,
 
     // Enum Preservation - Required for enums to be available at runtime
-    "preserveConstEnums": true
+    "preserveConstEnums": true,
+
+    // Task 3.2 (`minder generate` codegen): lets the committed golden fixture
+    // below type-check its `import ... from 'minder-data-provider'` (the
+    // real published package specifier — what actual generated output uses)
+    // against this repo's own source, since there is no self-referencing
+    // `node_modules/minder-data-provider` link in a plain checkout. Inert for
+    // every other file: nothing under src/**/* imports the package's own
+    // name, so this mapping only ever resolves for the golden file below.
+    "paths": {
+      "minder-data-provider": ["./src/index.ts"]
+    }
   },
   "include": [
     "src/**/*",
@@ -56,6 +67,13 @@
     // assertions are the gate that proves createTypedMinder's typing works).
     // Deliberately NOT `tests/**/*` — that would pull the whole suite (with
     // its intentional `any`/loose-typing) into this strict, src-only check.
-    "tests/typed-routes-types.test.ts"
+    "tests/typed-routes-types.test.ts",
+    // Task 3.2: golden output of `minder generate --from
+    // tests/fixtures/openapi-petstore.json` — regenerated and byte-compared
+    // by tests/openapi-codegen.test.ts. Committing it here (rather than only
+    // type-checking a throwaway temp file inside the test) means a codegen
+    // change that produces output TypeScript itself rejects fails
+    // `npm run type-check` in CI, not just the jest suite.
+    "tests/fixtures/generated-petstore.routes.ts"
   ]
 }

@@ -409,3 +409,57 @@ resolveSecret(ref: SecretRef | string): string
 > secrets → `secret()` plus a server route / `resolveSecret`. Never put a raw secret in
 > client config — `configureMinder` throws (`MinderConfigError`,
 > `'CONFIG_EXPOSED_SECRET'`) in the browser.
+
+### CLI: `minder generate` — OpenAPI codegen for typed routes
+
+```
+minder generate --from <openapi.json> [--out minder.routes.ts] [--base-path-strategy strip|keep]
+```
+
+Reads an OpenAPI 3.x JSON document (3.0 and 3.1 — **YAML is not supported**; convert to
+JSON first) and emits a single `.ts` module wired for
+[`createTypedMinder`](#typed-routes-optional):
+
+- `export const routes = { ... } as const satisfies Record<string, ApiRoute>` — one entry
+  per operation, `url`/`method` derived from the spec.
+- One `export interface`/`export type` per `components.schemas` entry, plus a synthesized
+  named type for any inline (non-`$ref`) request-body or response schema.
+- `export interface RouteTypes { [routeName]: { body?: ...; response?: ... } }` for
+  consumers who want the request/response shapes without going through
+  `createTypedMinder`.
+
+**Route naming.** `operationId` is used (sanitized to a valid TS identifier) when
+present; otherwise a name is derived as `<method><PascalCasePath>` — e.g. `GET /pets` →
+`getPets`, `GET /pets/{petId}` → `getPetsByPetId` (each `{param}` segment becomes
+`By<PascalCaseParam>`). Colliding names are deduped deterministically with a numeric
+suffix (`_2`, `_3`, ...), in the order operations appear in the spec.
+
+**Path parameters.** OpenAPI's `{param}` becomes minder's own `:param` URL-template
+convention — the same one `ApiClient` interpolates at request time (see
+`src/core/ApiClient.ts`) — not the `{param}` braces themselves.
+
+**JSON Schema subset.** Supported: `object` (`properties`/`required`), `array`, `string`
+/`number`/`integer`/`boolean`, `enum` (string or number members), `oneOf` (emitted as a
+TS union), and `$ref` resolved against this document's own `components.schemas`.
+Anything else — `allOf`/`anyOf`, a `$ref` outside `components.schemas`, a schema with no
+usable `type`/`properties` — lowers to `unknown` with an explanatory comment rather than
+a wrong guess. Runtime validators (`ApiRoute.schema`, see
+[Response validation](#response-validation-standard-schema) above) are **not** emitted —
+codegen only produces compile-time types.
+
+**`--base-path-strategy`** (default `strip`): `strip` ignores the spec's `servers[0].url`
+entirely — every route is the raw OpenAPI path. `keep` prepends the *path portion* of
+`servers[0].url` (e.g. `"https://api.example.com/v1"` → `/v1`) to every route — use this
+when the spec's server URL carries a prefix your app's own `apiBaseUrl` does not already
+include.
+
+**Determinism.** Regenerating from an unchanged spec produces byte-identical output (no
+wall-clock timestamp is embedded in the file header) — safe to commit and diff.
+
+```ts
+import { createTypedMinder } from 'minder-data-provider';
+import { routes } from './minder.routes'; // generated
+
+const api = createTypedMinder(routes);
+const { data } = api.useMinder('listPets'); // typed from RouteTypes/components.schemas
+```

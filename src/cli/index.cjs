@@ -50,6 +50,15 @@ const { execFileSync } = require('child_process');
  */
 const { CERTIFIED } = require('../../scripts/generate-catalog.js');
 
+/**
+ * `minder generate --from <openapi.json>` (Task 3.2) — OpenAPI 3.x -> minder
+ * typed-routes codegen. Pure parsing/emission logic lives in
+ * scripts/lib/openapi-codegen.js (no fs/process there, see its header);
+ * `cmdGenerate` below does the file I/O and error reporting, same division
+ * of labor as `isCertifiedProvider`'s CERTIFIED require above.
+ */
+const openapiCodegen = require('../../scripts/lib/openapi-codegen.js');
+
 const CATALOG_DOC = 'docs/providers/CATALOG.md';
 
 /**
@@ -444,6 +453,22 @@ Commands:
                              --config file or .env.example are supported.
                              Full TS-config loading arrives with the first
                              provider wave.
+
+  generate --from <openapi.json> [--out minder.routes.ts]
+           [--base-path-strategy strip|keep]
+                             Generate a typed routes module from an OpenAPI
+                             3.x JSON document (3.0 and 3.1 — YAML is not
+                             supported, convert to JSON first). Emits a
+                             single .ts file: a \`routes\` const (satisfies
+                             ApiRoute, ready for createTypedMinder), request/
+                             response interfaces derived from
+                             components.schemas + operation schemas, and a
+                             RouteTypes map. --out defaults to
+                             "minder.routes.ts". --base-path-strategy
+                             defaults to "strip" (ignore servers[0].url,
+                             routes are the raw OpenAPI paths); "keep"
+                             prepends servers[0].url's path portion (e.g.
+                             "/v1") to every route.
 
 Run with no arguments (or --help / -h) to show this message.
 `;
@@ -908,6 +933,90 @@ function cmdDoctorBundle(ctx) {
   return 0;
 }
 
+// ── `minder generate` ───────────────────────────────────────────────────────
+
+const DEFAULT_GENERATE_OUT = 'minder.routes.ts';
+
+/**
+ * `minder generate --from <openapi.json> [--out <path>] [--base-path-strategy strip|keep]`
+ *
+ * Reads an OpenAPI 3.x JSON document and emits a single typed-routes `.ts`
+ * module (routes registry + request/response interfaces + a `RouteTypes`
+ * map) that plugs straight into `createTypedMinder` (src/core/typedRoutes.ts).
+ * YAML is explicitly out of scope (P11 "keep it simple", no new dependency
+ * for a YAML parser) — a non-JSON file fails fast with a clear message
+ * rather than a confusing JSON.parse stack trace.
+ *
+ * All actual parsing/derivation/emission is pure and lives in
+ * scripts/lib/openapi-codegen.js — this function only does fs I/O and turns
+ * `CodegenError`s into the CLI's stderr + exit-1 convention.
+ */
+function cmdGenerate(argv, ctx) {
+  const { cwd, stdout, stderr } = ctx;
+
+  const fromFlagIdx = argv.indexOf('--from');
+  const fromPath = fromFlagIdx !== -1 ? argv[fromFlagIdx + 1] : null;
+  if (fromFlagIdx === -1 || !fromPath) {
+    stderr.write(
+      'minder generate: missing required --from <openapi.json>.\n' +
+        'Usage: minder generate --from <openapi.json> [--out minder.routes.ts] [--base-path-strategy strip|keep]\n'
+    );
+    return 1;
+  }
+
+  const outFlagIdx = argv.indexOf('--out');
+  const outPath = outFlagIdx !== -1 ? argv[outFlagIdx + 1] : DEFAULT_GENERATE_OUT;
+  if (outFlagIdx !== -1 && !argv[outFlagIdx + 1]) {
+    stderr.write('minder generate: --out requires a path argument.\n');
+    return 1;
+  }
+
+  const strategyFlagIdx = argv.indexOf('--base-path-strategy');
+  const basePathStrategy = strategyFlagIdx !== -1 ? argv[strategyFlagIdx + 1] : 'strip';
+  if (strategyFlagIdx !== -1 && basePathStrategy !== 'strip' && basePathStrategy !== 'keep') {
+    stderr.write(
+      `minder generate: --base-path-strategy must be "strip" or "keep" (got "${basePathStrategy}").\n`
+    );
+    return 1;
+  }
+
+  const resolvedFrom = path.resolve(cwd, fromPath);
+  if (!fs.existsSync(resolvedFrom)) {
+    stderr.write(`minder generate: input file not found: ${fromPath}\n`);
+    return 1;
+  }
+
+  const raw = fs.readFileSync(resolvedFrom, 'utf8');
+  let spec;
+  try {
+    spec = JSON.parse(raw);
+  } catch {
+    stderr.write(
+      `minder generate: "${fromPath}" is not valid JSON. Only OpenAPI 3.x JSON documents are ` +
+        'supported — YAML specs are out of scope; convert to JSON first.\n'
+    );
+    return 1;
+  }
+
+  let code;
+  try {
+    code = openapiCodegen.generateRoutesModule(spec, { sourceLabel: fromPath, basePathStrategy });
+  } catch (e) {
+    if (e instanceof openapiCodegen.CodegenError) {
+      stderr.write(`minder generate: ${e.message}\n`);
+      return 1;
+    }
+    throw e;
+  }
+
+  const resolvedOut = path.resolve(cwd, outPath);
+  fs.mkdirSync(path.dirname(resolvedOut), { recursive: true });
+  fs.writeFileSync(resolvedOut, code, 'utf8');
+
+  stdout.write(`minder generate: wrote ${outPath} from ${fromPath}\n`);
+  return 0;
+}
+
 // ── `minder doctor` ─────────────────────────────────────────────────────────
 
 /**
@@ -1317,6 +1426,8 @@ function main(argv, io) {
       return cmdAdd(rest, ctx);
     case 'doctor':
       return cmdDoctor(rest, ctx);
+    case 'generate':
+      return cmdGenerate(rest, ctx);
     default:
       ctx.stderr.write(`minder: unknown command "${command}"\n\n`);
       cmdHelp(ctx);
@@ -1334,6 +1445,7 @@ module.exports = {
   cmdInit,
   cmdAdd,
   cmdDoctor,
+  cmdGenerate,
   cmdHelp,
   checkPeerVersions,
   applyPeerFixes,

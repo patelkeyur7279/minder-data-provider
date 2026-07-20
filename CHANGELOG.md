@@ -81,6 +81,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   type-only) and zero added bytes when unused (the validator is lazy-loaded only when a
   `schema` is actually configured). See README "Response Validation (Standard Schema)"
   and `docs/API_REFERENCE.md`.
+- **`minder generate --from <openapi.json>`** (semver-minor, additive): OpenAPI 3.x
+  (3.0/3.1) JSON → typed-routes codegen. Emits a single `.ts` file — a `routes` const
+  (`satisfies Record<string, ApiRoute>`, ready for `createTypedMinder`), one interface
+  per `components.schemas` entry plus any inline request/response schema, and a
+  `RouteTypes` map — with `operationId`-or-derived route naming and OpenAPI `{param}` →
+  minder's own `:param` URL-template convention. Deterministic (byte-identical on
+  re-generation), zero new dependencies (YAML input is explicitly out of scope). See
+  README "Generate typed routes from OpenAPI" and `docs/API_REFERENCE.md`.
 - **`minder doctor --bundle`**: scans your app for `minder-data-provider` imports and
   reports what each imported subpath costs (min+gzip, from the size table shipped in
   `dist/bundle-sizes.json`), with slimming tips (e.g. import from

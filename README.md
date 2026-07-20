@@ -192,6 +192,35 @@ const { data } = api.useMinder('users'); // data: User[] | null — no manual ge
 The plain `useMinder('/anything')` string call is unchanged and remains a fully-typed escape
 hatch — typed routes are purely additive.
 
+**Generate typed routes from OpenAPI** — already have an OpenAPI 3.x (3.0 or 3.1) JSON
+spec? Skip writing the `route<T>()` map by hand:
+
+```bash
+npx minder generate --from openapi.json --out minder.routes.ts
+```
+
+```ts
+import { createTypedMinder } from 'minder-data-provider';
+import { routes } from './minder.routes';
+
+const api = createTypedMinder(routes);
+const { data } = api.useMinder('listPets'); // data: Pet[] | null
+```
+
+The generated file exports a `routes` const (ready for `createTypedMinder`), one TS
+interface per `components.schemas` entry plus any inline request/response body, and a
+`RouteTypes` map (`{ [routeName]: { body?: ...; response?: ... } }`) for consumers who
+want the shapes without going through `createTypedMinder`. Route names come from each
+operation's `operationId` when present, else a derived `<method><PascalCasePath>` name
+(e.g. `GET /pets/{petId}` → `getPetsByPetId`); OpenAPI's `{param}` path segments become
+minder's own `:param` URL-template convention. Regenerating from the same spec is
+byte-for-byte deterministic, so the output is safe to commit and diff. Only YAML specs
+and the full JSON Schema vocabulary (`allOf`/`anyOf`, non-`$ref` `additionalProperties`,
+etc.) are out of scope — unrepresentable pieces fall back to `unknown` with a comment
+explaining why, rather than a wrong guess. `--base-path-strategy strip` (default) emits
+routes as raw OpenAPI paths; `keep` prepends the path portion of the spec's first
+`servers[].url` (e.g. `/v1`) to every route. See `npx minder --help` for the full flag list.
+
 ## Platform Support
 
 | Environment | Status |
