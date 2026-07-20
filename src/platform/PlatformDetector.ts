@@ -153,7 +153,9 @@ export class PlatformDetector {
       win.__NEXT_DATA__ ||
       win.next ||
       win.__BUILD_MANIFEST ||
-      document.getElementById('__next') ||
+      // Guard `document`: React Native sets global.window = global but never
+      // defines `document`, so a bare reference throws ReferenceError there.
+      (typeof document !== 'undefined' && document.getElementById('__next')) ||
       // Check for Next.js router
       win.next?.router ||
       // Check for Next.js head
