@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { parseJWT as decodeJwt } from '../utils/jwt.js';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMinderContext } from '../core/MinderDataProvider.js';
@@ -196,16 +196,92 @@ export function useCurrentUser() {
   };
 }
 
-// Media upload hook
-export function useMediaUpload(routeName: string) {
-  const { apiClient } = useMinderContext();
+/** Default trailing-edge throttle interval for upload progress commits (ms). */
+const DEFAULT_UPLOAD_PROGRESS_THROTTLE_MS = 100;
+
+/**
+ * MDPD-4 (perf audit A4): trailing-edge throttle for upload progress state
+ * commits. Coalesces a burst of progress events into at most one React state
+ * update per `intervalMs`, but ALWAYS commits the terminal (100%) value
+ * immediately so the final progress is never dropped. The latest value is held
+ * in a ref between commits, so intermediate events don't re-render the consumer.
+ * `intervalMs` is injectable for deterministic testing with fake timers.
+ */
+function useThrottledProgress(
+  intervalMs: number
+): {
+  progress: UploadProgress;
+  push: (p: UploadProgress) => void;
+  reset: () => void;
+} {
   const [progress, setProgress] = useState<UploadProgress>({ loaded: 0, total: 0, percentage: 0 });
+  const latestRef = useRef<UploadProgress>(progress);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const push = useCallback(
+    (p: UploadProgress) => {
+      latestRef.current = p;
+      // Terminal value (complete): flush immediately and cancel any pending tick
+      // so the 100% progress always commits without waiting on the interval.
+      if (p.percentage >= 100) {
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+          timerRef.current = null;
+        }
+        setProgress(p);
+        return;
+      }
+      // Otherwise coalesce: start one trailing timer that commits the latest
+      // value when it fires. Additional events before it fires only update the ref.
+      if (timerRef.current == null) {
+        timerRef.current = setTimeout(() => {
+          timerRef.current = null;
+          setProgress(latestRef.current);
+        }, intervalMs);
+      }
+    },
+    [intervalMs]
+  );
+
+  const reset = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    const zero: UploadProgress = { loaded: 0, total: 0, percentage: 0 };
+    latestRef.current = zero;
+    setProgress(zero);
+  }, []);
+
+  // Clear any pending timer on unmount so a late commit can't fire post-unmount.
+  useEffect(
+    () => () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    },
+    []
+  );
+
+  return { progress, push, reset };
+}
+
+// Media upload hook
+export function useMediaUpload(
+  routeName: string,
+  options?: { throttleMs?: number }
+) {
+  const { apiClient } = useMinderContext();
+  const throttleMs = options?.throttleMs ?? DEFAULT_UPLOAD_PROGRESS_THROTTLE_MS;
+  const { progress, push: pushProgress } = useThrottledProgress(throttleMs);
 
   const uploadFile = useCallback(
     async (file: File): Promise<MediaUploadResult> => {
-      return apiClient.uploadFile(routeName, file, setProgress);
+      // MDPD-4: commit progress through the throttle instead of setState-per-event.
+      return apiClient.uploadFile(routeName, file, pushProgress);
     },
-    [apiClient, routeName]
+    [apiClient, routeName, pushProgress]
   );
 
   const uploadMultiple = useCallback(

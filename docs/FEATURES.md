@@ -407,6 +407,11 @@ configureMinder({
 The media upload manager handles file uploads with progress. Use the hook's `upload` sub-object
 (stable identity) or `onProgress` on a request.
 
+`useMediaUpload(route, { throttleMs })` throttles progress state commits (trailing-edge, default
+100ms) so a burst of progress events no longer re-renders the consumer once per event (MDPD-4 /
+perf audit A4); the terminal 100% value is always committed. `useMinder().upload` keeps progress in
+a ref (its identity never changes across a progress stream).
+
 ```tsx
 const { upload } = useMinder('avatar');
 
