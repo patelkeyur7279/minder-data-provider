@@ -64,6 +64,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.2.0-beta.1] - Unreleased
 
+> **At a glance.** Everything in this release is additive (semver-minor) — no
+> breaking changes; those queue behind 3.0.0 above. Three new certified auth
+> providers (Auth.js, Auth0, AWS Cognito — bringing the catalog to nine) plus
+> `defineProvider`, a typed factory that makes integrating an uncatalogued SDK a
+> first-class path rather than a workaround. Two new opt-in capabilities: runtime
+> response validation against any Standard Schema validator (Zod/Valibot/ArkType,
+> with no new runtime dependency), and `minder generate`, which turns an OpenAPI
+> document into a typed routes registry. Two new CLI commands round it out —
+> `minder codemod redux-removal` automates most of the 3.0 migration, and
+> `minder doctor --bundle` prices your app's imports. The rest is evidence work:
+> bundle budgets and benchmarks now run in CI, and Vite, the Next.js App Router,
+> React 18, and Cloudflare Workers each moved to **Confirmed** in the Support
+> Matrix on the strength of runnable examples exercised in CI rather than
+> inference.
+
 ### Added
 
 - **Certified provider: Auth.js** (semver-minor, additive) —
