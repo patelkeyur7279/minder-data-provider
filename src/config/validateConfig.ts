@@ -59,6 +59,7 @@ export const KNOWN_TOP_LEVEL_KEYS = [
   'debug',
   'performance',
   'ssr',
+  'offline',
   'environments',
   'providers',
 ] as const;

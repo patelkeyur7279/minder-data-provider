@@ -75,6 +75,7 @@ export class OfflineManager {
   private syncPromise: Promise<SyncStats> | null = null;
   private netInfoUnsubscribe?: () => void;
   private listeners = new Set<OfflineManagerListener>();
+  private initPromise: Promise<void> | null = null;
 
   constructor(config: OfflineConfig = {}) {
     this.config = {
@@ -99,13 +100,22 @@ export class OfflineManager {
   }
 
   /**
-   * Initialize offline manager with better error handling
+   * Initialize offline manager. Idempotent: concurrent or repeated calls return
+   * the same in-flight promise so listeners are only ever set up once (the config
+   * pipeline kicks this off; callers/tests may also await it safely).
    */
   async initialize(): Promise<void> {
     if (!this.config.enabled) {
       return;
     }
+    if (this.initPromise) {
+      return this.initPromise;
+    }
+    this.initPromise = this.doInitialize();
+    return this.initPromise;
+  }
 
+  private async doInitialize(): Promise<void> {
     // Load queue from storage
     await this.loadQueue();
 
@@ -430,10 +440,11 @@ Web: Using basic online/offline detection
       throw new MinderOfflineError('Cannot sync while offline');
     }
 
+    const pendingAtStart = this.getQueueSize();
     this.isSyncing = true;
     this.config.onSyncStart();
     this.notify();
-    this.emitSyncHook('start');
+    this.emitSyncHook('start', { pending: pendingAtStart, processed: 0 });
 
     const startTime = Date.now();
     const stats: SyncStats = {
@@ -449,10 +460,15 @@ Web: Using basic online/offline detection
 
     try {
       const result = await this.syncPromise;
-      this.emitSyncHook('success');
+      this.emitSyncHook('success', {
+        processed: result.successful,
+        pending: this.getQueueSize(),
+      });
       return result;
     } catch (error) {
-      this.emitSyncHook('error');
+      this.emitSyncHook('error', {
+        error: { message: error instanceof Error ? error.message : String(error) },
+      });
       throw error;
     } finally {
       this.isSyncing = false;
@@ -465,11 +481,17 @@ Web: Using basic online/offline detection
    * Fire the offline-sync lifecycle plugin hooks (fire-and-forget,
    * error-isolated per plugin). Zero-overhead when no plugins are registered.
    */
-  private emitSyncHook(phase: 'start' | 'success' | 'error'): void {
+  private emitSyncHook(
+    phase: 'start' | 'success' | 'error',
+    extra?: { pending?: number; processed?: number; error?: { message: string; code?: string } }
+  ): void {
     if (pluginManager.size === 0) return;
     void pluginManager.executeSyncHooks({
       phase,
       queueSize: this.getQueueSize(),
+      pending: extra?.pending ?? this.getQueueSize(),
+      ...(extra?.processed !== undefined ? { processed: extra.processed } : {}),
+      ...(extra?.error ? { error: extra.error } : {}),
       timestamp: Date.now(),
     });
   }
@@ -616,6 +638,7 @@ Web: Using basic online/offline detection
       this.netInfoUnsubscribe();
       this.netInfoUnsubscribe = undefined;
     }
+    this.initPromise = null;
 
     await this.saveQueue();
   }

@@ -382,6 +382,10 @@ const stream = minder.stream('/events', {
 - **IndexedDB storage falls back to localStorage** when IndexedDB is unavailable.
 - The offline manager **removes its window listeners on destroy** (no leaks).
 - Plugins observe offline behavior through `onConnectivityChange(online)` and `onSync(event)`.
+- `configureMinder({ offline: { enabled: true } })` instantiates and wires the OfflineManager
+  (MDPD-6): it drives those hooks and is reachable via `getOfflineManager()` (exported from the
+  package root and `minder-data-provider/config`). Re-configuring destroys the prior manager first,
+  so its window listeners are removed (no duplicate emissions).
 
 ```ts
 configureMinder({
@@ -501,8 +505,8 @@ interface MinderPlugin {
   provideToken?(): string | null | Promise<string | null>; // supplies a token when auth has none
   onAuthRefresh?(tokens): void;          // fired on token rotation
   onUpload?(event: UploadLifecycleEvent): void;             // emitted via BOTH MediaUploadManager (`/upload`) AND the useMinder/useMediaUpload path (ApiClient.uploadFile) — MDPD-6
-  onSync?(event: SyncLifecycleEvent): void;                 // emitted only by the internal platform OfflineManager (not yet publicly exported)
-  onConnectivityChange?(online: boolean): void;             // same internal OfflineManager — not reachable via the public API yet
+  onSync?(event: SyncLifecycleEvent): void;                 // fired by the OfflineManager wired by configureMinder({ offline:{enabled:true} }) — MDPD-6
+  onConnectivityChange?(online: boolean): void;             // same OfflineManager — reachable via the public config; see getOfflineManager()
 }
 ```
 

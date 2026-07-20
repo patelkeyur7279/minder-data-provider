@@ -10,8 +10,32 @@ import { validateMinderConfig } from './validateConfig.js';
 import { setGlobalMinderConfig } from '../core/globalConfig.js';
 import { setMinderGlobalConfig, clearMinderCache } from '../core/minder.js';
 import { pluginManager, type MinderPlugin } from '../plugins/PluginSystem.js';
+import { OfflineManager } from '../platform/offline/OfflineManager.js';
+import type { OfflineConfig } from '../platform/offline/types.js';
 
 const logger = new Logger('Config', { level: LoggerLogLevel.DEBUG });
+
+// MDPD-6: re-export the platform OfflineManager from the public config/root entry
+// so `onSync` / `onConnectivityChange` are reachable (it emits through the shared
+// pluginManager). Previously the manager lived only under platform/offline and
+// was never exported or instantiated by the config pipeline.
+export { OfflineManager } from '../platform/offline/OfflineManager.js';
+
+/**
+ * The OfflineManager instance wired by the most recent
+ * `configureMinder({ offline: { enabled: true } })` call, or `null` when offline
+ * is disabled. Re-configuring destroys the previous instance first (so its window
+ * listeners are removed — no duplicates/leaks).
+ */
+let currentOfflineManager: OfflineManager | null = null;
+
+/**
+ * Accessor for the OfflineManager instantiated by `configureMinder` when offline
+ * support is enabled (MDPD-6). Returns `null` when offline is disabled.
+ */
+export function getOfflineManager(): OfflineManager | null {
+  return currentOfflineManager;
+}
 
 /**
  * 🎯 UNIFIED MINDER CONFIGURATION
@@ -167,6 +191,14 @@ export interface UnifiedMinderConfig {
     prefetch?: string[];
   };
 
+  /**
+   * Offline support. When `{ enabled: true }`, `configureMinder` instantiates and
+   * wires a platform OfflineManager (MDPD-6): it queues work while offline, syncs
+   * on reconnect, and drives the `onSync` / `onConnectivityChange` plugin hooks.
+   * Access the live instance via `getOfflineManager()`.
+   */
+  offline?: OfflineConfig;
+
   /** Environment overrides */
   environments?: Record<string, {
     apiUrl?: string;
@@ -250,6 +282,13 @@ export function configureMinder(config: UnifiedMinderConfig): MinderConfig {
   // array replaces the old one instead of double-registering (or warning) by name.
   registerConfigPlugins(config.plugins);
 
+  // MDPD-6: instantiate and wire the OfflineManager when offline support is
+  // enabled. It emits onSync / onConnectivityChange through the shared
+  // pluginManager. Re-configuring destroys the prior instance first so its window
+  // listeners are removed (no duplicates/leaks). initialize() is fire-and-forget
+  // (async listener setup); callers can await getOfflineManager()!.initialize().
+  wireOfflineManager(fullConfig.offline);
+
   logger.debug('Minder configured', {
     platform,
     environment: isDevelopment ? 'development' : 'production',
@@ -294,6 +333,34 @@ function registerConfigPlugins(plugins: MinderPlugin[] | undefined): void {
     pluginManager.register(plugin);
     configRegisteredPluginNames.push(plugin.name);
   }
+}
+
+/**
+ * Instantiate / tear down the OfflineManager for a (re)configuration (MDPD-6).
+ *
+ * - Any manager from a previous configure is destroyed first, which removes its
+ *   window online/offline listeners (no duplicates across re-configure).
+ * - When `offline.enabled`, a fresh manager is created, stored for
+ *   `getOfflineManager()`, and initialized (async listener setup is
+ *   fire-and-forget; the promise is awaitable via `initialize()`).
+ */
+function wireOfflineManager(offline: OfflineConfig | undefined): void {
+  // Destroy the previous instance's listeners before replacing it.
+  if (currentOfflineManager) {
+    void currentOfflineManager.destroy();
+    currentOfflineManager = null;
+  }
+
+  if (!offline?.enabled) {
+    return;
+  }
+
+  const manager = new OfflineManager(offline);
+  currentOfflineManager = manager;
+  // Kick off listener setup; errors are isolated (never break configureMinder).
+  void manager.initialize().catch((err) => {
+    logger.warn(`[Minder config] offline: initialize failed: ${String(err)}`);
+  });
 }
 
 /**
@@ -502,6 +569,12 @@ function applyUserConfig(
   // by validateMinderConfig; consumed via getProviderConfig).
   if (userConfig.providers !== undefined) {
     baseConfig.providers = userConfig.providers;
+  }
+
+  // Offline config passes through to MinderConfig.offline (consumed by the
+  // OfflineManager wiring in configureMinder — MDPD-6).
+  if (userConfig.offline !== undefined) {
+    baseConfig.offline = userConfig.offline;
   }
 
   // Auth configuration
