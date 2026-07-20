@@ -59,6 +59,16 @@ const { CERTIFIED } = require('../../scripts/generate-catalog.js');
  */
 const openapiCodegen = require('../../scripts/lib/openapi-codegen.js');
 
+/**
+ * `minder codemod redux-removal` (Task C) — auto-migrate off the Redux
+ * integration removed in v3.0. Pure transform logic lives in
+ * scripts/lib/codemod-redux-removal.js (no fs there — see its header for the
+ * text/regex-vs-TS-compiler-API tradeoff); `cmdCodemod` below does the
+ * directory walk, file I/O, --dry-run diff preview, and summary reporting —
+ * same division of labor as `cmdGenerate`/openapiCodegen above.
+ */
+const codemodReduxRemoval = require('../../scripts/lib/codemod-redux-removal.js');
+
 const CATALOG_DOC = 'docs/providers/CATALOG.md';
 
 /**
@@ -469,6 +479,21 @@ Commands:
                              routes are the raw OpenAPI paths); "keep"
                              prepends servers[0].url's path portion (e.g.
                              "/v1") to every route.
+
+  codemod redux-removal [--dry-run] [--dir <path>]
+                             Auto-migrate off the Redux integration removed in
+                             v3.0 (see docs/MIGRATION_GUIDE.md, "v2.x -> v3.0").
+                             Renames useReduxSlice() to useMinder() and strips
+                             the redux field from configureMinder()/MinderConfig
+                             objects; useStore(), ReduxConfig, the Redux
+                             <Provider> wrapper, and DynamicLoader's redux
+                             members are flagged with TODO comments (not
+                             auto-rewritten) since they have no safe automatic
+                             replacement. --dry-run previews a diff for every
+                             file without writing; default mode writes and
+                             prints the same summary. --dir scopes the scan
+                             (default: cwd); node_modules/dist/build output are
+                             always skipped.
 
 Run with no arguments (or --help / -h) to show this message.
 `;
@@ -1017,6 +1042,236 @@ function cmdGenerate(argv, ctx) {
   return 0;
 }
 
+// ── `minder codemod redux-removal` ──────────────────────────────────────────
+
+/** Recursively collect source file paths under `dir`, same extension/skip-dir rules as `doctor --bundle`. */
+function collectSourceFiles(dir) {
+  const files = [];
+  const walk = (d, depth) => {
+    if (depth > 12) return;
+    let entries;
+    try {
+      entries = fs.readdirSync(d, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (e.name.startsWith('.') && e.name !== '.') continue;
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) {
+        if (!BUNDLE_SCAN_SKIP_DIRS.has(e.name)) walk(p, depth + 1);
+        continue;
+      }
+      if (!BUNDLE_SCAN_EXTS.has(path.extname(e.name))) continue;
+      files.push(p);
+    }
+  };
+  walk(dir, 0);
+  return files;
+}
+
+/**
+ * Line-based diff between `before`/`after` (LCS via DP, capped at 4M line-pair
+ * cells — beyond that a file is large enough that a full LCS is wasteful for
+ * a preview, so it falls back to a single common-prefix/suffix hunk instead).
+ * No new dependency (P11): this is `--dry-run`'s only consumer.
+ */
+function lineDiffOps(beforeLines, afterLines) {
+  const n = beforeLines.length;
+  const m = afterLines.length;
+  if (n * m > 4_000_000) {
+    let start = 0;
+    while (start < n && start < m && beforeLines[start] === afterLines[start]) start += 1;
+    let endB = n - 1;
+    let endA = m - 1;
+    while (endB >= start && endA >= start && beforeLines[endB] === afterLines[endA]) {
+      endB -= 1;
+      endA -= 1;
+    }
+    const ops = [];
+    for (let i = 0; i < start; i += 1) ops.push({ type: 'ctx', line: beforeLines[i] });
+    for (let i = start; i <= endB; i += 1) ops.push({ type: 'del', line: beforeLines[i] });
+    for (let i = start; i <= endA; i += 1) ops.push({ type: 'add', line: afterLines[i] });
+    for (let i = endB + 1; i < n; i += 1) ops.push({ type: 'ctx', line: beforeLines[i] });
+    return ops;
+  }
+
+  const dp = new Array(n + 1);
+  for (let i = 0; i <= n; i += 1) dp[i] = new Uint32Array(m + 1);
+  for (let i = n - 1; i >= 0; i -= 1) {
+    for (let j = m - 1; j >= 0; j -= 1) {
+      dp[i][j] = beforeLines[i] === afterLines[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  const ops = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (beforeLines[i] === afterLines[j]) {
+      ops.push({ type: 'ctx', line: beforeLines[i] });
+      i += 1;
+      j += 1;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      ops.push({ type: 'del', line: beforeLines[i] });
+      i += 1;
+    } else {
+      ops.push({ type: 'add', line: afterLines[j] });
+      j += 1;
+    }
+  }
+  while (i < n) {
+    ops.push({ type: 'del', line: beforeLines[i] });
+    i += 1;
+  }
+  while (j < m) {
+    ops.push({ type: 'add', line: afterLines[j] });
+    j += 1;
+  }
+  return ops;
+}
+
+/** Render diff ops as unified-style hunks (2 lines of context) with `-`/`+`/` ` prefixes. */
+function renderDiffHunks(ops, context) {
+  const ctx = context == null ? 2 : context;
+  const changeIdx = [];
+  ops.forEach((op, idx) => {
+    if (op.type !== 'ctx') changeIdx.push(idx);
+  });
+  if (changeIdx.length === 0) return '';
+
+  const ranges = [];
+  let start = Math.max(0, changeIdx[0] - ctx);
+  let end = Math.min(ops.length - 1, changeIdx[0] + ctx);
+  for (let k = 1; k < changeIdx.length; k += 1) {
+    const idx = changeIdx[k];
+    const newStart = Math.max(0, idx - ctx);
+    if (newStart <= end + 1) {
+      end = Math.min(ops.length - 1, idx + ctx);
+    } else {
+      ranges.push([start, end]);
+      start = newStart;
+      end = Math.min(ops.length - 1, idx + ctx);
+    }
+  }
+  ranges.push([start, end]);
+
+  const lines = [];
+  for (const [s, e] of ranges) {
+    lines.push('  @@');
+    for (let idx = s; idx <= e; idx += 1) {
+      const op = ops[idx];
+      const prefix = op.type === 'add' ? '  + ' : op.type === 'del' ? '  - ' : '    ';
+      lines.push(prefix + op.line);
+    }
+  }
+  return lines.join('\n') + '\n';
+}
+
+function diffPreview(before, after) {
+  return renderDiffHunks(lineDiffOps(before.split('\n'), after.split('\n')));
+}
+
+const CODEMOD_COMMANDS = { 'redux-removal': codemodReduxRemoval };
+
+/**
+ * `minder codemod redux-removal [--dry-run] [--dir <path>]` — see
+ * scripts/lib/codemod-redux-removal.js's header for the full transform list
+ * and the text/regex-vs-TS-compiler-API tradeoff. `--dry-run` prints a
+ * per-file diff-style preview and writes nothing; default mode writes
+ * changes and prints the same summary (files changed, transforms applied,
+ * manual-TODO count with file:line locations) `--dry-run` shows up front.
+ * Never touches files outside `--dir` (default: cwd); skips
+ * node_modules/dist/build output (`collectSourceFiles`, shared with `doctor
+ * --bundle`'s scan). Idempotent — re-running over already-migrated files
+ * changes nothing (see the pure module's header for why).
+ */
+function cmdCodemod(argv, ctx) {
+  const { cwd, stdout, stderr } = ctx;
+  const sub = argv[0];
+
+  if (!sub || sub.startsWith('--')) {
+    stderr.write(
+      'minder codemod: missing subcommand.\n' +
+        'Usage: minder codemod redux-removal [--dry-run] [--dir <path>]\n'
+    );
+    return 1;
+  }
+  const codemod = CODEMOD_COMMANDS[sub];
+  if (!codemod) {
+    stderr.write(
+      `minder codemod: unknown subcommand "${sub}". Available: ${Object.keys(CODEMOD_COMMANDS).join(', ')}\n`
+    );
+    return 1;
+  }
+
+  const rest = argv.slice(1);
+  const dryRun = rest.includes('--dry-run');
+  const dirFlagIdx = rest.indexOf('--dir');
+  const dirArg = dirFlagIdx !== -1 ? rest[dirFlagIdx + 1] : '.';
+  if (dirFlagIdx !== -1 && !rest[dirFlagIdx + 1]) {
+    stderr.write('minder codemod: --dir requires a path argument.\n');
+    return 1;
+  }
+
+  const targetDir = path.resolve(cwd, dirArg);
+  if (!fs.existsSync(targetDir) || !fs.statSync(targetDir).isDirectory()) {
+    stderr.write(`minder codemod: directory not found: ${dirArg}\n`);
+    return 1;
+  }
+
+  const files = collectSourceFiles(targetDir);
+  let filesChanged = 0;
+  const transformTotals = new Map();
+  let todoTotal = 0;
+  const todoLocations = [];
+
+  for (const file of files) {
+    const relPath = path.relative(cwd, file);
+    const original = fs.readFileSync(file, 'utf8');
+    const result = codemod.transformSource(original);
+    if (!result.changed) continue;
+
+    filesChanged += 1;
+    for (const t of result.transforms) {
+      transformTotals.set(t.kind, (transformTotals.get(t.kind) || 0) + t.count);
+    }
+    for (const todo of result.todos) {
+      todoTotal += 1;
+      todoLocations.push(`${relPath}:${todo.line}`);
+    }
+
+    if (dryRun) {
+      stdout.write(`\n--- ${relPath}\n+++ ${relPath} (preview only -- not written)\n`);
+      stdout.write(diffPreview(original, result.output));
+    } else {
+      fs.writeFileSync(file, result.output, 'utf8');
+    }
+  }
+
+  stdout.write(
+    `\nminder codemod ${sub}${dryRun ? ' --dry-run' : ''}: scanned ${files.length} file(s) under ${dirArg}\n`
+  );
+  stdout.write(`  files changed: ${filesChanged}\n`);
+  if (transformTotals.size > 0) {
+    stdout.write('  transforms applied:\n');
+    for (const [kind, count] of transformTotals) {
+      stdout.write(`    ${count}x ${kind}\n`);
+    }
+  }
+  stdout.write(`  manual TODOs flagged: ${todoTotal}\n`);
+  for (const loc of todoLocations) {
+    stdout.write(`    ${loc}\n`);
+  }
+  if (dryRun) {
+    stdout.write(
+      filesChanged > 0
+        ? '\n  (--dry-run: no files written. Re-run without --dry-run to apply.)\n'
+        : '\n  (--dry-run: nothing to change.)\n'
+    );
+  }
+  return 0;
+}
+
 // ── `minder doctor` ─────────────────────────────────────────────────────────
 
 /**
@@ -1428,6 +1683,8 @@ function main(argv, io) {
       return cmdDoctor(rest, ctx);
     case 'generate':
       return cmdGenerate(rest, ctx);
+    case 'codemod':
+      return cmdCodemod(rest, ctx);
     default:
       ctx.stderr.write(`minder: unknown command "${command}"\n\n`);
       cmdHelp(ctx);
@@ -1446,6 +1703,7 @@ module.exports = {
   cmdAdd,
   cmdDoctor,
   cmdGenerate,
+  cmdCodemod,
   cmdHelp,
   checkPeerVersions,
   applyPeerFixes,
@@ -1469,4 +1727,8 @@ module.exports = {
   CATALOG_DOC,
   isCertifiedProvider,
   checkEnvironment,
+  collectSourceFiles,
+  diffPreview,
+  lineDiffOps,
+  renderDiffHunks,
 };

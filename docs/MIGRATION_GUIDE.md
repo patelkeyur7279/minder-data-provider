@@ -29,6 +29,51 @@ entirely — smaller bundle, one clear state model (TanStack Query for server st
 If you were **not** using the Redux hooks/config (the common case — they were read by nothing on the
 main path), **no code changes are needed.**
 
+### Automated migration
+
+`npx minder codemod redux-removal [--dry-run] [--dir <path>]` handles most of the mechanical part
+of the four migration steps above for you:
+
+```bash
+# Preview every change as a diff, without writing anything:
+npx minder codemod redux-removal --dry-run
+
+# Apply the changes:
+npx minder codemod redux-removal
+
+# Scope the scan to a subdirectory (default: cwd). node_modules/dist/build
+# output are always skipped either way.
+npx minder codemod redux-removal --dir src
+```
+
+**What it fixes automatically:**
+
+- Renames `useReduxSlice(route)` calls (and their import) to `useMinder(route)` — step 2. It also
+  inserts a `// TODO(minder-codemod): ...` comment above every renamed call, because
+  `useReduxSlice` returned `{ state, actions, selectors, dispatch }` while `useMinder` returns
+  `{ data, loading, error, mutate }` — the call is renamed correctly, but you still need to update
+  whatever you destructured from it.
+- Removes the `redux` field from `configureMinder({ ... })` calls and from object literals typed as
+  `MinderConfig` — step 1.
+
+**What it can only flag (adds a `// TODO(minder-codemod): ...` comment, does not rewrite):**
+
+- `useStore()` calls and its import — there's no automatic replacement (step 2's "use your own
+  react-redux store" is an app-specific decision).
+- `ReduxConfig` type usage — step 1's field removal doesn't imply the type import can always be
+  deleted blindly (it might still be referenced elsewhere).
+- `MinderDataProvider`'s Redux `<Provider>` wrapper and `useMinderContext().store` reads — step 3,
+  a JSX/structural change too risky to rewrite automatically.
+- `DynamicLoader`'s redux members (`loadRedux`/`getStore`/`isReduxLoaded`/`addReducer`, the
+  `'redux'` preload option, the `redux` field on `getLoadingStatus()`/`getBundleSavings()`).
+
+Every file it touches is re-runnable: running it again over already-migrated code makes no further
+changes. It only edits files it's confident about via text-anchored transforms (not the TypeScript
+compiler API — see `scripts/lib/codemod-redux-removal.js`'s header for why, and its exact
+scope/limitations). Always review a `--dry-run` first; unusual formatting (namespace imports,
+computed keys, `require()`-style imports) can fall outside what it safely rewrites, in which case
+it leaves that spot untouched rather than guessing.
+
 
 
 ## 2.2.0-beta.0 → 2.2.0-beta.1

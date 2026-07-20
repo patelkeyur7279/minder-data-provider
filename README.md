@@ -251,6 +251,10 @@ explaining why, rather than a wrong guess. `--base-path-strategy strip` (default
 routes as raw OpenAPI paths; `keep` prepends the path portion of the spec's first
 `servers[].url` (e.g. `/v1`) to every route. See `npx minder --help` for the full flag list.
 
+**Migrating off Redux (v3.0)?** `npx minder codemod redux-removal --dry-run` previews (and, without
+`--dry-run`, applies) the mechanical parts of the migration — see
+[Migration Guide: Automated migration](./docs/MIGRATION_GUIDE.md#automated-migration).
+
 ## Platform Support
 
 | Environment | Status |

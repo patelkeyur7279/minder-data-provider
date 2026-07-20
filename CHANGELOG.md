@@ -212,6 +212,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pre-release dist-tag, and the latest stable of each provider peer SDK, then runs the
   suite. Report-only (`continue-on-error: true` per job); an early warning if upstream
   breaks us before their stable release, not a merge gate.
+- **`minder codemod redux-removal [--dry-run] [--dir <path>]`** (semver-minor, additive CLI
+  capability, Task C): auto-migrates consumer code off the Redux integration removed in v3.0 (see
+  the [3.0.0] entry above and docs/MIGRATION_GUIDE.md). Renames `useReduxSlice()` calls to
+  `useMinder()` (with a review TODO for the differing return shape) and strips the `redux` field
+  from `configureMinder()`/`MinderConfig` objects automatically; `useStore()`, `ReduxConfig`, the
+  Redux `<Provider>` wrapper, `useMinderContext().store`, and `DynamicLoader`'s redux members are
+  flagged with `// TODO(minder-codemod):` comments instead of rewritten, since none of them have a
+  safe automatic replacement. Text/regex-based (not the TypeScript compiler API — `typescript` is a
+  devDependency of this repo, not a runtime dep, so a consumer project has no guarantee it's
+  resolvable; see `scripts/lib/codemod-redux-removal.js`'s header for the full tradeoff), anchored
+  on actual import bindings so a generic name like `useStore` (also exported by zustand) is only
+  touched when it's really bound to a `minder-data-provider*` import in that file. Idempotent —
+  re-running over already-migrated files changes nothing. `--dry-run` previews a per-file diff
+  without writing; default mode writes and prints the same summary (files changed, transforms
+  applied, manual-TODO count with file:line locations).
 
 ### Performance (bundle surgery — no API change; surface verified by API-snapshot gate)
 
