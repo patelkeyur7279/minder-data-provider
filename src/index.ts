@@ -18,7 +18,10 @@
 // ============================================================================
 import { checkReactVersionAtRuntime } from './utils/version-validator.js';
 
-// Auto-check in development mode
+// Auto-check in development mode. This is the library's ONLY import-time side
+// effect — package.json `sideEffects` lists exactly the built entry files that
+// contain it. Everything else must stay side-effect-free at module scope so
+// consumer bundlers can drop unused modules.
 if (process.env.NODE_ENV === 'development') {
   checkReactVersionAtRuntime();
 }

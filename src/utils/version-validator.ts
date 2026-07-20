@@ -85,12 +85,7 @@ export function checkReactVersionAtRuntime(): void {
   }
 }
 
-// Auto-check in development
-if (process.env.NODE_ENV === 'development') {
-  // Defer check to avoid blocking
-  if (typeof setTimeout !== 'undefined') {
-    setTimeout(() => {
-      checkReactVersionAtRuntime();
-    }, 100);
-  }
-}
+// NOTE: no module-scope auto-check here. The dev-mode auto-check lives only in the
+// main entry (src/index.ts) — the one file listed in package.json `sideEffects`.
+// A second check here would (a) run the check twice in dev and (b) force bundlers
+// to keep this module even when unused.
