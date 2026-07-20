@@ -138,6 +138,43 @@ import { pluginManager, isShortCircuitResponse } from '../plugins/PluginSystem.j
 import type { InterceptableRequest } from '../plugins/PluginSystem.js';
 
 // ============================================================================
+// RETRY SUPPORT (MDPD-23)
+// ============================================================================
+
+/**
+ * Backoff sleep used between minder() retry attempts. Injectable so tests can
+ * substitute a zero-delay implementation instead of waiting on real timers.
+ * @internal
+ */
+let retrySleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Testing hook: override (or reset, by passing null) the retry backoff sleep.
+ * @internal
+ */
+export function __setRetrySleepForTesting(
+  fn: ((ms: number) => Promise<void>) | null
+): void {
+  retrySleep =
+    fn ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+}
+
+/**
+ * Whether a failed request should be retried. Retry network errors (status 0),
+ * 5xx server errors, and 429 rate-limits — but NOT 4xx client errors, which are
+ * deterministic and would just fail again.
+ */
+function isRetryableFailure(status: number): boolean {
+  return status === 0 || status === 429 || status >= 500;
+}
+
+/** Backoff delay for a given (1-based) attempt: 100ms * attempt, capped at 1s. */
+function retryBackoffMs(attempt: number): number {
+  return Math.min(100 * attempt, 1000);
+}
+
+// ============================================================================
 // CORE MINDER FUNCTION
 // ============================================================================
 
@@ -305,74 +342,106 @@ export async function minder<TData = any>(
       ((transport === 'auto' || transport === undefined) && isEdgeRuntime());
     const useFetch = wantsFetch && !isComplexRequest;
 
-    if (shortCircuited) {
-      // A plugin already produced a synthetic response — skip the transport
-      // entirely (responseData/status/headers were set during interception).
-    } else if (!useFetch) {
-      const response = await axios(config);
-      responseData = response.data;
-      responseStatus = response.status;
-      responseHeaders = response.headers as Record<string, string>;
-    } else {
-      // Super-fast native fetch path
-      // MDPD-18: absolute http(s) URLs bypass the configured baseURL, mirroring
-      // the axios path — otherwise baseURL is double-prefixed onto the absolute
-      // URL (e.g. 'http://BASEhttp://x/api').
-      const requestUrl = config.url || '';
-      let fullUrl = /^https?:\/\//i.test(requestUrl)
-        ? requestUrl
-        : (config.baseURL || '') + requestUrl;
-      
-      // Handle query parameters
-      if (config.params) {
-        const queryParams = new URLSearchParams();
-        Object.entries(config.params).forEach(([key, value]) => {
-          if (value !== undefined && value !== null) {
-            queryParams.append(key, String(value));
-          }
-        });
-        const queryString = queryParams.toString();
-        if (queryString) {
-          fullUrl += (fullUrl.includes('?') ? '&' : '?') + queryString;
-        }
-      }
+    // MDPD-23: explicit retry for the standalone minder() path. minder() never
+    // rejects, so TanStack's retry can't help here — retryable transport
+    // failures (network / 5xx / 429; NOT 4xx) are retried up to options.retries
+    // times with a small backoff. Short-circuited (plugin-synthesized) responses
+    // are never retried. The never-throws contract is preserved: after retries
+    // are exhausted the original error propagates to the terminal handler below,
+    // which fires onError/plugin hooks exactly once and returns a failure result.
+    const maxRetries =
+      options?.retries && options.retries > 0 ? Math.floor(options.retries) : 0;
+    let retryAttempt = 0;
 
-      const fetchOptions: RequestInit = {
-        method: config.method,
-        headers: config.headers as Record<string, string>,
-        body: (config.method !== 'GET' && config.method !== 'HEAD' && config.data) 
-          ? (typeof config.data === 'string' ? config.data : JSON.stringify(config.data)) 
-          : undefined,
-      };
+    while (true) {
+      try {
+        if (shortCircuited) {
+          // A plugin already produced a synthetic response — skip the transport
+          // entirely (responseData/status/headers were set during interception).
+        } else if (!useFetch) {
+          const response = await axios(config);
+          responseData = response.data;
+          responseStatus = response.status;
+          responseHeaders = response.headers as Record<string, string>;
+        } else {
+          // Super-fast native fetch path
+          // MDPD-18: absolute http(s) URLs bypass the configured baseURL, mirroring
+          // the axios path — otherwise baseURL is double-prefixed onto the absolute
+          // URL (e.g. 'http://BASEhttp://x/api').
+          const requestUrl = config.url || '';
+          let fullUrl = /^https?:\/\//i.test(requestUrl)
+            ? requestUrl
+            : (config.baseURL || '') + requestUrl;
       
-      const controller = new AbortController();
-      const timeoutId = config.timeout ? setTimeout(() => controller.abort(), config.timeout) : null;
-      fetchOptions.signal = controller.signal;
+          // Handle query parameters
+          if (config.params) {
+            const queryParams = new URLSearchParams();
+            Object.entries(config.params).forEach(([key, value]) => {
+              if (value !== undefined && value !== null) {
+                queryParams.append(key, String(value));
+              }
+            });
+            const queryString = queryParams.toString();
+            if (queryString) {
+              fullUrl += (fullUrl.includes('?') ? '&' : '?') + queryString;
+            }
+          }
+
+          const fetchOptions: RequestInit = {
+            method: config.method,
+            headers: config.headers as Record<string, string>,
+            body: (config.method !== 'GET' && config.method !== 'HEAD' && config.data) 
+              ? (typeof config.data === 'string' ? config.data : JSON.stringify(config.data)) 
+              : undefined,
+          };
       
-      const response = await fetch(fullUrl, fetchOptions);
-      if (timeoutId) clearTimeout(timeoutId);
+          const controller = new AbortController();
+          const timeoutId = config.timeout ? setTimeout(() => controller.abort(), config.timeout) : null;
+          fetchOptions.signal = controller.signal;
       
-      responseStatus = response.status;
-      response.headers.forEach((value, key) => {
-        responseHeaders[key] = value;
-      });
+          const response = await fetch(fullUrl, fetchOptions);
+          if (timeoutId) clearTimeout(timeoutId);
       
-      if (!response.ok) {
-         // Create axios-like error for compatibility with handleError
-         const error: any = new Error(response.statusText);
-         error.response = { status: responseStatus, data: await response.text().catch(() => ''), headers: responseHeaders };
-         error.isAxiosError = true;
-         throw error;
-      }
+          responseStatus = response.status;
+          response.headers.forEach((value, key) => {
+            responseHeaders[key] = value;
+          });
       
-      const contentType = response.headers.get('content-type');
-      if (contentType?.includes('application/json')) {
-        responseData = await response.json().catch(() => null);
-      } else {
-        responseData = await response.text().catch(() => '');
+          if (!response.ok) {
+             // Create axios-like error for compatibility with handleError
+             const error: any = new Error(response.statusText);
+             error.response = { status: responseStatus, data: await response.text().catch(() => ''), headers: responseHeaders };
+             error.isAxiosError = true;
+             throw error;
+          }
+      
+          const contentType = response.headers.get('content-type');
+          if (contentType?.includes('application/json')) {
+            responseData = await response.json().catch(() => null);
+          } else {
+            responseData = await response.text().catch(() => '');
+          }
+        }
+        // Transport succeeded — leave the retry loop.
+        break;
+      } catch (transportError: unknown) {
+        const failure = handleError(transportError);
+        if (
+          !shortCircuited &&
+          maxRetries > 0 &&
+          retryAttempt < maxRetries &&
+          isRetryableFailure(failure.status)
+        ) {
+          retryAttempt++;
+          await retrySleep(retryBackoffMs(retryAttempt));
+          continue;
+        }
+        // Not retryable or retries exhausted — propagate the ORIGINAL error to
+        // the terminal handler so onError/plugin hooks fire exactly once.
+        throw transportError;
       }
     }
-    
+
     // 7. Decode response with model if provided
     const decodedData = decodeWithModel<TData>(responseData, options?.model);
     
