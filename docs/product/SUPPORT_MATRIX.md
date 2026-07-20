@@ -48,11 +48,11 @@
 | TanStack Query caching | **Confirmed** | query-core based CacheManager, tested |
 | Auth (JWT presence/expiry, refresh) | **Confirmed** | Fail-closed since 2.2.0-beta.1; parity-tested |
 | Plugin bus (request/response/error/token hooks) | **Confirmed** | Emitters live in ApiClient + minder(); tested |
-| Plugin hooks `onUpload`/`onSync`/`onConnectivityChange` | **Partial — not reachable via public API** | Emitters exist + tested, but `onSync`/`onConnectivityChange` fire only from the internal `platform/offline` OfflineManager (not publicly exported), and `onUpload` fires only via `MediaUploadManager` (`/upload`), NOT the `useMinder`/`useMediaUpload` path (2026-07-19 release audit) |
-| Plugin hooks `onCacheHit`/`onCacheMiss` | **Not implemented (dead)** | Declared on interface; zero emit sites in `src/` — documented as roadmap only |
-| WebSocket | **Experimental** | 3 overlapping layers (core manager / client / adapters); tests exist for manager only |
-| Upload | **Experimental** | Works; re-render storm defect (perf audit A4) |
-| Offline | **Experimental** | Two competing implementations; 1s polling hooks |
+| Plugin hooks `onUpload`/`onSync`/`onConnectivityChange` | **Reachable via public API** | MDPD-6: `onUpload` now fires from the `useMinder`/`useMediaUpload` path (`ApiClient.uploadFile`) as well as `MediaUploadManager`; `onSync`/`onConnectivityChange` fire from the `OfflineManager` wired by `configureMinder({ offline:{enabled:true} })` (now exported + `getOfflineManager()`). Unit+integration tested on branch; no cross-browser/device soak |
+| Plugin hooks `onCacheHit`/`onCacheMiss` | **Implemented** | MDPD-5: emitted from `minder()`'s opt-in `{ cache: true }` response cache (miss on first/expired, hit on fresh). Unit tested on branch |
+| WebSocket | **Experimental** | 3 overlapping layers (core manager / client / adapters) intentionally NOT consolidated (high-risk). Canonical public path documented (`/websocket` `WebSocketClient` + `useWebSocket` + `useMinder().websocket`); both public layers now unit tested (connect/subscribe/reconnect-backoff/cleanup). Unit tested on branch; no cross-browser/device soak |
+| Upload | **Experimental** | Works; MDPD-4 re-render storm fixed — `useMediaUpload` progress commits throttled (50-event upload: ~50→~5 renders). Unit tested on branch; no cross-browser/device soak |
+| Offline | **Experimental** | Two competing implementations (core + platform) — NOT consolidated (high-risk); platform `OfflineManager` now publicly wired via `configureMinder`/`getOfflineManager` for the sync/connectivity hooks (MDPD-6). Unit+integration tested on branch; no cross-browser/device soak |
 
 ## Provider integrations
 

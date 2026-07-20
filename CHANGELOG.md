@@ -81,6 +81,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **MDPD-24** — `minder()`'s `cache`/`cacheTTL` options now work: with
   `cache: true`, successful GET results are cached for the TTL and reported with
   `metadata.cached=true` on subsequent hits (non-GET/`cache:false` unchanged).
+- **MDPD-4** — `useMediaUpload` no longer re-renders once per progress event
+  (perf audit A4): progress state commits are throttled (trailing-edge, injectable
+  interval, default 100ms) with the terminal 100% value always committed. A 50-event
+  upload now re-renders the consumer ~5 times instead of ~50; callback identities stay stable.
+- **MDPD-5** — the `onCacheHit`/`onCacheMiss` plugin hooks (previously declared with
+  zero emit sites) now fire from `minder()`'s opt-in `{ cache: true }` response cache:
+  `onCacheMiss(key)` on the first/expired call and `onCacheHit({ key, value, age, timestamp })`
+  on a fresh hit.
+- **MDPD-6** — three declared plugin hooks are now reachable through the public API:
+  `onUpload` fires from the `useMinder`/`useMediaUpload` upload path (via `ApiClient.uploadFile`,
+  not just the standalone `MediaUploadManager`); and `configureMinder({ offline: { enabled: true } })`
+  now instantiates and wires the platform `OfflineManager` (also exported, with a
+  `getOfflineManager()` accessor) so `onSync`/`onConnectivityChange` fire — re-configuring
+  destroys the prior manager first so its window listeners don't leak.
+- **WebSocket** — added unit coverage for the two untested public layers (`WebSocketClient`
+  from `/websocket` and the `useWebSocket` hook); no defects surfaced (reconnect/backoff +
+  cleanup already correct). Documented the canonical public path; the core `WebSocketManager`
+  is internal `MinderDataProvider` plumbing (layers intentionally not consolidated).
 
 ### Fixed
 
