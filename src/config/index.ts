@@ -688,48 +688,28 @@ function getEnabledFeatures(config: Partial<MinderConfig>): string[] {
 }
 
 /**
- * Validate Next.js specific configuration
- * Next.js requires the 'dynamic' property to enable dynamic imports
- * 
- * @throws {MinderConfigError} if dynamic import is not configured in Next.js
+ * Validate Next.js specific configuration.
+ *
+ * `dynamic` (from `next/dynamic`) lets Minder lazy-load its dev-only devtools in
+ * a Next.js app. MDPD-11: this used to hard-throw NEXTJS_DYNAMIC_REQUIRED when
+ * `dynamic` was absent — but docs/NEXTJS_APP_ROUTER.md never documents `dynamic`,
+ * so following the docs crashed `next build`. It is now a single warning and the
+ * config continues with a working default (no dynamic-import devtools).
  */
 function validateNextJsConfig(config: UnifiedMinderConfig): void {
-  // Check if dynamic property exists and is not empty
+  // Check if dynamic property exists and is a function
   const dynamicConfig = (config as any).dynamic;
 
   if (!dynamicConfig || typeof dynamicConfig !== 'function') {
-    const error = new MinderConfigError(
-      'Next.js detected: Missing required "dynamic" configuration',
-      'dynamic',
-      'NEXTJS_DYNAMIC_REQUIRED'
-    );
-
-    error.addSuggestion({
-      message: 'Next.js requires the "dynamic" import to enable code splitting',
-      action: 'Add `dynamic: dynamic` to your configuration',
-      link: 'https://github.com/patelkeyur7279/minder-data-provider/blob/main/docs/DYNAMIC_IMPORTS.md'
-    });
-
-    error.addSuggestion({
-      message: 'Import the dynamic function from Next.js',
-      action: 'Add `import dynamic from "next/dynamic";` at the top of your file'
-    });
-
-    error.addSuggestion({
-      message: 'Example configuration:',
-      action: `
-import dynamic from "next/dynamic";
-import { createMinderConfig } from "minder-data-provider/config";
-
-export const config = createMinderConfig({
-  apiUrl: "https://api.example.com",
-  dynamic: dynamic, // ⚠️ Required for Next.js
-  routes: { users: "/users" }
-});
-      `.trim()
-    });
-
-    throw error;
+    if (typeof console !== 'undefined' && console.warn) {
+      console.warn(
+        '[Minder] Next.js detected without a "dynamic" import. Minder will run ' +
+          'with its dynamic-import devtools disabled. To enable them, pass ' +
+          '`dynamic` from next/dynamic:\n' +
+          '  import dynamic from "next/dynamic";\n' +
+          '  configureMinder({ apiUrl: "...", dynamic, routes: { users: "/users" } });'
+      );
+    }
   }
 }
 
