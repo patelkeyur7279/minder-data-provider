@@ -22,6 +22,7 @@ Providers on the Minder roadmap. These are not yet available — they follow the
 | Auth.js | auth | web, node, edge | nextjs |
 | Auth0 | auth | web, node, edge | react, nextjs, vite |
 | Clerk | auth | web, node, edge | react, nextjs, vite |
+| Cognito | auth | web, node, edge | react, nextjs, vite |
 | Firebase | auth, database, storage | web, node, edge | react, nextjs, vite |
 | Razorpay | payments | web, node, edge | react, nextjs, vite |
 | Sentry | analytics | web, node, edge | react, nextjs, vite |

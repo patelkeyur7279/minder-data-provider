@@ -115,6 +115,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   should prefer local JWKS verification (out of scope for v1). 10/10
   certification (`node scripts/certify-provider.js providers/auth0`); catalog
   entry: docs/providers/CATALOG.md.
+- **Certified provider: Cognito** (semver-minor, additive) —
+  **`minder-data-provider/providers/cognito`** — auth via `useAuth()`, mirroring
+  Auth0's lazy-SDK-import client pattern and fetch-to-upstream-verify server
+  pattern. Client `registerCognitoProvider()` lazily imports AWS Amplify v6's
+  functional Auth API (`aws-amplify` for `Amplify.configure()`,
+  `aws-amplify/auth` for `fetchAuthSession`/`getCurrentUser`/`signOut` — dynamic
+  `import()`, never static — zero bytes for mock-mode/non-Cognito consumers) or
+  accepts a `createCognitoFactory` DI seam; `getSession()` calls
+  `client.fetchAuthSession()` and reads the decoded `tokens.idToken.payload`,
+  applying the same fail-closed presence+expiry check as every other certified
+  provider (`sub` non-empty AND `exp` numeric-seconds strictly in the future);
+  `signOut()` calls `client.signOut(...)`. Server-side,
+  `createCognitoSessionHandler({ userPoolDomain })` reads the caller's
+  `Authorization: Bearer <token>` header (400 if missing/malformed) and forwards
+  it, unmodified, to the user pool's own OAuth2 `GET
+  https://{userPoolDomain}/oauth2/userInfo` endpoint — 200 maps to
+  `{ userId: sub, valid: true }`, any non-200 to `{ userId: null, valid: false }`
+  (upstream body never thrown through raw), and a network failure to a masked
+  502 (`COGNITO_UPSTREAM_ERROR`), the same pattern as Auth0's
+  `AUTH0_UPSTREAM_ERROR`. No secret exists anywhere in this provider's config
+  surface — `userPoolId`/`userPoolClientId` are public identifiers, and the
+  Cognito App Client used must be a "public client" (no client secret
+  generated), the same shape as Auth0's SPA/PKCE clients. Documented
+  prerequisite (verified 2026-07-21, web search): `/oauth2/userInfo` requires a
+  Hosted UI domain configured for the user pool AND an access token obtained via
+  the Hosted UI / OAuth2 authorization-code flow — tokens from a direct
+  username/password `InitiateAuth` sign-in carry no OAuth scopes and are
+  rejected upstream (mapped to a signed-out response, never a crash). `mock:
+  true` registers a deterministic in-memory session (Cognito-shaped
+  `sub`/`cognito:username`/`email` claims plus a structurally-valid fake JWT)
+  with zero network. `aws-amplify` is declared an optional peerDependency
+  (`^6.0.0`; vetted 2026-07-21, see `.claude/notes/research.md`). Frameworks
+  claimed: `react`, `nextjs`, `vite` (mirrors Auth0 — React Native untested
+  here, P7, even though Amplify ships an RN-compatible build). 10/10
+  certification (`node scripts/certify-provider.js providers/cognito`); catalog
+  entry: docs/providers/CATALOG.md.
 - **`defineProvider` custom-provider factory** (semver-minor, additive): a typed factory —
   `defineProvider<TContract, TConfig, TClient>` plus the `DefineProviderOptions` and
   `CustomProvider` types — for integrating any SDK the catalog doesn't cover, exported from

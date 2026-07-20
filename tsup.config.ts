@@ -38,6 +38,7 @@ export default defineConfig({
     'providers/sentry': 'providers/sentry/src/index.ts',
     'providers/authjs': 'providers/authjs/src/index.ts',
     'providers/auth0': 'providers/auth0/src/index.ts',
+    'providers/cognito': 'providers/cognito/src/index.ts',
 
     // Feature modules (for tree-shaking)
     'crud/index': 'src/crud/index.ts',
@@ -97,6 +98,8 @@ export default defineConfig({
     '@sentry/browser',
     'next-auth',
     '@auth0/auth0-spa-js',
+    'aws-amplify',
+    'aws-amplify/auth',
     // Node.js built-ins that should not be in browser bundles
     'fs',
     'path',

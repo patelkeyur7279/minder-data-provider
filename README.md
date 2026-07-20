@@ -110,6 +110,7 @@ and zero provider account, then flip `mock: false` when you're ready to go live.
 | Auth.js | auth |
 | Auth0 | auth |
 | Clerk | auth |
+| Cognito | auth |
 | Firebase | auth, database, storage |
 | Razorpay | payments |
 | Sentry | analytics |

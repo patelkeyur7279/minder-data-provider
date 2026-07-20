@@ -395,8 +395,8 @@ describe('generate-catalog', () => {
       expect(Array.isArray(CERTIFIED)).toBe(true);
     });
 
-    it('should have all 8 roadmap providers in CERTIFIED', () => {
-      expect(CERTIFIED.length).toBe(8);
+    it('should have all 9 roadmap providers in CERTIFIED', () => {
+      expect(CERTIFIED.length).toBe(9);
       expect(CERTIFIED).toContain('@minder/provider-supabase');
       expect(CERTIFIED).toContain('@minder/provider-stripe');
       expect(CERTIFIED).toContain('@minder/provider-clerk');
@@ -405,6 +405,7 @@ describe('generate-catalog', () => {
       expect(CERTIFIED).toContain('@minder/provider-sentry');
       expect(CERTIFIED).toContain('@minder/provider-authjs');
       expect(CERTIFIED).toContain('@minder/provider-auth0');
+      expect(CERTIFIED).toContain('@minder/provider-cognito');
     });
 
     it('should have an empty PLANNED array — the initial roadmap is complete', () => {

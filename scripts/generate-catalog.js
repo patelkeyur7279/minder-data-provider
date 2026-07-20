@@ -37,6 +37,7 @@ const CERTIFIED = [
   '@minder/provider-sentry',
   '@minder/provider-authjs',
   '@minder/provider-auth0',
+  '@minder/provider-cognito',
 ];
 
 // Planned providers with roadmap info. Empty: Razorpay (F-R1) and Sentry

@@ -682,5 +682,10 @@
     "createAuth0SessionHandler",
     "getProviderClient",
     "registerAuth0Provider"
+  ],
+  "providers__cognito": [
+    "createCognitoSessionHandler",
+    "getProviderClient",
+    "registerCognitoProvider"
   ]
 }

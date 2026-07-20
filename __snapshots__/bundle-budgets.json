@@ -23,6 +23,7 @@
   "providers/clerk": 5.9,
   "providers/authjs": 5.1,
   "providers/auth0": 5.3,
+  "providers/cognito": 5.6,
   "providers/supabase": 5.1,
   "debug": 1.8,
   "ssr": 1.6,

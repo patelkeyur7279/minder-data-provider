@@ -161,6 +161,11 @@
       "types": "./dist/providers/auth0.d.ts",
       "import": "./dist/providers/auth0.mjs",
       "require": "./dist/providers/auth0.js"
+    },
+    "./providers/cognito": {
+      "types": "./dist/providers/cognito.d.ts",
+      "import": "./dist/providers/cognito.mjs",
+      "require": "./dist/providers/cognito.js"
     }
   },
   "scripts": {
@@ -250,6 +255,7 @@
   "peerDependencies": {
     "@auth0/auth0-spa-js": "^2.0.0",
     "@clerk/clerk-js": "^5.0.0",
+    "aws-amplify": "^6.0.0",
     "@sentry/browser": "^8.0.0",
     "@supabase/supabase-js": "^2.0.0",
     "@tanstack/query-core": "^5.90.6",
@@ -267,6 +273,9 @@
       "optional": true
     },
     "@clerk/clerk-js": {
+      "optional": true
+    },
+    "aws-amplify": {
       "optional": true
     },
     "@supabase/supabase-js": {
