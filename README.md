@@ -108,6 +108,7 @@ and zero provider account, then flip `mock: false` when you're ready to go live.
 | Provider | Categories |
 | --- | --- |
 | Auth.js | auth |
+| Auth0 | auth |
 | Clerk | auth |
 | Firebase | auth, database, storage |
 | Razorpay | payments |
@@ -115,11 +116,11 @@ and zero provider account, then flip `mock: false` when you're ready to go live.
 | Stripe | payments |
 | Supabase | auth, database, storage |
 
-All seven are **Certified** (10-point checklist, mock-mode example, CI-tested). Six
-ship for React, Next.js, and Vite on web, Node, and edge runtimes; Auth.js ships for
-Next.js only (its REST session contract is shared by other `@auth/*` framework
-adapters, but only Next.js is tested here — see the catalog). Full detail:
-[**Provider Catalog**](./docs/providers/CATALOG.md).
+All eight are **Certified** (10-point checklist, mock-mode example, CI-tested).
+Seven ship for React, Next.js, and Vite on web, Node, and edge runtimes; Auth.js
+ships for Next.js only (its REST session contract is shared by other `@auth/*`
+framework adapters, but only Next.js is tested here — see the catalog). Full
+detail: [**Provider Catalog**](./docs/providers/CATALOG.md).
 
 #### Bring your own provider
 

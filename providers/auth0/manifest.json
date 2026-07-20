@@ -1,0 +1,36 @@
+{
+  "name": "@minder/provider-auth0",
+  "version": "0.1.0",
+  "displayName": "Auth0",
+  "categories": ["auth"],
+  "capabilities": ["auth", "session-verification"],
+  "config": {
+    "clientSafe": ["domain", "clientId", "audience", "redirectUri", "mock"],
+    "serverOnly": []
+  },
+  "scopes": [
+    {
+      "scope": "auth:session",
+      "why": "Read the current Auth0 session via the SPA client (isAuthenticated/getIdTokenClaims) to expose the signed-in user via useAuth()."
+    },
+    {
+      "scope": "auth:signout",
+      "why": "Sign the user out (client.logout) when the app calls useAuth().signOut(), letting Auth0's own SDK perform its default post-logout redirect."
+    },
+    {
+      "scope": "session:verify",
+      "why": "Verify a request's Auth0 access token server-side by calling Auth0's own public GET {domain}/userinfo endpoint, applying fail-closed handling before any protected server route trusts the caller."
+    }
+  ],
+  "runtimes": ["web", "node", "edge"],
+  "frameworks": ["react", "nextjs", "vite"],
+  "peerDependencies": {
+    "@auth0/auth0-spa-js": "^2.0.0"
+  },
+  "docs": {
+    "setup": "./README.md",
+    "example": "./example.ts",
+    "security": "./README.md"
+  },
+  "license": "MIT"
+}

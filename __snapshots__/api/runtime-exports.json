@@ -677,5 +677,10 @@
     "createAuthjsSessionHandler",
     "getProviderClient",
     "registerAuthjsProvider"
+  ],
+  "providers__auth0": [
+    "createAuth0SessionHandler",
+    "getProviderClient",
+    "registerAuth0Provider"
   ]
 }

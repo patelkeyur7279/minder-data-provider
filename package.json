@@ -156,6 +156,11 @@
       "types": "./dist/providers/authjs.d.ts",
       "import": "./dist/providers/authjs.mjs",
       "require": "./dist/providers/authjs.js"
+    },
+    "./providers/auth0": {
+      "types": "./dist/providers/auth0.d.ts",
+      "import": "./dist/providers/auth0.mjs",
+      "require": "./dist/providers/auth0.js"
     }
   },
   "scripts": {
@@ -243,6 +248,7 @@
     "typescript": "^5.4.3"
   },
   "peerDependencies": {
+    "@auth0/auth0-spa-js": "^2.0.0",
     "@clerk/clerk-js": "^5.0.0",
     "@sentry/browser": "^8.0.0",
     "@supabase/supabase-js": "^2.0.0",
@@ -257,6 +263,9 @@
     "stripe": "^14.0.0"
   },
   "peerDependenciesMeta": {
+    "@auth0/auth0-spa-js": {
+      "optional": true
+    },
     "@clerk/clerk-js": {
       "optional": true
     },

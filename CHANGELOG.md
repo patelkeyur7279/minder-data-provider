@@ -85,6 +85,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   contract but are untested here). 10/10 certification
   (`node scripts/certify-provider.js providers/authjs`); catalog entry:
   docs/providers/CATALOG.md.
+- **Certified provider: Auth0** (semver-minor, additive) —
+  **`minder-data-provider/providers/auth0`** — auth via `useAuth()`, borrowing the
+  lazy-SDK-import client pattern and the fetch-to-upstream-verify server pattern
+  from `providers/clerk` (NOT Auth.js's DI seam — Auth0 exposes a public
+  `/userinfo` endpoint that Auth.js has no equivalent of). Client
+  `registerAuth0Provider()` lazily imports `@auth0/auth0-spa-js` (dynamic
+  `import()`, never static — zero bytes for mock-mode/non-Auth0 consumers) or
+  accepts a `createAuth0Factory` DI seam; `getSession()` calls
+  `client.isAuthenticated()` then `client.getIdTokenClaims()`, applying the same
+  fail-closed presence+expiry check as every other certified provider (`sub`
+  non-empty AND `exp` numeric-seconds strictly in the future); `signOut()` calls
+  `client.logout(...)`, letting the SDK's own redirect UX proceed unimpeded.
+  Server-side, `createAuth0SessionHandler({ domain })` reads the caller's
+  `Authorization: Bearer <token>` header (400 if missing/malformed) and forwards
+  it, unmodified, to Auth0's own public `GET https://{domain}/userinfo` endpoint —
+  200 maps to `{ userId: sub, valid: true }`, any non-200 to
+  `{ userId: null, valid: false }` (upstream body never thrown through raw), and a
+  network failure to a masked 502 (`AUTH0_UPSTREAM_ERROR`), the same pattern as
+  Clerk's `CLERK_UPSTREAM_ERROR`. No DI seam needed and no secret exists anywhere
+  in this provider's config surface — `domain` is a public tenant identifier, like
+  Clerk's `publishableKey` (Auth0 SPA/PKCE clients have no client secret at all).
+  `mock: true` registers a deterministic in-memory session with zero network.
+  `@auth0/auth0-spa-js` is declared an optional peerDependency (`^2.0.0`; vetted
+  2026-07-21, see `.claude/notes/research.md`). Frameworks claimed: `react`,
+  `nextjs`, `vite` (mirrors Clerk — React Native untested here, P7). Known
+  trade-off documented in the README: per-request `/userinfo` calls are Auth0's
+  own recommended pattern for low/medium traffic; high-traffic resource servers
+  should prefer local JWKS verification (out of scope for v1). 10/10
+  certification (`node scripts/certify-provider.js providers/auth0`); catalog
+  entry: docs/providers/CATALOG.md.
 - **`defineProvider` custom-provider factory** (semver-minor, additive): a typed factory —
   `defineProvider<TContract, TConfig, TClient>` plus the `DefineProviderOptions` and
   `CustomProvider` types — for integrating any SDK the catalog doesn't cover, exported from
