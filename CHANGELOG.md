@@ -66,6 +66,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Certified provider: Auth.js** (semver-minor, additive) —
+  **`minder-data-provider/providers/authjs`** — auth via `useAuth()`, zero-SDK on
+  BOTH sides. Client `getSession()`/`signOut()` call Auth.js's own REST session
+  contract (`GET {basePath}/session`, `GET {basePath}/csrf`, `POST {basePath}/signout`,
+  default `/api/auth`) directly over `fetch` — no `next-auth`/`@auth/core` import at
+  all. Server-side, `createAuthjsSessionHandler({ sessionResolver })` wraps an
+  app-supplied `sessionResolver` DI seam (bridging the app's own Auth.js v5 `auth()`,
+  which is app-specific config a library cannot import) and returns only
+  `{ userId, valid }`. Both paths run every raw session through the same fail-closed
+  `toSession()` check: trusted only if `user.id` is non-empty AND `expires` parses to
+  a future date — presence + expiry only, exactly like the other certified auth
+  providers. `mock: true` registers a deterministic in-memory session with zero
+  network. `next-auth` is declared an optional peerDependency (`^5.0.0-beta.0` — Auth.js
+  v5 is still in beta upstream; see `.claude/notes/research.md`) purely for the
+  consuming app's own `auth.ts`; this adapter itself never imports it. Frameworks
+  claimed: `nextjs` only (P7 — other `@auth/*` framework adapters share the same REST
+  contract but are untested here). 10/10 certification
+  (`node scripts/certify-provider.js providers/authjs`); catalog entry:
+  docs/providers/CATALOG.md.
 - **`defineProvider` custom-provider factory** (semver-minor, additive): a typed factory —
   `defineProvider<TContract, TConfig, TClient>` plus the `DefineProviderOptions` and
   `CustomProvider` types — for integrating any SDK the catalog doesn't cover, exported from

@@ -1,0 +1,36 @@
+{
+  "name": "@minder/provider-authjs",
+  "version": "0.1.0",
+  "displayName": "Auth.js",
+  "categories": ["auth"],
+  "capabilities": ["auth", "session-verification"],
+  "config": {
+    "clientSafe": ["basePath", "mock"],
+    "serverOnly": []
+  },
+  "scopes": [
+    {
+      "scope": "auth:session",
+      "why": "Read the current Auth.js session via GET {basePath}/session (Auth.js's own cookie-authenticated session endpoint) to expose the signed-in user via useAuth()."
+    },
+    {
+      "scope": "auth:signout",
+      "why": "Sign the user out via Auth.js's own CSRF-protected signout flow (GET {basePath}/csrf then POST {basePath}/signout) when the app calls useAuth().signOut()."
+    },
+    {
+      "scope": "session:verify",
+      "why": "Verify the current request's Auth.js session server-side via an app-supplied sessionResolver (bridging the app's own auth()), applying fail-closed presence+expiry validation before any protected server route trusts the caller."
+    }
+  ],
+  "runtimes": ["web", "node", "edge"],
+  "frameworks": ["nextjs"],
+  "peerDependencies": {
+    "next-auth": "^5.0.0-beta.0"
+  },
+  "docs": {
+    "setup": "./README.md",
+    "example": "./example.ts",
+    "security": "./README.md"
+  },
+  "license": "MIT"
+}

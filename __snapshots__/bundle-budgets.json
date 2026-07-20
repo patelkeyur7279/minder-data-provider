@@ -21,6 +21,7 @@
   "providers/sentry": 6.8,
   "providers/firebase": 6.2,
   "providers/clerk": 5.9,
+  "providers/authjs": 5.1,
   "providers/supabase": 5.1,
   "debug": 1.8,
   "ssr": 1.6,

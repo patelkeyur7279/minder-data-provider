@@ -19,6 +19,7 @@ Providers on the Minder roadmap. These are not yet available — they follow the
 
 | displayName | Categories | Runtimes | Frameworks |
 |---|---|---|---|
+| Auth.js | auth | web, node, edge | nextjs |
 | Clerk | auth | web, node, edge | react, nextjs, vite |
 | Firebase | auth, database, storage | web, node, edge | react, nextjs, vite |
 | Razorpay | payments | web, node, edge | react, nextjs, vite |

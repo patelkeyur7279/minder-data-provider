@@ -672,5 +672,10 @@
     "__resetSentrySdkCache",
     "getProviderClient",
     "registerSentryProvider"
+  ],
+  "providers__authjs": [
+    "createAuthjsSessionHandler",
+    "getProviderClient",
+    "registerAuthjsProvider"
   ]
 }

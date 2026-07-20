@@ -395,22 +395,23 @@ describe('generate-catalog', () => {
       expect(Array.isArray(CERTIFIED)).toBe(true);
     });
 
-    it('should have all 6 roadmap providers in CERTIFIED', () => {
-      expect(CERTIFIED.length).toBe(6);
+    it('should have all 7 roadmap providers in CERTIFIED', () => {
+      expect(CERTIFIED.length).toBe(7);
       expect(CERTIFIED).toContain('@minder/provider-supabase');
       expect(CERTIFIED).toContain('@minder/provider-stripe');
       expect(CERTIFIED).toContain('@minder/provider-clerk');
       expect(CERTIFIED).toContain('@minder/provider-firebase');
       expect(CERTIFIED).toContain('@minder/provider-razorpay');
       expect(CERTIFIED).toContain('@minder/provider-sentry');
+      expect(CERTIFIED).toContain('@minder/provider-authjs');
     });
 
     it('should have an empty PLANNED array — the initial roadmap is complete', () => {
       expect(Array.isArray(PLANNED)).toBe(true);
       expect(PLANNED.length).toBe(0);
       // Supabase (S-03), Stripe (T-03), Clerk (D-03), Firebase (E-03),
-      // Razorpay (F-R1), and Sentry (F-S1) all graduated to CERTIFIED — none
-      // are planned any longer.
+      // Razorpay (F-R1), Sentry (F-S1), and Auth.js (Task 4.1) all graduated
+      // to CERTIFIED — none are planned any longer.
       expect(PLANNED).toEqual([]);
     });
   });

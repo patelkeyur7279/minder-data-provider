@@ -36,6 +36,7 @@ export default defineConfig({
     'providers/firebase': 'providers/firebase/src/index.ts',
     'providers/razorpay': 'providers/razorpay/src/index.ts',
     'providers/sentry': 'providers/sentry/src/index.ts',
+    'providers/authjs': 'providers/authjs/src/index.ts',
 
     // Feature modules (for tree-shaking)
     'crud/index': 'src/crud/index.ts',
@@ -93,6 +94,7 @@ export default defineConfig({
     'firebase',
     'razorpay',
     '@sentry/browser',
+    'next-auth',
     // Node.js built-ins that should not be in browser bundles
     'fs',
     'path',
