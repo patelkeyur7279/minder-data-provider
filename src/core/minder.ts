@@ -315,7 +315,13 @@ export async function minder<TData = any>(
       responseHeaders = response.headers as Record<string, string>;
     } else {
       // Super-fast native fetch path
-      let fullUrl = (config.baseURL || '') + (config.url || '');
+      // MDPD-18: absolute http(s) URLs bypass the configured baseURL, mirroring
+      // the axios path — otherwise baseURL is double-prefixed onto the absolute
+      // URL (e.g. 'http://BASEhttp://x/api').
+      const requestUrl = config.url || '';
+      let fullUrl = /^https?:\/\//i.test(requestUrl)
+        ? requestUrl
+        : (config.baseURL || '') + requestUrl;
       
       // Handle query parameters
       if (config.params) {
