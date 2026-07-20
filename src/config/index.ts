@@ -2,7 +2,7 @@ import { Logger, LogLevel as LoggerLogLevel } from '../utils/Logger.js';
 import type { MinderConfig, ApiRoute, EnvironmentOverride } from '../core/types.js';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { createConfigFromPreset, type ConfigPreset, getPresetInfo } from './presets.js';
-import { HttpMethod, StorageType, Platform, LogLevel } from '../constants/enums.js';
+import { HttpMethod, StorageType, Platform, LogLevel, CacheType } from '../constants/enums.js';
 import { PlatformDetector } from '../platform/PlatformDetector.js';
 import { MinderConfigError } from '../errors/MinderError.js';
 import { assertNoExposedSecrets } from '../security/secrets.js';
@@ -69,6 +69,16 @@ export interface UnifiedMinderConfig {
     gcTime?: number;
     refetchOnWindowFocus?: boolean;
     refetchOnReconnect?: boolean;
+    /**
+     * Time-to-live in ms. Matches the shape MDP's own presets emit
+     * ({ type, ttl, maxSize }) and the documented FEATURES.md example.
+     * Normalized to `staleTime` when `staleTime` is not given.
+     */
+    ttl?: number;
+    /** Cache strategy (memory | persistent | hybrid), matching presets. */
+    type?: CacheType;
+    /** Maximum number of cached entries, matching presets. */
+    maxSize?: number;
   };
 
   /**
@@ -460,9 +470,17 @@ function applyUserConfig(
     } else if (userConfig.cache === false) {
       baseConfig.cache = undefined;
     } else {
+      const userCache = userConfig.cache;
+      // MDPD-9: normalize the documented/preset `ttl` field to `staleTime`.
+      // `staleTime` (if explicitly provided) wins; otherwise `ttl` takes effect.
+      const normalizedStaleTime =
+        userCache.staleTime ?? userCache.ttl ?? baseConfig.cache?.staleTime;
       baseConfig.cache = {
         ...baseConfig.cache,
-        ...userConfig.cache,
+        ...userCache,
+        ...(normalizedStaleTime !== undefined
+          ? { staleTime: normalizedStaleTime }
+          : {}),
       };
     }
   }
