@@ -615,8 +615,36 @@ export function createPlugin(plugin: MinderPlugin): MinderPlugin {
 }
 
 /**
- * Helper to register multiple plugins at once
+ * Helper to register multiple plugins at once.
+ *
+ * Accepts both the variadic form `registerPlugins(a, b)` and — MDPD-30 — the
+ * array form `registerPlugins([a, b])`, which previously registered the array
+ * object itself as a (nameless) plugin. Array arguments are flattened one level,
+ * and any entry lacking a string `name` is warned and skipped rather than
+ * silently registered under an `undefined` key.
  */
-export function registerPlugins(...plugins: MinderPlugin[]): void {
-  plugins.forEach(plugin => pluginManager.register(plugin));
+export function registerPlugins(
+  ...plugins: Array<MinderPlugin | MinderPlugin[]>
+): void {
+  const flattened: unknown[] = [];
+  for (const entry of plugins) {
+    if (Array.isArray(entry)) {
+      flattened.push(...entry);
+    } else {
+      flattened.push(entry);
+    }
+  }
+
+  const logger = new Logger('PluginSystem', { level: LogLevel.WARN });
+  for (const candidate of flattened) {
+    const plugin = candidate as MinderPlugin | null | undefined;
+    if (!plugin || typeof plugin.name !== 'string' || plugin.name.length === 0) {
+      logger.warn(
+        'registerPlugins: ignored an entry with no string "name". ' +
+          'Each plugin must be an object with a unique string `name`.'
+      );
+      continue;
+    }
+    pluginManager.register(plugin);
+  }
 }
