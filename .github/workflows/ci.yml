@@ -41,7 +41,13 @@ jobs:
       
       - name: Build
         run: npm run build
-      
+
+      - name: Verify public API surface unchanged
+        run: npm run verify:api
+
+      - name: Verify consumer tree-shaking
+        run: npm run verify:treeshake
+
       - name: Upload coverage
         if: matrix.node-version == 20
         uses: codecov/codecov-action@v3
