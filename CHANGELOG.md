@@ -64,6 +64,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.2.0-beta.1] - Unreleased
 
+### Performance (bundle surgery — no API change; surface verified by API-snapshot gate)
+
+- **Context split from provider**: `useMinderContext`/`useMinderContextSafe` moved to a
+  light internal module (type-only manager imports); `MinderDataProvider` re-exports
+  them, so imports keep working from every existing path. Hooks no longer pull the
+  provider's manager-construction graph into consumer bundles.
+- **DevTools lazy-loaded**: the in-app DevTools panel now loads via `React.lazy` in its
+  own chunk — dev-only UI never ships in production bundles. The panel mounts a tick
+  later than before (dev-only, gated behind `debug.devTools`).
+- **Local-first storage lazy-loaded**: `useMinder`'s `source: 'local' | 'local-first'`
+  machinery (LocalStore + platform storage adapters) loads on first use instead of
+  being bundled for every consumer.
+- **Measured** (min+gzip, consumer-level incl. shared chunks): crud 36.7→18.9 KB,
+  cache 36.5→19.3, websocket 37.5→20.0, upload 38.6→21.0, auth 39.0→22.5;
+  `useMinder` initial load ≈13 KB with code-splitting. Previous README/docs size
+  claims came from an entry-file-only analyzer that ignored shared chunks — the new
+  `npm run measure:bundles` numbers are the honest baseline going forward.
+- **`sideEffects` stays `true`** (MDPD-17 invariant). An entry-file allowlist was
+  evaluated and rejected: with tsup code-splitting, even a full entry allowlist lets
+  Rollup/Vite consumers drop chunk-init side effects on some subpaths (reproduced on
+  `/crud`), reintroducing the MDPD-17 production crash. The consumer-treeshake guard
+  now bundles the main entry **and** `/hook` + `/crud` subpaths so any future
+  packaging change that regresses this fails CI.
+- **CI hardening**: per-subpath bundle budgets + initial-load scenario budgets
+  (`npm run budgets:check`, committed in `__snapshots__/bundle-budgets.json`) and a
+  public-API snapshot gate (`npm run verify:api`, baseline in `__snapshots__/api/`)
+  now run on every push/PR. Dev-mode React version check runs once (was twice).
+
 ### Changed (security — behavior changes)
 
 - **`AuthManager.isAuthenticated()` now fails closed.** A JWT-shaped token

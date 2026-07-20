@@ -33,13 +33,21 @@ mkdirSync(staged, { recursive: true });
 cpSync(join(root, 'dist'), join(staged, 'dist'), { recursive: true });
 cpSync(join(root, 'package.json'), join(staged, 'package.json'));
 
-// The minimal consumer: exactly what a real app's first page does.
-writeFileSync(
-  join(work, 'consumer.mjs'),
-  `import { useMinder, configureMinder } from 'minder-data-provider';\n` +
+// Consumers: what a real app's first page does — via the MAIN entry AND the
+// hook-consuming subpath entries. Every entry file must be listed in
+// package.json "sideEffects": an entry missing from that list regresses
+// MDPD-17 for its consumers only, which a main-entry-only check cannot see
+// (this exact miss shipped briefly during the 2026-07 sideEffects-allowlist
+// work and was caught by testing the /hook subpath).
+const CONSUMERS = {
+  'main entry': `import { useMinder, configureMinder } from 'minder-data-provider';\n` +
     `configureMinder({ apiUrl: 'http://localhost:9' });\n` +
     `export const hook = useMinder;\n`,
-);
+  '/hook subpath': `import { useMinder } from 'minder-data-provider/hook';\n` +
+    `export const hook = useMinder;\n`,
+  '/crud subpath': `import { useOneTouchCrud } from 'minder-data-provider/crud';\n` +
+    `export const hook = useOneTouchCrud;\n`,
+};
 
 const EXTERNALS = new Set([
   'react', 'react-dom', 'react/jsx-runtime',
@@ -48,29 +56,34 @@ const EXTERNALS = new Set([
 ]);
 
 try {
-  const bundle = await rollup({
-    input: join(work, 'consumer.mjs'),
-    plugins: [nodeResolve({ rootDir: work, browser: true, preferBuiltins: false })],
-    external: (id) => EXTERNALS.has(id) || id.startsWith('node:'),
-    onwarn: () => {},
-  });
-  const { output } = await bundle.generate({ format: 'es' });
-  await bundle.close();
-  const out = output.map((o) => ('code' in o ? o.code : '')).join('\n');
+  const summaries = [];
+  for (const [name, code] of Object.entries(CONSUMERS)) {
+    writeFileSync(join(work, 'consumer.mjs'), code);
+    const bundle = await rollup({
+      input: join(work, 'consumer.mjs'),
+      plugins: [nodeResolve({ rootDir: work, browser: true, preferBuiltins: false })],
+      external: (id) => EXTERNALS.has(id) || id.startsWith('node:'),
+      onwarn: () => {},
+    });
+    const { output } = await bundle.generate({ format: 'es' });
+    await bundle.close();
+    const out = output.map((o) => ('code' in o ? o.code : '')).join('\n');
 
-  const contextCalls = (out.match(/createContext\(/g) ?? []).length;
-  if (contextCalls === 0) {
-    console.error(
-      'verify-consumer-treeshake: FAIL — a treeshaking Rollup consumer bundle of dist/ lost all ' +
-        'createContext() calls. useMinder() will throw in production builds (MDPD-17). ' +
-        'Check package.json "sideEffects" (must be true while tsup splitting is on) — see the ' +
-        'INVARIANT note in tsup.config.ts.',
-    );
-    process.exit(1);
+    const contextCalls = (out.match(/createContext\(/g) ?? []).length;
+    if (contextCalls === 0) {
+      console.error(
+        `verify-consumer-treeshake: FAIL — a treeshaking Rollup consumer bundle of the ${name} lost ` +
+          'all createContext() calls. useMinder() will throw in production builds (MDPD-17). ' +
+          'Check package.json "sideEffects": every entry file in the exports map must be listed ' +
+          'while tsup splitting is on — see the INVARIANT note in tsup.config.ts.',
+      );
+      process.exit(1);
+    }
+    summaries.push(`${name}: ${contextCalls} createContext, ${(out.length / 1024).toFixed(0)}KB`);
   }
   console.log(
-    `verify-consumer-treeshake: OK — ${contextCalls} createContext call(s) survive a treeshaking ` +
-      `Rollup consumer bundle (${(out.length / 1024).toFixed(0)}KB unminified).`,
+    `verify-consumer-treeshake: OK — context survives a treeshaking Rollup consumer bundle ` +
+      `(${summaries.join(' · ')}).`,
   );
 } finally {
   rmSync(work, { recursive: true, force: true });
