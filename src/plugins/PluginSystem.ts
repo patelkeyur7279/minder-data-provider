@@ -41,7 +41,15 @@ export interface MinderPlugin {
   onRequest?: (request: PluginRequest) => void | Promise<void>;
   onResponse?: (response: PluginResponse) => void | Promise<void>;
   onError?: (error: PluginError) => void | Promise<void>;
+  /**
+   * Fired on a fresh hit in minder()'s opt-in `{ cache: true }` response cache
+   * (MDPD-5). Receives the cache key, cached value, and entry age.
+   */
   onCacheHit?: (cacheEntry: CacheHitEvent) => void | Promise<void>;
+  /**
+   * Fired when a `{ cache: true }` GET has no fresh entry (first call or expired)
+   * before the transport is consulted (MDPD-5).
+   */
   onCacheMiss?: (cacheKey: string) => void | Promise<void>;
   onDestroy?: () => void | Promise<void>;
 

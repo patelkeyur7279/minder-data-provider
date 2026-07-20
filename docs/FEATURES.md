@@ -332,7 +332,11 @@ Caching is backed by TanStack Query (the cache layer imports from `@tanstack/que
 - Config-level cache options via `configureMinder({ cache })`.
 - Result metadata reports `cached: boolean`.
 - The hook exposes `invalidate`, `cancel`, `isStale`, and a `cache` sub-object (stable identity).
-- `onCacheHit`/`onCacheMiss` are declared on the plugin interface but are **not currently emitted** by the cache layer (no emit sites in `src/`) — treat them as roadmap, not working observability. Use `onRequest`/`onResponse` for request-level observation today.
+- `onCacheHit`/`onCacheMiss` plugin hooks are emitted from the standalone `minder()` opt-in
+  response cache (MDPD-5): a `{ cache: true }` GET fires `onCacheMiss(key)` on the first/expired call
+  and `onCacheHit({ key, value, age, timestamp })` on a fresh hit (which skips the transport).
+  Requests without `cache: true` do not use this cache and emit neither hook; use
+  `onRequest`/`onResponse` for request-level observation.
 
 ```ts
 // Cache a GET for 30s
@@ -482,8 +486,8 @@ interface MinderPlugin {
   onRequest?(req: PluginRequest): void | Promise<void>;
   onResponse?(res: PluginResponse): void | Promise<void>;
   onError?(err: PluginError): void | Promise<void>;
-  onCacheHit?(e): void;                                     // NOT emitted yet (roadmap)
-  onCacheMiss?(key: string): void;                          // NOT emitted yet (roadmap)
+  onCacheHit?(e): void;                                     // fired by minder()'s opt-in `{ cache: true }` response cache (MDPD-5)
+  onCacheMiss?(key: string): void;                          // fired by minder()'s opt-in `{ cache: true }` response cache (MDPD-5)
   onDestroy?(): void;
 
   provideToken?(): string | null | Promise<string | null>; // supplies a token when auth has none

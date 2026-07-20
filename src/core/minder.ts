@@ -186,6 +186,8 @@ interface CacheEntry {
   result: MinderResult;
   /** Epoch ms after which this entry is stale. */
   expiresAt: number;
+  /** Epoch ms when this entry was stored (used for CacheHitEvent.age). */
+  storedAt: number;
 }
 
 /**
@@ -378,6 +380,16 @@ export async function minder<TData = any>(
           duration: Date.now() - startTime,
           cached: true,
         };
+        // MDPD-5: notify cache-observability plugins of the hit (fire-and-forget,
+        // error-isolated per plugin). Zero-overhead when no plugin is registered.
+        if (pluginManager.size > 0) {
+          void pluginManager.executeCacheHitHooks({
+            key: cacheKey,
+            value: cached.data,
+            age: Date.now() - entry.storedAt,
+            timestamp: Date.now(),
+          });
+        }
         if (options?.onSuccess) {
           options.onSuccess(cached.data);
         }
@@ -386,6 +398,11 @@ export async function minder<TData = any>(
       if (entry) {
         // Stale — drop it so the map doesn't grow unbounded with dead entries.
         responseCache.delete(cacheKey);
+      }
+      // MDPD-5: a cache-enabled GET with no fresh entry is a miss (first-ever or
+      // expired) — notify observability plugins before we touch the transport.
+      if (pluginManager.size > 0) {
+        void pluginManager.executeCacheMissHooks(cacheKey);
       }
     }
 
@@ -587,6 +604,7 @@ export async function minder<TData = any>(
       responseCache.set(cacheKey, {
         result: deepCopyResult(successResult),
         expiresAt: Date.now() + resolveCacheTtl(options?.cacheTTL),
+        storedAt: Date.now(),
       });
     }
 
