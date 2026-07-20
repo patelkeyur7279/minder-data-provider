@@ -1,5 +1,17 @@
 # Support Matrix
 
+> **2026-07-19 fix-branch update (`fix/mdpd-workspace-findings`, local only):** the MDPD demo
+> workspace (`../minder-data-provider-demo`) produced runnable example apps + locally-run test
+> suites for several rows below and drove a fix wave (see CHANGELOG Unreleased: sideEffects
+> packaging, retries, cache, plugins, config typing). Owner-authorized promotions on this branch:
+> **Next.js → Confirmed (local)** (runnable two-router example, 54 tests, runtime-verified) ·
+> **Electron → Confirmed (local)** (real headed GUI run incl. a useMinder page in the production
+> renderer) · **Vite → Confirmed (local)** (103 unit + 19 Playwright E2E against the production
+> build). "(local)" = the original Confirmed bar (runnable example + tests) is met but CI legs do
+> not exist yet because this branch is unpushed. New OPEN finding: no react-server-safe entry —
+> under Turbopack all imports must sit behind "use client" (MDPD-13). RN/Expo promotion pending
+> an iOS Simulator run in progress in the MDPD workspace.
+
 > **Rule:** "Confirmed" requires a runnable example app + tests exercising it in CI. Nothing is
 > promoted without that evidence. (Evidence rule: audits of 2026-07-18; test suite = 86 suites /
 > 1592 tests, jsdom + React 19.)
