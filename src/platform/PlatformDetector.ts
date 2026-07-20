@@ -97,11 +97,19 @@ export class PlatformDetector {
   private static isElectron(): boolean {
     const win = window as any;
     
-    // Multiple indicators for Electron
+    // Multiple indicators for Electron.
+    // MDPD-34: every navigator property must be feature-guarded. On
+    // iOS/Hermes, React Native provides `navigator` WITHOUT `userAgent`, and
+    // this method runs BEFORE isReactNative() in the detection order — a bare
+    // `navigator.userAgent.includes(...)` crashed configureMinder() at app
+    // boot on a real iPhone simulator (2/3 cold launches). Same defect class
+    // as the unguarded `document` in isNextJs() (MDPD-32).
     return !!(
       win.electron ||
       win.process?.type === 'renderer' ||
-      navigator.userAgent.includes('Electron') ||
+      (typeof navigator !== 'undefined' &&
+        typeof navigator.userAgent === 'string' &&
+        navigator.userAgent.includes('Electron')) ||
       (typeof process !== 'undefined' && process.versions?.electron)
     );
   }
@@ -131,10 +139,10 @@ export class PlatformDetector {
   private static isReactNative(): boolean {
     const win = window as any;
     
-    // Multiple indicators for React Native
+    // Multiple indicators for React Native (navigator guarded — MDPD-34)
     return !!(
       win.ReactNativeWebView ||
-      navigator.product === 'ReactNative' ||
+      (typeof navigator !== 'undefined' && navigator.product === 'ReactNative') ||
       // Check for RN-specific globals
       win.__fbBatchedBridge ||
       // Check for RN dimensions
