@@ -68,7 +68,11 @@ the `live` capability contract, and also needs one secret-requiring server call 
 an event to Acme's ingest API). That combination exercises every piece a real integration
 needs. The full, runnable, tested version is
 [`examples/custom-provider/acme-provider.ts`](../../examples/custom-provider/acme-provider.ts)
-— what follows is that same code, condensed, using the published package's import paths.
+— which builds on the [`defineProvider` factory](#35-the-defineprovider-factory-optional-recommended)
+([§3.5](#35-the-defineprovider-factory-optional-recommended)). This section first shows the
+**from-scratch primitives** the factory composes — so you understand exactly what runs — then
+§3.5 collapses them into one typed call. Both paths are fully supported; the primitives below
+are not a legacy path.
 
 **Step 1 — config + client shape.** One public field, one secret field, one dev-mode flag, a
 test DI seam real integrations omit — and the subset of the SDK client this adapter uses:
@@ -204,12 +208,69 @@ export function createAcmeIngestHandler(opts: { apiSecret: SecretRef }): MinderH
 ```
 
 That's the whole integration across the four steps above — small enough to read in one
-sitting, and every symbol in it (down to `defaultAcmeClient`, `toLiveContract`,
-`createMockLive`) is exactly what
+sitting. The building blocks (`toLiveContract`, `createMockLive`, `defaultAcmeClient`) and the
+server handler are exactly what
 [`examples/custom-provider/acme-provider.ts`](../../examples/custom-provider/acme-provider.ts)
-defines, condensed into a step-by-step walkthrough. Mount `createAcmeIngestHandler` on a
-server route, call `registerAcmeProvider` once at startup (`{ mock: true }` for the zero-SDK
-path), and `useLive('events', cb)` works exactly like it would for a certified provider.
+defines; the only difference is that the runnable example wires the register/mock/cleanup
+lifecycle through the [`defineProvider` factory](#35-the-defineprovider-factory-optional-recommended)
+(next section) instead of by hand. Mount `createAcmeIngestHandler` on a server route, call
+`registerAcmeProvider` once at startup (`{ mock: true }` for the zero-SDK path), and
+`useLive('events', cb)` works exactly like it would for a certified provider.
+
+### 3.5 The `defineProvider` factory (optional, recommended)
+
+Step 3 above hand-rolls three things every provider needs and every provider gets subtly
+wrong at least once: the mock-vs-real branch, the `getProviderClient()` escape-hatch state,
+and — the classic footgun — a cleanup that must clear the active client **only if it is still
+the current one** (a later `register()` may have replaced it; a stale `unregister()` must not
+null out the newer client). `defineProvider` is public API that folds exactly those three into
+one generically-typed call. It adds **no capability** — it calls the very same
+`registerCapabilityProvider` / `registerMockProvider` shown above, so anything you build with
+it you can still build from the primitives, and the six certified providers are deliberately
+wired by hand. It exists so you get the correct lifecycle for free:
+
+```ts
+import { defineProvider } from 'minder-data-provider';
+import type { LiveContract } from 'minder-data-provider';
+
+const acme = defineProvider<LiveContract, AcmeProviderConfig, AcmeLikeClient>({
+  providerName: 'acme-analytics',
+  capability: 'live',
+  // Called ONLY on the real path — throw here for missing required config.
+  createClient(config) {
+    if (!config.projectId) {
+      throw new Error('registerAcmeProvider: "projectId" is required (or set providers.acme.mock = true).');
+    }
+    return config.createAcmeClient?.(config.projectId) ?? defaultAcmeClient();
+  },
+  toContract: (client) => toLiveContract(client),   // raw SDK -> LiveContract
+  createMock: () => createMockLive(),               // zero SDK, zero keys, zero network
+});
+
+// The escape hatch and the register wrapper (adds Acme's config-source fallback):
+export function getProviderClient(): unknown {
+  return acme.getClient();  // raw client, or null in mock mode / when unregistered
+}
+
+export function registerAcmeProvider(config?: AcmeProviderConfig): () => void {
+  const effective = config ?? (getProviderConfig('acme')?.raw as AcmeProviderConfig) ?? {};
+  return acme.register(effective);  // unregister() also clears getClient(), correctly
+}
+```
+
+`defineProvider<TContract, TConfig, TClient>` is fully generic across the contract, your config
+type, and your raw client type. Mock selection defaults to `config.mock === true` (override via
+`isMock`); mock mode with no `createMock` throws a clear error rather than silently registering
+nothing. This is exactly what the runnable example uses, and
+[`tests/define-provider.test.ts`](../../tests/define-provider.test.ts) exercises the whole
+lifecycle — real register/init/cleanup, mock, the missing-`createMock` guard, and the
+still-current cleanup — importing **only** from the published root entry.
+
+> **Not** `defineProviderManifest`. That helper (also public — see
+> [§4](#4-optional-going-further-community-certification)) builds the static `manifest.json`
+> metadata for community *certification*, a publish-time concern. `defineProvider` is the
+> *runtime* registration shape. Different tools, different phases — a custom provider needs
+> only `defineProvider`; the manifest is for when you publish.
 
 ## 4. Optional: going further — community certification
 

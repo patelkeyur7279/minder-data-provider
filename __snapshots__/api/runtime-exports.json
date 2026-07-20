@@ -110,6 +110,7 @@
     "debounce",
     "deepMerge",
     "defaultLogger",
+    "defineProvider",
     "defineProviderManifest",
     "dehydrate",
     "describeCredential",

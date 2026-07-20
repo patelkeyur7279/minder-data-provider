@@ -16,3 +16,8 @@ export type { AuthContract, PaymentsContract, StorageContract, LiveContract } fr
 
 // Mock-mode plumbing (task F-04) — see ./mockRegistry.ts.
 export { registerMockProvider, getProviderConfig } from './mockRegistry.js';
+
+// Typed custom-provider factory (Task 4.0) — optional ergonomic sugar over the primitives
+// above. See ./defineProvider.ts and docs/providers/CUSTOM.md.
+export { defineProvider } from './defineProvider.js';
+export type { DefineProviderOptions, CustomProvider } from './defineProvider.js';

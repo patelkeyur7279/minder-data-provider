@@ -9,6 +9,22 @@ export interface AuthContract {
     } | null>;
     signOut(): Promise<void>;
 }
+export interface CustomProvider<TConfig, TClient> {
+    readonly providerName: string;
+    readonly capability: Capability;
+    register(_: TConfig): () => void;
+    getClient(): TClient | null;
+}
+export interface DefineProviderOptions<TContract, TConfig = {
+    mock?: boolean;
+}, TClient = unknown> {
+    providerName: string;
+    capability: Capability;
+    createClient(_: TConfig): TClient;
+    toContract(_: TClient, _: TConfig): TContract;
+    isMock?(_: TConfig): boolean;
+    createMock?(_: TConfig): TContract;
+}
 export interface DynamicLoaderConfig {
     preload?: ('query' | 'axios')[];
     cache?: boolean;
@@ -254,6 +270,9 @@ export declare function createTypedMinder<R extends Record<string, TypedRoute<an
 };
 export declare function debounce<T extends (...args: any[]) => any>(_: T, _: number): (..._: Parameters<T>) => void;
 export declare function deepMerge<T extends Record<string, unknown> = Record<string, unknown>>(_: T, _: Record<string, unknown>): T;
+export declare function defineProvider<TContract, TConfig = {
+    mock?: boolean;
+}, TClient = unknown>(_: DefineProviderOptions<TContract, TConfig, TClient>): CustomProvider<TConfig, TClient>;
 export declare function extractParamNames(_: string): string[];
 export declare function formatApiError(_: unknown): string;
 export declare function formatFileSize(_: number): string;
@@ -370,7 +389,7 @@ export { _ as AuthManager } from './AuthManager-HASH.js';
 export { _ as AuthState, _ as CacheRequirements, _ as CacheType, _ as ConfigPreset, _ as ConfigPresetType, _ as CrudOperation, _ as DEFAULT_VALUES, _ as DataSize, _ as DataSizeType, _ as EVENTS, _ as Environment, _ as ErrorCode, _ as HTTP_STATUS, _ as HttpMethodType, _ as LogLevel, _ as LogLevelType, _ as MIME_TYPES, _ as NetworkState, _ as NotificationType, _ as NotificationTypeType, _ as PaginationType, _ as Platform, _ as PlatformType, _ as PrefetchStrategy, _ as QueryStatus, _ as QueryStatusType, _ as RetryStrategy, _ as STORAGE_KEYS, _ as SecurityLevel, _ as SecurityLevelType, _ as SortOrder, _ as StorageType, _ as StorageTypeType, _ as TokenType, _ as UploadState, _ as WebSocketState, _ as isConfigPreset, _ as isDataSize, _ as isHttpMethod, _ as isLogLevel, _ as isPlatform, _ as isQueryStatus, _ as isSecurityLevel, _ as isStorageType } from './enums-HASH.js';
 export { _ as BatchedRequest, _ as PendingRequest, _ as ProxyConfig, _ as ProxyManager } from './ApiClient-HASH.js';
 export { _ as CacheManager } from './CacheManager-HASH.js';
-export { _ as Capability, _ as CapabilityProvider, _ as UseAuthReturn, _ as UseCheckoutReturn, _ as UseLiveReturn, _ as UseStorageReturn, _ as getCapabilityProvider, _ as getProviderConfig, _ as registerCapabilityProvider, _ as registerClientSafeProviderKeys, _ as registerMockProvider, _ as subscribeCapabilityRegistry, _ as useAuth, _ as useCheckout, _ as useLive, _ as useStorage } from './validateConfig-HASH.js';
+export { _ as CapabilityProvider, _ as UseAuthReturn, _ as UseCheckoutReturn, _ as UseLiveReturn, _ as UseStorageReturn, _ as getCapabilityProvider, _ as getProviderConfig, _ as registerCapabilityProvider, _ as registerClientSafeProviderKeys, _ as registerMockProvider, _ as subscribeCapabilityRegistry, _ as useAuth, _ as useCheckout, _ as useLive, _ as useStorage } from './validateConfig-HASH.js';
 export { _ as CredentialInput, _ as ExposedSecret, _ as SecretRef, _ as assertNoExposedSecrets, _ as describeCredential, _ as env, _ as findExposedSecrets, _ as isCredentialInput, _ as isSecretRef, _ as redactSecrets, _ as secret } from './credentials-HASH.js';
 export { CSRFToken, JWTPayload, SecureAuthConfig, SecureAuthManager, TokenRefreshConfig, TokenRefreshManager, createSecureAuthManager, createTokenRefreshManager } from './auth/index.js';
 export { _ as DebugManager } from './DebugManager-HASH.js';
@@ -394,6 +413,7 @@ export { WebSocketClient, WebSocketEventHandler, WebSocketMessage, createWebSock
 
 // #region Other
 export { ApiRoute }
+export { Capability }
 export { EnvironmentOverride }
 export { InferOutput }
 export { MinderConfig }

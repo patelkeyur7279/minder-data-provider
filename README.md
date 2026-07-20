@@ -116,8 +116,33 @@ and zero provider account, then flip `mock: false` when you're ready to go live.
 
 All six are **Certified** (10-point checklist, mock-mode example, CI-tested) and ship
 for React, Next.js, and Vite on web, Node, and edge runtimes. Full detail:
-[**Provider Catalog**](./docs/providers/CATALOG.md). Building on your own backend
-instead? See [**Building a custom provider**](./docs/providers/CUSTOM.md).
+[**Provider Catalog**](./docs/providers/CATALOG.md).
+
+#### Bring your own provider
+
+The certified list is convenience, never lock-in. **Any** SDK we don't ship an adapter for
+integrates through the same first-class, public API — no fork, no internal imports. The typed
+`defineProvider` factory wires the whole lifecycle (mock-vs-real branch, the raw-SDK escape
+hatch, and correct cleanup) so your app's `useAuth()`/`useCheckout()`/`useStorage()`/`useLive()`
+light up unchanged behind your integration:
+
+```typescript
+import { defineProvider } from "minder-data-provider";
+
+const myProvider = defineProvider({
+  providerName: "acme-analytics",
+  capability: "live",
+  createClient: (config) => makeAcmeClient(config.projectId),
+  toContract: (client) => ({ subscribe: (ch, cb) => (client.on(ch, cb), () => client.off(ch, cb)) }),
+  createMock: () => ({ subscribe: (ch, cb) => (cb({ channel: ch, mock: true }), () => {}) }),
+});
+
+myProvider.register({ projectId: "proj_1" }); // or { mock: true } for zero-key dev
+```
+
+Prefer the from-scratch primitives, or need a secret-backed server route? The full,
+runnable, tested walkthrough is [**Building a custom provider**](./docs/providers/CUSTOM.md)
+([reference code](./examples/custom-provider/acme-provider.ts)).
 
 ### Level 3 — plugins, servers, and secrets
 

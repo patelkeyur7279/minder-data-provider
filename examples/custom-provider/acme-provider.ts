@@ -1,8 +1,16 @@
 /**
  * Reference custom provider: "Acme Analytics" (fictional SDK, no real vendor).
- * docs/providers/CUSTOM.md #3's walkthrough, made runnable + tested. Mirrors
+ * docs/providers/CUSTOM.md's walkthrough, made runnable + tested. Mirrors
  * providers/clerk but stays IN-APP — same public machinery, no manifest.json,
  * no publishing.
+ *
+ * Built on the typed `defineProvider` factory (Task 4.0) — optional ergonomic
+ * sugar that formalizes the mock-vs-real branch, the raw-client escape hatch,
+ * and the "clear the active client only if it is still current" cleanup, so an
+ * author gets the correct lifecycle for free. The from-scratch equivalent (the
+ * exact same `registerCapabilityProvider` / `registerMockProvider` calls
+ * `defineProvider` makes internally) is in docs/providers/CUSTOM.md §3 — this
+ * factory adds no capability, only removes boilerplate.
  *
  * Import-path note (G-06): this file lives inside the minder-data-provider
  * repo itself, so it uses relative imports rather than the published package
@@ -18,8 +26,7 @@
  *   '../../src/server.js'      ->  'minder-data-provider/server'
  */
 import {
-  registerCapabilityProvider,
-  registerMockProvider,
+  defineProvider,
   getProviderConfig,
   registerClientSafeProviderKeys,
 } from '../../src/index.js';
@@ -28,7 +35,8 @@ import { resolveSecret, jsonResponse } from '../../src/server.js';
 import type { MinderHandler } from '../../src/server.js';
 
 // Same call every certified provider makes (see providers/*/src/index.ts):
-// exempts these public keys from the raw-secret-shaped-key check below.
+// exempts these public keys from the raw-secret-shaped-key check below. This is
+// a config-time concern kept separate from `defineProvider` (runtime registration).
 registerClientSafeProviderKeys('acme', ['projectId', 'mock']);
 
 export interface AcmeProviderConfig {
@@ -42,13 +50,6 @@ export interface AcmeProviderConfig {
 export interface AcmeLikeClient {
   on(channel: string, cb: (event: unknown) => void): void;
   off(channel: string, cb: (event: unknown) => void): void;
-}
-
-let activeClient: AcmeLikeClient | null = null;
-
-/** Raw SDK escape hatch — null in mock mode. */
-export function getProviderClient(): unknown {
-  return activeClient;
 }
 
 const toLiveContract = (client: AcmeLikeClient): LiveContract => ({
@@ -76,33 +77,39 @@ function defaultAcmeClient(): AcmeLikeClient {
   return { on: (ch, cb) => void listeners.set(ch, cb), off: (ch) => void listeners.delete(ch) };
 }
 
-/** Register the provider. `config` omitted -> reads providers.acme via getProviderConfig(). */
+/**
+ * The provider, defined once. `defineProvider` owns the lifecycle: it calls `createClient`
+ * only on the real path (so `createMock` runs with zero SDK/keys), wires the `getProviderClient`
+ * escape hatch, and returns an `unregister()` that clears `getClient()` correctly.
+ */
+const acmeProvider = defineProvider<LiveContract, AcmeProviderConfig, AcmeLikeClient>({
+  providerName: 'acme-analytics',
+  capability: 'live',
+  createClient(config) {
+    if (!config.projectId) {
+      throw new Error('registerAcmeProvider: "projectId" is required (or set providers.acme.mock = true).');
+    }
+    return config.createAcmeClient?.(config.projectId) ?? defaultAcmeClient();
+  },
+  toContract: (client) => toLiveContract(client),
+  createMock: () => createMockLive(),
+});
+
+/** Raw SDK escape hatch — null in mock mode. Delegates to the factory's tracked client. */
+export function getProviderClient(): unknown {
+  return acmeProvider.getClient();
+}
+
+/**
+ * Register the provider. `config` omitted -> reads providers.acme via getProviderConfig().
+ * Thin wrapper over `acmeProvider.register` that adds Acme's config-source fallback.
+ */
 export function registerAcmeProvider(config?: AcmeProviderConfig): () => void {
   const fromGlobal = !config ? getProviderConfig('acme') : null;
   const effective: AcmeProviderConfig =
     config ?? (fromGlobal ? { ...(fromGlobal.raw as AcmeProviderConfig), mock: fromGlobal.mock } : {});
 
-  if (effective.mock === true) {
-    activeClient = null;
-    return registerMockProvider<LiveContract>('live', createMockLive(), 'acme-analytics');
-  }
-  if (!effective.projectId) {
-    throw new Error('registerAcmeProvider: "projectId" is required (or set providers.acme.mock = true).');
-  }
-
-  const client = effective.createAcmeClient?.(effective.projectId) ?? defaultAcmeClient();
-  activeClient = client;
-
-  const unregister = registerCapabilityProvider({
-    providerName: 'acme-analytics',
-    capability: 'live',
-    implementation: toLiveContract(client),
-    getProviderClient: () => client,
-  });
-  return () => {
-    unregister();
-    if (activeClient === client) activeClient = null;
-  };
+  return acmeProvider.register(effective);
 }
 
 /** SERVER: secret-requiring ingest call. Resolves apiSecret per-request; never logs it. */

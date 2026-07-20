@@ -66,6 +66,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`defineProvider` custom-provider factory** (semver-minor, additive): a typed factory —
+  `defineProvider<TContract, TConfig, TClient>` plus the `DefineProviderOptions` and
+  `CustomProvider` types — for integrating any SDK the catalog doesn't cover, exported from
+  the root entry (`minder-data-provider`). It folds the register/mock/cleanup lifecycle every
+  provider re-implements into one call: the mock-vs-real branch, the `getProviderClient()`
+  escape hatch, and the cleanup that clears the active client **only if it is still the current
+  one** (the stale-unregister footgun, handled once, correctly). It adds no capability — it
+  composes the same public `registerCapabilityProvider` / `registerMockProvider` primitives,
+  which remain fully supported, and the six certified providers are still wired by hand.
+  Edge-safe and zero added bundle weight (imports only the existing `contracts` registry
+  primitives; `core` and every other entry are unaffected — only the root `index` surface
+  grows). The reference example
+  ([`examples/custom-provider/acme-provider.ts`](examples/custom-provider/acme-provider.ts))
+  now builds on it, and [`tests/define-provider.test.ts`](tests/define-provider.test.ts) proves
+  the whole lifecycle using only the published surface. See README "Bring your own provider"
+  and `docs/providers/CUSTOM.md` §3.5. Not to be confused with `defineProviderManifest`
+  (publish-time certification metadata) — `defineProvider` is the runtime registration shape.
 - **Response validation via Standard Schema** (semver-minor, additive): opt-in runtime
   validation of the response body against any [Standard Schema](https://standardschema.dev)
   validator (Zod ≥3.24, Valibot, ArkType, Effect Schema) — new `ApiRoute.schema` (route-def)
