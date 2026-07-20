@@ -29,7 +29,7 @@ import {
   pluginManager as globalPluginManager,
   isShortCircuitResponse,
 } from '../plugins/PluginSystem.js';
-import type { InterceptableRequest, ShortCircuitResponse } from '../plugins/PluginSystem.js';
+import type { InterceptableRequest, ShortCircuitResponse, UploadLifecycleEvent } from '../plugins/PluginSystem.js';
 import { redactSecrets } from '../security/secrets.js';
 import { applyRequestBody, buildUploadFormData, createUploadProgressHandler } from './apiClient/upload.js';
 import { normalizeApiError, sanitizeHeaders as sanitizeHeadersInternal } from './apiClient/errors.js';
@@ -937,6 +937,25 @@ export class ApiClient {
     return response.data;
   }
 
+  /**
+   * Fire the upload-lifecycle plugin hooks (fire-and-forget, error-isolated per
+   * plugin inside the manager). Zero-overhead when no plugins are registered.
+   * MDPD-6: this is what makes `onUpload` reachable through the
+   * useMinder / useMediaUpload path (both call {@link uploadFile}), not just via
+   * the standalone MediaUploadManager.
+   */
+  private emitUploadHook(
+    event: Omit<UploadLifecycleEvent, 'file' | 'timestamp'> & { file?: File }
+  ): void {
+    if (this.pluginManager.size === 0) return;
+    const { file, ...rest } = event;
+    void this.pluginManager.executeUploadHooks({
+      ...rest,
+      file: file ? { name: file.name, size: file.size, type: file.type } : undefined,
+      timestamp: Date.now(),
+    });
+  }
+
   // File upload with progress
   async uploadFile(
     routeName: string,
@@ -944,9 +963,32 @@ export class ApiClient {
     onProgress?: (progress: { loaded: number; total: number; percentage: number }) => void
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ): Promise<any> {
-    return this.request(routeName, buildUploadFormData(file), undefined, {
-      onUploadProgress: createUploadProgressHandler(onProgress),
-    });
+    // MDPD-6: emit the documented UploadLifecycleEvent phases through the plugin
+    // bus so onUpload observers work on the hook path, mirroring MediaUploadManager.
+    const uploadId = `${file?.name ?? 'upload'}-${file?.size ?? 0}-${Date.now()}`;
+    const url = this.config.routes?.[routeName]?.url ?? routeName;
+
+    this.emitUploadHook({ phase: 'start', uploadId, url, file });
+
+    try {
+      const result = await this.request(routeName, buildUploadFormData(file), undefined, {
+        onUploadProgress: createUploadProgressHandler((progress) => {
+          this.emitUploadHook({ phase: 'progress', uploadId, url, file, progress });
+          onProgress?.(progress);
+        }),
+      });
+      this.emitUploadHook({ phase: 'complete', uploadId, url, file, result });
+      return result;
+    } catch (error) {
+      this.emitUploadHook({
+        phase: 'error',
+        uploadId,
+        url,
+        file,
+        error: { message: error instanceof Error ? error.message : String(error) },
+      });
+      throw error;
+    }
   }
 
   // WebSocket connection

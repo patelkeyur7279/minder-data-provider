@@ -415,7 +415,10 @@ async function onPick(file: File) {
 }
 ```
 
-Plugins observe the media pipeline via `onUpload(event)`:
+Plugins observe the media pipeline via `onUpload(event)` — fired both by the standalone
+`MediaUploadManager` (`minder-data-provider/upload`) and by the `useMinder` / `useMediaUpload` hook
+path (they route through `ApiClient.uploadFile`, MDPD-6). The hook path emits
+`start` → `progress` (per tick) → `complete`, or `error` if the transport fails:
 
 ```ts
 {
@@ -492,7 +495,7 @@ interface MinderPlugin {
 
   provideToken?(): string | null | Promise<string | null>; // supplies a token when auth has none
   onAuthRefresh?(tokens): void;          // fired on token rotation
-  onUpload?(event: UploadLifecycleEvent): void;             // emitted only via MediaUploadManager (`minder-data-provider/upload`), NOT the useMinder/useMediaUpload path
+  onUpload?(event: UploadLifecycleEvent): void;             // emitted via BOTH MediaUploadManager (`/upload`) AND the useMinder/useMediaUpload path (ApiClient.uploadFile) — MDPD-6
   onSync?(event: SyncLifecycleEvent): void;                 // emitted only by the internal platform OfflineManager (not yet publicly exported)
   onConnectivityChange?(online: boolean): void;             // same internal OfflineManager — not reachable via the public API yet
 }
