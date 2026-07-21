@@ -28,7 +28,9 @@ jobs:
           node-version: ${{ matrix.node-version }}
       
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm install -g npm@11.6.2  # match packageManager — npm10/11 disagree on optional-wasm lockfile subtrees
+          npm ci
       
       - name: Run linting
         run: npm run lint:check
@@ -74,7 +76,9 @@ jobs:
           node-version: 22
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm install -g npm@11.6.2  # match packageManager — npm10/11 disagree on optional-wasm lockfile subtrees
+          npm ci
 
       - name: Swap in React 18
         run: npm install --no-save react@18 react-dom@18
@@ -96,7 +100,9 @@ jobs:
           node-version: 22
 
       - name: Install and build library
-        run: npm ci && npm run build
+        run: |
+          npm install -g npm@11.6.2  # match packageManager — npm10/11 disagree on optional-wasm lockfile subtrees
+          npm ci && npm run build
 
       - name: Pack library tarball
         run: npm pack
@@ -127,7 +133,9 @@ jobs:
           node-version: 22
 
       - name: Install and build library
-        run: npm ci && npm run build
+        run: |
+          npm install -g npm@11.6.2  # match packageManager — npm10/11 disagree on optional-wasm lockfile subtrees
+          npm ci && npm run build
 
       - name: Pack library tarball
         run: npm pack
@@ -167,7 +175,9 @@ jobs:
           node-version: 22
 
       - name: Install and build library
-        run: npm ci && npm run build
+        run: |
+          npm install -g npm@11.6.2  # match packageManager — npm10/11 disagree on optional-wasm lockfile subtrees
+          npm ci && npm run build
 
       - name: Pack library tarball
         run: npm pack

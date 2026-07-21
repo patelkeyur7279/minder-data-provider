@@ -23,7 +23,9 @@ jobs:
           node-version: '20'
 
       - name: Install library dependencies
-        run: npm ci
+        run: |
+          npm install -g npm@11.6.2  # match packageManager — npm10/11 disagree on optional-wasm lockfile subtrees
+          npm ci
 
       - name: Build library
         run: npm run build

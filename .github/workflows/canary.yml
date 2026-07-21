@@ -25,7 +25,9 @@ jobs:
           node-version: 22
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm install -g npm@11.6.2  # match packageManager — npm10/11 disagree on optional-wasm lockfile subtrees
+          npm ci
 
       - name: Swap in React @next
         # --legacy-peer-deps: react@next resolves to a canary build (e.g.
@@ -69,7 +71,9 @@ jobs:
           node-version: 22
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm install -g npm@11.6.2  # match packageManager — npm10/11 disagree on optional-wasm lockfile subtrees
+          npm ci
 
       - name: Resolve best pre-release dist-tag
         id: resolve
@@ -119,7 +123,9 @@ jobs:
           node-version: 22
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm install -g npm@11.6.2  # match packageManager — npm10/11 disagree on optional-wasm lockfile subtrees
+          npm ci
 
       - name: Swap in latest stable provider peer SDKs
         run: |
