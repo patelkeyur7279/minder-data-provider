@@ -107,9 +107,12 @@ jobs:
       - name: Pack library tarball
         run: npm pack
 
-      - name: Install and build example
+      - name: Install and build example (tarball override)
         working-directory: examples/nextjs-app-router
-        run: npm install && npm run build
+        run: |
+          npm install
+          npm install ../../minder-data-provider-2.2.0-beta.0.tgz
+          npm run build
 
       - name: Runtime smoke (page + API route)
         working-directory: examples/nextjs-app-router

@@ -8,7 +8,7 @@
     "start": "wrangler dev --port 8787"
   },
   "dependencies": {
-    "minder-data-provider": "file:../../minder-data-provider-2.2.0-beta.0.tgz"
+    "minder-data-provider": "file:../.."
   },
   "devDependencies": {
     "wrangler": "^4"

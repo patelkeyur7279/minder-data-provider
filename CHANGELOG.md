@@ -330,6 +330,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance (bundle surgery — no API change; surface verified by API-snapshot gate)
 
+- **Internal: bundle budgets now measure TRUE eager bytes** — the budget script
+  bundles each subpath with code-splitting enabled and counts only the entry chunk
+  plus its statically-imported closure; dynamically-imported chunks (SSE transport,
+  validation, local-first storage, DevTools) are no longer billed to entries that
+  load them lazily. Budgets re-tightened to honest eager sizes across the board
+  (e.g. core 42.2 KB, hook 37.4 KB measured; websocket/cache/crud each ~6 KB lower
+  than previously reported). `verify:treeshake` remains the authority on lazy
+  exclusion.
 - **Internal: lazy singleton registry (v3.0 prep, Spec 1.3c Phases A/B)** — every
   cross-entry singleton (React context, provider registry, global config, plugin
   manager, auth manager) now lives behind lazy getters in a `globalThis`-keyed store
