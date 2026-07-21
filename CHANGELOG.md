@@ -62,7 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **useMediaUpload**: progress resets per upload; overlapping uploads serialized;
   upload lifecycle terminal phase unified to `'success'`.
 
-## [2.2.0-beta.1] - Unreleased
+## [2.2.0-beta.1] - 2026-07-21
 
 > **At a glance.** Everything in this release is additive (semver-minor) — no
 > breaking changes; those queue behind 3.0.0 above. Three new certified auth
