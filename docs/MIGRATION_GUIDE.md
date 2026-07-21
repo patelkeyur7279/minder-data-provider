@@ -401,6 +401,27 @@ gone) — this is a bugfix (fewer wasted retries, deterministic instead of accid
 behavior you were relying on. See [FEATURES.md § Conflict resolution](FEATURES.md#conflict-resolution-spec-51)
 for the full API.
 
+### 9. Managed SSE transport (Spec 5.2)
+
+**Additive — no action required.** `MinderConfig.realtime` is widened from `boolean` to
+`boolean | RealtimeConfig`; the boolean form (`realtime: true`) is preserved verbatim and keeps
+meaning exactly what it did before (enable realtime via WebSocket). WebSocket stays the default
+transport for every existing app.
+
+Opt into the new managed, auto-reconnecting SSE transport by passing an object instead:
+
+```ts
+// Before (WebSocket, unchanged):
+configureMinder({ /* ... */, realtime: true, websocket: { url } });
+
+// New, opt-in (SSE):
+configureMinder({ /* ... */, realtime: { transport: 'sse', url } });
+```
+
+New additive exports: `RealtimeConfig`, `RealtimeTransport`, and `SseTransport` (via the new
+`minder-data-provider/realtime` subpath). No existing export was removed or changed. See
+[FEATURES.md § Managed SSE transport](FEATURES.md#managed-sse-transport-spec-52) for the full API.
+
 ---
 
 ## v1.x → v2.0

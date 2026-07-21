@@ -45,6 +45,7 @@ export default defineConfig({
     'auth/index': 'src/auth/index.ts',
     'cache/index': 'src/cache/index.ts',
     'websocket/index': 'src/websocket/index.ts',
+    'realtime/index': 'src/core/realtime/index.ts',
     'upload/index': 'src/upload/index.ts',
     'debug/index': 'src/debug/index.ts',
     'config/index': 'src/config/index.ts',

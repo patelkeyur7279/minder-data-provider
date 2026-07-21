@@ -28,6 +28,7 @@ export declare function createSSRConfig(_: MinderConfig, _?: SSROptions): {
     cors?: CorsConfig;
     corsHelper?: CorsHelperConfig;
     websocket?: WebSocketConfig;
+    realtime?: boolean | RealtimeConfig;
     performance?: PerformanceConfig;
     debug?: DebugConfig;
     security?: SecurityConfig;

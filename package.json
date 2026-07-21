@@ -92,6 +92,11 @@
       "import": "./dist/websocket/index.mjs",
       "require": "./dist/websocket/index.js"
     },
+    "./realtime": {
+      "types": "./dist/realtime/index.d.ts",
+      "import": "./dist/realtime/index.mjs",
+      "require": "./dist/realtime/index.js"
+    },
     "./upload": {
       "types": "./dist/upload/index.d.ts",
       "import": "./dist/upload/index.mjs",

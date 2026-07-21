@@ -36,6 +36,14 @@ import { setGlobalMinderConfig } from "./globalConfig.js";
 import { getMinderContext } from "./MinderContext.js";
 import { checkReactVersionAtRuntime } from "../utils/version-validator.js";
 import type { MinderContextValue } from "./MinderContext.js";
+import {
+  selectRealtimeTransport,
+  resolveWebSocketConfigForSelection,
+  resolveRealtimeConfig,
+} from "./realtime/selectTransport.js";
+import { LazySseTransport } from "./realtime/LazySseTransport.js";
+import type { RealtimeTransport } from "./realtime/types.js";
+import { getActiveOfflineManager } from "../platform/offline/registry.js";
 
 // Context accessors live in MinderContext.tsx (kept import-light so hooks
 // don't pull the provider's manager construction into consumer bundles).
@@ -195,15 +203,49 @@ export function MinderDataProvider({
       finalConfig.debug?.cacheLogs
     );
 
-    // Create WebSocket Manager if configured
-    const websocketManager = finalConfig.websocket
-      ? new WebSocketManager(
-        finalConfig.websocket,
+    // Create the realtime transport (WS or SSE) per the precedence table in
+    // Spec 5.2 §3.1. WS stays the default and this branch is byte-for-byte the
+    // same construction as before; SSE is lazy-loaded (§4.8) so non-SSE apps
+    // never pull SseTransport's module into their bundle (P4).
+    const realtimeTransportKind = selectRealtimeTransport(finalConfig);
+    let websocketManager: WebSocketManager | undefined;
+    let realtimeManager: RealtimeTransport | undefined;
+
+    if (realtimeTransportKind === "ws") {
+      websocketManager = new WebSocketManager(
+        resolveWebSocketConfigForSelection(finalConfig),
         authManager,
         debugManager,
         finalConfig.debug?.websocketLogs
-      )
-      : undefined;
+      );
+      realtimeManager = websocketManager;
+    } else if (realtimeTransportKind === "sse") {
+      realtimeManager = new LazySseTransport(
+        () => import("./realtime/SseTransport.js"),
+        resolveRealtimeConfig(finalConfig),
+        authManager,
+        debugManager,
+        finalConfig.debug?.websocketLogs ?? false
+      );
+    }
+
+    // Resync-nudge glue (5.1 §5 / 5.2 §4.6): a conventional 'resync' event
+    // triggers an offline sync + full query invalidation; 'invalidate' targets
+    // specific keys. Reads the neutral offline registry (not ApiClient) so
+    // there's no realtime -> offline import cycle; the transport itself carries
+    // no offline import (works for either WS or SSE, whichever was selected).
+    if (realtimeManager) {
+      realtimeManager.subscribe("resync", () => {
+        void getActiveOfflineManager()?.sync();
+        void queryClientRef.invalidateQueries();
+      });
+      realtimeManager.subscribe("invalidate", (payload) => {
+        const keys = (payload as { keys?: unknown } | undefined)?.keys;
+        void queryClientRef.invalidateQueries(
+          keys ? { queryKey: keys as readonly unknown[] } : undefined
+        );
+      });
+    }
 
     let ReactQueryDevtools:
       | ComponentType<{ initialIsOpen?: boolean }>
@@ -224,6 +266,7 @@ export function MinderDataProvider({
       authManager,
       cacheManager,
       websocketManager,
+      realtimeManager,
       environmentManager,
       proxyManager,
       debugManager,

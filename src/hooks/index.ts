@@ -353,14 +353,19 @@ export function useMediaUpload(
 
 // WebSocket hook
 export function useWebSocket() {
-  const { websocketManager } = useMinderContext();
+  const { websocketManager, realtimeManager } = useMinderContext();
+  // `realtimeManager` is set for both transports (aliases the WS manager under
+  // transport:'ws', holds the lazy SseTransport under transport:'sse'); the
+  // `websocketManager` fallback keeps WS behavior identical while making SSE
+  // reachable. `send` is optional (SSE is receive-only, §4.7).
+  const rt = realtimeManager ?? websocketManager;
 
   return {
-    connect: () => websocketManager?.connect(),
-    disconnect: () => websocketManager?.disconnect(),
-    send: (type: string, data: any) => websocketManager?.send(type, data),
-    subscribe: (event: string, callback: (data: any) => void) => websocketManager?.subscribe(event, callback),
-    isConnected: () => websocketManager?.isConnected() || false,
+    connect: () => rt?.connect(),
+    disconnect: () => rt?.disconnect(),
+    send: (type: string, data: any) => rt?.send?.(type, data),
+    subscribe: (event: string, callback: (data: any) => void) => rt?.subscribe(event, callback),
+    isConnected: () => rt?.isConnected() || false,
   };
 }
 

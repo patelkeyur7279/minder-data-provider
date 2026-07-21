@@ -10,6 +10,11 @@ import {
 import type { OfflineConfig } from '../platform/offline/types.js';
 import type { MinderPlugin } from '../plugins/PluginSystem.js';
 import type { StandardSchemaV1 } from '../types/standard-schema.js';
+import type { RealtimeConfig } from './realtime/types.js';
+
+// Re-export so `RealtimeConfig` is reachable wherever `MinderConfig` is (main
+// entry, `./core`, `./realtime`) without a second import (Spec 5.2 §3.1).
+export type { RealtimeConfig, RealtimeReconnectConfig } from './realtime/types.js';
 
 // Re-export the vendored Standard Schema interface so route-def / per-call
 // response validation (`ApiRoute.schema`, `MinderOptions.schema` — Task 3.1)
@@ -43,6 +48,14 @@ export interface MinderConfig {
   /** CORS helper configuration - Does NOT bypass CORS, only adds helpful client-side features */
   corsHelper?: CorsHelperConfig;
   websocket?: WebSocketConfig;
+  /**
+   * Enable realtime updates. The legacy boolean form (`true`) is preserved
+   * verbatim — it keeps meaning "enable realtime via WebSocket" exactly as
+   * before (`FeatureLoader`'s `!!config.realtime` legacy read is unaffected).
+   * The object form additionally selects the transport (`'ws' | 'sse'`) — see
+   * `RealtimeConfig` (Spec 5.2). WS remains the default; SSE is opt-in.
+   */
+  realtime?: boolean | RealtimeConfig;
   performance?: PerformanceConfig;
   debug?: DebugConfig;
   security?: SecurityConfig;

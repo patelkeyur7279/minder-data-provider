@@ -1182,25 +1182,36 @@ export function useMinder<TData = any>(
   // WEBSOCKET (integrated from useWebSocket)
   // =========================================================================
 
-  const websocketMethods = useMemo(() => ({
-    connect: () => {
-      context?.websocketManager?.connect();
-    },
-    disconnect: () => {
-      context?.websocketManager?.disconnect();
-    },
-    send: (type: string, data: any) => {
-      context?.websocketManager?.send(type, data);
-    },
-    subscribe: (event: string, callback: (data: any) => void) => {
-      // ✅ Return unsubscribe function for cleanup
-      const unsubscribe = context?.websocketManager?.subscribe(event, callback);
-      return unsubscribe || (() => { }); // Return noop if no manager
-    },
-    isConnected: () => {
-      return context?.websocketManager?.isConnected() || false;
-    },
-  }), [context]);
+  const websocketMethods = useMemo(() => {
+    // Route through the transport-neutral `realtimeManager`, which is set for
+    // BOTH transports (it aliases `websocketManager` under transport:'ws' and
+    // holds the lazy SseTransport under transport:'sse'). Falling back to
+    // `websocketManager` keeps this identical for WS while making SSE reachable
+    // from the public hook — otherwise apps on transport:'sse' can never open
+    // the stream and the resync glue never fires (5.2 §4.6/§4.8).
+    const rt = context?.realtimeManager ?? context?.websocketManager;
+    return {
+      connect: () => {
+        rt?.connect();
+      },
+      disconnect: () => {
+        rt?.disconnect();
+      },
+      send: (type: string, data: any) => {
+        // SSE is receive-only: `send` is optional on RealtimeTransport and
+        // no-ops with a warn on SseTransport (§4.7).
+        rt?.send?.(type, data);
+      },
+      subscribe: (event: string, callback: (data: any) => void) => {
+        // ✅ Return unsubscribe function for cleanup
+        const unsubscribe = rt?.subscribe(event, callback);
+        return unsubscribe || (() => { }); // Return noop if no manager
+      },
+      isConnected: () => {
+        return rt?.isConnected() || false;
+      },
+    };
+  }, [context]);
 
   // =========================================================================
   // FILE UPLOAD (integrated from useMediaUpload)

@@ -23,6 +23,7 @@ import type { WebSocketManager } from "./WebSocketManager.js";
 import type { EnvironmentManager } from "./EnvironmentManager.js";
 import type { ProxyManager } from "./ProxyManager.js";
 import type { DebugManager } from "../debug/DebugManager.js";
+import type { RealtimeTransport } from "./realtime/types.js";
 import { minderStore } from "./singletons.js";
 
 export interface MinderContextValue {
@@ -31,6 +32,13 @@ export interface MinderContextValue {
   authManager: AuthManager;
   cacheManager: CacheManager;
   websocketManager?: WebSocketManager;
+  /**
+   * Transport-neutral realtime handle (Spec 5.2). Points at the same object as
+   * `websocketManager` when WS is selected; holds the (lazily-loaded) SSE
+   * transport when `realtime.transport === 'sse'`; `undefined` when no
+   * realtime transport is configured.
+   */
+  realtimeManager?: RealtimeTransport;
   environmentManager?: EnvironmentManager;
   proxyManager?: ProxyManager;
   debugManager?: DebugManager;

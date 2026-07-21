@@ -370,9 +370,12 @@ websocket.subscribe?.('messages');
   auto-reconnect with exponential backoff (`reconnect` on by default; `heartbeat` in ms). Use it
   when you want a socket independent of a provider/route.
 - **`useWebSocket()`** and **`useMinder().websocket`** — thin hooks that delegate to the provider's
-  WebSocket manager (require `MinderDataProvider`). They add no lifecycle side effects of their own,
-  so there is nothing to leak across mount/unmount; `subscribe(event, cb)` returns the manager's
-  unsubscribe function for your own cleanup.
+  selected realtime transport (require `MinderDataProvider`). They route through the transport-neutral
+  realtime manager, so the **same `connect()`/`disconnect()`/`subscribe()` surface drives either
+  transport** — WebSocket by default, or the reconnecting SSE transport when `realtime: { transport:
+  'sse' }` is configured (`send()` is a receive-only no-op under SSE). They add no lifecycle side
+  effects of their own, so there is nothing to leak across mount/unmount; `subscribe(event, cb)`
+  returns the manager's unsubscribe function for your own cleanup.
 
 The core `WebSocketManager` (`src/core/WebSocketManager.ts`) is **internal plumbing** for
 `MinderDataProvider` (platform-adapter selection, auth-token URL) — not a public API. All three
@@ -389,6 +392,68 @@ const stream = minder.stream('/events', {
 ```
 
 > Reliability: `StreamClient` routes async errors to `onError` (they no longer escape unhandled).
+
+`minder.stream()` above is a **one-shot** primitive — no reconnect, no resume. For a long-lived,
+managed subscription see the next section.
+
+### Managed SSE transport (Spec 5.2)
+
+An opt-in, **managed, auto-reconnecting** SSE transport, selectable alongside WebSocket behind the
+same subscribe surface:
+
+```ts
+configureMinder({
+  apiUrl: env('NEXT_PUBLIC_API_URL'),
+  routes: { /* ... */ },
+  realtime: { transport: 'sse', url: env('NEXT_PUBLIC_SSE_URL') },
+});
+```
+
+```tsx
+const { realtimeManager } = useMinderContext();
+useEffect(() => {
+  realtimeManager?.connect();
+  const unsub = realtimeManager?.subscribe('order.updated', (data) => console.log(data));
+  return () => { unsub?.(); realtimeManager?.disconnect(); };
+}, [realtimeManager]);
+```
+
+- **`realtime: boolean | RealtimeConfig`.** The legacy `realtime: true` boolean is unchanged
+  (WebSocket, as before). The new object form additionally selects the transport:
+  `{ transport: 'ws' | 'sse', url?, auth?, reconnect?, stallTimeoutMs?, lastEventIdHeader?,
+  withCredentials? }`. **`transport` defaults to `'ws'`** — SSE is opt-in only. This top-level
+  config field is a different concern from the per-hook `useMinder(route, { realtime: true })`
+  option above (subscription intent for that hook call, unaffected).
+- **`RealtimeTransport` surface** — `connect()`, `disconnect()`, `subscribe(event, cb)`,
+  `isConnected()`, optional `send()` — is identical for both transports. `MinderDataProvider`
+  exposes the selected one as `realtimeManager` in context (alongside the existing
+  `websocketManager`, which stays populated only for the WS branch).
+- **Header-based auth, never a URL token.** Built on `fetch` + `ReadableStream` (not native
+  `EventSource`, which cannot set headers) specifically so the token goes in
+  `Authorization: Bearer <token>`, re-read from your auth manager on every (re)connect.
+- **Reconnect:** jittered exponential backoff (`reconnect.baseDelayMs`/`maxDelayMs`, default
+  1s/30s, full jitter), honoring a server `Retry-After` header when present. Gives up after
+  `reconnect.maxAttempts` (default 10; `0` = unlimited) and emits a terminal
+  `subscribe('__closed', ({ reason, attempts }) => ...)` event.
+- **Resume via `Last-Event-ID`:** the first connect sends none; a reconnect after a received
+  `id:` line resends it so the server can replay missed events.
+- **Stall detection:** no bytes (including comment keepalives) within `stallTimeoutMs` (default
+  45s) aborts and reconnects.
+- **Permanent vs. transient:** `401`/`403`/`404`/`204` stop for good (no further fetch, terminal
+  `__closed`); `429`/`5xx`/network drops/stalls reconnect.
+- **Resync convention:** a `'resync'` event triggers `offlineManager.sync()` +
+  `queryClient.invalidateQueries()`; an `'invalidate'` event invalidates `{ keys }`. Both are
+  server-side conventions your backend opts into, not hard contracts.
+- **`send()` is a no-op** (with a `console.warn`) — SSE is receive-only. Use REST/mutations for
+  client→server, or `transport: 'ws'` for bidirectional.
+- **Bundle cost:** `minder-data-provider/realtime` is an independently-importable subpath;
+  `SseTransport` is lazy-loaded (dynamic `import()`) inside `MinderDataProvider`, so apps that
+  don't set `transport: 'sse'` pay zero bytes for it.
+- **Platform support (honest, see SUPPORT_MATRIX.md):** **Experimental** on web, Node ≥20, and
+  edge runtimes (all have `fetch` + `ReadableStream`). **Unknown** on React Native/Expo — RN's
+  `fetch` does not implement a readable response body; the transport detects this and fails fast
+  with a clear error rather than hanging silently. A `react-native-fetch-api`-style polyfill is
+  the app's choice to add, not a dependency of this package.
 
 ---
 

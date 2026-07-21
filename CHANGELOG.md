@@ -279,9 +279,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   safety, and alias parity, plus real-`ApiClient`-wiring integration tests; full existing offline
   suite stays green.
   See README/docs/FEATURES.md "Offline" § Conflict resolution.
+- **Managed SSE transport** (semver-minor, additive; Spec 5.2) — promotes the one-shot
+  `StreamClient` primitive into a managed, auto-reconnecting Server-Sent Events transport
+  (`SseTransport`), selectable alongside WebSocket behind the same subscribe/emit surface via
+  `realtime: { transport: 'sse' | 'ws', url, auth, reconnect, stallTimeoutMs, lastEventIdHeader,
+  withCredentials }`. `MinderConfig.realtime` is widened `boolean → boolean | RealtimeConfig`
+  (superset — the boolean form is preserved verbatim; `FeatureLoader`'s `!!config.realtime` legacy
+  read is unaffected) and **`'ws'` stays the default** — SSE is opt-in only. New
+  `minder-data-provider/realtime` subpath exports `SseTransport`, `RealtimeTransport`,
+  `RealtimeConfig`; `MinderDataProvider` exposes the selected transport as `realtimeManager` in
+  context alongside the existing `websocketManager`. Built on `fetch` + `ReadableStream`
+  (deliberately not native `EventSource`, which cannot set headers) so auth is
+  **header-based** (`Authorization: Bearer <token>`, re-read on every reconnect) — never a
+  URL query param (P2). Reconnect is jittered exponential backoff (full jitter, 1s base / 30s cap
+  by default), honors a server `Retry-After` header (seconds or HTTP-date form) when present, and
+  gives up after `reconnect.maxAttempts` (default 10; `0` = unlimited) with a terminal
+  `subscribe('__closed', ({ reason, attempts }) => ...)` event. Resumes via `Last-Event-ID` — the
+  first connect sends none; a reconnect after a received `id:` line does. HTTP responses are
+  classified permanent (`401`/`403`/`404`/`204` — stop, no further fetch) vs. transient
+  (`429`/`5xx`/network drop/stall — reconnect). Stall detection: no bytes (including comment
+  keepalives) within `stallTimeoutMs` (default 45s) aborts and reconnects. A `'resync'` event
+  triggers `offlineManager.sync()` + `queryClient.invalidateQueries()`; an `'invalidate'` event
+  invalidates `{ keys }` — both are documented server conventions, wired in
+  `MinderDataProvider` (the transport itself carries no offline import). `send()` is a
+  receive-only no-op (warns) — use REST/mutations or `transport: 'ws'` for client→server.
+  Extracted a new shared, buffered `SseParser` (`src/core/realtime/SseParser.ts`) that fixes a
+  real cross-chunk data-loss bug in the old inline parser (an event whose `data:` line spanned two
+  network reads was corrupted — no residual buffering); `StreamClient`/`minder.stream()` now reuse
+  it, with unchanged public behavior for well-formed streams and the corruption bug fixed as a
+  strict improvement. **P4:** `minder-data-provider/realtime` is independently importable and
+  `SseTransport` is lazy-loaded (dynamic `import()`) inside `MinderDataProvider` — non-SSE apps
+  pay zero eager bytes; `core`/main bundle budgets unaffected (`verify:treeshake` green across all
+  30 export entries × 2 engines). **P5:** Web-standard APIs only (`fetch`, `ReadableStream`,
+  `TextDecoder`, `AbortController`, `setTimeout`) — RN/Expo's `fetch` has no readable response
+  body, so the transport runtime-detects that and fails fast with a clear error instead of a
+  silently-dead stream. **P7 (Support Matrix):** ships at **Experimental** for web/Node ≥20/edge
+  runtimes (unit-tested on branch, no runnable example app yet) and **Unknown** for RN/Expo (no
+  claim of support without a polyfilled device run). See
+  [FEATURES.md § Managed SSE transport](docs/FEATURES.md#managed-sse-transport-spec-52) and
+  [MIGRATION_GUIDE.md § 9](docs/MIGRATION_GUIDE.md#9-managed-sse-transport-spec-52) (additive, no
+  action required).
 
 ### Performance (bundle surgery — no API change; surface verified by API-snapshot gate)
 
+- **Internal: lazy singleton registry (v3.0 prep, Spec 1.3c Phases A/B)** — every
+  cross-entry singleton (React context, provider registry, global config, plugin
+  manager, auth manager) now lives behind lazy getters in a `globalThis`-keyed store
+  (`Symbol.for`), eliminating import-time side effects and making singleton identity
+  bundler-independent (insurance against chunk-duplication forks). Public API
+  bit-identical (snapshot-gated). The consumer tree-shake guard grew from 3 to 29
+  entries and now runs on two bundler engines (Rollup + Rspack); it currently proves
+  `sideEffects: false` must WAIT for the 3.0 enum reshape — the flip lands there,
+  reclaiming ~2 KB/entry. Cost today: ~+0.16 KB/entry indirection (budgets
+  re-baselined transparently: core 52.6, hook 47.8, config 22.1).
 - **Context split from provider**: `useMinderContext`/`useMinderContextSafe` moved to a
   light internal module (type-only manager imports); `MinderDataProvider` re-exports
   them, so imports keep working from every existing path. Hooks no longer pull the

@@ -1,5 +1,6 @@
 import { MinderError } from '../errors/MinderError.js';
 import type { MinderConfig } from './types.js';
+import type { SseParser as SseParserType } from './realtime/SseParser.js';
 
 export interface StreamOptions {
   headers?: Record<string, string>;
@@ -53,6 +54,23 @@ export class StreamClient {
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      // Shared, buffered parser (Spec 5.2 §4.1) — fixes a real cross-chunk data
+      // loss bug the previous inline `chunk.split('\n')` loop had (G1): a `data:`
+      // line split across two network reads used to be treated as two complete
+      // (and corrupt) lines. `SseParser` buffers the trailing partial line
+      // across `feed()` calls instead. Behavior is otherwise unchanged: only
+      // `data:` lines are surfaced to `onMessage`, and `[DONE]` still ends the
+      // stream via `onDone()`.
+      //
+      // Loaded via dynamic import (not a static top-level import) so this
+      // rarely-used one-shot API doesn't pull the parser into `minder()`'s
+      // eager bundle for every consumer (P4) — `minder()`/StreamClient are
+      // statically imported by nearly every entry point, so a static import
+      // here would have made ALL of them pay for SSE parsing even when
+      // `.stream()` is never called. `SseTransport`/`./realtime` share the
+      // exact same underlying chunk once code-split.
+      const { SseParser } = await import('./realtime/SseParser.js');
+      const parser: SseParserType = new SseParser();
 
       const processStream = async () => {
         try {
@@ -64,15 +82,17 @@ export class StreamClient {
             }
 
             const chunk = decoder.decode(value, { stream: true });
-            const lines = chunk.split('\n');
-            
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                const data = line.slice(6).trim();
-                if (data === '[DONE]') {
-                  options.onDone?.();
-                  return; // End the stream
-                }
+            const frames = parser.feed(chunk);
+
+            let streamEnded = false;
+            for (const frame of frames) {
+              if (frame.type === 'done') {
+                options.onDone?.();
+                streamEnded = true;
+                break;
+              }
+              if (frame.type === 'event') {
+                const data = frame.data.trim();
                 if (data) {
                   try {
                     options.onMessage?.(JSON.parse(data));
@@ -81,6 +101,9 @@ export class StreamClient {
                   }
                 }
               }
+            }
+            if (streamEnded) {
+              return; // End the stream ([DONE] sentinel)
             }
           }
         } catch (error: any) {
