@@ -1,266 +1,311 @@
 /**
  * Centralized Enums and Constants for Minder Data Provider
- * 
+ *
  * This file contains all static values that should be type-safe and immutable.
- * Using enums provides better IDE autocomplete, prevents typos, and makes refactoring easier.
+ *
+ * SHAPE (v3.0 — Spec 1.3c §3/B1): each "enum" is an `as const` object plus a
+ * same-named union type, NOT a TypeScript `enum`. Value access (`HttpMethod.GET`)
+ * and type usage (`x: HttpMethod`) are unchanged and the runtime value STRINGS
+ * are byte-identical, so `===` comparisons and serialized values are unaffected.
+ * The reason for the shape: a non-const `enum` compiles to a runtime IIFE that
+ * *mutates* an object at import time — a module side effect that a consumer
+ * bundler treating the package as `sideEffects: false` will DROP from a shared
+ * chunk, leaving `HttpMethod` undefined in production (dabd92d / MDPD-17). An
+ * `as const` object has no import-time mutation: it is a plain value retained by
+ * reference wherever it is used, so `sideEffects: false` is honest. This is a
+ * BREAKING change only for TS consumers doing `enum`-only operations (e.g. using
+ * the name in a `namespace`-merge or relying on nominal `enum` identity); see
+ * docs/MIGRATION_GUIDE.md (v2.x → v3.0).
  */
+
+/* eslint-disable @typescript-eslint/no-redeclare --
+ * Every `export const X = {...} as const` is deliberately paired with an
+ * `export type X = (typeof X)[keyof typeof X]` value+type merge — the whole point
+ * of this file's shape (it replaces `enum`, which is itself a value+type merge).
+ * The same idiom is suppressed inline at src/index.ts (HttpMethod re-export). A
+ * file-level disable is correct here because the merge is intentional for ALL 24
+ * declarations, not an accidental redeclaration. */
 
 // ============================================
 // HTTP Methods
 // ============================================
-export enum HttpMethod {
-  GET = 'GET',
-  POST = 'POST',
-  PUT = 'PUT',
-  PATCH = 'PATCH',
-  DELETE = 'DELETE',
-  HEAD = 'HEAD',
-  OPTIONS = 'OPTIONS',
-}
+export const HttpMethod = {
+  GET: 'GET',
+  POST: 'POST',
+  PUT: 'PUT',
+  PATCH: 'PATCH',
+  DELETE: 'DELETE',
+  HEAD: 'HEAD',
+  OPTIONS: 'OPTIONS',
+} as const;
+export type HttpMethod = (typeof HttpMethod)[keyof typeof HttpMethod];
 
 // ============================================
 // Query/Request Status
 // ============================================
-export enum QueryStatus {
-  IDLE = 'idle',
-  LOADING = 'loading',
-  PENDING = 'pending',
-  SUCCESS = 'success',
-  ERROR = 'error',
-}
+export const QueryStatus = {
+  IDLE: 'idle',
+  LOADING: 'loading',
+  PENDING: 'pending',
+  SUCCESS: 'success',
+  ERROR: 'error',
+} as const;
+export type QueryStatus = (typeof QueryStatus)[keyof typeof QueryStatus];
 
 // ============================================
 // Log Levels
 // ============================================
-export enum LogLevel {
-  NONE = 'none',
-  ERROR = 'error',
-  WARN = 'warn',
-  WARNING = 'warning',
-  INFO = 'info',
-  DEBUG = 'debug',
-}
+export const LogLevel = {
+  NONE: 'none',
+  ERROR: 'error',
+  WARN: 'warn',
+  WARNING: 'warning',
+  INFO: 'info',
+  DEBUG: 'debug',
+} as const;
+export type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
 
 // ============================================
 // Storage Types
 // ============================================
-export enum StorageType {
-  MEMORY = 'memory',
-  LOCAL_STORAGE = 'localStorage',
-  SESSION_STORAGE = 'sessionStorage',
-  COOKIE = 'cookie',
-  INDEXED_DB = 'indexedDB',
-  ASYNC_STORAGE = 'AsyncStorage',
-  SECURE_STORE = 'SecureStore',
-  ELECTRON_STORE = 'electron-store',
-}
+export const StorageType = {
+  MEMORY: 'memory',
+  LOCAL_STORAGE: 'localStorage',
+  SESSION_STORAGE: 'sessionStorage',
+  COOKIE: 'cookie',
+  INDEXED_DB: 'indexedDB',
+  ASYNC_STORAGE: 'AsyncStorage',
+  SECURE_STORE: 'SecureStore',
+  ELECTRON_STORE: 'electron-store',
+} as const;
+export type StorageType = (typeof StorageType)[keyof typeof StorageType];
 
 // ============================================
 // Cache Types
 // ============================================
-export enum CacheType {
-  MEMORY = 'memory',
-  PERSISTENT = 'persistent',
-  HYBRID = 'hybrid',
-}
+export const CacheType = {
+  MEMORY: 'memory',
+  PERSISTENT: 'persistent',
+  HYBRID: 'hybrid',
+} as const;
+export type CacheType = (typeof CacheType)[keyof typeof CacheType];
 
-export enum CacheRequirements {
-  BASIC = 'basic',
-  ADVANCED = 'advanced',
-}
+export const CacheRequirements = {
+  BASIC: 'basic',
+  ADVANCED: 'advanced',
+} as const;
+export type CacheRequirements = (typeof CacheRequirements)[keyof typeof CacheRequirements];
 
 // ============================================
 // Security Levels
 // ============================================
-export enum SecurityLevel {
-  NONE = 'none',
-  BASIC = 'basic',
-  STANDARD = 'standard',
-  STRICT = 'strict',
-}
+export const SecurityLevel = {
+  NONE: 'none',
+  BASIC: 'basic',
+  STANDARD: 'standard',
+  STRICT: 'strict',
+} as const;
+export type SecurityLevel = (typeof SecurityLevel)[keyof typeof SecurityLevel];
 
 // ============================================
 // Platform Types
 // ============================================
-export enum Platform {
-  WEB = 'web',
-  NEXT_JS = 'nextjs',
-  REACT_NATIVE = 'react-native',
-  NATIVE = 'native',
-  EXPO = 'expo',
-  ELECTRON = 'electron',
-  NODE = 'node',
-}
+export const Platform = {
+  WEB: 'web',
+  NEXT_JS: 'nextjs',
+  REACT_NATIVE: 'react-native',
+  NATIVE: 'native',
+  EXPO: 'expo',
+  ELECTRON: 'electron',
+  NODE: 'node',
+} as const;
+export type Platform = (typeof Platform)[keyof typeof Platform];
 
 // ============================================
 // Data Size Estimates
 // ============================================
-export enum DataSize {
-  SMALL = 'small',
-  MEDIUM = 'medium',
-  LARGE = 'large',
-}
+export const DataSize = {
+  SMALL: 'small',
+  MEDIUM: 'medium',
+  LARGE: 'large',
+} as const;
+export type DataSize = (typeof DataSize)[keyof typeof DataSize];
 
 // ============================================
 // Prefetch Strategies
 // ============================================
-export enum PrefetchStrategy {
-  NONE = 'none',
-  ESSENTIAL = 'essential',
-  AGGRESSIVE = 'aggressive',
-}
+export const PrefetchStrategy = {
+  NONE: 'none',
+  ESSENTIAL: 'essential',
+  AGGRESSIVE: 'aggressive',
+} as const;
+export type PrefetchStrategy = (typeof PrefetchStrategy)[keyof typeof PrefetchStrategy];
 
 // ============================================
 // Config Presets
 // ============================================
-export enum ConfigPreset {
-  MINIMAL = 'minimal',
-  STANDARD = 'standard',
-  ADVANCED = 'advanced',
-  ENTERPRISE = 'enterprise',
-  BALANCED = 'balanced',
-  COMPREHENSIVE = 'comprehensive',
-}
+export const ConfigPreset = {
+  MINIMAL: 'minimal',
+  STANDARD: 'standard',
+  ADVANCED: 'advanced',
+  ENTERPRISE: 'enterprise',
+  BALANCED: 'balanced',
+  COMPREHENSIVE: 'comprehensive',
+} as const;
+export type ConfigPreset = (typeof ConfigPreset)[keyof typeof ConfigPreset];
 
 // ============================================
 // Notification/Alert Types
 // ============================================
-export enum NotificationType {
-  SUCCESS = 'success',
-  ERROR = 'error',
-  WARNING = 'warning',
-  INFO = 'info',
-}
+export const NotificationType = {
+  SUCCESS: 'success',
+  ERROR: 'error',
+  WARNING: 'warning',
+  INFO: 'info',
+} as const;
+export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType];
 
 // ============================================
 // Debug Log Types
 // ============================================
-export enum DebugLogType {
-  API = 'api',
-  CACHE = 'cache',
-  AUTH = 'auth',
-  WEBSOCKET = 'websocket',
-  UPLOAD = 'upload',
-}
+export const DebugLogType = {
+  API: 'api',
+  CACHE: 'cache',
+  AUTH: 'auth',
+  WEBSOCKET: 'websocket',
+  UPLOAD: 'upload',
+} as const;
+export type DebugLogType = (typeof DebugLogType)[keyof typeof DebugLogType];
 
 // ============================================
 // Environment Types
 // ============================================
-export enum Environment {
-  DEVELOPMENT = 'development',
-  STAGING = 'staging',
-  PRODUCTION = 'production',
-  TEST = 'test',
-}
+export const Environment = {
+  DEVELOPMENT: 'development',
+  STAGING: 'staging',
+  PRODUCTION: 'production',
+  TEST: 'test',
+} as const;
+export type Environment = (typeof Environment)[keyof typeof Environment];
 
 // ============================================
 // WebSocket States
 // ============================================
-export enum WebSocketState {
-  CONNECTING = 'connecting',
-  OPEN = 'open',
-  CLOSING = 'closing',
-  CLOSED = 'closed',
-}
+export const WebSocketState = {
+  CONNECTING: 'connecting',
+  OPEN: 'open',
+  CLOSING: 'closing',
+  CLOSED: 'closed',
+} as const;
+export type WebSocketState = (typeof WebSocketState)[keyof typeof WebSocketState];
 
 // ============================================
 // Upload States
 // ============================================
-export enum UploadState {
-  IDLE = 'idle',
-  PREPARING = 'preparing',
-  UPLOADING = 'uploading',
-  PROCESSING = 'processing',
-  COMPLETED = 'completed',
-  FAILED = 'failed',
-  CANCELLED = 'cancelled',
-}
+export const UploadState = {
+  IDLE: 'idle',
+  PREPARING: 'preparing',
+  UPLOADING: 'uploading',
+  PROCESSING: 'processing',
+  COMPLETED: 'completed',
+  FAILED: 'failed',
+  CANCELLED: 'cancelled',
+} as const;
+export type UploadState = (typeof UploadState)[keyof typeof UploadState];
 
 // ============================================
 // Network States
 // ============================================
-export enum NetworkState {
-  ONLINE = 'online',
-  OFFLINE = 'offline',
-  SLOW = 'slow',
-  UNKNOWN = 'unknown',
-}
+export const NetworkState = {
+  ONLINE: 'online',
+  OFFLINE: 'offline',
+  SLOW: 'slow',
+  UNKNOWN: 'unknown',
+} as const;
+export type NetworkState = (typeof NetworkState)[keyof typeof NetworkState];
 
 // ============================================
 // CRUD Operations
 // ============================================
-export enum CrudOperation {
-  CREATE = 'create',
-  READ = 'read',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LIST = 'list',
-  SEARCH = 'search',
-}
+export const CrudOperation = {
+  CREATE: 'create',
+  READ: 'read',
+  UPDATE: 'update',
+  DELETE: 'delete',
+  LIST: 'list',
+  SEARCH: 'search',
+} as const;
+export type CrudOperation = (typeof CrudOperation)[keyof typeof CrudOperation];
 
 // ============================================
 // Authentication States
 // ============================================
-export enum AuthState {
-  UNAUTHENTICATED = 'unauthenticated',
-  AUTHENTICATING = 'authenticating',
-  AUTHENTICATED = 'authenticated',
-  ERROR = 'error',
-  REFRESHING = 'refreshing',
-}
+export const AuthState = {
+  UNAUTHENTICATED: 'unauthenticated',
+  AUTHENTICATING: 'authenticating',
+  AUTHENTICATED: 'authenticated',
+  ERROR: 'error',
+  REFRESHING: 'refreshing',
+} as const;
+export type AuthState = (typeof AuthState)[keyof typeof AuthState];
 
 // ============================================
 // Token Types
 // ============================================
-export enum TokenType {
-  ACCESS = 'access',
-  REFRESH = 'refresh',
-  ID = 'id',
-  CSRF = 'csrf',
-}
+export const TokenType = {
+  ACCESS: 'access',
+  REFRESH: 'refresh',
+  ID: 'id',
+  CSRF: 'csrf',
+} as const;
+export type TokenType = (typeof TokenType)[keyof typeof TokenType];
 
 // ============================================
 // Retry Strategies
 // ============================================
-export enum RetryStrategy {
-  NONE = 'none',
-  LINEAR = 'linear',
-  EXPONENTIAL = 'exponential',
-  CUSTOM = 'custom',
-}
+export const RetryStrategy = {
+  NONE: 'none',
+  LINEAR: 'linear',
+  EXPONENTIAL: 'exponential',
+  CUSTOM: 'custom',
+} as const;
+export type RetryStrategy = (typeof RetryStrategy)[keyof typeof RetryStrategy];
 
 // ============================================
 // Sort Orders
 // ============================================
-export enum SortOrder {
-  ASC = 'asc',
-  DESC = 'desc',
-  ASCENDING = 'ascending',
-  DESCENDING = 'descending',
-}
+export const SortOrder = {
+  ASC: 'asc',
+  DESC: 'desc',
+  ASCENDING: 'ascending',
+  DESCENDING: 'descending',
+} as const;
+export type SortOrder = (typeof SortOrder)[keyof typeof SortOrder];
 
 // ============================================
 // Pagination Types
 // ============================================
-export enum PaginationType {
-  OFFSET = 'offset',
-  CURSOR = 'cursor',
-  PAGE = 'page',
-}
+export const PaginationType = {
+  OFFSET: 'offset',
+  CURSOR: 'cursor',
+  PAGE: 'page',
+} as const;
+export type PaginationType = (typeof PaginationType)[keyof typeof PaginationType];
 
 // ============================================
 // Error Codes
 // ============================================
-export enum ErrorCode {
-  NETWORK_ERROR = 'NETWORK_ERROR',
-  TIMEOUT = 'TIMEOUT',
-  UNAUTHORIZED = 'UNAUTHORIZED',
-  FORBIDDEN = 'FORBIDDEN',
-  NOT_FOUND = 'NOT_FOUND',
-  VALIDATION_ERROR = 'VALIDATION_ERROR',
-  SERVER_ERROR = 'SERVER_ERROR',
-  UNKNOWN = 'UNKNOWN',
-}
+export const ErrorCode = {
+  NETWORK_ERROR: 'NETWORK_ERROR',
+  TIMEOUT: 'TIMEOUT',
+  UNAUTHORIZED: 'UNAUTHORIZED',
+  FORBIDDEN: 'FORBIDDEN',
+  NOT_FOUND: 'NOT_FOUND',
+  VALIDATION_ERROR: 'VALIDATION_ERROR',
+  SERVER_ERROR: 'SERVER_ERROR',
+  UNKNOWN: 'UNKNOWN',
+} as const;
+export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
 
 // ============================================
 // Constants (non-enum values)
@@ -341,11 +386,11 @@ export const EVENTS = {
 /**
  * Generic type guard factory function
  * Creates type guard functions for any enum to avoid code duplication
- * 
- * @template T - The enum type
- * @param enumObj - The enum object
- * @returns Type guard function that checks if value is valid enum member
- * 
+ *
+ * @template T - The `as const` object type
+ * @param enumObj - The `as const` object
+ * @returns Type guard function that checks if value is valid member
+ *
  * @example
  * const isHttpMethod = createEnumTypeGuard(HttpMethod);
  * isHttpMethod('GET') // true
@@ -360,63 +405,63 @@ function createEnumTypeGuard<T extends Record<string, string>>(
 }
 
 /**
- * Type guard for HttpMethod enum
+ * Type guard for HttpMethod
  * @param value - String value to check
  * @returns True if value is a valid HttpMethod
  */
 export const isHttpMethod = createEnumTypeGuard(HttpMethod);
 
 /**
- * Type guard for QueryStatus enum
+ * Type guard for QueryStatus
  * @param value - String value to check
  * @returns True if value is a valid QueryStatus
  */
 export const isQueryStatus = createEnumTypeGuard(QueryStatus);
 
 /**
- * Type guard for LogLevel enum
+ * Type guard for LogLevel
  * @param value - String value to check
  * @returns True if value is a valid LogLevel
  */
 export const isLogLevel = createEnumTypeGuard(LogLevel);
 
 /**
- * Type guard for Platform enum
+ * Type guard for Platform
  * @param value - String value to check
  * @returns True if value is a valid Platform
  */
 export const isPlatform = createEnumTypeGuard(Platform);
 
 /**
- * Type guard for StorageType enum
+ * Type guard for StorageType
  * @param value - String value to check
  * @returns True if value is a valid StorageType
  */
 export const isStorageType = createEnumTypeGuard(StorageType);
 
 /**
- * Type guard for SecurityLevel enum
+ * Type guard for SecurityLevel
  * @param value - String value to check
  * @returns True if value is a valid SecurityLevel
  */
 export const isSecurityLevel = createEnumTypeGuard(SecurityLevel);
 
 /**
- * Type guard for DebugLogType enum
+ * Type guard for DebugLogType
  * @param value - String value to check
  * @returns True if value is a valid DebugLogType
  */
 export const isDebugLogType = createEnumTypeGuard(DebugLogType);
 
 /**
- * Type guard for DataSize enum
+ * Type guard for DataSize
  * @param value - String value to check
  * @returns True if value is a valid DataSize
  */
 export const isDataSize = createEnumTypeGuard(DataSize);
 
 /**
- * Type guard for ConfigPreset enum
+ * Type guard for ConfigPreset
  * @param value - String value to check
  * @returns True if value is a valid ConfigPreset
  */

@@ -4,7 +4,7 @@
  */
 
 import { Logger, LogLevel } from '../utils/Logger.js';
-import { minderStore } from '../core/singletons.js';
+import { minderStore, lazySingletonProxy } from '../core/singletons.js';
 
 /**
  * Capabilities a plugin can declare (used for introspection + lazy loading).
@@ -490,7 +490,11 @@ function pluginManagerSingleton(): PluginManager {
   const s = minderStore();
   return (s.pluginManager ??= new PluginManager());
 }
-export const pluginManager = /*#__PURE__*/ pluginManagerSingleton();
+// A4 (Spec 1.3c): lazy accessor-backed binding. The store slot guarantees ONE
+// bundler-independent instance; the proxy keeps the `pluginManager.method()` API
+// identical (P1 — zero public-API change) while deferring `new PluginManager()`
+// from import time to first property access.
+export const pluginManager = /*#__PURE__*/ lazySingletonProxy(pluginManagerSingleton);
 
 /**
  * Built-in Plugins
