@@ -18,6 +18,9 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
       - name: Sync Wiki
         run: |
           echo "Configuring git..."
@@ -34,11 +37,12 @@ jobs:
           find . -maxdepth 1 ! -name '.git' ! -name '.' ! -name '..' -exec rm -rf {} +
           cd ..
 
-          # Copy docs content to wiki repo, then drop internal-only dirs so
-          # process/planning notes are never published to the public wiki.
-          # Curated user docs (guides, providers) sync; internal ones do not.
-          cp -a docs/. wiki_repo/
-          rm -rf wiki_repo/development wiki_repo/superpowers
+          # Build the numbered documentation book from docs/ (single source of
+          # truth, never modified) straight into the cleaned wiki repo. The
+          # generator itself fails the job (non-zero exit) if a docs/*.md file
+          # is uncurated (neither listed nor excluded in wiki-book.json) or if
+          # any generated link is broken — see scripts/build-wiki.mjs.
+          node scripts/build-wiki.mjs --out wiki_repo
 
           echo "Committing changes..."
           cd wiki_repo
