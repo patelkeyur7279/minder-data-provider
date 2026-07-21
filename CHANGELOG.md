@@ -76,11 +76,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `minder doctor --bundle` prices your app's imports. Offline mutations that
 > hit a 409/412 on replay now resolve deterministically instead of
 > retry-then-silent-drop, via a new pluggable `conflictResolution`/
-> `resolveConflict` on `OfflineConfig`. The rest is evidence work: bundle
-> budgets and benchmarks now run in CI, and Vite, the Next.js App Router,
-> React 18, and Cloudflare Workers each moved to **Confirmed** in the Support
-> Matrix on the strength of runnable examples exercised in CI rather than
-> inference.
+> `resolveConflict` on `OfflineConfig`. Realtime gains an opt-in **managed SSE
+> transport** (`realtime: { transport: 'sse' }`, new
+> `minder-data-provider/realtime` subpath) — server-push over plain HTTP with
+> header-based auth, Last-Event-ID resume, and Retry-After-aware reconnect —
+> while WebSocket remains the default; the shared parser rewrite also fixes a
+> chunk-boundary data-loss bug in `StreamClient`. Under the hood, every
+> cross-entry singleton moved behind a lazy `globalThis` registry (3.0 prep;
+> public API snapshot-verified unchanged). The rest is evidence work: bundle
+> budgets and benchmarks now run in CI, the consumer tree-shake guard now
+> exercises all 29 entries on two bundler engines, and Vite, the Next.js App
+> Router, React 18, and Cloudflare Workers each moved to **Confirmed** in the
+> Support Matrix on the strength of runnable examples exercised in CI rather
+> than inference.
 
 ### Added
 
