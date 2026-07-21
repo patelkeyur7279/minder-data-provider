@@ -13,6 +13,7 @@
  */
 
 import { parseJWT as decodeJwt, isTokenUsable } from '../utils/jwt.js';
+import { minderStore } from '../core/singletons.js';
 
 interface GlobalAuthConfig {
   storage?: 'localStorage' | 'sessionStorage' | 'memory';
@@ -162,8 +163,21 @@ class GlobalAuthManager {
   }
 }
 
-// Global singleton instance
-export const globalAuthManager = new GlobalAuthManager();
+// Global singleton instance (A5). Backed by the process-wide singleton store
+// (../core/singletons.ts) so its identity survives however a consumer's bundler
+// splits/duplicates chunks — one auth manager, one restored-token state, shared
+// across every entry. `/*#__PURE__*/` lets a tree-shaker drop it for consumers
+// that never reference it. This is a pure identity/laziness move: the security
+// invariants (P2 — client auth = presence + expiry only, corrupt JWTs fail
+// closed via isTokenExpired/isTokenUsable) live in the class methods and are
+// untouched; construction (incl. restoreFromStorage) still runs eagerly at
+// import wherever the binding is retained, so restore timing is unchanged. The
+// exported value binding and its `GlobalAuthManager` type are unchanged (P1).
+function globalAuthManagerSingleton(): GlobalAuthManager {
+  const s = minderStore();
+  return (s.globalAuthManager ??= new GlobalAuthManager());
+}
+export const globalAuthManager = /*#__PURE__*/ globalAuthManagerSingleton();
 
 // Export class for custom instances
 export { GlobalAuthManager };

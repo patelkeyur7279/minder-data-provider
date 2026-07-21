@@ -16,15 +16,11 @@
 // ============================================================================
 // VERSION VALIDATION - Auto-check for conflicts
 // ============================================================================
-import { checkReactVersionAtRuntime } from './utils/version-validator.js';
-
-// Auto-check in development mode. This is the library's ONLY import-time side
-// effect — package.json `sideEffects` lists exactly the built entry files that
-// contain it. Everything else must stay side-effect-free at module scope so
-// consumer bundlers can drop unused modules.
-if (process.env.NODE_ENV === 'development') {
-  checkReactVersionAtRuntime();
-}
+// The dev-only React-version conflict check no longer runs at import here
+// (Spec 1.3c §2.4). A top-level call is a module side effect that blocks an
+// honest `sideEffects: false`; it now runs on MinderDataProvider's first mount
+// (still dev-only, still guarded by `hasChecked` so it fires exactly once). The
+// standalone (no-provider) minder() path never triggered the React check anyway.
 
 // ============================================================================
 // CORE EXPORTS - NEW ARCHITECTURE

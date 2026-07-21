@@ -14,7 +14,7 @@ import { OfflineManager } from '../platform/offline/OfflineManager.js';
 import type { OfflineConfig } from '../platform/offline/types.js';
 import { setActiveOfflineManager, getActiveOfflineManager } from '../platform/offline/registry.js';
 
-const logger = new Logger('Config', { level: LoggerLogLevel.DEBUG });
+const logger = /*#__PURE__*/ new Logger('Config', { level: LoggerLogLevel.DEBUG });
 
 // MDPD-6: re-export the platform OfflineManager from the public config/root entry
 // so `onSync` / `onConnectivityChange` are reachable (it emits through the shared

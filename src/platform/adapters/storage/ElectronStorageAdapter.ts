@@ -8,7 +8,7 @@
 import { Logger, LogLevel } from '../../../utils/Logger.js';
 import { BaseStorageAdapter, StorageAdapterOptions } from './StorageAdapter.js';
 
-const logger = new Logger('ElectronStorageAdapter', { level: LogLevel.ERROR });
+const logger = /*#__PURE__*/ new Logger('ElectronStorageAdapter', { level: LogLevel.ERROR });
 
 export class ElectronStorageAdapter extends BaseStorageAdapter {
   private store: any;

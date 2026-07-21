@@ -1,7 +1,7 @@
 import { Logger, LogLevel } from '../utils/Logger.js';
 import type { MinderConfig } from '../core/types.js';
 
-const logger = new Logger('SSR', { level: LogLevel.WARN });
+const logger = /*#__PURE__*/ new Logger('SSR', { level: LogLevel.WARN });
 
 export interface SSROptions {
   prefetch?: string[];

@@ -2,7 +2,7 @@ import { Logger, LogLevel } from '../utils/Logger.js';
 import type { ApiRoute } from './types.js';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const logger = new Logger('ProxyManager', { level: LogLevel.DEBUG });
+const logger = /*#__PURE__*/ new Logger('ProxyManager', { level: LogLevel.DEBUG });
 
 export interface ProxyConfig {
   enabled: boolean;

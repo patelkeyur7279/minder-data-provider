@@ -6,7 +6,7 @@ import { DebugLogType } from '../constants/enums.js';
 import { createWebSocketAdapterWithFallback } from '../platform/adapters/websocket/WebSocketAdapterFactory.js';
 import type { WebSocketAdapter } from '../platform/adapters/websocket/WebSocketAdapter.js';
 
-const logger = new Logger('WebSocketManager', { level: LogLevel.WARN });
+const logger = /*#__PURE__*/ new Logger('WebSocketManager', { level: LogLevel.WARN });
 
 export class WebSocketManager {
   private config: WebSocketConfig;

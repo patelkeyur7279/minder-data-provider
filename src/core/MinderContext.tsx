@@ -11,7 +11,7 @@
  * consumer bundle. Do not add value imports of managers here.
  */
 import { createContext, useContext } from "react";
-import type { ComponentType } from "react";
+import type { ComponentType, Context } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 import type { DehydratedState } from "@tanstack/react-query";
 
@@ -23,6 +23,7 @@ import type { WebSocketManager } from "./WebSocketManager.js";
 import type { EnvironmentManager } from "./EnvironmentManager.js";
 import type { ProxyManager } from "./ProxyManager.js";
 import type { DebugManager } from "../debug/DebugManager.js";
+import { minderStore } from "./singletons.js";
 
 export interface MinderContextValue {
   config: MinderConfig;
@@ -38,10 +39,22 @@ export interface MinderContextValue {
   dehydratedState?: DehydratedState;
 }
 
-export const MinderContext = createContext<MinderContextValue | null>(null);
+/**
+ * The one React context, created lazily on first *call* (at render) and stored
+ * on a `globalThis` slot for bundler-independent identity — see ./singletons.ts.
+ * There is deliberately NO top-level `createContext(...)`: a module-scope call is
+ * the exact import-time side effect a `sideEffects: false` consumer bundler would
+ * wrongly drop (MDPD-17), and duplicating the chunk would fork the context.
+ * `createContext` lives in THIS `"use client"` module (not the edge-safe
+ * singletons store) so the store stays React-value-free.
+ */
+export function getMinderContext(): Context<MinderContextValue | null> {
+  const s = minderStore();
+  return (s.context ??= createContext<MinderContextValue | null>(null));
+}
 
 export function useMinderContext(): MinderContextValue {
-  const context = useContext(MinderContext);
+  const context = useContext(getMinderContext());
   if (!context) {
     throw new Error("useMinderContext must be used within MinderDataProvider");
   }
@@ -55,5 +68,5 @@ export function useMinderContext(): MinderContextValue {
  * Hooks and breaks hook-order guarantees if the accessor ever grows).
  */
 export function useMinderContextSafe(): MinderContextValue | null {
-  return useContext(MinderContext);
+  return useContext(getMinderContext());
 }

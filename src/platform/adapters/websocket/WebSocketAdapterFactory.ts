@@ -13,7 +13,7 @@ import { WebWebSocketAdapter } from './WebWebSocketAdapter.js';
 import { NativeWebSocketAdapter } from './NativeWebSocketAdapter.js';
 import { MinderPlatformError, MinderWebSocketError } from '../../../errors/index.js';
 
-const logger = new Logger('WebSocketAdapterFactory', { level: LogLevel.WARN });
+const logger = /*#__PURE__*/ new Logger('WebSocketAdapterFactory', { level: LogLevel.WARN });
 
 /**
  * Create WebSocket adapter based on current platform

@@ -71,6 +71,10 @@ export function createCorsMiddleware(options: CorsMiddlewareOptions = {}) {
  * (Before 2.2.0-beta.1 this default was `origin: '*'` + `credentials: true` —
  * the unsafe combination the library's own CorsManager flags.)
  */
-const corsMiddleware = createCorsMiddleware();
+// `/*#__PURE__*/` (A3): the factory call is a module-scope side effect that a
+// `sideEffects: false` consumer would otherwise be forced to retain. Annotated
+// pure so bundlers may drop this default export when unused (the server entry
+// re-exports the `createCorsMiddleware` factory, not this pre-built instance).
+const corsMiddleware = /*#__PURE__*/ createCorsMiddleware();
 
 export default corsMiddleware;

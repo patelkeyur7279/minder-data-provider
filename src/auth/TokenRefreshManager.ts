@@ -11,7 +11,7 @@ import { Logger, LogLevel } from '../utils/Logger.js';
 import { parseJWT as decodeJwt } from '../utils/jwt.js';
 import { MinderAuthError } from '../errors/index.js';
 
-const logger = new Logger('TokenRefreshManager', { 
+const logger = /*#__PURE__*/ new Logger('TokenRefreshManager', { 
   level: LogLevel.WARN
 });
 

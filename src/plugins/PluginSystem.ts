@@ -4,6 +4,7 @@
  */
 
 import { Logger, LogLevel } from '../utils/Logger.js';
+import { minderStore } from '../core/singletons.js';
 
 /**
  * Capabilities a plugin can declare (used for introspection + lazy loading).
@@ -479,8 +480,17 @@ export class PluginManager {
   }
 }
 
-// Global plugin manager instance
-export const pluginManager = new PluginManager();
+// Global plugin manager instance (A4). Backed by the process-wide singleton
+// store (../core/singletons.ts) so its identity survives however a consumer's
+// bundler splits/duplicates chunks — every entry sees the SAME manager, so a
+// plugin registered once is observed everywhere. The `/*#__PURE__*/` annotation
+// lets a tree-shaker drop it entirely for consumers that never reference it.
+// The exported value binding and its `PluginManager` type are unchanged (P1).
+function pluginManagerSingleton(): PluginManager {
+  const s = minderStore();
+  return (s.pluginManager ??= new PluginManager());
+}
+export const pluginManager = /*#__PURE__*/ pluginManagerSingleton();
 
 /**
  * Built-in Plugins
@@ -490,7 +500,7 @@ export const pluginManager = new PluginManager();
  * Logger Plugin - Logs all requests and responses (only in debug mode)
  */
 export const createLoggerPlugin = (debug: boolean = false): MinderPlugin => {
-  const logger = new Logger('LoggerPlugin', {
+  const logger = /*#__PURE__*/ new Logger('LoggerPlugin', {
     level: debug ? LogLevel.DEBUG : LogLevel.WARN
   });
   
@@ -606,7 +616,7 @@ export class CacheWarmupPlugin implements MinderPlugin {
  * Performance Monitor Plugin - Track performance metrics
  */
 export const createPerformanceMonitorPlugin = (debug: boolean = false): MinderPlugin => {
-  const logger = new Logger('PerformanceMonitorPlugin', {
+  const logger = /*#__PURE__*/ new Logger('PerformanceMonitorPlugin', {
     level: debug ? LogLevel.DEBUG : LogLevel.WARN
   });
   
@@ -649,7 +659,7 @@ export function registerPlugins(
 ): void {
   const flattened: unknown[] = (plugins as unknown[]).flat(Infinity);
 
-  const logger = new Logger('PluginSystem', { level: LogLevel.WARN });
+  const logger = /*#__PURE__*/ new Logger('PluginSystem', { level: LogLevel.WARN });
   for (const candidate of flattened) {
     const plugin = candidate as MinderPlugin | null | undefined;
     if (!plugin || typeof plugin.name !== 'string' || plugin.name.length === 0) {

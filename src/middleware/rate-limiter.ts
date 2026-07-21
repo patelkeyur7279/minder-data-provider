@@ -9,7 +9,7 @@
 
 import { Logger, LogLevel } from '../utils/Logger.js';
 
-const logger = new Logger('RateLimiter', { level: LogLevel.DEBUG });
+const logger = /*#__PURE__*/ new Logger('RateLimiter', { level: LogLevel.DEBUG });
 
 /**
  * Rate limit configuration

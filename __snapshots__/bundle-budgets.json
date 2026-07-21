@@ -12,7 +12,7 @@
   "upload": 23.1,
   "websocket": 22.1,
   "cache": 21.2,
-  "config": 21,
+  "config": 21.5,
   "crud": 20.9,
   "providers/stripe": 7.9,
   "providers/razorpay": 7.8,

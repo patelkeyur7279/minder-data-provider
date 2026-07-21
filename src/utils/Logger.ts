@@ -343,4 +343,4 @@ export function createLogger(context: string, config?: LoggerConfig): Logger {
 /**
  * Default logger instance for general use
  */
-export const defaultLogger = new Logger('Minder');
+export const defaultLogger = /*#__PURE__*/ new Logger('Minder');

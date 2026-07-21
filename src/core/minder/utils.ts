@@ -5,7 +5,7 @@
 import type { HttpMethod, MinderError, MinderOptions } from './types.js';
 import { Logger, LogLevel } from '../../utils/Logger.js';
 
-const logger = new Logger('Minder', { level: LogLevel.WARN });
+const logger = /*#__PURE__*/ new Logger('Minder', { level: LogLevel.WARN });
 
 // ============================================================================
 // SMART OPERATION DETECTION

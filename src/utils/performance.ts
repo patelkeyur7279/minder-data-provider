@@ -13,7 +13,7 @@ import type { BatchedRequest, PendingRequest, PerformanceMetrics } from './perfo
 // Re-export types for backward compatibility
 export type { BatchedRequest, PendingRequest, PerformanceMetrics } from './performance/types.js';
 
-const logger = new Logger('Performance', { level: LogLevel.WARN });
+const logger = /*#__PURE__*/ new Logger('Performance', { level: LogLevel.WARN });
 
 // ============================================================================
 // REQUEST BATCHING

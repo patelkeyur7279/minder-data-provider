@@ -10,7 +10,7 @@ import { WebNetworkAdapter } from './WebNetworkAdapter.js';
 import { NativeNetworkAdapter } from './NativeNetworkAdapter.js';
 import { MinderPlatformError } from '../../../errors/index.js';
 
-const logger = new Logger('NetworkAdapterFactory', { level: LogLevel.WARN });
+const logger = /*#__PURE__*/ new Logger('NetworkAdapterFactory', { level: LogLevel.WARN });
 
 export class NetworkAdapterFactory {
   /**

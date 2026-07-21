@@ -73,20 +73,34 @@ export type {
 // ============================================================================
 
 import { getGlobalMinderConfig } from './globalConfig.js';
+import { minderStore } from './singletons.js';
 
-// minder()'s URL-resolution bag (baseURL/headers/timeout/token). Together with
-// the routes-aware registry (getGlobalMinderConfig) this forms ONE unified
+// minder()'s URL-resolution bag (baseURL/headers/timeout/token) — C3. Together
+// with the routes-aware registry (getGlobalMinderConfig) this forms ONE unified
 // config: the registry supplies url/method/headers/timeout for registered route
 // NAMES, and this bag supplies the baseURL/headers/token used to actually
 // dispatch the request. `configureMinder()` from `src/config` is the single
 // source of truth that writes both stores.
-let globalConfig: MinderConfig = {
+//
+// This bag is a DISTINCT store from the routes-aware globalConfig.ts one (C1):
+// they have different defaults (C1 starts `null`; this one starts populated with
+// baseURL/timeout/headers) and different write paths, so they are NOT merged
+// into one cell — see the C1/C3 note in the Spec 1.3c report. Both now live on
+// the process-wide singleton store (./singletons.ts) for chunk-duplication-proof
+// identity, so `configureMinder()` and standalone minder() reads can never land
+// on opposite sides of a forked copy.
+const defaultMinderUrlConfig = (): MinderConfig => ({
   baseURL: '',
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
-};
+});
+
+function minderUrlConfig(): MinderConfig {
+  const s = minderStore();
+  return (s.minderUrlConfig ??= defaultMinderUrlConfig());
+}
 
 /**
  * Internal: write minder()'s URL-resolution config (baseURL/headers/timeout/
@@ -95,7 +109,7 @@ let globalConfig: MinderConfig = {
  * @internal
  */
 export function setMinderGlobalConfig(config: Partial<MinderConfig>): void {
-  globalConfig = { ...globalConfig, ...config };
+  minderStore().minderUrlConfig = { ...minderUrlConfig(), ...config };
 }
 
 /**
@@ -103,10 +117,8 @@ export function setMinderGlobalConfig(config: Partial<MinderConfig>): void {
  * @internal
  */
 export function getMinderGlobalConfig(): MinderConfig {
-  return globalConfig;
+  return minderUrlConfig();
 }
-
-let deprecationWarned = false;
 
 /**
  * Configure minder globally.
@@ -124,8 +136,9 @@ let deprecationWarned = false;
  * });
  */
 export function configureMinder(config: Partial<MinderConfig>): void {
-  if (!deprecationWarned) {
-    deprecationWarned = true;
+  const s = minderStore();
+  if (!s.minderDeprecationWarned) {
+    s.minderDeprecationWarned = true;
     console.warn(
       '[Minder] `minder.config()` / `configureMinder` from core is deprecated. ' +
       'Use `configureMinder` from "minder-data-provider" instead (it also registers routes).'
@@ -147,8 +160,15 @@ import type { InterceptableRequest } from '../plugins/PluginSystem.js';
  * substitute a zero-delay implementation instead of waiting on real timers.
  * @internal
  */
-let retrySleep = (ms: number): Promise<void> =>
+const defaultRetrySleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
+
+// Held on the singleton store (C3) so a test's injected sleep and the retry loop
+// that consumes it can never end up on opposite sides of a duplicated chunk.
+function retrySleep(ms: number): Promise<void> {
+  const s = minderStore();
+  return (s.minderRetrySleep ??= defaultRetrySleep)(ms);
+}
 
 /**
  * Testing hook: override (or reset, by passing null) the retry backoff sleep.
@@ -157,8 +177,7 @@ let retrySleep = (ms: number): Promise<void> =>
 export function __setRetrySleepForTesting(
   fn: ((ms: number) => Promise<void>) | null
 ): void {
-  retrySleep =
-    fn ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+  minderStore().minderRetrySleep = fn ?? defaultRetrySleep;
 }
 
 /**
@@ -218,7 +237,10 @@ interface CacheEntry {
  * MAX_RESPONSE_CACHE_ENTRIES; the oldest entry is evicted on overflow.
  * @internal
  */
-const responseCache = new Map<string, CacheEntry>();
+function responseCache(): Map<string, CacheEntry> {
+  const s = minderStore();
+  return (s.minderResponseCache ??= new Map<string, CacheEntry>()) as Map<string, CacheEntry>;
+}
 
 /** Hard cap on cached entries; oldest (insertion order) evicted on overflow. */
 const MAX_RESPONSE_CACHE_ENTRIES = 200;
@@ -262,13 +284,14 @@ const ABSOLUTE_URL_RE = /^(?:[a-z][a-z\d+\-.]*:)?\/\//i;
 
 /** Store a cache entry, evicting the oldest entry when the cap is exceeded. */
 function setCacheEntry(key: string, entry: CacheEntry): void {
+  const cache = responseCache();
   // Delete-first so a re-set refreshes the key's insertion position.
-  responseCache.delete(key);
-  responseCache.set(key, entry);
-  if (responseCache.size > MAX_RESPONSE_CACHE_ENTRIES) {
+  cache.delete(key);
+  cache.set(key, entry);
+  if (cache.size > MAX_RESPONSE_CACHE_ENTRIES) {
     // Maps iterate in insertion order — the first key is the oldest entry.
-    const oldest = responseCache.keys().next().value;
-    if (oldest !== undefined) responseCache.delete(oldest);
+    const oldest = cache.keys().next().value;
+    if (oldest !== undefined) cache.delete(oldest);
   }
 }
 
@@ -278,7 +301,7 @@ function setCacheEntry(key: string, entry: CacheEntry): void {
  * @internal
  */
 export function clearMinderCache(): void {
-  responseCache.clear();
+  responseCache().clear();
 }
 
 /** Structured deep copy so cached results can't be mutated through aliasing. */
@@ -382,25 +405,26 @@ export async function minder<TData = any>(
     }
 
     // 2. Build request config
+    const urlConfig = minderUrlConfig();
     const config: AxiosRequestConfig = {
       baseURL:
         options?.baseURL ||
-        globalConfig.baseURL ||
+        urlConfig.baseURL ||
         (registryRoute ? registry?.apiBaseUrl : undefined) ||
         '',
       url,
       method,
-      timeout: options?.timeout || registryRoute?.timeout || globalConfig.timeout,
+      timeout: options?.timeout || registryRoute?.timeout || urlConfig.timeout,
       headers: {
-        ...globalConfig.headers,
+        ...urlConfig.headers,
         ...registryRoute?.headers,
         ...options?.headers,
       },
       params: options?.params,
     };
-    
+
     // 3. Add authentication token
-    const token = options?.token || globalConfig.token;
+    const token = options?.token || urlConfig.token;
     if (token) {
       config.headers!.Authorization = `Bearer ${token}`;
     }
@@ -469,7 +493,7 @@ export async function minder<TData = any>(
         (options?.headers ?? config.headers) as Record<string, unknown> | undefined
       );
       cacheKey = buildCacheKey(method, resolvedUrl, config.params, authIdentity);
-      const entry = responseCache.get(cacheKey);
+      const entry = responseCache().get(cacheKey);
       if (entry && entry.expiresAt > Date.now()) {
         const cached = deepCopyResult(entry.result) as MinderResult<TData>;
         // Entries store the RAW (pre-model-decode) response data; decode per hit
@@ -499,7 +523,7 @@ export async function minder<TData = any>(
       }
       if (entry) {
         // Stale — drop it so the map doesn't grow unbounded with dead entries.
-        responseCache.delete(cacheKey);
+        responseCache().delete(cacheKey);
       }
       // MDPD-5: a cache-enabled GET with no fresh entry is a miss (first-ever or
       // expired) — notify observability plugins before we touch the transport.
@@ -807,7 +831,7 @@ export async function minder<TData = any>(
  * Attach Server-Sent Events stream capability
  */
 (minder as any).stream = async (url: string, options: StreamOptions) => {
-  const streamClient = new StreamClient(globalConfig as any);
+  const streamClient = new StreamClient(minderUrlConfig() as any);
   return streamClient.stream(url, options);
 };
 

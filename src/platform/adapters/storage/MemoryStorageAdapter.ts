@@ -7,7 +7,7 @@
 import { Logger, LogLevel } from '../../../utils/Logger.js';
 import { BaseStorageAdapter, StorageAdapterOptions } from './StorageAdapter.js';
 
-const logger = new Logger('MemoryStorageAdapter', { level: LogLevel.ERROR });
+const logger = /*#__PURE__*/ new Logger('MemoryStorageAdapter', { level: LogLevel.ERROR });
 
 export class MemoryStorageAdapter extends BaseStorageAdapter {
   private store: Map<string, string>;

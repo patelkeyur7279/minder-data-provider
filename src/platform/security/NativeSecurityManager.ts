@@ -13,7 +13,7 @@ import {
   SecurityValidation,
 } from './SecurityManager.js';
 
-const logger = new Logger('NativeSecurityManager', { level: LogLevel.WARN });
+const logger = /*#__PURE__*/ new Logger('NativeSecurityManager', { level: LogLevel.WARN });
 
 /**
  * Native Security Manager

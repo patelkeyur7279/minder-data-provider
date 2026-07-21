@@ -19,6 +19,8 @@
  * `console.warn`) rather than throwing — this keeps hot-reload/dev ergonomics simple.
  */
 
+import { minderStore } from '../core/singletons.js';
+
 export type Capability = 'auth' | 'payments' | 'storage' | 'live';
 
 export interface CapabilityProvider<T = unknown> {
@@ -34,15 +36,24 @@ export interface CapabilityProvider<T = unknown> {
   getProviderClient(): unknown;
 }
 
-// Module-level registry state. One slot per capability.
-const registry = new Map<Capability, CapabilityProvider>();
+// Registry state lives on the process-wide singleton store (see ../core/singletons.ts)
+// so identity survives any way a consumer's bundler splits/duplicates chunks — one
+// Map, one Set, no matter how many chunks reference this module. Created lazily on
+// first access, never at import (keeps this module side-effect-free).
+function registryMap(): Map<Capability, CapabilityProvider> {
+  const s = minderStore();
+  return (s.capabilityRegistry ??= new Map<Capability, CapabilityProvider>());
+}
 
 // Subscribers notified on every register/unregister so hooks (useSyncExternalStore) can
 // re-render when the registry changes for a capability they care about.
-const subscribers = new Set<() => void>();
+function subscriberSet(): Set<() => void> {
+  const s = minderStore();
+  return (s.capabilitySubscribers ??= new Set<() => void>());
+}
 
 function notify(): void {
-  for (const cb of subscribers) {
+  for (const cb of subscriberSet()) {
     cb();
   }
 }
@@ -57,6 +68,7 @@ function notify(): void {
  * since replaced it) — this avoids a stale unregister callback tearing down a newer provider.
  */
 export function registerCapabilityProvider(provider: CapabilityProvider): () => void {
+  const registry = registryMap();
   const existing = registry.get(provider.capability);
   if (existing) {
     console.warn(
@@ -72,8 +84,8 @@ export function registerCapabilityProvider(provider: CapabilityProvider): () => 
   return () => {
     if (unregistered) return;
     unregistered = true;
-    if (registry.get(provider.capability) === provider) {
-      registry.delete(provider.capability);
+    if (registryMap().get(provider.capability) === provider) {
+      registryMap().delete(provider.capability);
       notify();
     }
   };
@@ -83,7 +95,7 @@ export function registerCapabilityProvider(provider: CapabilityProvider): () => 
  * Get the currently-registered provider for a capability, or `null` if none is registered.
  */
 export function getCapabilityProvider<T = unknown>(capability: Capability): CapabilityProvider<T> | null {
-  return (registry.get(capability) as CapabilityProvider<T> | undefined) ?? null;
+  return (registryMap().get(capability) as CapabilityProvider<T> | undefined) ?? null;
 }
 
 /**
@@ -91,8 +103,8 @@ export function getCapabilityProvider<T = unknown>(capability: Capability): Capa
  * Returns an unsubscribe function.
  */
 export function subscribeCapabilityRegistry(cb: () => void): () => void {
-  subscribers.add(cb);
+  subscriberSet().add(cb);
   return () => {
-    subscribers.delete(cb);
+    subscriberSet().delete(cb);
   };
 }

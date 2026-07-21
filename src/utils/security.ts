@@ -7,7 +7,7 @@ import { Logger, LogLevel } from './Logger.js';
 import DOMPurify from 'dompurify';
 import type { SecurityConfig } from '../core/types.js';
 
-const logger = new Logger('SecurityUtils', { level: LogLevel.WARN });
+const logger = /*#__PURE__*/ new Logger('SecurityUtils', { level: LogLevel.WARN });
 
 /**
  * Generate cryptographically secure CSRF token

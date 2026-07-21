@@ -31,7 +31,7 @@ import { isReplayErrorSentinel, type ReplayErrorSentinel } from './replaySentine
 // pluginManager keeps OfflineManager decoupled from any core wiring.
 import { pluginManager } from '../../plugins/PluginSystem.js';
 
-const logger = new Logger('OfflineManager', { level: LogLevel.WARN });
+const logger = /*#__PURE__*/ new Logger('OfflineManager', { level: LogLevel.WARN });
 
 /**
  * Sentinel returned by {@link OfflineManager.executeRequest} (via

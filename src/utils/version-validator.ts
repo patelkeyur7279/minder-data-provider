@@ -7,7 +7,7 @@
 
 import { Logger, LogLevel } from './Logger.js';
 
-const logger = new Logger('VersionValidator', {
+const logger = /*#__PURE__*/ new Logger('VersionValidator', {
   level: process.env.NODE_ENV === 'development' ? LogLevel.WARN : LogLevel.ERROR
 });
 

@@ -6,7 +6,7 @@
 import { Logger, LogLevel } from '../../../utils/Logger.js';
 import { BaseStorageAdapter, StorageAdapterOptions } from './StorageAdapter.js';
 
-const logger = new Logger('WebStorageAdapter', { level: LogLevel.ERROR });
+const logger = /*#__PURE__*/ new Logger('WebStorageAdapter', { level: LogLevel.ERROR });
 
 export class WebStorageAdapter extends BaseStorageAdapter {
   private storage: Storage;

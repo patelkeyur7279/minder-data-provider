@@ -33,7 +33,8 @@ import { ProxyManager } from "./ProxyManager.js";
 import { DebugManager } from "../debug/DebugManager.js";
 import { DebugLogType } from "../constants/enums.js";
 import { setGlobalMinderConfig } from "./globalConfig.js";
-import { MinderContext } from "./MinderContext.js";
+import { getMinderContext } from "./MinderContext.js";
+import { checkReactVersionAtRuntime } from "../utils/version-validator.js";
 import type { MinderContextValue } from "./MinderContext.js";
 
 // Context accessors live in MinderContext.tsx (kept import-light so hooks
@@ -84,6 +85,16 @@ export function MinderDataProvider({
   const [queryClientRef] = useState(
     () => new QueryClient(getQueryClientConfig(config))
   );
+
+  // Dev-only React-version conflict check (Spec 1.3c §2.4). Moved here off the
+  // package's import path so `sideEffects: false` stays honest. `hasChecked`
+  // inside checkReactVersionAtRuntime() makes this fire exactly once across all
+  // provider mounts; the empty dep array scopes it to first mount.
+  useEffect(() => {
+    if (process.env.NODE_ENV === "development") {
+      checkReactVersionAtRuntime();
+    }
+  }, []);
 
   const contextValue = useMemo(() => {
     // Setup environment manager if environments are configured
@@ -263,6 +274,10 @@ export function MinderDataProvider({
         )}
     </QueryClientProvider>
   );
+
+  // Resolve the context at render time (client component) — see ./singletons.ts.
+  // No module-scope `createContext` call to be tree-shaken away (MDPD-17).
+  const MinderContext = getMinderContext();
 
   return (
     <MinderContext.Provider value={contextValue}>
