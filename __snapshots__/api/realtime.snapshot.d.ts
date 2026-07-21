@@ -17,6 +17,7 @@ export declare class SseTransport implements RealtimeTransport {
     private destroyed;
     private connected;
     private pendingConnect;
+    private connectPromise;
     constructor(_: ResolvedRealtimeConfig, _: AuthManager, _?: DebugManager, _?: boolean);
     connect(): Promise<void>;
     disconnect(): void;
