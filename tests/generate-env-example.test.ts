@@ -186,9 +186,23 @@ describe('generate-env-example — main()', () => {
 });
 
 describe('generate-env-example — CLI smoke test (child_process)', () => {
-  it('running the script against this repo writes a real .env.example and reports variables', () => {
+  // Spawning a node child while the full jest worker pool is under load can
+  // transiently fail on constrained CI runners (observed ~1-in-7 on the Linux
+  // matrix; the script itself is deterministic — solo runs never fail). One
+  // logged retry keeps the smoke test meaningful without letting a scheduler
+  // hiccup fail the whole suite; a real script defect still fails both tries.
+  const runScript = (args: string[] = []): string => {
     const scriptPath = path.join(__dirname, '..', 'scripts', 'generate-env-example.js');
-    const output = execFileSync('node', [scriptPath], { encoding: 'utf8' });
+    try {
+      return execFileSync('node', [scriptPath, ...args], { encoding: 'utf8' });
+    } catch (err) {
+      console.warn('[generate-env-example smoke] first spawn failed, retrying once:', err);
+      return execFileSync('node', [scriptPath, ...args], { encoding: 'utf8' });
+    }
+  };
+
+  it('running the script against this repo writes a real .env.example and reports variables', () => {
+    const output = runScript();
     expect(output).toContain('[generate-env-example] Wrote');
 
     const envExamplePath = path.join(__dirname, '..', '.env.example');
@@ -200,7 +214,7 @@ describe('generate-env-example — CLI smoke test (child_process)', () => {
   it('--check exits 0 when up to date and non-zero after a source change introduces a new var', () => {
     const scriptPath = path.join(__dirname, '..', 'scripts', 'generate-env-example.js');
     // Ensure it's up to date first.
-    execFileSync('node', [scriptPath], { encoding: 'utf8' });
+    runScript();
     expect(() => execFileSync('node', [scriptPath, '--check'], { encoding: 'utf8' })).not.toThrow();
 
     const tmpDir = makeTmpDir('minder-env-check-');
