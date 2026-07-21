@@ -73,8 +73,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > with no new runtime dependency), and `minder generate`, which turns an OpenAPI
 > document into a typed routes registry. Two new CLI commands round it out —
 > `minder codemod redux-removal` automates most of the 3.0 migration, and
-> `minder doctor --bundle` prices your app's imports. The rest is evidence work:
-> bundle budgets and benchmarks now run in CI, and Vite, the Next.js App Router,
+> `minder doctor --bundle` prices your app's imports. Offline mutations that
+> hit a 409/412 on replay now resolve deterministically instead of
+> retry-then-silent-drop, via a new pluggable `conflictResolution`/
+> `resolveConflict` on `OfflineConfig`. The rest is evidence work: bundle
+> budgets and benchmarks now run in CI, and Vite, the Next.js App Router,
 > React 18, and Cloudflare Workers each moved to **Confirmed** in the Support
 > Matrix on the strength of runnable examples exercised in CI rather than
 > inference.
@@ -242,6 +245,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   re-running over already-migrated files changes nothing. `--dry-run` previews a per-file diff
   without writing; default mode writes and prints the same summary (files changed, transforms
   applied, manual-TODO count with file:line locations).
+- **Offline conflict resolution** (semver-minor, additive; Spec 5.1) — wires the previously-dead
+  `OfflineConfig.conflictResolution`/`onConflict` into the replay pipeline. A queued mutation whose
+  replay comes back with a status in the new `conflictStatuses` (default `[409, 412]`) is now
+  resolved deterministically instead of blindly retrying and then silently dropping after
+  `maxRetries`. New optional `OfflineConfig` fields: `conflictStatuses`, `resolveConflict` (rich
+  async resolver — preferred over the now-`@deprecated` `onConflict`, still honored via an
+  adapter), `conflictResolveTimeoutMs` (default `15000`), `strictOrder` (default `false`),
+  `onDeadLetter` + `deadLetterKey` (opt-in dead-letter observability/persistence). New exported
+  types `ConflictStrategy`, `ConflictContext`, `ConflictResolution` (`src/platform/offline/types.ts`,
+  re-exported from the offline barrel). Strategies: `'server-wins'` (default — discard the queued
+  mutation, accept server state), `'last-write-wins'`/`'client-wins'` (alias — re-issue the client
+  mutation), `'merge'`/`'manual'` (alias — invoke the resolver). Per-mutation override via
+  `QueuedRequest.metadata.conflictResolution` (a strategy name, not a function — it must survive
+  `JSON.stringify` for queue persistence) beats the global default. Fail-closed: a resolver that
+  throws, returns a malformed result, or exceeds `conflictResolveTimeoutMs` falls through to the
+  existing retry→dead-letter path — never a silent discard or silent accept. The one default-path
+  behavior change (a 409/412 replay resolves via `server-wins` immediately instead of retrying 3×
+  then dropping) is a bugfix, not a breaking change — same end state, fewer wasted retries; see
+  MIGRATION_GUIDE.md. Executor-side change: `ApiClient.ts`'s injected replay executor no longer
+  throws on a non-2xx replay response — it resolves an internal (non-exported)
+  `ReplayErrorSentinel` so `OfflineManager` alone owns conflict-vs-error policy; a genuine
+  transport failure (network/timeout, no response) is untouched. Note: a non-conflict replay error
+  now always surfaces to `onRequestError`/dead-letter as a reconstructed `MinderNetworkError`
+  (previously e.g. a replayed 400 could surface as a different `Minder*Error` subtype depending on
+  status) — `lastError`/retry count/drop timing are unchanged, only the reconstructed error's
+  class/`code` can differ from the original. 31 new tests
+  (`tests/offline-conflict-resolution.test.ts`) covering all strategies, the legacy `onConflict`
+  adapter, abort-on-`destroy()`, `strictOrder` (incl. a prior success committing before a later
+  halt), custom `conflictStatuses`, dead-letter callbacks, byte-equal non-conflict passthrough
+  (incl. a real 500 through the full ApiClient pipeline), per-mutation override precedence, all
+  resolver fail-closed modes, the resolution guard's non-persistence across restart, re-issue loop
+  safety, and alias parity, plus real-`ApiClient`-wiring integration tests; full existing offline
+  suite stays green.
+  See README/docs/FEATURES.md "Offline" § Conflict resolution.
 
 ### Performance (bundle surgery — no API change; surface verified by API-snapshot gate)
 

@@ -429,6 +429,54 @@ configureMinder({
 
 `SyncLifecycleEvent`: `{ phase, pending?, processed?, error?, timestamp }`.
 
+### Conflict resolution (Spec 5.1)
+
+A replay that comes back with a status in `conflictStatuses` (default `[409, 412]`) is now
+resolved deterministically instead of blindly retrying and silently dropping the mutation after
+`maxRetries`. Configure it on `offline`:
+
+```ts
+offline: {
+  enabled: true,
+  conflictResolution: 'server-wins',   // default — discard the queued mutation, accept the server
+  // conflictResolution: 'last-write-wins' | 'client-wins',  // re-issue the client mutation as-is
+  // conflictResolution: 'merge' | 'manual',                 // invoke resolveConflict below
+  conflictStatuses: [409, 412],        // override to add e.g. a custom 428
+  conflictResolveTimeoutMs: 15000,     // resolver is raced against this; timeout fails closed
+  resolveConflict: async (ctx) => {
+    // ctx: { request, clientBody, base?, server, status, signal }
+    return { action: 'retry', body: { ...ctx.clientBody, ...ctx.server, version: undefined } };
+    // or: { action: 'discard' }  (accept server, drop the mutation)
+    // or: { action: 'keep' }     (leave queued for a later manual sync)
+  },
+},
+```
+
+- **Strategies:** `'server-wins'` (default, discard + accept server) · `'last-write-wins'` /
+  `'client-wins'` (alias — re-issue the client mutation, client wins) · `'merge'` / `'manual'`
+  (alias — invokes `resolveConflict`, or the deprecated `onConflict(request, serverData)` adapter
+  if that's all that's configured). If both `resolveConflict` and `onConflict` are set,
+  `resolveConflict` wins and `onConflict` is ignored (one-time warning).
+- **Per-mutation override:** pass a strategy name (not a function — it must survive
+  `JSON.stringify` for persistence) via `metadata.conflictResolution` on `addToQueue`; it beats the
+  global `conflictResolution` for that request. A `base` snapshot for `resolveConflict`'s
+  `ctx.base` can similarly be stashed at enqueue time as `metadata.conflictBase`.
+- **Fail-closed:** if `resolveConflict` throws, returns a malformed result, or exceeds
+  `conflictResolveTimeoutMs`, the request falls through to the normal retry→dead-letter path —
+  never a silent discard or silent accept.
+- **`strictOrder`** (default `false`): when `true`, replay goes fully sequential and a `'keep'`
+  resolution or a replay failure halts the remainder of that sync pass — trades throughput for
+  causal safety (mutation N+1 never applies against a base N was supposed to establish). Default
+  keeps today's concurrent `syncBatchSize` batching.
+- **`onDeadLetter?(request, lastError)`** (+ optional `deadLetterKey` storage key): opt-in
+  observability for a request dropped at `maxRetries` — the existing silent-drop is unchanged by
+  default.
+- **Backward compat:** with no conflict config at all, the only observable change is that a
+  409/412 replay now resolves via `server-wins` immediately instead of retrying 3× and then
+  dropping — same end state (mutation gone), fewer wasted retries.
+- SSE / server-push transport for proactively notifying clients of conflicts is a separate,
+  not-yet-shipped deliverable (Spec 5.1 §5) — this section covers replay-time detection only.
+
 ---
 
 ## File Upload

@@ -35,6 +35,7 @@
     "MinderAuthError",
     "MinderAuthorizationError",
     "MinderConfigError",
+    "MinderConflictError",
     "MinderDataProvider",
     "MinderError",
     "MinderErrorBoundary",

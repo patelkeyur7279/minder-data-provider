@@ -381,6 +381,20 @@ export class MinderOfflineError extends MinderError {
 }
 
 /**
+ * Offline conflict-resolution errors (Spec 5.1) — thrown when a conflict
+ * resolver fails closed: it threw, returned a malformed `ConflictResolution`,
+ * timed out, or `conflictResolution` resolved to `'merge'`/`'manual'` with no
+ * resolver configured. Always routed into the existing retry→dead-letter
+ * path (`OfflineManager.handleRequestError`) — never a silent discard/accept.
+ */
+export class MinderConflictError extends MinderError {
+  constructor(message: string, code: string = 'CONFLICT_ERROR') {
+    super(message, code, 409);
+    this.name = 'MinderConflictError';
+  }
+}
+
+/**
  * Plugin errors
  */
 export class MinderPluginError extends MinderError {

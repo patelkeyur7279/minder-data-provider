@@ -228,6 +228,7 @@ export {
   MinderSecurityError,
   MinderTimeoutError,
   MinderOfflineError,
+  MinderConflictError,
   MinderPluginError,
   MinderWebSocketError,
   MinderUploadError,

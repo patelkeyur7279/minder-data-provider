@@ -187,17 +187,54 @@ export class ApiClient {
       // equivalent of the old setProcessQueueCallback). Replayed requests then
       // carry auth/CSRF/CORS/interceptors, and sync() emits onSync around them.
       this.offlineManager.setRequestExecutor(async (request: QueuedRequest) => {
-        const response = await this.axiosInstance.request({
-          method: request.method,
-          url: request.url,
-          data: request.body,
-          headers: request.headers,
-          // Mark the re-dispatch so a replay that fails again is NOT re-captured
-          // by the auto-queue path in apiClient/errors.ts (which would duplicate
-          // the request). The manager's own retry accounting owns replay failures.
-          ...( { __minderReplay: true } as Record<string, unknown> ),
-        });
-        return response.data;
+        try {
+          const response = await this.axiosInstance.request({
+            method: request.method,
+            url: request.url,
+            data: request.body,
+            headers: request.headers,
+            // Mark the re-dispatch so a replay that fails again is NOT re-captured
+            // by the auto-queue path in apiClient/errors.ts (which would duplicate
+            // the request). The manager's own retry accounting owns replay failures.
+            ...( { __minderReplay: true } as Record<string, unknown> ),
+          });
+          return response.data;
+        } catch (err) {
+          // This same axiosInstance's response interceptor (setupInterceptors,
+          // above) already ran and transformed the raw AxiosError into a
+          // Minder*Error/ApiError via handleError() -> normalizeApiError() ->
+          // buildApiError() BEFORE this catch ever sees it — `err` here is
+          // that transformed value, not the raw AxiosError. normalizeApiError
+          // always attaches the untouched original as `err.raw`, so THAT is
+          // what tells us whether the server actually responded.
+          //
+          // Server RESPONDED with a non-2xx status -> report a uniform
+          // HTTP-outcome sentinel instead of throwing (Spec 5.1 §10.1, option
+          // (a)). ApiClient stays a dumb transport: it never reads
+          // `conflictStatuses` and never decides conflict-vs-error, it just
+          // reports "here is the HTTP outcome" and leaves that call entirely
+          // to the offline layer. Deliberately carrying the ALREADY-TRANSFORMED
+          // `err.message`/`err.code` (not the raw generic axios message) is
+          // what keeps a non-conflict status byte-equal to the pre-feature
+          // thrown error: buildApiError gives 404/429/500/etc. their own
+          // custom message text, not axios's generic "Request failed with
+          // status code N".
+          const raw = (err as { raw?: unknown } | null | undefined)?.raw;
+          if (axios.isAxiosError(raw) && raw.response) {
+            const transformed = err as { message?: string; code?: string };
+            return {
+              __minderReplayOutcome: 'error' as const,
+              status: raw.response.status,
+              serverData: raw.response.data,
+              message: transformed?.message ?? raw.message,
+              code: transformed?.code ?? raw.code,
+            };
+          }
+          // Genuine transport failure (ERR_NETWORK/timeout/etc, no response)
+          // -> re-throw the (already-transformed) error unchanged; this path
+          // is untouched by this feature.
+          throw err;
+        }
       });
     }
 

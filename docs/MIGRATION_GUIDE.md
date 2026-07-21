@@ -93,6 +93,7 @@ breaks at build time.
 - [5. peerDependencies move](#5-peerdependencies-move)
 - [6. `useAuth` root-entry shadowing](#6-useauth-root-entry-shadowing)
 - [7. `rawUrl` and config unification](#7-rawurl-and-config-unification)
+- [8. Offline conflict resolution](#8-offline-conflict-resolution)
 
 ### 1. Fail-closed `isAuthenticated()`
 
@@ -383,6 +384,22 @@ const { data: users } = useMinder("users"); // resolves via the registry, no pro
 
 No action needed unless you were working around the old `"Route not found"` behavior
 (e.g. avoiding `rawUrl` in provider mode) — that workaround is no longer necessary.
+
+### 8. Offline conflict resolution
+
+**Additive — no action required.** `OfflineConfig.conflictResolution`/`onConflict` were declared
+but never read; a queued mutation whose replay came back with a 409/412 simply retried up to
+`maxRetries` and was then silently dropped — neither "server wins" nor "client wins," just
+blind-retry-then-drop. That config is now wired into the replay pipeline (Spec 5.1): new optional
+`conflictStatuses`, `resolveConflict`, `conflictResolveTimeoutMs`, `strictOrder`, `onDeadLetter`,
+and `deadLetterKey` fields on `OfflineConfig`, all opt-in.
+
+**The only observable default-path change:** with zero conflict config set, a 409/412 replay now
+resolves via the documented default (`conflictResolution: 'server-wins'`) immediately, instead of
+retrying 3 times and then dropping. The end state is identical either way (the queued mutation is
+gone) — this is a bugfix (fewer wasted retries, deterministic instead of accidental), not a
+behavior you were relying on. See [FEATURES.md § Conflict resolution](FEATURES.md#conflict-resolution-spec-51)
+for the full API.
 
 ---
 
