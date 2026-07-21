@@ -414,8 +414,9 @@ describe('🧪 COMPREHENSIVE FRAMEWORK TESTING', () => {
                 result.current.setToken(jwt);
             });
 
-            // Non-numeric exp should be treated as no expiration (Bug #5 fix)
-            expect(result.current.isAuthenticated()).toBe(true);
+            // Non-numeric exp claim is malformed: fails closed (2.2.0-beta.1).
+            // (Bug #5's actual fix — not crashing on malformed tokens — still holds.)
+            expect(result.current.isAuthenticated()).toBe(false);
         });
     });
 

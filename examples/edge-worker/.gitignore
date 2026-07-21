@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+
+# Wrangler local dev state (KV/D1/cache persistence, temp files)
+.wrangler/
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store

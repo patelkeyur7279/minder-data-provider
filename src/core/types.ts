@@ -8,11 +8,25 @@ import {
   NotificationType
 } from '../constants/enums.js';
 import type { OfflineConfig } from '../platform/offline/types.js';
+import type { MinderPlugin } from '../plugins/PluginSystem.js';
+import type { StandardSchemaV1 } from '../types/standard-schema.js';
+import type { RealtimeConfig } from './realtime/types.js';
+
+// Re-export so `RealtimeConfig` is reachable wherever `MinderConfig` is (main
+// entry, `./core`, `./realtime`) without a second import (Spec 5.2 §3.1).
+export type { RealtimeConfig, RealtimeReconnectConfig } from './realtime/types.js';
+
+// Re-export the vendored Standard Schema interface so route-def / per-call
+// response validation (`ApiRoute.schema`, `MinderOptions.schema` — Task 3.1)
+// is reachable from the `core` type surface without a second import.
+export type { StandardSchemaV1, InferOutput, InferInput } from '../types/standard-schema.js';
 
 // Core configuration types
 export interface MinderConfig {
   apiBaseUrl: string;
   routes: Record<string, ApiRoute>;
+  /** Provider platform config sections (see contracts/mockRegistry getProviderConfig). */
+  providers?: Record<string, unknown>;
   /**
    * Optional dynamic import function (e.g., Next.js dynamic())
    * Used for code-splitting React Query Devtools in development
@@ -34,7 +48,14 @@ export interface MinderConfig {
   /** CORS helper configuration - Does NOT bypass CORS, only adds helpful client-side features */
   corsHelper?: CorsHelperConfig;
   websocket?: WebSocketConfig;
-  redux?: ReduxConfig;
+  /**
+   * Enable realtime updates. The legacy boolean form (`true`) is preserved
+   * verbatim — it keeps meaning "enable realtime via WebSocket" exactly as
+   * before (`FeatureLoader`'s `!!config.realtime` legacy read is unaffected).
+   * The object form additionally selects the transport (`'ws' | 'sse'`) — see
+   * `RealtimeConfig` (Spec 5.2). WS remains the default; SSE is opt-in.
+   */
+  realtime?: boolean | RealtimeConfig;
   performance?: PerformanceConfig;
   debug?: DebugConfig;
   security?: SecurityConfig;
@@ -42,6 +63,12 @@ export interface MinderConfig {
   telemetry?: TelemetryConfig;
   ssr?: SSRConfig;
   offline?: OfflineConfig;
+  /**
+   * Plugins to register on this client. Each plugin can observe the request
+   * lifecycle (onRequest/onResponse/onError) — the basis for drop-in
+   * integrations (crash reporting, analytics, payments, etc.).
+   */
+  plugins?: MinderPlugin[];
   environments?: Record<string, EnvironmentOverride>;
   defaultEnvironment?: string;
   autoDetectEnvironment?: boolean;
@@ -70,6 +97,15 @@ export interface ApiRoute {
   optimistic?: boolean;
   cache?: boolean;
   timeout?: number;
+  /**
+   * Opt-in runtime validation of the response body against any Standard
+   * Schema validator (Zod >=3.24, Valibot, ArkType, Effect Schema, or any
+   * object implementing the `~standard` interface). Fail-closed: a mismatch
+   * (or a validator that itself throws) never passes as a valid response — it
+   * surfaces as a `RESPONSE_VALIDATION_FAILED` error instead. A per-call
+   * `MinderOptions.schema` overrides this when both are set.
+   */
+  schema?: StandardSchemaV1;
 }
 
 export interface AuthConfig {
@@ -206,12 +242,6 @@ export interface WebSocketConfig {
   heartbeat?: number;
 }
 
-export interface ReduxConfig {
-  devTools?: boolean;
-  middleware?: any[];
-  preloadedState?: any;
-}
-
 export interface RetryConfig {
   /**
    * Maximum number of retry attempts
@@ -245,6 +275,12 @@ export interface RetryConfig {
    * @default 30000
    */
   maxDelay?: number;
+
+  /**
+   * Exponential backoff factor
+   * @default 2
+   */
+  factor?: number;
 
   /**
    * Custom function to determine if a request should be retried

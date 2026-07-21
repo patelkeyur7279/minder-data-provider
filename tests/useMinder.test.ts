@@ -81,17 +81,10 @@ describe('useMinder Hook', () => {
         expect(result.current.loading).toBe(false);
       });
 
-      // The mocked minder returns MinderResult, so data will be the full result
-      expect(result.current.data).toEqual({
-        success: true,
-        data: mockData,
-        error: null,
-        status: 200,
-        metadata: expect.objectContaining({
-          method: 'GET',
-          url: '/users',
-        }),
-      });
+      // `data` is the unwrapped payload from the MinderResult (not the whole result).
+      expect(result.current.data).toEqual(mockData);
+      expect(result.current.success).toBe(true);
+      expect(result.current.error).toBeNull();
     });
 
     it('should not fetch when autoFetch is false', async () => {
@@ -290,14 +283,13 @@ describe('useMinder Hook', () => {
         expect(result.current.loading).toBe(false);
       });
 
-      // The mocked minder returns MinderResult with error, so data contains the full result
-      expect(result.current.data).toBeDefined();
-      expect(result.current.data).toEqual(expect.objectContaining({
-        success: false,
-        error: expect.objectContaining({
-          code: 'NETWORK_ERROR',
-          message: 'Network error',
-        }),
+      // A failed request now surfaces the error (data is null), instead of
+      // wrapping the whole MinderResult into `data` and reporting success.
+      expect(result.current.data).toBeNull();
+      expect(result.current.success).toBe(false);
+      expect(result.current.error).toEqual(expect.objectContaining({
+        code: 'NETWORK_ERROR',
+        message: 'Network error',
       }));
     });
   });

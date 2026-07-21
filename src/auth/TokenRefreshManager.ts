@@ -8,9 +8,10 @@
  */
 
 import { Logger, LogLevel } from '../utils/Logger.js';
+import { parseJWT as decodeJwt } from '../utils/jwt.js';
 import { MinderAuthError } from '../errors/index.js';
 
-const logger = new Logger('TokenRefreshManager', { 
+const logger = /*#__PURE__*/ new Logger('TokenRefreshManager', { 
   level: LogLevel.WARN
 });
 
@@ -89,26 +90,7 @@ export class TokenRefreshManager {
    * Parse JWT token and extract payload
    */
   private parseJWT(token: string): JWTPayload | null {
-    try {
-      // JWT format: header.payload.signature
-      const parts = token.split('.');
-      if (parts.length !== 3) {
-        return null;
-      }
-
-      // Decode base64url payload
-      const payloadPart = parts[1];
-      if (!payloadPart) {
-        return null;
-      }
-      const decoded = atob(payloadPart.replace(/-/g, '+').replace(/_/g, '/'));
-      return JSON.parse(decoded);
-    } catch (error) {
-      if (this.config.debug) {
-        logger.error('Failed to parse JWT:', error);
-      }
-      return null;
-    }
+    return decodeJwt<JWTPayload>(token);
   }
 
   /**

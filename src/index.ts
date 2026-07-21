@@ -16,12 +16,11 @@
 // ============================================================================
 // VERSION VALIDATION - Auto-check for conflicts
 // ============================================================================
-import { checkReactVersionAtRuntime } from './utils/version-validator.js';
-
-// Auto-check in development mode
-if (process.env.NODE_ENV === 'development') {
-  checkReactVersionAtRuntime();
-}
+// The dev-only React-version conflict check no longer runs at import here
+// (Spec 1.3c §2.4). A top-level call is a module side effect that blocks an
+// honest `sideEffects: false`; it now runs on MinderDataProvider's first mount
+// (still dev-only, still guarded by `hasChecked` so it fires exactly once). The
+// standalone (no-provider) minder() path never triggered the React check anyway.
 
 // ============================================================================
 // CORE EXPORTS - NEW ARCHITECTURE
@@ -31,6 +30,9 @@ if (process.env.NODE_ENV === 'development') {
 // Core universal function
 export { minder } from './core/minder.js';
 export { configureMinder } from './config/index.js';
+// Wave K — enterprise config composition: merge separate per-team/feature
+// config modules into one before configureMinder.
+export { mergeMinderConfig } from './config/mergeConfig.js';
 export type {
   MinderOptions,
   MinderResult,
@@ -75,6 +77,19 @@ export type {
   UseMinderReturn,
 } from './hooks/useMinder.js';
 
+// Capability contract hooks (provider foundation, task F-03). Explicit named re-exports here
+// intentionally shadow the legacy `useAuth` pulled in below via `export * from './hooks/index.js'`
+// (ES module semantics: local/explicit exports take precedence over star-exported names) — this
+// capability-contract `useAuth` is the one consumers of the root entry point get.
+export { useAuth, useCheckout, useStorage, useLive } from './hooks/contracts.js';
+export type {
+  UseAuthReturn,
+  UseCheckoutReturn,
+  UseStorageReturn,
+  UseLiveReturn,
+} from './hooks/contracts.js';
+export * from './contracts/index.js';
+
 // Pagination hook
 export { usePaginatedMinder } from './hooks/usePaginatedMinder.js';
 export type {
@@ -84,12 +99,21 @@ export type {
   PageData,
 } from './hooks/usePaginatedMinder.js';
 
+// 🆕 QR-D1 — Opt-in typed routes: inferred response types via a factory,
+// WITHOUT changing `minder`/`useMinder` (they remain untyped escape hatches).
+export { route, createTypedMinder } from './core/typedRoutes.js';
+export type { TypedRoute, ResponseOf } from './core/typedRoutes.js';
+
 // ============================================================================
 // LEGACY EXPORTS - For backward compatibility
 // ============================================================================
 
 // Provider component (old architecture - RE-ENABLED for backward compatibility)
 export { MinderDataProvider, useMinderContext } from './core/MinderDataProvider.js';
+// Wave I — local-first: the persistence layer behind useMinder's
+// `source: 'local' | 'local-first'`. Exported so apps can pre-seed or manage
+// offline data directly (isomorphic: web / native / expo / electron).
+export { LocalStore, getDefaultLocalStore, localKeyOf } from './core/LocalStore.js';
 export * from './core/types.js';
 export * from './core/EnvironmentManager.js';
 export * from './core/ProxyManager.js';
@@ -124,6 +148,39 @@ export * from './query/index.js';
 // Error Boundary Component
 export { MinderErrorBoundary, useErrorHandler } from './components/index.js';
 export type { ErrorBoundaryProps } from './components/index.js';
+
+// ============================================================================
+// SECRET-KEY SAFETY — keep secret keys out of the client bundle
+// ============================================================================
+export {
+  secret,
+  env,
+  SecretRef,
+  isSecretRef,
+  redactSecrets,
+  findExposedSecrets,
+  assertNoExposedSecrets,
+} from './security/secrets.js';
+export type { ExposedSecret } from './security/secrets.js';
+
+// ============================================================================
+// CUSTOM PROVIDER PLATFORM API (G-06)
+// ============================================================================
+// The same public functions every certified provider (providers/clerk,
+// providers/stripe, providers/supabase, providers/firebase,
+// providers/razorpay, providers/sentry) uses, so an app can build an
+// equivalent custom provider from this published package alone — see
+// docs/providers/CUSTOM.md.
+//
+// Client-config-time: declare which of a provider's config keys are safe to
+// appear inline in CLIENT config (see src/config/validateConfig.ts).
+export { registerClientSafeProviderKeys } from './config/validateConfig.js';
+// Credential helpers safe to call ANYWHERE (never resolve a value; never
+// touch process.env/fs). `resolveCredential` is SERVER-ONLY — it throws if
+// called in the browser — and is therefore intentionally NOT exported here;
+// import it from 'minder-data-provider/server' instead.
+export { isCredentialInput, describeCredential } from './security/credentials.js';
+export type { CredentialInput } from './security/credentials.js';
 
 // ============================================================================
 // PLATFORM SUPPORT (v2.1)
@@ -167,6 +224,7 @@ export {
   MinderSecurityError,
   MinderTimeoutError,
   MinderOfflineError,
+  MinderConflictError,
   MinderPluginError,
   MinderWebSocketError,
   MinderUploadError,
@@ -174,6 +232,13 @@ export {
   getErrorMessage,
   getErrorCode,
 } from './errors/index.js';
+
+// Response-validation error (Task 3.1). Exported TYPE-ONLY on purpose: the class
+// lives in the lazy validation chunk (responseValidation.ts) so it costs zero
+// eager bytes for consumers who never configure a `schema` (design §5 / P4).
+// Runtime consumers branch on `error.code === 'RESPONSE_VALIDATION_FAILED'`
+// (+ `error.issues`); the thrown instance is reachable at `result.error.raw`.
+export type { MinderResponseValidationError } from './core/responseValidation.js';
 
 // ============================================================================
 // MIDDLEWARE EXPORTS
@@ -196,10 +261,22 @@ export type {
 // ENUMS & CONSTANTS - Type-safe values for configuration
 // ============================================================================
 
+// `HttpMethod` is re-exported via a concrete value binding (not a bare
+// `export { HttpMethod } from …`). Under tsup `splitting`, esbuild wraps the
+// shared enums module in a lazy `__esm` init thunk; a pure re-export merely
+// forwards the (still-undefined) binding and, because the package sets
+// `sideEffects: false`, a consuming bundler such as webpack never runs the
+// thunk — leaving `HttpMethod` undefined in the browser client bundle. Tying
+// the export to a concrete const forces esbuild to invoke the init thunk
+// eagerly wherever `HttpMethod` is imported. See tests/dist-entry-exports.
+import { HttpMethod as _HttpMethod } from './constants/enums.js';
+export const HttpMethod = _HttpMethod;
+// eslint-disable-next-line @typescript-eslint/no-redeclare -- legal TS value+type merge; the pair is what keeps the enum eagerly initialized
+export type HttpMethod = _HttpMethod;
+
 // Export all enums for type-safe configuration
 export {
   // HTTP & Network
-  HttpMethod,
   QueryStatus,
   NetworkState,
   RetryStrategy,

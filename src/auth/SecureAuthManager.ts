@@ -1,8 +1,8 @@
 /**
  * 🔒 SecureAuthManager - Production-grade secure authentication
- * 
+ *
  * Features:
- * - ✅ httpOnly cookies (prevents XSS)
+ * - ✅ Cookie-based token storage, with a helper for server-set httpOnly cookies
  * - ✅ CSRF token protection
  * - ✅ Secure token generation (Web Crypto API)
  * - ✅ HTTPS enforcement in production
@@ -10,11 +10,24 @@
  * - ✅ Secure refresh token rotation
  * - ✅ Rate limiting on auth operations
  * - ✅ Input sanitization
- * 
+ *
  * Security best practices built-in by default.
+ *
+ * ⚠️ **On "httpOnly" and XSS**: JavaScript can never set the `HttpOnly`
+ * cookie attribute — it's a browser restriction that exists specifically to
+ * keep script-writable cookies script-*readable* too. This class's
+ * `setToken()`/token storage path writes to `document.cookie` from the
+ * client, so those cookies are **not** httpOnly and are just as readable by
+ * an XSS payload as localStorage/sessionStorage would be. The `httpOnly`
+ * flag in `cookieOptions` does not change that — it only affects the string
+ * built by `setHttpOnlyCookie()` (below), which is a helper meant to be sent
+ * from your **server** as a `Set-Cookie` response header. For XSS-resistant
+ * token storage, issue the cookie from the server (via `Set-Cookie` with
+ * `HttpOnly`) rather than relying on this class's client-side cookie writes.
  */
 
 import { AuthManager } from '../core/AuthManager.js';
+import { parseJWT as decodeJwt } from '../utils/jwt.js';
 import type { AuthConfig } from '../core/types.js';
 import type { DebugManager } from '../debug/DebugManager.js';
 import { StorageType } from '../constants/enums.js';
@@ -47,7 +60,15 @@ export interface SecureAuthConfig extends Partial<AuthConfig> {
   enableCSRF?: boolean;
   
   /**
-   * httpOnly cookie options (when storage=COOKIE)
+   * Cookie attribute options (when storage=COOKIE).
+   *
+   * NOTE: `httpOnly` here does NOT make the cookies this class writes via
+   * `document.cookie` HttpOnly — JavaScript running in the browser is
+   * fundamentally unable to set that attribute (that's the whole point of
+   * HttpOnly: it hides the cookie from script access). This flag only
+   * affects `setHttpOnlyCookie()`, a helper for generating a `Set-Cookie`
+   * header value on your SERVER. If you need real HttpOnly protection,
+   * your backend must set the cookie, not this client-side class.
    */
   cookieOptions?: {
     httpOnly?: boolean;
@@ -236,18 +257,7 @@ export class SecureAuthManager extends AuthManager {
    * Parse JWT token payload
    */
   private parseJWT(token: string): JWTPayload | null {
-    try {
-      // Validate JWT has 3 parts (header.payload.signature)
-      const parts = token.split('.');
-      if (parts.length !== 3 || !parts[1]) {
-        return null;
-      }
-      
-      const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-      return payload as JWTPayload;
-    } catch {
-      return null;
-    }
+    return decodeJwt<JWTPayload>(token);
   }
   
   /**
@@ -546,8 +556,17 @@ export class SecureAuthManager extends AuthManager {
   // ==========================================================================
   
   /**
-   * Set httpOnly cookie (server-side only)
-   * This should be called from your backend
+   * Build a `Set-Cookie` header value for a SERVER-set httpOnly cookie.
+   *
+   * This does not run in — nor set anything from — the browser. It's a
+   * string builder: call it from your backend request handler and send the
+   * result as a literal `Set-Cookie` response header. That is the only way
+   * to get a real HttpOnly cookie (JS in the browser cannot set the
+   * HttpOnly attribute), and therefore the only way to store an
+   * XSS-resistant token via cookies. This is unrelated to the client-side
+   * `document.cookie` writes this class performs for
+   * `storage: StorageType.COOKIE` (see class-level docs above), which are
+   * never HttpOnly regardless of `cookieOptions.httpOnly`.
    */
   setHttpOnlyCookie(name: string, value: string): string {
     const options = this.secureConfig.cookieOptions || {};

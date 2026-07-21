@@ -1,4 +1,4 @@
-import { minder } from 'minder-data-provider';
+import { minder } from 'minder-data-provider/native';
 import type { Todo, CreateTodoInput, UpdateTodoInput, SyncQueueItem } from '../types';
 import {
   getTodosFromStorage,

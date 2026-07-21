@@ -59,7 +59,9 @@ describe('CORS Helper Rename', () => {
 
       expect((config as any).corsHelper).toBeDefined();
       expect((config as any).corsHelper.enabled).toBe(true);
-      expect((config as any).corsHelper.credentials).toBe(true);
+      // G-05: flipped true->false — boolean shorthand only means "enable",
+      // credentials must be opted into explicitly (M0-01 opt-in contract).
+      expect((config as any).corsHelper.credentials).toBe(false);
     });
 
     it('should work with corsHelper boolean shorthand (false)', () => {
@@ -126,9 +128,11 @@ describe('CORS Helper Rename', () => {
       });
 
       expect(config.cors?.enabled).toBe(true);
-      expect(config.cors?.credentials).toBe(true);
+      // G-05: flipped true->false (both mirrors) — boolean shorthand only
+      // means "enable", credentials must be opted into explicitly (M0-01).
+      expect(config.cors?.credentials).toBe(false);
       expect((config as any).corsHelper.enabled).toBe(true);
-      expect((config as any).corsHelper.credentials).toBe(true);
+      expect((config as any).corsHelper.credentials).toBe(false);
     });
 
     it('should work with cors boolean shorthand (false)', () => {
@@ -243,7 +247,11 @@ describe('CORS Helper Rename', () => {
       expect(helper.headers).toEqual(['Content-Type', 'Authorization']);
     });
 
-    it('should default credentials to true when enabled', () => {
+    // G-05: renamed (was "should default credentials to true when enabled")
+    // and flipped true->false — that name asserted the exact bug this fix
+    // removes. `enabled: true` alone is not an opinion on credentials;
+    // opt-in requires an explicit `credentials: true` (M0-01 contract).
+    it('should default credentials to false when enabled without an explicit opinion', () => {
       const config = configureMinder({
         apiUrl: 'https://api.example.com',
         corsHelper: {
@@ -251,7 +259,7 @@ describe('CORS Helper Rename', () => {
         },
       });
 
-      expect((config as any).corsHelper.credentials).toBe(true);
+      expect((config as any).corsHelper.credentials).toBe(false);
     });
 
     it('should allow credentials to be explicitly false', () => {

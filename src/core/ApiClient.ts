@@ -1,24 +1,21 @@
 import axios, { AxiosError } from 'axios';
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import type { MinderConfig, ApiRoute, ApiError } from './types.js';
+import type { StandardSchemaV1 } from '../types/standard-schema.js';
 import { HttpMethod, DebugLogType } from '../constants/enums.js';
 import { AuthManager } from './AuthManager.js';
 import { ProxyManager } from './ProxyManager.js';
-import { OfflineManager } from './OfflineManager.js';
+import { OfflineManager } from '../platform/offline/OfflineManager.js';
+import { getActiveOfflineManager } from '../platform/offline/registry.js';
+import type { QueuedRequest } from '../platform/offline/types.js';
 import {
   MinderConfigError,
   MinderNetworkError,
-  MinderTimeoutError,
-  MinderOfflineError,
-  MinderValidationError,
-  MinderAuthError,
-  MinderAuthorizationError
 } from '../errors/index.js';
 import {
   CSRFTokenManager,
   XSSSanitizer,
-  RateLimiter,
-  getSecurityHeaders
+  RateLimiter
 } from '../utils/security.js';
 import { CorsManager, handleCorsError } from '../utils/corsManager.js';
 import {
@@ -27,8 +24,18 @@ import {
   PerformanceMonitor,
 } from '../utils/performance.js';
 import { AnalyticsManager } from '../utils/analytics.js';
+import { telemetry } from '../utils/TelemetryTracker.js';
 import { TelemetryManager } from '../utils/telemetry.js';
 import type { DebugManager } from '../debug/DebugManager.js';
+import {
+  PluginManager,
+  pluginManager as globalPluginManager,
+  isShortCircuitResponse,
+} from '../plugins/PluginSystem.js';
+import type { InterceptableRequest, ShortCircuitResponse, UploadLifecycleEvent } from '../plugins/PluginSystem.js';
+import { redactSecrets } from '../security/secrets.js';
+import { applyRequestBody, buildUploadFormData, createUploadProgressHandler } from './apiClient/upload.js';
+import { normalizeApiError, sanitizeHeaders as sanitizeHeadersInternal } from './apiClient/errors.js';
 
 export class ApiClient {
   private axiosInstance: AxiosInstance;
@@ -48,6 +55,21 @@ export class ApiClient {
   private telemetryManager?: TelemetryManager;
   private corsManager?: CorsManager;
   private offlineManager?: OfflineManager;
+  // True only when THIS client constructed its own OfflineManager (standalone,
+  // no configureMinder-wired instance). A wired manager is owned by the config
+  // lifecycle, so destroy() must NOT tear it down.
+  private ownsOfflineManager = false;
+
+  // Background timers — stored so destroy() can clear them (otherwise they leak
+  // and keep firing after the owning provider unmounts / on HMR).
+  private analyticsTimer?: ReturnType<typeof setInterval>;
+  private telemetryTimer?: ReturnType<typeof setInterval>;
+
+  // Plugin bus. Per-instance when `config.plugins` is supplied, else the global
+  // singleton (so `registerPlugins(...)` keeps working). `ownsPluginManager`
+  // means destroy() should tear it down.
+  private pluginManager: PluginManager;
+  private ownsPluginManager = false;
 
   // Token refresh state
   private isRefreshing = false;
@@ -117,7 +139,7 @@ export class ApiClient {
 
       // Auto-track performance if enabled
       if (config.analytics.autoTrackPerformance && this.performanceMonitor) {
-        setInterval(() => {
+        this.analyticsTimer = setInterval(() => {
           const metrics = this.performanceMonitor?.getMetrics();
           if (metrics) {
             this.analyticsManager?.trackPerformance(metrics);
@@ -132,7 +154,7 @@ export class ApiClient {
 
       // Send performance stats to HQ
       if (this.performanceMonitor) {
-        setInterval(() => {
+        this.telemetryTimer = setInterval(() => {
           const metrics = this.performanceMonitor?.getMetrics();
           if (metrics) {
             this.telemetryManager?.trackPerformance(metrics);
@@ -141,36 +163,242 @@ export class ApiClient {
       }
     }
 
-    // Initialize Offline Manager
+    // Initialize Offline Manager (MDPD unified-manager fix).
+    //
+    // There is exactly ONE OfflineManager per configuration. When
+    // configureMinder wired one (getActiveOfflineManager()), reuse THAT
+    // instance — it is the manager whose sync engine emits onSync /
+    // onConnectivityChange — so genuinely-failed auto-queued requests replay
+    // through it and those hooks fire. Only when running standalone (a bare
+    // `new ApiClient(...)` with offline enabled and no wired manager) do we
+    // construct our own, and then we own its teardown.
     if (config.offline?.enabled) {
-      this.offlineManager = new OfflineManager(config.offline);
-      this.offlineManager.setProcessQueueCallback(async (request) => {
-        // Replay request
-        await this.axiosInstance.request({
-          method: request.method,
-          url: request.url,
-          data: request.body,
-          headers: request.headers
-        });
+      const wired = getActiveOfflineManager();
+      if (wired) {
+        this.offlineManager = wired;
+        this.ownsOfflineManager = false;
+      } else {
+        this.offlineManager = new OfflineManager(config.offline);
+        this.ownsOfflineManager = true;
+        // Async listener setup; isolated so it never breaks construction.
+        void this.offlineManager.initialize().catch(() => { /* isolated */ });
+      }
+      // Inject our axios instance as the replay transport (the unified-manager
+      // equivalent of the old setProcessQueueCallback). Replayed requests then
+      // carry auth/CSRF/CORS/interceptors, and sync() emits onSync around them.
+      this.offlineManager.setRequestExecutor(async (request: QueuedRequest) => {
+        try {
+          const response = await this.axiosInstance.request({
+            method: request.method,
+            url: request.url,
+            data: request.body,
+            headers: request.headers,
+            // Mark the re-dispatch so a replay that fails again is NOT re-captured
+            // by the auto-queue path in apiClient/errors.ts (which would duplicate
+            // the request). The manager's own retry accounting owns replay failures.
+            ...( { __minderReplay: true } as Record<string, unknown> ),
+          });
+          return response.data;
+        } catch (err) {
+          // This same axiosInstance's response interceptor (setupInterceptors,
+          // above) already ran and transformed the raw AxiosError into a
+          // Minder*Error/ApiError via handleError() -> normalizeApiError() ->
+          // buildApiError() BEFORE this catch ever sees it — `err` here is
+          // that transformed value, not the raw AxiosError. normalizeApiError
+          // always attaches the untouched original as `err.raw`, so THAT is
+          // what tells us whether the server actually responded.
+          //
+          // Server RESPONDED with a non-2xx status -> report a uniform
+          // HTTP-outcome sentinel instead of throwing (Spec 5.1 §10.1, option
+          // (a)). ApiClient stays a dumb transport: it never reads
+          // `conflictStatuses` and never decides conflict-vs-error, it just
+          // reports "here is the HTTP outcome" and leaves that call entirely
+          // to the offline layer. Deliberately carrying the ALREADY-TRANSFORMED
+          // `err.message`/`err.code` (not the raw generic axios message) is
+          // what keeps a non-conflict status byte-equal to the pre-feature
+          // thrown error: buildApiError gives 404/429/500/etc. their own
+          // custom message text, not axios's generic "Request failed with
+          // status code N".
+          const raw = (err as { raw?: unknown } | null | undefined)?.raw;
+          if (axios.isAxiosError(raw) && raw.response) {
+            const transformed = err as { message?: string; code?: string };
+            return {
+              __minderReplayOutcome: 'error' as const,
+              status: raw.response.status,
+              serverData: raw.response.data,
+              message: transformed?.message ?? raw.message,
+              code: transformed?.code ?? raw.code,
+            };
+          }
+          // Genuine transport failure (ERR_NETWORK/timeout/etc, no response)
+          // -> re-throw the (already-transformed) error unchanged; this path
+          // is untouched by this feature.
+          throw err;
+        }
       });
+    }
+
+    // Initialize plugin bus — per-instance if plugins are supplied, else the
+    // shared global manager (so registerPlugins(...) keeps working).
+    if (config.plugins && config.plugins.length > 0) {
+      this.pluginManager = new PluginManager({ debug: config.debug?.enabled });
+      this.ownsPluginManager = true;
+      config.plugins.forEach((p) => this.pluginManager.register(p));
+    } else {
+      this.pluginManager = globalPluginManager;
+    }
+    if (this.pluginManager.size > 0) {
+      // onInit is isolated per-plugin inside the manager; don't block construction.
+      void this.pluginManager.init(config).catch(() => { /* isolated */ });
     }
 
     // Use proxy baseURL if enabled, otherwise use original
     const baseURL = proxyManager?.isEnabled() ? proxyManager.config.baseUrl : config.apiBaseUrl;
 
-    // Create axios instance with CORS support
+    // Create axios instance with CORS support.
+    //
+    // IMPORTANT: default request headers here must stay within the CORS
+    // "safelisted" set (Content-Type: application/json is safelisted;
+    // Accept always is). Response-type security headers (CSP, X-Frame-Options,
+    // etc. — see getSecurityHeaders() in utils/security.ts) must NEVER be
+    // spread onto the request here: they are non-safelisted, so their mere
+    // presence forces the browser to perform a CORS preflight OPTIONS request
+    // before every single call, roughly doubling latency cross-origin.
+    //
+    // withCredentials defaults to false (opt-in via config.cors.credentials)
+    // for the same reason: sending credentials on cross-origin requests
+    // changes preflight requirements and requires the server to echo back a
+    // non-wildcard Access-Control-Allow-Origin, so it should be an explicit
+    // choice rather than a silent default.
     this.axiosInstance = axios.create({
       baseURL,
       timeout: config.performance?.timeout || 30000,
-      withCredentials: config.cors?.credentials ?? true,
+      withCredentials: config.cors?.credentials === true,
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        ...getSecurityHeaders(config.security?.headers, config.security?.strictCSP),
       },
     });
 
     this.setupInterceptors();
+  }
+
+  /**
+   * Release all resources held by this client.
+   *
+   * Clears the background analytics/telemetry timers, drops the in-flight
+   * request cache and any queued refresh waiters, and tears down the offline
+   * manager if it exposes a destroy(). Call this when the owning provider
+   * unmounts so intervals/listeners don't leak (especially under HMR or when
+   * multiple clients are created).
+   */
+  public destroy(): void {
+    if (this.analyticsTimer) {
+      clearInterval(this.analyticsTimer);
+      this.analyticsTimer = undefined;
+    }
+    if (this.telemetryTimer) {
+      clearInterval(this.telemetryTimer);
+      this.telemetryTimer = undefined;
+    }
+    this.requestCache.clear();
+    this.failedQueue = [];
+    if (this.ownsPluginManager) {
+      void this.pluginManager.destroy();
+    }
+    // OfflineManager registers window listeners; release them ONLY when this
+    // client owns the manager. A configureMinder-wired manager is shared and
+    // owned by the config lifecycle (re-configure/destroy handle it there), so
+    // tearing it down here would kill offline support for other consumers.
+    if (this.ownsOfflineManager) {
+      void this.offlineManager?.destroy();
+    }
+  }
+
+  // ── Plugin bus emitters (observability; fire-and-forget, never block I/O) ──
+
+  private emitPluginRequest(config: AxiosRequestConfig): void {
+    if (this.pluginManager.size === 0) return;
+    void this.pluginManager.executeRequestHooks({
+      method: (config.method || 'GET').toUpperCase(),
+      url: config.url || '',
+      headers: config.headers as Record<string, string> | undefined,
+      body: config.data,
+      timestamp: Date.now(),
+    });
+  }
+
+  private emitPluginResponse(response: AxiosResponse): void {
+    if (this.pluginManager.size === 0) return;
+    const start = (response.config as { __minderStart?: number }).__minderStart;
+    void this.pluginManager.executeResponseHooks({
+      status: response.status,
+      data: response.data,
+      headers: response.headers as Record<string, string> | undefined,
+      duration: start ? Date.now() - start : 0,
+      timestamp: Date.now(),
+    });
+  }
+
+  private emitPluginError(error: AxiosError): void {
+    if (this.pluginManager.size === 0) return;
+    const cfg = error.config as (AxiosRequestConfig & { __minderStart?: number }) | undefined;
+    void this.pluginManager.executeErrorHooks({
+      message: error.message || 'Request error',
+      code: error.code || (error.response ? String(error.response.status) : undefined),
+      stack: error.stack,
+      request: cfg
+        ? {
+            method: (cfg.method || 'GET').toUpperCase(),
+            url: cfg.url || '',
+            headers: cfg.headers as Record<string, string> | undefined,
+            body: cfg.data,
+            timestamp: cfg.__minderStart || Date.now(),
+          }
+        : undefined,
+      timestamp: Date.now(),
+    });
+  }
+
+  /**
+   * Run the mutating `onRequestIntercept` middleware chain against the outgoing
+   * axios config. Header/url/method/params/data mutations are applied in place.
+   * If a plugin short-circuits, the {@link ShortCircuitResponse} is returned and
+   * the caller MUST resolve with its synthetic data without hitting the
+   * transport. Returns `null` when the chain completed normally.
+   *
+   * Zero-overhead fast path: returns immediately when no registered plugin
+   * implements the hook.
+   */
+  private async runRequestInterceptors(
+    requestConfig: AxiosRequestConfig,
+    routeName: string
+  ): Promise<ShortCircuitResponse | null> {
+    if (this.pluginManager.size === 0 || !this.pluginManager.hasRequestInterceptors()) {
+      return null;
+    }
+
+    const interceptable: InterceptableRequest = {
+      url: requestConfig.url || '',
+      method: (requestConfig.method || 'GET').toString().toUpperCase(),
+      headers: (requestConfig.headers as Record<string, string>) || {},
+      params: requestConfig.params as Record<string, unknown> | undefined,
+      data: requestConfig.data,
+      routeName,
+    };
+
+    const result = await this.pluginManager.executeRequestInterceptors(interceptable);
+    if (isShortCircuitResponse(result)) {
+      return result;
+    }
+
+    // Apply the middleware's mutations back onto the outgoing axios config.
+    requestConfig.url = result.url;
+    requestConfig.method = result.method as AxiosRequestConfig['method'];
+    requestConfig.headers = result.headers as AxiosRequestConfig['headers'];
+    requestConfig.params = result.params;
+    requestConfig.data = result.data;
+    return null;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -208,12 +436,16 @@ export class ApiClient {
             method: config.method,
             url: config.url,
             headers: this.sanitizeHeaders(config.headers),
-            data: config.data,
-            params: config.params
+            data: redactSecrets(config.data),
+            params: redactSecrets(config.params)
           });
         }
 
-        const token = this.authManager.getToken(); // Add auth token if available
+        let token = this.authManager.getToken(); // Add auth token if available
+        if (!token && this.pluginManager.size > 0) {
+          // Auth-provider plugins (Firebase/Auth0/Clerk…) can supply the token.
+          token = await this.pluginManager.collectToken();
+        }
         if (token) {
           const authHeader = this.config.auth?.authHeader || 'Authorization';
           const authPrefix = this.config.auth?.authTokenPrefix !== undefined ? this.config.auth.authTokenPrefix : 'Bearer';
@@ -234,6 +466,7 @@ export class ApiClient {
           const key = `${config.method}:${config.url}`;
           const { requests, window } = this.config.security.rateLimiting;
           if (!this.rateLimiter.check(key, requests, window)) {
+            telemetry.recordRateLimitHit();
             throw new MinderNetworkError('Rate limit exceeded. Please try again later.', 429, undefined, 'RATE_LIMIT_EXCEEDED');
           }
         }
@@ -246,6 +479,10 @@ export class ApiClient {
           );
           Object.assign(config.headers, corsHeaders);
         }
+
+        // Stamp start time + fire plugin request hooks (non-blocking observability)
+        (config as { __minderStart?: number }).__minderStart = Date.now();
+        this.emitPluginRequest(config);
 
         return config;
       },
@@ -264,11 +501,12 @@ export class ApiClient {
           this.debugManager.log(DebugLogType.API, `✅ ${response.status} ${response.config.method?.toUpperCase()} ${response.config.url}${duration ? ` (${duration}ms)` : ''}`, {
             status: response.status,
             statusText: response.statusText,
-            data: response.data,
+            data: redactSecrets(response.data),
             headers: this.sanitizeHeaders(response.headers),
             duration
           });
         }
+        this.emitPluginResponse(response);
         return response;
       },
       async (error) => {
@@ -278,14 +516,54 @@ export class ApiClient {
             status: error.response?.status,
             statusText: error.response?.statusText,
             message: error.message,
-            data: error.response?.data
+            data: redactSecrets(error.response?.data)
           });
         }
 
+        this.emitPluginError(error as AxiosError);
+
         const originalRequest = error.config;
+
+        // --- Exponential Backoff Retry Logic ---
+        const retries = this.config.performance?.retries ?? 0;
+        const currentRetryCount = originalRequest._retryCount || 0;
+        
+        // Retry on Network errors (no response), 5XX server errors, or 429 Too Many Requests
+        const isRetryableError = !error.response || 
+                               (error.response.status >= 500 && error.response.status < 600) || 
+                               error.response.status === 429;
+        
+        // Allow custom shouldRetry function
+        const customShouldRetry = this.config.performance?.retryConfig?.shouldRetry;
+        const shouldRetry = customShouldRetry 
+          ? customShouldRetry(error, currentRetryCount) 
+          : isRetryableError;
+
+        if (shouldRetry && currentRetryCount < retries) {
+          originalRequest._retryCount = currentRetryCount + 1;
+          
+          const baseDelay = this.config.performance?.retryDelay ?? 1000;
+          const factor = this.config.performance?.retryConfig?.factor ?? 2;
+          const maxDelay = this.config.performance?.retryConfig?.maxDelay ?? 30000;
+          
+          // Calculate delay with exponential backoff and jitter
+          const exponentialDelay = Math.min(baseDelay * Math.pow(factor, currentRetryCount), maxDelay);
+          const jitter = Math.random() * 200; // Add up to 200ms jitter
+          const delay = exponentialDelay + jitter;
+          
+          if (this.debugManager && this.config.debug?.networkLogs) {
+            this.debugManager.log(DebugLogType.API, `⚠️ Retrying request (${originalRequest._retryCount}/${retries}) in ${Math.round(delay)}ms: ${originalRequest.method?.toUpperCase()} ${originalRequest.url}`);
+          }
+          
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return this.axiosInstance.request(originalRequest);
+        }
+        // --- End Retry Logic ---
 
         // Handle 401 Unauthorized
         if (error.response?.status === 401 && !originalRequest._retry) {
+          telemetry.recordAuthFailure();
+          originalRequest._retry = true;
           // Check if refresh is configured
           if (this.config.auth?.refreshUrl) {
             if (this.isRefreshing) {
@@ -347,7 +625,7 @@ export class ApiClient {
                 this.debugManager.log(DebugLogType.API, `🚀 POST ${fullRefreshUrl} (Refresh)`, {
                   hasRefreshToken: !!refreshToken,
                   isCookieStorage,
-                  headers
+                  headers: this.sanitizeHeaders(headers)
                 });
               }
 
@@ -357,7 +635,10 @@ export class ApiClient {
                   ? this.config.auth.getRefreshRequestBody(refreshToken)
                   : (refreshToken ? { refreshToken } : {}),
                 {
-                  withCredentials: true, // Important for cookies
+                  // Follow the same opt-in flag as the main axios instance —
+                  // defaulting to true here would silently send credentials
+                  // cross-origin even when the app never asked for it.
+                  withCredentials: this.config.cors?.credentials === true,
                   headers
                 }
               );
@@ -383,6 +664,14 @@ export class ApiClient {
                   this.authManager.setRefreshToken(newRefreshToken);
                 }
 
+                // Notify plugins of the token rotation (non-blocking)
+                if (this.pluginManager.size > 0) {
+                  void this.pluginManager.executeAuthRefreshHooks({
+                    accessToken: token,
+                    refreshToken: newRefreshToken,
+                  });
+                }
+
                 this.processQueue(null, token);
                 this.isRefreshing = false;
 
@@ -397,7 +686,7 @@ export class ApiClient {
               // Log refresh failure
               if (this.debugManager && this.config.debug?.networkLogs) {
                 this.debugManager.log(DebugLogType.API, `❌ REFRESH FAILED`, {
-                  error: refreshError instanceof Error ? refreshError.message : refreshError
+                  error: redactSecrets(refreshError instanceof Error ? refreshError.message : refreshError)
                 });
               }
 
@@ -481,168 +770,21 @@ export class ApiClient {
     );
   }
 
+  /**
+   * Normalize any thrown/rejected error into Minder's structured shape AND attach
+   * the ORIGINAL underlying error as `.raw` on whatever it produces — both the
+   * objects it returns (e.g. the 400 result object) and the MinderError subclasses
+   * it throws. This guarantees every error a consumer eventually sees exposes the
+   * untouched source error (typically the AxiosError) for `.raw` inspection.
+   *
+   * Delegates to `normalizeApiError` in `./apiClient/errors.js`.
+   */
   private handleError(error: unknown): ApiError {
-    // Check if it's an AxiosError
-    if (axios.isAxiosError(error)) {
-      const axiosError = error as AxiosError;
-
-      const status = axiosError.response?.status || 0;
-      const url = axiosError.config?.url;
-      const method = axiosError.config?.method?.toUpperCase();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const responseData = axiosError.response?.data as any;
-      const responseHeaders = axiosError.response?.headers as Record<string, string> | undefined;
-
-      switch (status) {
-        case 400:
-          return {
-            message: responseData?.message || 'Bad Request',
-            status,
-            code: 'BAD_REQUEST',
-            details: responseData,
-          };
-
-        case 401:
-          throw new MinderAuthError(
-            responseData?.message || 'Authentication required'
-          );
-
-        case 403:
-          // Check if this is a CORS origin blocked error
-          if (responseHeaders?.['access-control-allow-origin'] === 'null') {
-            const corsMsg = responseData?.message || 'CORS origin blocked - request origin not allowed';
-            throw new MinderNetworkError(corsMsg, 403, responseData, url, method, 'CORS_ORIGIN_BLOCKED');
-          }
-          throw new MinderAuthorizationError(
-            responseData?.message || 'Permission denied'
-          );
-
-        case 404: {
-          const notFoundMsg = responseData?.message || `Resource not found: ${method} ${url}`;
-          throw new MinderNetworkError(notFoundMsg, 404, responseData, url, method);
-        }
-
-        case 405: {
-          // Check if this is a CORS preflight failed error
-          if (method === 'OPTIONS') {
-            const corsMsg = responseData?.message || 'CORS preflight request failed - server does not allow OPTIONS method';
-            throw new MinderNetworkError(corsMsg, 405, responseData, url, method, 'CORS_PREFLIGHT_FAILED');
-          }
-          const methodMsg = responseData?.message || `Method not allowed: ${method} ${url}`;
-          throw new MinderNetworkError(methodMsg, 405, responseData, url, method);
-        }
-
-        case 422: {
-          throw new MinderValidationError(
-            responseData?.message || 'Validation failed',
-            responseData?.errors
-          );
-        }
-
-        case 429: {
-          const rateLimitMsg = responseData?.message || 'Too many requests - rate limit exceeded';
-          throw new MinderNetworkError(rateLimitMsg, 429, responseData, url, method);
-        }
-
-        case 500:
-        case 502:
-        case 503:
-        case 504: {
-          const serverMsg = responseData?.message || 'Server error - please try again later';
-          throw new MinderNetworkError(serverMsg, status, responseData, url, method);
-        }
-
-        default:
-          throw new MinderNetworkError(
-            responseData?.message || axiosError.message || 'API error',
-            status,
-            responseData,
-            url,
-            method,
-            responseData?.code || 'API_ERROR'
-          );
-      }
-    }
-
-    // Network error (has request but no response)
-    if (error && typeof error === 'object' && 'request' in error) {
-      const networkError = error as {
-        request?: unknown;
-        code?: string;
-        config?: { url?: string; method?: string; timeout?: number };
-      };
-
-      // Check for timeout
-      if (networkError.code === 'ECONNABORTED') {
-        throw new MinderTimeoutError(
-          'Request timeout',
-          networkError.config?.timeout || 30000,
-          networkError.config?.url
-        );
-      }
-
-      // Check for offline
-      if (networkError.code === 'ERR_NETWORK' || typeof navigator !== 'undefined' && !navigator.onLine) {
-        // Queue request if offline manager is enabled
-        if (this.offlineManager && networkError.config?.url && networkError.config?.method) {
-          this.offlineManager.queueRequest({
-            url: networkError.config.url,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            method: networkError.config.method as any,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            body: (networkError.config as any).data,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            headers: (networkError.config as any).headers
-          });
-        }
-        throw new MinderOfflineError('No network connection', networkError.config?.url);
-      }
-
-      // Generic network error
-      throw new MinderNetworkError(
-        'Network error - please check your connection',
-        0,
-        undefined,
-        networkError.config?.url,
-        networkError.config?.method?.toUpperCase(),
-        'NETWORK_ERROR'
-      );
-    }
-
-    // Other errors
-    const errorMessage = error instanceof Error
-      ? error.message
-      : 'Unknown error occurred';
-
-    return {
-      message: errorMessage,
-      code: 'UNKNOWN_ERROR',
-      details: error,
-    };
-  }
-
-  private sanitizeData(data: unknown): unknown {
-    if (!this.sanitizer) return data;
-
-    // Skip sanitization for binary types and FormData
-    if (typeof FormData !== 'undefined' && data instanceof FormData) return data;
-    if (typeof Blob !== 'undefined' && data instanceof Blob) return data;
-    if (typeof File !== 'undefined' && data instanceof File) return data;
-
-    return this.sanitizer.sanitize(data);
+    return normalizeApiError(error, this.offlineManager);
   }
 
   private sanitizeHeaders(headers: any): any {
-    if (!headers) return headers;
-    const sanitized = { ...headers };
-    const sensitiveHeaders = ['Authorization', 'Cookie', 'Set-Cookie', 'X-CSRF-Token', 'x-csrf-token'];
-
-    Object.keys(sanitized).forEach(key => {
-      if (sensitiveHeaders.some(h => h.toLowerCase() === key.toLowerCase())) {
-        sanitized[key] = '[REDACTED]';
-      }
-    });
-    return sanitized;
+    return sanitizeHeadersInternal(headers);
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -651,10 +793,31 @@ export class ApiClient {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     data?: any,
     params?: Record<string, unknown>,
-    options?: AxiosRequestConfig
+    // `rawUrl` is a Minder-only escape-hatch flag (not an axios option); it is
+    // stripped before the config reaches axios.
+    options?: AxiosRequestConfig & { rawUrl?: boolean }
   ): Promise<T> {
+    // ── Ad-hoc / third-party escape hatch (mirrors useMinder's route-validation
+    //    exemption and minder()'s standalone behavior) ─────────────────────────
+    // An absolute URL or an explicit `rawUrl:true` option skips the registry
+    // entirely and builds the request directly. Auth/interceptors/plugins still
+    // apply because we go through the shared axiosInstance.
+    const isAbsoluteUrl = /^https?:\/\//i.test(routeName);
+    if (isAbsoluteUrl || options?.rawUrl === true) {
+      return this.requestRaw<T>(routeName, data, params, options, isAbsoluteUrl);
+    }
+
     const route = this.config.routes?.[routeName];
     if (!route) {
+      // An ad-hoc relative PATH (leading "/") that is not a registered route
+      // NAME is treated as a raw path resolved against baseURL. This lets
+      // provider-mode `useMinder('/ad-hoc')` work without the hook having to
+      // thread the rawUrl flag. BARE unknown names (no leading slash) still
+      // throw the helpful ROUTE_NOT_FOUND below.
+      if (routeName.startsWith('/')) {
+        return this.requestRaw<T>(routeName, data, params, options, false);
+      }
+
       const availableRoutes = Object.keys(this.config.routes || {});
       const error = new MinderConfigError(
         `Route '${routeName}' not found in configuration`,
@@ -711,25 +874,25 @@ export class ApiClient {
     }
 
     // Handle different content types with sanitization
-    if (data) {
-      const sanitizedData = this.sanitizeData(data);
+    applyRequestBody(requestConfig, data, this.sanitizer);
 
-      if (typeof FormData !== 'undefined' && sanitizedData instanceof FormData) {
-        requestConfig.data = sanitizedData;
-        // Remove Content-Type to let browser/axios set it with boundary
-        // We set it to undefined to ensure it's not merged with defaults
-        if (requestConfig.headers) {
-          delete requestConfig.headers['Content-Type'];
-          delete requestConfig.headers['content-type'];
-          // Also set to undefined in case some parts of the system re-add it
-          (requestConfig.headers as any)['Content-Type'] = undefined;
+    // Mutating request middleware: plugins may rewrite the outgoing config or
+    // short-circuit the request entirely with a synthetic response. Runs after
+    // the config (headers/data) is fully assembled and before any transport.
+    const shortCircuit = await this.runRequestInterceptors(requestConfig, routeName);
+    if (shortCircuit) {
+      const scData = shortCircuit.response.data;
+      // Transform the synthetic payload with the route model too, so a
+      // short-circuited response behaves exactly as if it came from the network.
+      if (route.model && scData) {
+        if (Array.isArray(scData)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          return scData.map((item: any) => new (route.model as any)().fromJSON(item)) as T;
         }
-      } else if (typeof sanitizedData === 'string' && sanitizedData.startsWith('<?xml')) {
-        requestConfig.data = sanitizedData;
-        requestConfig.headers!['Content-Type'] = 'application/xml';
-      } else {
-        requestConfig.data = sanitizedData;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return new (route.model as any)().fromJSON(scData) as T;
       }
+      return scData as T;
     }
 
     // Execute request with caching for GET
@@ -764,6 +927,21 @@ export class ApiClient {
       this.performanceMonitor.recordLatency(routeName, duration);
     }
 
+    // Task 3.1: opt-in runtime response validation via Standard Schema.
+    // `schema` isn't part of AxiosRequestConfig — it arrives as an ad-hoc
+    // property on `options`, mirroring how `rawUrl` is threaded through.
+    // Per-call `options.schema` wins over the route-def `route.schema`.
+    // Validates the RAW response body before the model transform below,
+    // since schemas describe wire JSON, not a decoded model instance. The
+    // validator, error class, and throw logic all live in the deferred
+    // responseValidation.js chunk, so callers who never configure a schema
+    // pay only the bare presence-guard here.
+    const effSchema = (options as { schema?: StandardSchemaV1 } | undefined)?.schema ?? route.schema;
+    if (effSchema) {
+      const { validateResponseOrThrow } = await import('./responseValidation.js');
+      response.data = await validateResponseOrThrow<any>(response.data, effSchema, response.status);
+    }
+
     // Transform response using model if specified
     if (route.model && response.data) {
       if (Array.isArray(response.data)) {
@@ -778,6 +956,105 @@ export class ApiClient {
     return response.data;
   }
 
+  /**
+   * Build and dispatch a request for an ad-hoc URL that bypasses the route
+   * registry — either an absolute `https?://` URL or a `rawUrl`/leading-slash
+   * path. Goes through the shared axiosInstance so auth, interceptors and
+   * plugins apply exactly as they do for registered routes.
+   *
+   * Method resolution: an explicit `options.method` wins; otherwise a request
+   * carrying a body defaults to POST and a bodyless one to GET.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async requestRaw<T = any>(
+    routeName: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data: any,
+    params: Record<string, unknown> | undefined,
+    options: (AxiosRequestConfig & { rawUrl?: boolean }) | undefined,
+    isAbsoluteUrl: boolean
+  ): Promise<T> {
+    // Strip the Minder-only `rawUrl` flag so it never leaks into axios config.
+    const {
+      headers: customHeaders,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      rawUrl: _rawUrl,
+      method: optionMethod,
+      ...otherOptions
+    } = (options || {}) as AxiosRequestConfig & { rawUrl?: boolean };
+
+    // Resolve the URL: absolute is used verbatim; relative resolves against the
+    // instance baseURL. Support trivial `:param` substitution for parity with
+    // registered routes.
+    let url = routeName;
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        url = url.replace(`:${key}`, String(value));
+      });
+    }
+
+    const method = optionMethod || (data === null || data === undefined ? HttpMethod.GET : HttpMethod.POST);
+
+    const requestConfig: AxiosRequestConfig = {
+      method,
+      url,
+      headers: {
+        ...(this.proxyManager?.getProxyHeaders() || {}),
+        ...(customHeaders || {})
+      },
+      timeout: this.proxyManager?.getTimeout() || this.config.performance?.timeout,
+      ...otherOptions,
+    };
+
+    // Absolute URLs are used verbatim: clear baseURL so the instance's
+    // apiBaseUrl is never prefixed.
+    if (isAbsoluteUrl) {
+      requestConfig.baseURL = '';
+    }
+
+    // Body handling with sanitization, mirroring the registered-route path.
+    applyRequestBody(requestConfig, data, this.sanitizer);
+
+    // Mutating request middleware (same semantics as the registered-route path).
+    const shortCircuit = await this.runRequestInterceptors(requestConfig, routeName);
+    if (shortCircuit) {
+      return shortCircuit.response.data as T;
+    }
+
+    const response: AxiosResponse<T> = await this.axiosInstance.request(requestConfig);
+
+    // Task 3.1: opt-in runtime response validation via Standard Schema. No
+    // registry route exists for this ad-hoc/raw path (absolute URL or
+    // `rawUrl`/leading-slash escape hatch), so only the per-call
+    // `options.schema` applies here — there is no route-def to fall back to.
+    const effSchema = (options as { schema?: StandardSchemaV1 } | undefined)?.schema;
+    if (effSchema) {
+      const { validateResponseOrThrow } = await import('./responseValidation.js');
+      return (await validateResponseOrThrow(response.data, effSchema, response.status)) as T;
+    }
+
+    return response.data;
+  }
+
+  /**
+   * Fire the upload-lifecycle plugin hooks (fire-and-forget, error-isolated per
+   * plugin inside the manager). Zero-overhead when no plugins are registered.
+   * MDPD-6: this is what makes `onUpload` reachable through the
+   * useMinder / useMediaUpload path (both call {@link uploadFile}), not just via
+   * the standalone MediaUploadManager.
+   */
+  private emitUploadHook(
+    event: Omit<UploadLifecycleEvent, 'file' | 'timestamp'> & { file?: File }
+  ): void {
+    if (this.pluginManager.size === 0) return;
+    const { file, ...rest } = event;
+    void this.pluginManager.executeUploadHooks({
+      ...rest,
+      file: file ? { name: file.name, size: file.size, type: file.type } : undefined,
+      timestamp: Date.now(),
+    });
+  }
+
   // File upload with progress
   async uploadFile(
     routeName: string,
@@ -785,21 +1062,34 @@ export class ApiClient {
     onProgress?: (progress: { loaded: number; total: number; percentage: number }) => void
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ): Promise<any> {
-    const formData = new FormData();
-    formData.append('file', file);
+    // MDPD-6: emit the documented UploadLifecycleEvent phases through the plugin
+    // bus so onUpload observers work on the hook path, mirroring MediaUploadManager.
+    const uploadId = `${file?.name ?? 'upload'}-${file?.size ?? 0}-${Date.now()}`;
+    const url = this.config.routes?.[routeName]?.url ?? routeName;
 
-    return this.request(routeName, formData, undefined, {
-      onUploadProgress: (progressEvent) => {
-        if (onProgress && progressEvent.total) {
-          const percentage = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          onProgress({
-            loaded: progressEvent.loaded,
-            total: progressEvent.total,
-            percentage,
-          });
-        }
-      },
-    });
+    this.emitUploadHook({ phase: 'start', uploadId, url, file });
+
+    try {
+      const result = await this.request(routeName, buildUploadFormData(file), undefined, {
+        onUploadProgress: createUploadProgressHandler((progress) => {
+          this.emitUploadHook({ phase: 'progress', uploadId, url, file, progress });
+          onProgress?.(progress);
+        }),
+      });
+      // Standardized on 'success' for parity with MediaUploadManager (both
+      // emitters are unreleased-new; the type union still allows 'complete').
+      this.emitUploadHook({ phase: 'success', uploadId, url, file, result });
+      return result;
+    } catch (error) {
+      this.emitUploadHook({
+        phase: 'error',
+        uploadId,
+        url,
+        file,
+        error: { message: error instanceof Error ? error.message : String(error) },
+      });
+      throw error;
+    }
   }
 
   // WebSocket connection
@@ -807,6 +1097,22 @@ export class ApiClient {
     const token = this.authManager.getToken();
     const wsUrl = token ? `${url}?token=${token}` : url;
     return new WebSocket(wsUrl, protocols);
+  }
+
+  /**
+   * Escape hatch: get the live, underlying axios instance for full, unrestricted
+   * control (arbitrary `axios.request(...)`, adding one-off interceptors, etc.).
+   *
+   * Requests you issue directly against this instance bypass Minder's route
+   * registry and plugin request/response emission — you are talking to axios
+   * directly. However, because it is the SAME instance Minder uses internally,
+   * all interceptors configured on it (auth-token injection, CSRF, CORS, retry,
+   * 401 refresh, error normalization) DO still apply to those direct calls.
+   *
+   * @returns the internal AxiosInstance (same reference used for all Minder I/O)
+   */
+  public getAxiosInstance(): AxiosInstance {
+    return this.axiosInstance;
   }
 
   // Get performance metrics

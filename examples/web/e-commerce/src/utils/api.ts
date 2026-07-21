@@ -32,13 +32,13 @@ const getApiBaseUrl = () => {
  * - Easy to modify base URL, headers, timeout, etc.
  */
 
-// Configure minder with default options
+// Configure minder with default options.
+// Current API: `apiUrl` is the required base URL (was `baseURL`); per-request
+// timeout lives under `performance`. Content-Type/Accept are default request
+// headers now, so no explicit headers map is needed here.
 configureMinder({
-  baseURL: getApiBaseUrl(),
-  timeout: 10000, // 10 seconds
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  apiUrl: getApiBaseUrl(),
+  performance: { timeout: 10000 }, // 10 seconds
 });
 
 /**

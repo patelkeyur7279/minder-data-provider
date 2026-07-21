@@ -1,0 +1,22 @@
+# Keeps minder-data-provider's OWN dependencies current. Downstream apps that
+# want the same discipline can extend the shareable Renovate preset at
+# .github/renovate-preset.json (see docs/COMPATIBILITY.md).
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+    groups:
+      # One PR for the low-risk minor/patch bumps; majors come separately so
+      # they get reviewed on their own (React 20 / react-query 6, etc.).
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies", "github-actions"]

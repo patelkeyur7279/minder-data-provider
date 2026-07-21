@@ -424,7 +424,9 @@ describe('EnvironmentManager', () => {
       const resolved = manager.getResolvedConfig();
       
       expect(resolved.cors?.enabled).toBe(true);
-      expect(resolved.cors?.credentials).toBe(true);
+      // G-08: credentials are opt-in — the old `?? true` default combined with
+      // origin '*' below was the SEC-01 wildcard+credentials combination.
+      expect(resolved.cors?.credentials).toBe(false);
       expect(resolved.cors?.origin).toBe('*');
       expect(resolved.cors?.methods).toEqual(['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']);
       expect(resolved.cors?.headers).toEqual(['Content-Type', 'Authorization', 'X-Requested-With']);

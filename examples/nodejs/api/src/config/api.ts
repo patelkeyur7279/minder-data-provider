@@ -1,4 +1,12 @@
-import { minder, configureMinder } from 'minder-data-provider';
+// Pure-Node app — both imports are React-free (the main entry re-exports the
+// hooks, which require React as a peer):
+//   - `minder` from `/node` (the data function).
+//   - `configureMinder` from `/config` — the CURRENT unified config API
+//     (`apiUrl` + routes), React-free and NOT deprecated. (Measured: /config
+//     pulls no React.) They share the same global config, so configuring via
+//     `/config` is picked up by `minder` from `/node`.
+import { minder } from 'minder-data-provider/node';
+import { configureMinder } from 'minder-data-provider/config';
 
 /**
  * API Configuration
@@ -31,12 +39,12 @@ const getApiBaseUrl = () => {
 /**
  * Configure Minder with default options
  */
+// The `/config` entry's configureMinder is the current UnifiedMinderConfig API
+// (`apiUrl` + routes + performance/auth/etc.), React-free and non-deprecated.
+// Content-Type/Accept are default request headers now, so no headers map needed.
 configureMinder({
-  baseURL: getApiBaseUrl(),
-  timeout: 10000, // 10 seconds
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  apiUrl: getApiBaseUrl(),
+  performance: { timeout: 10000 }, // 10 seconds
 });
 
 /**

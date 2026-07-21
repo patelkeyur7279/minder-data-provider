@@ -1,4 +1,5 @@
 import type { AuthConfig } from './types.js';
+import { parseJWT as decodeJwt, isJwtShaped } from '../utils/jwt.js';
 import type { DebugManager } from '../debug/DebugManager.js';
 import { StorageType, DebugLogType } from '../constants/enums.js';
 
@@ -156,6 +157,17 @@ export class AuthManager {
     this.notify();
   }
 
+  /**
+   * Client-side authentication check. IMPORTANT: this only inspects token
+   * presence and (for JWTs) the `exp` claim — it does NOT verify the JWT
+   * signature (a client bundle cannot hold signing secrets). Server-side
+   * consumers (./server, ./nextjs, ./node entries) MUST verify signatures
+   * themselves (e.g. with `jose`/`jsonwebtoken`) before trusting a request.
+   *
+   * Fails closed: a JWT-shaped token whose payload cannot be decoded, or
+   * whose `exp` claim is present but non-numeric, is treated as NOT
+   * authenticated. Opaque (non-JWT) tokens keep presence-based semantics.
+   */
   isAuthenticated(): boolean {
     const token = this.getToken();
     if (!token) {
@@ -165,48 +177,44 @@ export class AuthManager {
       return false;
     }
 
-    // Check if token is expired (if it's a JWT)
-    try {
-      // Validate JWT has 3 parts (header.payload.signature)
-      const parts = token.split('.');
-      if (parts.length !== 3 || !parts[1]) {
-        // Not a valid JWT format, assume it's valid
-        if (this.debugManager && this.enableLogs) {
-          this.debugManager.log(DebugLogType.AUTH, '✅ AUTH CHECK: Non-JWT token', {});
-        }
-        return true;
-      }
-
-      const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-      const now = Date.now() / 1000;
-
-      // Bug #4 fix: Use typeof to properly handle exp=0
-      // Bug #5 fix: Wrapped in try-catch to handle non-numeric exp
-      const isValid = typeof payload.exp === 'number'
-        ? payload.exp > now
-        : true; // No expiration field means token doesn't expire
-
+    // Opaque bearer token: nothing to inspect client-side, presence-based.
+    if (!isJwtShaped(token)) {
       if (this.debugManager && this.enableLogs) {
-        const emoji = isValid ? '✅' : '⏰';
-        const status = isValid ? 'VALID' : 'EXPIRED';
-        this.debugManager.log(DebugLogType.AUTH, `${emoji} AUTH CHECK: ${status}`, {
-          exp: payload.exp,
-          expType: typeof payload.exp,
-          now,
-          isValid,
-        });
-      }
-
-      return isValid;
-    } catch (error) {
-      // If parsing fails, assume it's valid (Bug #5 fix)
-      if (this.debugManager && this.enableLogs) {
-        this.debugManager.log(DebugLogType.AUTH, '⚠️ AUTH CHECK: JWT parse error, treating as valid', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
+        this.debugManager.log(DebugLogType.AUTH, '✅ AUTH CHECK: Non-JWT token', {});
       }
       return true;
     }
+
+    const payload = decodeJwt(token);
+    if (!payload) {
+      // JWT-shaped but undecodable: fail closed.
+      if (this.debugManager && this.enableLogs) {
+        this.debugManager.log(DebugLogType.AUTH, '❌ AUTH CHECK: Corrupt JWT rejected', {});
+      }
+      return false;
+    }
+
+    const now = Date.now() / 1000;
+    // Bug #4 fix: typeof check properly handles exp=0.
+    const isValid =
+      payload.exp === undefined
+        ? true // No expiration claim: token doesn't expire client-side.
+        : typeof payload.exp === 'number'
+          ? payload.exp > now
+          : false; // Malformed exp claim: fail closed.
+
+    if (this.debugManager && this.enableLogs) {
+      const emoji = isValid ? '✅' : '⏰';
+      const status = isValid ? 'VALID' : 'EXPIRED';
+      this.debugManager.log(DebugLogType.AUTH, `${emoji} AUTH CHECK: ${status}`, {
+        exp: payload.exp,
+        expType: typeof payload.exp,
+        now,
+        isValid,
+      });
+    }
+
+    return isValid;
   }
 
   private setItem(key: string, value: string): void {

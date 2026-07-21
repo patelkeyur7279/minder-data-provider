@@ -12,6 +12,9 @@
  * - Refresh token support
  */
 
+import { parseJWT as decodeJwt, isTokenUsable } from '../utils/jwt.js';
+import { minderStore } from '../core/singletons.js';
+
 interface GlobalAuthConfig {
   storage?: 'localStorage' | 'sessionStorage' | 'memory';
   tokenKey?: string;
@@ -63,20 +66,7 @@ class GlobalAuthManager {
   }
 
   private parseJWT(token: string): any {
-    try {
-      const base64Url = token.split('.')[1];
-      if (!base64Url) return null;
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(
-        atob(base64)
-          .split('')
-          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-          .join('')
-      );
-      return JSON.parse(jsonPayload);
-    } catch (error) {
-      return null;
-    }
+    return decodeJwt(token);
   }
 
   async setToken(token: string): Promise<void> {
@@ -140,8 +130,13 @@ class GlobalAuthManager {
     }
   }
 
+  /**
+   * Same fail-closed semantics as AuthManager.isAuthenticated() (this is the
+   * no-provider fallback path in useMinder). No signature verification —
+   * see isTokenUsable().
+   */
   isAuthenticated(): boolean {
-    return !!this.token;
+    return isTokenUsable(this.token);
   }
 
   getCurrentUser(): any {
@@ -168,8 +163,21 @@ class GlobalAuthManager {
   }
 }
 
-// Global singleton instance
-export const globalAuthManager = new GlobalAuthManager();
+// Global singleton instance (A5). Backed by the process-wide singleton store
+// (../core/singletons.ts) so its identity survives however a consumer's bundler
+// splits/duplicates chunks — one auth manager, one restored-token state, shared
+// across every entry. `/*#__PURE__*/` lets a tree-shaker drop it for consumers
+// that never reference it. This is a pure identity/laziness move: the security
+// invariants (P2 — client auth = presence + expiry only, corrupt JWTs fail
+// closed via isTokenExpired/isTokenUsable) live in the class methods and are
+// untouched; construction (incl. restoreFromStorage) still runs eagerly at
+// import wherever the binding is retained, so restore timing is unchanged. The
+// exported value binding and its `GlobalAuthManager` type are unchanged (P1).
+function globalAuthManagerSingleton(): GlobalAuthManager {
+  const s = minderStore();
+  return (s.globalAuthManager ??= new GlobalAuthManager());
+}
+export const globalAuthManager = /*#__PURE__*/ globalAuthManagerSingleton();
 
 // Export class for custom instances
 export { GlobalAuthManager };

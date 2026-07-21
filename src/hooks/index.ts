@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { parseJWT as decodeJwt } from '../utils/jwt.js';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useSelector, useDispatch } from 'react-redux';
-import { useMinderContext } from '../core/MinderDataProvider.js';
+import { useMinderContext } from '../core/MinderContext.js';
 import type { CrudOperations, UploadProgress, MediaUploadResult } from '../core/types.js';
 
 // Main hook for CRUD operations
@@ -177,34 +177,6 @@ export function useCache() {
   };
 }
 
-// Redux store hook
-export function useStore() {
-  const { store } = useMinderContext();
-
-  return {
-    getState: () => store.getState(),
-    dispatch: (action: any) => store.dispatch(action),
-    subscribe: (listener: () => void) => store.subscribe(listener),
-  };
-}
-
-// Redux slice hook
-export function useReduxSlice(routeName: string) {
-  const { store } = useMinderContext();
-  const dispatch = useDispatch();
-  const state = useSelector((state: any) => state[routeName]);
-
-  // Get slice from store (this would be populated by sliceGenerator)
-  const slice = (store as any)._slices?.[routeName];
-
-  return {
-    state,
-    actions: slice?.actions || {},
-    selectors: slice?.selectors || {},
-    dispatch,
-  };
-}
-
 // Current user hook
 export function useCurrentUser() {
   const [user, setUser] = useState<any>(null);
@@ -213,24 +185,7 @@ export function useCurrentUser() {
 
   useEffect(() => {
     const token = authManager.getToken();
-    if (token) {
-      try {
-        // Validate JWT has 3 parts (header.payload.signature)
-        const parts = token.split('.');
-        if (parts.length !== 3 || !parts[1]) {
-          setUser(null);
-          return;
-        }
-
-        // Decode JWT token to get user info
-        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-        setUser(payload);
-      } catch {
-        setUser(null);
-      }
-    } else {
-      setUser(null);
-    }
+    setUser(token ? decodeJwt(token) : null);
   }, [authManager]);
 
   return {
@@ -241,16 +196,139 @@ export function useCurrentUser() {
   };
 }
 
-// Media upload hook
-export function useMediaUpload(routeName: string) {
-  const { apiClient } = useMinderContext();
+/** Default trailing-edge throttle interval for upload progress commits (ms). */
+const DEFAULT_UPLOAD_PROGRESS_THROTTLE_MS = 100;
+
+/**
+ * MDPD-4 (perf audit A4): trailing-edge throttle for upload progress state
+ * commits. Coalesces a burst of progress events into at most one React state
+ * update per `intervalMs`, but ALWAYS commits the terminal (100%) value
+ * immediately so the final progress is never dropped. The latest value is held
+ * in a ref between commits, so intermediate events don't re-render the consumer.
+ * `intervalMs` is injectable for deterministic testing with fake timers.
+ */
+function useThrottledProgress(
+  intervalMs: number
+): {
+  progress: UploadProgress;
+  push: (p: UploadProgress) => void;
+  reset: () => void;
+} {
   const [progress, setProgress] = useState<UploadProgress>({ loaded: 0, total: 0, percentage: 0 });
+  const latestRef = useRef<UploadProgress>(progress);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const push = useCallback(
+    (p: UploadProgress) => {
+      latestRef.current = p;
+      // Terminal value (complete): flush immediately and cancel any pending tick
+      // so the 100% progress always commits without waiting on the interval.
+      if (p.percentage >= 100) {
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+          timerRef.current = null;
+        }
+        setProgress(p);
+        return;
+      }
+      // Otherwise coalesce: start one trailing timer that commits the latest
+      // value when it fires. Additional events before it fires only update the ref.
+      if (timerRef.current == null) {
+        timerRef.current = setTimeout(() => {
+          timerRef.current = null;
+          setProgress(latestRef.current);
+        }, intervalMs);
+      }
+    },
+    [intervalMs]
+  );
+
+  const reset = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    const zero: UploadProgress = { loaded: 0, total: 0, percentage: 0 };
+    latestRef.current = zero;
+    setProgress(zero);
+  }, []);
+
+  // Clear any pending timer on unmount so a late commit can't fire post-unmount.
+  useEffect(
+    () => () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    },
+    []
+  );
+
+  return { progress, push, reset };
+}
+
+/**
+ * Media upload hook.
+ *
+ * Progress semantics (single shared `progress` value):
+ * - Progress commits are throttled (see {@link useThrottledProgress}) to avoid a
+ *   re-render storm; the terminal 100% value always commits.
+ * - Each `uploadFile` / `uploadMultiple` call RESETS progress to zero at its
+ *   start, so a subsequent upload never briefly shows the previous upload's
+ *   stale 100%.
+ * - Concurrent `uploadFile` calls on the SAME hook instance are SERIALIZED: a
+ *   second call issued while the first is still in flight is queued behind it
+ *   and only begins (resetting progress and dispatching) once the first
+ *   settles. This deliberately avoids two overlapping uploads sharing — and
+ *   corrupting — the single throttle timer / progress state (upload A's terminal
+ *   flush would otherwise clear the shared pending timer and drop upload B's
+ *   coalesced update). `uploadMultiple` was already sequential and inherits the
+ *   per-file reset.
+ */
+export function useMediaUpload(
+  routeName: string,
+  options?: { throttleMs?: number }
+) {
+  const { apiClient } = useMinderContext();
+  const throttleMs = options?.throttleMs ?? DEFAULT_UPLOAD_PROGRESS_THROTTLE_MS;
+  const { progress, push: pushProgress, reset: resetProgress } = useThrottledProgress(throttleMs);
+
+  // Tail of the serialized-upload chain. `null` means no upload is in flight, so
+  // the next call runs SYNCHRONOUSLY (preserving eager progress-callback wiring);
+  // a non-null tail means a call is active and the next one queues behind it.
+  const chainTailRef = useRef<Promise<unknown> | null>(null);
+
+  const runUpload = useCallback(
+    (file: File): Promise<MediaUploadResult> => {
+      // Fresh progress for every upload — no stale 100% carried over.
+      resetProgress();
+      // MDPD-4: commit progress through the throttle instead of setState-per-event.
+      return apiClient.uploadFile(routeName, file, pushProgress);
+    },
+    [apiClient, routeName, pushProgress, resetProgress]
+  );
 
   const uploadFile = useCallback(
-    async (file: File): Promise<MediaUploadResult> => {
-      return apiClient.uploadFile(routeName, file, setProgress);
+    (file: File): Promise<MediaUploadResult> => {
+      const prior = chainTailRef.current;
+      // No upload in flight: start immediately. Otherwise serialize behind it.
+      const result: Promise<MediaUploadResult> = prior
+        ? prior.then(() => runUpload(file))
+        : runUpload(file);
+
+      // Track this call as the new tail; swallow rejection for chaining only
+      // (callers still receive the real `result` promise, rejection intact).
+      const tail = result.catch(() => undefined);
+      chainTailRef.current = tail;
+      void tail.then(() => {
+        if (chainTailRef.current === tail) {
+          chainTailRef.current = null;
+        }
+      });
+
+      return result;
     },
-    [apiClient, routeName]
+    [runUpload]
   );
 
   const uploadMultiple = useCallback(
@@ -275,14 +353,19 @@ export function useMediaUpload(routeName: string) {
 
 // WebSocket hook
 export function useWebSocket() {
-  const { websocketManager } = useMinderContext();
+  const { websocketManager, realtimeManager } = useMinderContext();
+  // `realtimeManager` is set for both transports (aliases the WS manager under
+  // transport:'ws', holds the lazy SseTransport under transport:'sse'); the
+  // `websocketManager` fallback keeps WS behavior identical while making SSE
+  // reachable. `send` is optional (SSE is receive-only, §4.7).
+  const rt = realtimeManager ?? websocketManager;
 
   return {
-    connect: () => websocketManager?.connect(),
-    disconnect: () => websocketManager?.disconnect(),
-    send: (type: string, data: any) => websocketManager?.send(type, data),
-    subscribe: (event: string, callback: (data: any) => void) => websocketManager?.subscribe(event, callback),
-    isConnected: () => websocketManager?.isConnected() || false,
+    connect: () => rt?.connect(),
+    disconnect: () => rt?.disconnect(),
+    send: (type: string, data: any) => rt?.send?.(type, data),
+    subscribe: (event: string, callback: (data: any) => void) => rt?.subscribe(event, callback),
+    isConnected: () => rt?.isConnected() || false,
   };
 }
 
@@ -290,7 +373,7 @@ export function useWebSocket() {
 export function useUIState() {
   const [uiState, setUIState] = useState({
     modals: {} as Record<string, boolean>,
-    notifications: [] as any[],
+    notifications: [] as unknown[],
     loading: {} as Record<string, boolean>,
   });
 

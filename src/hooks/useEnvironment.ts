@@ -1,5 +1,7 @@
+"use client";
+
 import { useState, useEffect } from 'react';
-import { useMinderContext } from '../core/MinderDataProvider.js';
+import { useMinderContext } from '../core/MinderContext.js';
 
 export function useEnvironment() {
   const { environmentManager } = useMinderContext();

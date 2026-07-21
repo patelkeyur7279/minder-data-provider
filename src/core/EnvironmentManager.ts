@@ -94,7 +94,10 @@ export class EnvironmentManager {
 
     return {
       ...corsConfig,
-      credentials: corsConfig.credentials ?? true,
+      // G-08: opt-in (was `?? true` — an environments override with
+      // cors:{enabled:true} silently produced the SEC-01 wildcard+credentials
+      // combination and armed withCredentials for every request).
+      credentials: corsConfig.credentials === true,
       origin: corsConfig.origin || '*',
       methods: corsConfig.methods || [HttpMethod.GET, HttpMethod.POST, HttpMethod.PUT, HttpMethod.DELETE, HttpMethod.OPTIONS],
       headers: corsConfig.headers || ['Content-Type', 'Authorization', 'X-Requested-With'],

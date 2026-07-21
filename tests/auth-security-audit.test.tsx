@@ -80,9 +80,7 @@ describe('🔒 AUTHENTICATION SECURITY AUDIT', () => {
                 expect(localStorage.getItem('test_token')).toBeNull();
             });
 
-            // Skip: Jest/jsdom doesn't support document.cookie properly
-            // This works perfectly in real browsers - verified manually
-            it.skip('should work with cookie storage', () => {
+            it('should work with cookie storage', () => {
                 const authManager = new AuthManager({
                     tokenKey: 'test_token',
                     storage: StorageType.COOKIE,
@@ -261,7 +259,8 @@ describe('🔒 AUTHENTICATION SECURITY AUDIT', () => {
                 });
 
                 authManager.setToken('header.!!!INVALID_BASE64!!!.signature');
-                expect(authManager.isAuthenticated()).toBe(true);
+                // JWT-shaped but undecodable: fails closed (2.2.0-beta.1)
+                expect(authManager.isAuthenticated()).toBe(false);
             });
 
             it('should handle JWT with invalid JSON', () => {
@@ -272,7 +271,8 @@ describe('🔒 AUTHENTICATION SECURITY AUDIT', () => {
 
                 const invalidJson = Buffer.from('{invalid json}').toString('base64');
                 authManager.setToken(`header.${invalidJson}.signature`);
-                expect(authManager.isAuthenticated()).toBe(true);
+                // JWT-shaped but undecodable: fails closed (2.2.0-beta.1)
+                expect(authManager.isAuthenticated()).toBe(false);
             });
 
             it('should correctly validate JWT expiration timestamps', () => {
@@ -334,24 +334,56 @@ describe('🔒 AUTHENTICATION SECURITY AUDIT', () => {
         });
 
         describe('Storage Security', () => {
-            // Skip: Jest/jsdom doesn't support document.cookie properly
-            // Cookies are set correctly with secure flags in production
-            it.skip('should set secure cookie flags', () => {
-                const authManager = new AuthManager({
-                    tokenKey: 'test_token',
-                    storage: StorageType.COOKIE,
+            // jsdom's cookie jar is spec-compliant: a cookie carrying the
+            // `Secure` attribute is silently dropped when set from a
+            // non-secure (http:) origin, which is what jsdom's default test
+            // origin (http://localhost/) is. That makes `document.cookie`
+            // read-back useless for asserting the Secure flag was written.
+            // Instead, spy on the `cookie` setter (it lives on
+            // Document.prototype) to capture the exact string AuthManager
+            // wrote, independent of whether jsdom's jar chose to keep it.
+            it('should set secure cookie flags', () => {
+                const cookieDescriptor = Object.getOwnPropertyDescriptor(
+                    Object.getPrototypeOf(document),
+                    'cookie'
+                );
+                expect(cookieDescriptor).toBeDefined();
+
+                let writtenCookieString: string | undefined;
+                Object.defineProperty(document, 'cookie', {
+                    configurable: true,
+                    get() {
+                        return cookieDescriptor!.get!.call(document);
+                    },
+                    set(value: string) {
+                        writtenCookieString = value;
+                        cookieDescriptor!.set!.call(document, value);
+                    },
                 });
 
-                authManager.setToken('cookie-token');
+                try {
+                    // secureCookie: true forces the Secure flag regardless of
+                    // the test origin's protocol (AuthManager auto-detects
+                    // from window.location.protocol otherwise, which would be
+                    // http: under jsdom and make this assertion meaningless).
+                    const authManager = new AuthManager({
+                        tokenKey: 'test_token',
+                        storage: StorageType.COOKIE,
+                        secureCookie: true,
+                    });
 
-                // Note: Jest/jsdom doesn't support reading document.cookie properly
-                // The code DOES set: secure; samesite=strict; path=/
-                // We can verify token is stored and retrievable
-                expect(authManager.getToken()).toBe('cookie-token');
+                    authManager.setToken('cookie-token');
 
-                // TODO: Manual verification in real browser:
-                // - Open DevTools → Application → Cookies
-                // - Verify cookie has: secure, samesite=strict, path=/
+                    expect(writtenCookieString).toBeDefined();
+                    const written = writtenCookieString!.toLowerCase();
+                    expect(written).toContain('secure');
+                    expect(written).toContain('samesite=strict');
+                    expect(written).toContain('path=/');
+                    expect(writtenCookieString).toContain('cookie-token');
+                } finally {
+                    // Restore the prototype accessor for every other test.
+                    delete (document as unknown as Record<string, unknown>).cookie;
+                }
             });
 
             it('should not leak tokens between different keys', () => {
@@ -534,8 +566,8 @@ describe('🔒 AUTHENTICATION SECURITY AUDIT', () => {
                 const jwt = `header.${payload}.signature`;
 
                 authManager.setToken(jwt);
-                // Non-numeric exp should be treated as no expiration
-                expect(authManager.isAuthenticated()).toBe(true);
+                // Non-numeric exp claim is malformed: fails closed (2.2.0-beta.1)
+                expect(authManager.isAuthenticated()).toBe(false);
             });
         });
     });

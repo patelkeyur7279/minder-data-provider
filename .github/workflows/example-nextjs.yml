@@ -1,0 +1,42 @@
+name: Example - Next.js
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'providers/**'
+      - 'package.json'
+      - 'tsup.config.ts'
+      - 'examples/nextjs-app/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install library dependencies
+        run: |
+          npm install -g npm@11.6.2  # match packageManager — npm10/11 disagree on optional-wasm lockfile subtrees
+          npm ci
+
+      - name: Build library
+        run: npm run build
+
+      - name: Pack library
+        run: npm pack
+
+      - name: Install example app dependencies
+        working-directory: examples/nextjs-app
+        run: npm install
+
+      - name: Build example app
+        working-directory: examples/nextjs-app
+        run: npm run build

@@ -1,75 +1,62 @@
-
 /**
  * @jest-environment jsdom
+ *
+ * Unified OfflineManager — FormData / non-serializable body behavior.
+ *
+ * The old core manager persisted its queue to IndexedDB and filtered out
+ * non-serializable bodies. The unified platform manager persists ONLY when a
+ * `storage` adapter is configured; with no adapter the queue is in-memory only
+ * (documented in FEATURES.md). This guards that a FormData-bodied request is
+ * still held in memory and that persistence happens only through an adapter.
  */
 import { describe, it, expect, beforeEach, jest, afterEach } from '@jest/globals';
-import { OfflineManager } from '../src/core/OfflineManager';
-import { StorageType } from '../src/constants/enums';
+import { OfflineManager } from '../src/platform/offline/OfflineManager';
+import type { StorageAdapter } from '../src/platform/adapters/storage/StorageAdapter';
 
-describe('OfflineManager - FormData Reproduction', () => {
-    let offlineManager: OfflineManager;
-    let mockStorage: any;
+describe('OfflineManager (unified) — FormData / in-memory queue', () => {
+  beforeEach(() => {
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
 
-    beforeEach(() => {
-        // Mock localStorage
-        mockStorage = {
-            getItem: jest.fn(),
-            setItem: jest.fn(),
-            removeItem: jest.fn(),
-            clear: jest.fn(),
-        };
-        Object.defineProperty(window, 'localStorage', {
-            value: mockStorage,
-            writable: true
-        });
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
 
-        // Mock navigator.onLine
-        Object.defineProperty(navigator, 'onLine', {
-            value: false,
-            configurable: true
-        });
+  it('holds a FormData-bodied request in the in-memory queue (no storage adapter)', async () => {
+    const mgr = new OfflineManager({ enabled: true });
 
-        // Mock crypto.randomUUID
-        Object.defineProperty(global, 'crypto', {
-            value: {
-                randomUUID: () => 'test-uuid-123'
-            },
-            writable: true
-        });
+    const formData = new FormData();
+    formData.append('file', new Blob(['test content']), 'test.txt');
 
-        jest.spyOn(console, 'warn').mockImplementation(() => { });
-        jest.spyOn(console, 'error').mockImplementation(() => { });
-    });
+    await mgr.addToQueue('POST', '/upload', { body: formData, headers: {} });
 
-    afterEach(() => {
-        jest.restoreAllMocks();
-    });
+    // In memory regardless of serializability.
+    expect(mgr.getQueueSize()).toBe(1);
+    expect(mgr.getQueue()[0].body).toBe(formData);
+  });
 
-    it('should handle FormData in offline queue (memory only, not persisted)', () => {
-        offlineManager = new OfflineManager({
-            enabled: true,
-            storageKey: 'offline_queue'
-        });
+  it('persists the queue only through a configured storage adapter', async () => {
+    const store: Record<string, string> = {};
+    const adapter = {
+      getItem: jest.fn(async (k: string) => store[k] ?? null),
+      setItem: jest.fn(async (k: string, v: string) => {
+        store[k] = v;
+      }),
+      removeItem: jest.fn(async (k: string) => {
+        delete store[k];
+      }),
+      clear: jest.fn(async () => {
+        for (const k of Object.keys(store)) delete store[k];
+      }),
+    } as unknown as StorageAdapter;
 
-        const formData = new FormData();
-        formData.append('file', new Blob(['test content']), 'test.txt');
+    const mgr = new OfflineManager({ enabled: true, storage: adapter, storageKey: 'q' });
+    await mgr.addToQueue('POST', '/api/users', { body: { name: 'x' } });
 
-        // Queue a request with FormData
-        offlineManager.queueRequest({
-            url: '/upload',
-            method: 'POST',
-            body: formData,
-            headers: {}
-        });
-
-        // 1. Check that it IS in memory
-        expect(offlineManager.getQueueLength()).toBe(1);
-
-        // 2. Check what was persisted to storage
-        expect(mockStorage.setItem).toHaveBeenCalled();
-        const savedData = JSON.parse(mockStorage.setItem.mock.calls[0][1]);
-
-        // Should be empty array because FormData is not serializable and we filtered it out
-        expect(savedData).toEqual([]);
-    });
+    expect(adapter.setItem).toHaveBeenCalled();
+    const saved = JSON.parse((adapter.setItem as jest.Mock).mock.calls.at(-1)![1]);
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({ method: 'POST', url: '/api/users' });
+  });
 });

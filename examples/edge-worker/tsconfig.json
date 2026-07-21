@@ -1,0 +1,19 @@
+{
+  // Standalone consumer config. Its PRESENCE is load-bearing: without a
+  // tsconfig here, wrangler's esbuild walks up and finds the repo root
+  // tsconfig, whose `paths: { "minder-data-provider": ["./src/index.ts"] }`
+  // (QR-D1 type-test mapping) redirects the bare import to LIBRARY SOURCE —
+  // which requires Node built-ins and can never build for bare workerd.
+  // This file pins resolution to node_modules (the packed tarball), i.e.
+  // what a real consumer gets.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": []
+  },
+  "include": ["src"]
+}

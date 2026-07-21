@@ -22,3 +22,24 @@ export type {
   PluginError,
   CacheHitEvent
 } from './PluginSystem';
+
+export {
+  PROVIDER_CATEGORIES,
+  PROVIDER_RUNTIMES,
+  PROVIDER_FRAMEWORKS,
+  providerManifestSchema,
+  validateProviderManifest,
+  defineProviderManifest
+} from './manifest';
+
+export type {
+  ProviderCategory,
+  ProviderRuntime,
+  ProviderFramework,
+  ProviderCapability,
+  ProviderConfigSplit,
+  ProviderScope,
+  ProviderDocs,
+  ProviderManifest,
+  ValidationResult
+} from './manifest';

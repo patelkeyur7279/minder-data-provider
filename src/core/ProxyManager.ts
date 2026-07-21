@@ -2,7 +2,7 @@ import { Logger, LogLevel } from '../utils/Logger.js';
 import type { ApiRoute } from './types.js';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const logger = new Logger('ProxyManager', { level: LogLevel.DEBUG });
+const logger = /*#__PURE__*/ new Logger('ProxyManager', { level: LogLevel.DEBUG });
 
 export interface ProxyConfig {
   enabled: boolean;
@@ -67,18 +67,24 @@ export class ProxyManager {
 
     const corsMethods = this.config.cors?.methods?.join(',') || 'GET,POST,PUT,DELETE,OPTIONS';
     const corsHeaders = this.config.cors?.headers?.join(',') || 'Content-Type,Authorization';
-    const corsCredentials = this.config.cors?.credentials !== false ? 'true' : 'false';
+    // Credentials are opt-in: the pre-2.2.0-beta.1 default was 'true', which
+    // combined with the wildcard origin default is the canonical unsafe CORS
+    // configuration (flagged by CorsManager.validateConfig).
+    const corsCredentials = this.config.cors?.credentials === true ? 'true' : 'false';
+
+    if (corsCredentials === 'true' && corsOrigin === '*') {
+      throw new Error(
+        '[minder-data-provider] Refusing to generate a proxy that sends ' +
+          'Access-Control-Allow-Credentials with a wildcard origin. Set cors.origin ' +
+          'to an explicit allowlist when cors.credentials is true.'
+      );
+    }
 
     return `
     // pages/api/minder-proxy/[...path].js
-    const corsPath = require.resolve('./corsMiddleware');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const corsMiddleware = require(corsPath);
-
     export default async function handler(req, res) {
       const { path } = req.query;
       const apiPath = Array.isArray(path) ? path.join('/') : path;
-      await corsMiddleware(req, res);
 
       // CORS headers
       res.setHeader('Access-Control-Allow-Origin', '${corsOrigin}');
@@ -126,7 +132,17 @@ export class ProxyManager {
 
     const corsMethods = this.config.cors?.methods?.join(',') || 'GET,POST,PUT,DELETE,OPTIONS';
     const corsHeaders = this.config.cors?.headers?.join(',') || 'Content-Type,Authorization';
-    const corsCredentials = this.config.cors?.credentials !== false ? 'true' : 'false';
+    // G-08: credentials are opt-in (was `!== false`, defaulting the unsafe
+    // wildcard+credentials combination ON) — aligned with generateNextJSProxy.
+    const corsCredentials = this.config.cors?.credentials === true ? 'true' : 'false';
+
+    if (corsCredentials === 'true' && corsOrigin === "'*'") {
+      throw new Error(
+        '[minder-data-provider] Refusing to generate an Express proxy that sends ' +
+          'Access-Control-Allow-Credentials with a wildcard origin. Set cors.origin ' +
+          'to an explicit allowlist when cors.credentials is true.'
+      );
+    }
 
     return `
     const express = require('express');

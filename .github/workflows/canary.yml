@@ -1,0 +1,161 @@
+# Weekly canary: early-warning against upstream @next / pre-release / latest-stable
+# drift in our core peer deps (React, TanStack Query) and provider peer SDKs.
+#
+# Report-only — every job runs with continue-on-error: true and NEVER gates a PR
+# or push (see `on:` below — schedule + manual dispatch only). A red job here
+# means "upstream broke us before their stable release" — investigate before
+# that release ships, but it must never block this repo's own CI or merges.
+
+name: Canary
+
+on:
+  schedule:
+    - cron: '0 6 * * 1' # Monday 06:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  react-canary:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: |
+          npm install -g npm@11.6.2  # match packageManager — npm10/11 disagree on optional-wasm lockfile subtrees
+          npm ci
+
+      - name: Swap in React @next
+        # --legacy-peer-deps: react@next resolves to a canary build (e.g.
+        # 19.x-canary-<hash>) whose version string doesn't satisfy the peer
+        # semver ranges declared by @tanstack/react-query(-devtools) and
+        # @testing-library/react (^18 || ^19) even though it IS a 19.x build —
+        # confirmed locally, npm's default resolver ERESOLVEs on this without it.
+        run: npm install --no-save --legacy-peer-deps react@next react-dom@next @testing-library/react@latest
+
+      - name: Print resolved versions
+        run: npm ls react react-dom @testing-library/react || true
+
+      - name: Run full test suite under React @next
+        id: test
+        run: npm test
+
+      - name: Write summary
+        if: always()
+        run: |
+          {
+            echo "### React canary"
+            echo ""
+            echo "\`\`\`"
+            npm ls react react-dom @testing-library/react || true
+            echo "\`\`\`"
+            if [ "${{ steps.test.outcome }}" = "success" ]; then
+              echo "Result: PASS"
+            else
+              echo "Result: FAIL — upstream React @next broke us, investigate before their stable release"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  tanstack-canary:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: |
+          npm install -g npm@11.6.2  # match packageManager — npm10/11 disagree on optional-wasm lockfile subtrees
+          npm ci
+
+      - name: Resolve best pre-release dist-tag
+        id: resolve
+        run: |
+          TAG=$(npm view @tanstack/react-query dist-tags --json | node -e "const t=JSON.parse(require('fs').readFileSync(0));process.stdout.write(t.next||t.beta||t.alpha||t.rc||'latest')")
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Resolved dist-tag: $TAG"
+
+      - name: Swap in @tanstack/react-query pre-release
+        # --legacy-peer-deps: older pre-release tags (e.g. 5.0.0-beta.35) declare
+        # react ^18 only — npm's default resolver ERESOLVEs against react 19.
+        run: npm install --no-save --legacy-peer-deps @tanstack/react-query@${{ steps.resolve.outputs.tag }}
+
+      - name: Print resolved version
+        run: npm ls @tanstack/react-query || true
+
+      - name: Run full test suite under TanStack Query pre-release
+        id: test
+        run: npm test
+
+      - name: Write summary
+        if: always()
+        run: |
+          {
+            echo "### TanStack Query canary"
+            echo ""
+            echo "Dist-tag resolved: \`${{ steps.resolve.outputs.tag }}\`"
+            echo ""
+            echo "\`\`\`"
+            npm ls @tanstack/react-query || true
+            echo "\`\`\`"
+            if [ "${{ steps.test.outcome }}" = "success" ]; then
+              echo "Result: PASS"
+            else
+              echo "Result: FAIL — upstream TanStack Query pre-release broke us, investigate before their stable release"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  provider-sdks-latest:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: |
+          npm install -g npm@11.6.2  # match packageManager — npm10/11 disagree on optional-wasm lockfile subtrees
+          npm ci
+
+      - name: Swap in latest stable provider peer SDKs
+        run: |
+          npm install --no-save \
+            @clerk/clerk-js@latest \
+            @sentry/browser@latest \
+            @supabase/supabase-js@latest \
+            firebase@latest \
+            razorpay@latest \
+            stripe@latest
+
+      - name: Print resolved versions
+        run: npm ls @clerk/clerk-js @sentry/browser @supabase/supabase-js firebase razorpay stripe || true
+
+      - name: Run provider tests only
+        id: test
+        run: npx jest providers
+
+      - name: Write summary
+        if: always()
+        run: |
+          {
+            echo "### Provider SDKs (latest stable) canary"
+            echo ""
+            echo "\`\`\`"
+            npm ls @clerk/clerk-js @sentry/browser @supabase/supabase-js firebase razorpay stripe || true
+            echo "\`\`\`"
+            if [ "${{ steps.test.outcome }}" = "success" ]; then
+              echo "Result: PASS"
+            else
+              echo "Result: FAIL — a provider peer SDK's latest stable release broke us, investigate"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

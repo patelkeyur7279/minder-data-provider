@@ -1,7 +1,11 @@
-import { QueryClient } from '@tanstack/react-query';
-import type { Query, QueryState } from '@tanstack/react-query';
+// Phase 6: the cache layer is framework-agnostic — import from query-core (the
+// engine that @tanstack/react-query itself re-exports) rather than the React
+// bindings. Identical class/types; no behavior change.
+import { QueryClient } from '@tanstack/query-core';
+import type { Query, QueryState } from '@tanstack/query-core';
 import type { DebugManager } from '../debug/DebugManager.js';
 import { DebugLogType } from '../constants/enums.js';
+import { telemetry } from '../utils/TelemetryTracker.js';
 
 export class CacheManager {
   private queryClient: QueryClient;
@@ -19,6 +23,11 @@ export class CacheManager {
   getCachedData<T = any>(queryKey: string | string[]): T | undefined {
     const key = Array.isArray(queryKey) ? queryKey : [queryKey];
     const data = this.queryClient.getQueryData<T>(key);
+    if (data !== undefined) {
+      telemetry.recordCacheHit();
+    } else {
+      telemetry.recordCacheMiss();
+    }
     
     if (this.debugManager && this.enableLogs) {
       const emoji = data ? '✅' : '❌';

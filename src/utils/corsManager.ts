@@ -12,7 +12,9 @@ export class CorsManager {
   constructor(config: CorsConfig = {}) {
     this.config = {
       enabled: config.enabled ?? this.shouldEnableCors(),
-      credentials: config.credentials ?? true,
+      // G-08: opt-in (was `?? true`) — credentialed mode must be an explicit
+      // choice; CorsManager.validateConfig itself flags credentials+wildcard.
+      credentials: config.credentials === true,
       methods: config.methods ?? [HttpMethod.GET, HttpMethod.POST, HttpMethod.PUT, HttpMethod.DELETE],
       headers: config.headers ?? ['Content-Type', 'Authorization'],
       ...config

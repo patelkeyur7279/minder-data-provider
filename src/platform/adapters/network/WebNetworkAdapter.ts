@@ -12,7 +12,7 @@ import {
   NetworkError,
 } from './NetworkAdapter.js';
 
-const logger = new Logger('WebNetworkAdapter', { level: LogLevel.WARN });
+const logger = /*#__PURE__*/ new Logger('WebNetworkAdapter', { level: LogLevel.WARN });
 
 export class WebNetworkAdapter extends NetworkAdapter {
   constructor(config: NetworkAdapterConfig = {}) {

@@ -13,7 +13,7 @@ import {
   SecurityValidation,
 } from './SecurityManager.js';
 
-const logger = new Logger('ElectronSecurityManager', { level: LogLevel.WARN });
+const logger = /*#__PURE__*/ new Logger('ElectronSecurityManager', { level: LogLevel.WARN });
 
 /**
  * Electron Security Manager

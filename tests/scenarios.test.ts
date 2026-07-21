@@ -123,7 +123,14 @@ describe('Comprehensive Scenarios', () => {
     });
 
     describe('3. Security', () => {
-        it('should apply security headers', async () => {
+        // M0-01: getSecurityHeaders() produces HTTP *response* headers (CSP,
+        // X-Frame-Options, etc.) for a server to send back — not request
+        // headers. They used to be spread onto the axios instance's default
+        // request headers, which is non-safelisted and forces a CORS preflight
+        // OPTIONS round-trip on every cross-origin call. config.security.headers
+        // (and the security headers machinery generally) must no longer reach
+        // outgoing request headers at all.
+        it('does not leak config.security.headers onto outgoing request headers', async () => {
             // Re-instantiate to trigger create
             authManager = new AuthManager(config.auth);
 
@@ -136,8 +143,9 @@ describe('Comprehensive Scenarios', () => {
             apiClient = new ApiClient(secureConfig, authManager);
 
             const createConfig = mockedAxios.create.mock.calls[mockedAxios.create.mock.calls.length - 1][0];
-            expect(createConfig.headers).toMatchObject({
-                'X-Custom-Security': 'secure'
+            expect(createConfig.headers).toEqual({
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
             });
         });
     });

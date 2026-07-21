@@ -312,7 +312,6 @@ interface MinderContextValue {
   environmentManager?: EnvironmentManager;
   proxyManager?: ProxyManager;
   debugManager?: DebugManager;
-  store: ReduxStore;               // Redux store
   queryClient: QueryClient;        // React Query client
   ReactQueryDevtools?: Component;  // Lazy-loaded DevTools
   dehydratedState?: DehydratedState;
@@ -425,5 +424,5 @@ const config = createMinderConfig({
 
 **Need Help?**
 - See [CONFIG_GUIDE.md](./CONFIG_GUIDE.md) for complete configuration options
-- See [examples/nextjs](../examples/nextjs) for working Next.js setup
+- See [examples/nextjs-app](../examples/nextjs-app) for a working, CI-tested Next.js setup
 - Open an issue on GitHub if you encounter problems

@@ -1,9 +1,11 @@
 /**
  * @jest-environment jsdom
  */
-import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import axios from 'axios';
 import { minder, configureMinder } from '../src/core/minder';
+import { setGlobalMinderConfig, clearGlobalMinderConfig } from '../src/core/globalConfig';
+import type { StandardSchemaV1 } from '../src/types/standard-schema';
 
 // Mock axios
 jest.mock('axios');
@@ -962,6 +964,169 @@ describe('minder() - Universal Data Provider', () => {
       
       expect(successResult.success).toBe(true);
       expect(successResult.data).toEqual({ secret: 'data' });
+    });
+  });
+
+  // ============================================================================
+  // RESPONSE VALIDATION (Task 3.1 — Standard Schema)
+  // ============================================================================
+
+  describe('Response validation (Standard Schema)', () => {
+    const userSchema: StandardSchemaV1<any, { id: number; name: string }> = {
+      '~standard': {
+        version: 1,
+        vendor: 'test',
+        validate: (v: any) =>
+          v && typeof v.id !== 'undefined' && typeof v.name === 'string'
+            ? { value: { id: Number(v.id), name: v.name } }
+            : { issues: [{ message: 'invalid user shape', path: ['name'] }] },
+      },
+    };
+
+    afterEach(() => {
+      clearGlobalMinderConfig();
+    });
+
+    it('passes valid data through, typed/replaced by the validator output', async () => {
+      mockedAxios.mockResolvedValueOnce({
+        data: { id: '1', name: 'Ada' },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+
+      const result = await minder('/users/1', undefined, { schema: userSchema });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual({ id: 1, name: 'Ada' });
+    });
+
+    it('fails closed with RESPONSE_VALIDATION_FAILED and populated issues on a mismatch', async () => {
+      mockedAxios.mockResolvedValueOnce({
+        data: { id: '1' }, // missing `name`
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+
+      const result = await minder('/users/1', undefined, { schema: userSchema });
+
+      expect(result.success).toBe(false);
+      expect(result.data).toBeNull();
+      expect(result.error?.code).toBe('RESPONSE_VALIDATION_FAILED');
+      expect(result.error?.status).toBe(200);
+      expect(result.error?.issues).toEqual([{ message: 'invalid user shape', path: ['name'] }]);
+    });
+
+    it('is a pass-through, byte-identical to the no-schema path, when no schema is configured', async () => {
+      const raw = { id: '1', name: 'Ada', extra: 'untouched' };
+      mockedAxios.mockResolvedValueOnce({
+        data: raw,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+
+      const result = await minder('/users/1');
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual(raw);
+    });
+
+    it('per-call options.schema overrides a route-def schema', async () => {
+      const routeSchema: StandardSchemaV1<any, any> = {
+        '~standard': {
+          version: 1,
+          vendor: 'test',
+          validate: () => ({ issues: [{ message: 'route schema always fails' }] }),
+        },
+      };
+      setGlobalMinderConfig({
+        apiBaseUrl: 'http://api.example.com',
+        routes: {
+          getUser: { method: 'GET' as any, url: '/users/1', schema: routeSchema },
+        },
+      });
+
+      mockedAxios.mockResolvedValueOnce({
+        data: { id: '1', name: 'Ada' },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+
+      // The per-call schema (valid) must win over the route-def schema
+      // (which always fails) — same precedence as method/timeout/headers.
+      const result = await minder('getUser', undefined, { schema: userSchema });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual({ id: 1, name: 'Ada' });
+    });
+
+    it('a route-def schema applies when no per-call schema is given', async () => {
+      setGlobalMinderConfig({
+        apiBaseUrl: 'http://api.example.com',
+        routes: {
+          getUser: { method: 'GET' as any, url: '/users/1', schema: userSchema },
+        },
+      });
+
+      mockedAxios.mockResolvedValueOnce({
+        data: { id: 'nope' }, // missing `name` -> fails userSchema
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+
+      const result = await minder('getUser');
+
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe('RESPONSE_VALIDATION_FAILED');
+    });
+
+    it('throwOnError:true throws the validation error instead of returning it', async () => {
+      mockedAxios.mockResolvedValueOnce({
+        data: { id: '1' }, // missing `name`
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+
+      await expect(
+        minder('/users/1', undefined, { schema: userSchema, throwOnError: true })
+      ).rejects.toMatchObject({
+        code: 'RESPONSE_VALIDATION_FAILED',
+        status: 200,
+        minderError: expect.objectContaining({ code: 'RESPONSE_VALIDATION_FAILED' }),
+      });
+    });
+
+    it('awaits an async validator', async () => {
+      const asyncUserSchema: StandardSchemaV1<any, { id: number; name: string }> = {
+        '~standard': {
+          version: 1,
+          vendor: 'test',
+          validate: async (v: any) => userSchema['~standard'].validate(v),
+        },
+      };
+      mockedAxios.mockResolvedValueOnce({
+        data: { id: '2', name: 'Grace' },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+
+      const result = await minder('/users/2', undefined, { schema: asyncUserSchema });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual({ id: 2, name: 'Grace' });
     });
   });
 });

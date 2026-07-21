@@ -9,7 +9,7 @@ import { Logger, LogLevel } from '../../../utils/Logger.js';
 import { BaseStorageAdapter, StorageAdapterOptions } from './StorageAdapter.js';
 import { MinderConfigError } from '../../../errors/MinderError.js';
 
-const logger = new Logger('NativeStorageAdapter', { level: LogLevel.ERROR });
+const logger = /*#__PURE__*/ new Logger('NativeStorageAdapter', { level: LogLevel.ERROR });
 
 export class NativeStorageAdapter extends BaseStorageAdapter {
   private AsyncStorage: any;

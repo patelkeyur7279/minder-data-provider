@@ -1,0 +1,21 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Shareable Renovate preset for apps using minder-data-provider. Extend it with: \"extends\": [\"github>patelkeyur7279/minder-data-provider//.github/renovate-preset\"]. Groups the React and TanStack Query families so version bumps land together and stay compatible with minder's peer ranges.",
+  "packageRules": [
+    {
+      "description": "Keep React and its types in one PR so react/react-dom never split.",
+      "matchPackageNames": ["react", "react-dom", "@types/react", "@types/react-dom"],
+      "groupName": "react"
+    },
+    {
+      "description": "Group all TanStack Query packages (minder's cache layer peer).",
+      "matchPackagePrefixes": ["@tanstack/"],
+      "groupName": "tanstack-query"
+    },
+    {
+      "description": "Surface minder-data-provider bumps prominently (new peer ranges ship here).",
+      "matchPackageNames": ["minder-data-provider"],
+      "labels": ["minder-update"]
+    }
+  ]
+}

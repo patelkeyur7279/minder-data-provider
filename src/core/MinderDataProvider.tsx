@@ -4,8 +4,8 @@
 // When using namespace imports (import * as React), bundlers can sometimes
 // create invalid references causing "Cannot read properties of null" errors
 import React, {
-  createContext,
-  useContext,
+  lazy,
+  useEffect,
   useMemo,
   useState,
   Suspense,
@@ -23,10 +23,7 @@ import { HydrationBoundary } from "@tanstack/react-query";
 //   { ssr: false }
 // );
 
-import { Provider as ReduxProvider } from "react-redux";
-import { configureStore } from "@reduxjs/toolkit";
 import type { MinderConfig } from "./types.js";
-import { createApiSlices } from "./SliceGenerator.js";
 import { ApiClient } from "./ApiClient.js";
 import { AuthManager } from "./AuthManager.js";
 import { CacheManager } from "./CacheManager.js";
@@ -34,26 +31,32 @@ import { WebSocketManager } from "./WebSocketManager.js";
 import { EnvironmentManager } from "./EnvironmentManager.js";
 import { ProxyManager } from "./ProxyManager.js";
 import { DebugManager } from "../debug/DebugManager.js";
-import { DevTools } from "../devtools/DevTools.js";
 import { DebugLogType } from "../constants/enums.js";
 import { setGlobalMinderConfig } from "./globalConfig.js";
+import { getMinderContext } from "./MinderContext.js";
+import { checkReactVersionAtRuntime } from "../utils/version-validator.js";
+import type { MinderContextValue } from "./MinderContext.js";
+import {
+  selectRealtimeTransport,
+  resolveWebSocketConfigForSelection,
+  resolveRealtimeConfig,
+} from "./realtime/selectTransport.js";
+import { LazySseTransport } from "./realtime/LazySseTransport.js";
+import type { RealtimeTransport } from "./realtime/types.js";
+import { getActiveOfflineManager } from "../platform/offline/registry.js";
 
-interface MinderContextValue {
-  config: MinderConfig;
-  apiClient: ApiClient;
-  authManager: AuthManager;
-  cacheManager: CacheManager;
-  websocketManager?: WebSocketManager;
-  environmentManager?: EnvironmentManager;
-  proxyManager?: ProxyManager;
-  debugManager?: DebugManager;
-  store: ReturnType<typeof configureStore>;
-  queryClient: QueryClient;
-  ReactQueryDevtools?: ComponentType<{ initialIsOpen?: boolean }>;
-  dehydratedState?: DehydratedState;
-}
+// Context accessors live in MinderContext.tsx (kept import-light so hooks
+// don't pull the provider's manager construction into consumer bundles).
+// Re-exported here so the public surface is unchanged.
+export { useMinderContext, useMinderContextSafe } from "./MinderContext.js";
+export type { MinderContextValue } from "./MinderContext.js";
 
-const MinderContext = createContext<MinderContextValue | null>(null);
+// DevTools is dev-only UI — loaded lazily so it lands in its own chunk and
+// production bundles never carry it. May appear a tick later than the sync
+// version did; it is gated to non-production + debug.devTools anyway.
+const LazyDevTools = lazy(() =>
+  import("../devtools/DevTools.js").then((m) => ({ default: m.DevTools }))
+);
 
 interface MinderDataProviderProps {
   config: MinderConfig;
@@ -62,7 +65,7 @@ interface MinderDataProviderProps {
   fallback?: ReactNode;
 }
 
-function getQueryClientConfig(config: MinderConfig) {
+export function getQueryClientConfig(config: MinderConfig) {
   return {
     defaultOptions: {
       queries: {
@@ -70,12 +73,12 @@ function getQueryClientConfig(config: MinderConfig) {
         gcTime: config.cache?.gcTime || 10 * 60 * 1000,
         refetchOnWindowFocus: config.cache?.refetchOnWindowFocus ?? false,
         refetchOnReconnect: config.cache?.refetchOnReconnect ?? true,
-        retry: config.performance?.retries || 3,
-        retryDelay: config.performance?.retryDelay || 1000,
+        retry: config.performance?.retries ?? 1,
+        retryDelay: config.performance?.retryDelay ?? 1000,
         enabled: typeof window !== "undefined" || !config.ssr?.enabled,
       },
       mutations: {
-        retry: config.performance?.retries || 1,
+        retry: config.performance?.retries ?? 1,
       },
     },
   };
@@ -90,6 +93,16 @@ export function MinderDataProvider({
   const [queryClientRef] = useState(
     () => new QueryClient(getQueryClientConfig(config))
   );
+
+  // Dev-only React-version conflict check (Spec 1.3c §2.4). Moved here off the
+  // package's import path so `sideEffects: false` stays honest. `hasChecked`
+  // inside checkReactVersionAtRuntime() makes this fire exactly once across all
+  // provider mounts; the empty dep array scopes it to first mount.
+  useEffect(() => {
+    if (process.env.NODE_ENV === "development") {
+      checkReactVersionAtRuntime();
+    }
+  }, []);
 
   const contextValue = useMemo(() => {
     // Setup environment manager if environments are configured
@@ -160,11 +173,11 @@ export function MinderDataProvider({
         gcTime: finalConfig.cache?.gcTime || 10 * 60 * 1000,
         refetchOnWindowFocus: finalConfig.cache?.refetchOnWindowFocus ?? false,
         refetchOnReconnect: finalConfig.cache?.refetchOnReconnect ?? true,
-        retry: finalConfig.performance?.retries || 3,
-        retryDelay: finalConfig.performance?.retryDelay || 1000,
+        retry: finalConfig.performance?.retries ?? 1,
+        retryDelay: finalConfig.performance?.retryDelay ?? 1000,
       },
       mutations: {
-        retry: finalConfig.performance?.retries || 1,
+        retry: finalConfig.performance?.retries ?? 1,
       },
     });
 
@@ -190,32 +203,49 @@ export function MinderDataProvider({
       finalConfig.debug?.cacheLogs
     );
 
-    // Create WebSocket Manager if configured
-    const websocketManager = finalConfig.websocket
-      ? new WebSocketManager(
-        finalConfig.websocket,
+    // Create the realtime transport (WS or SSE) per the precedence table in
+    // Spec 5.2 §3.1. WS stays the default and this branch is byte-for-byte the
+    // same construction as before; SSE is lazy-loaded (§4.8) so non-SSE apps
+    // never pull SseTransport's module into their bundle (P4).
+    const realtimeTransportKind = selectRealtimeTransport(finalConfig);
+    let websocketManager: WebSocketManager | undefined;
+    let realtimeManager: RealtimeTransport | undefined;
+
+    if (realtimeTransportKind === "ws") {
+      websocketManager = new WebSocketManager(
+        resolveWebSocketConfigForSelection(finalConfig),
         authManager,
         debugManager,
         finalConfig.debug?.websocketLogs
-      )
-      : undefined;
+      );
+      realtimeManager = websocketManager;
+    } else if (realtimeTransportKind === "sse") {
+      realtimeManager = new LazySseTransport(
+        () => import("./realtime/SseTransport.js"),
+        resolveRealtimeConfig(finalConfig),
+        authManager,
+        debugManager,
+        finalConfig.debug?.websocketLogs ?? false
+      );
+    }
 
-    // Generate Redux slices for all routes
-    const slices = createApiSlices(finalConfig.routes, apiClient);
-
-    // Create Redux store
-    const store = configureStore({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      reducer: slices.reducers as any,
-      middleware: (getDefaultMiddleware) =>
-        getDefaultMiddleware({
-          serializableCheck: {
-            ignoredActions: ["persist/PERSIST", "persist/REHYDRATE"],
-          },
-        }),
-      devTools: finalConfig.redux?.devTools ?? true,
-      preloadedState: finalConfig.redux?.preloadedState,
-    });
+    // Resync-nudge glue (5.1 §5 / 5.2 §4.6): a conventional 'resync' event
+    // triggers an offline sync + full query invalidation; 'invalidate' targets
+    // specific keys. Reads the neutral offline registry (not ApiClient) so
+    // there's no realtime -> offline import cycle; the transport itself carries
+    // no offline import (works for either WS or SSE, whichever was selected).
+    if (realtimeManager) {
+      realtimeManager.subscribe("resync", () => {
+        void getActiveOfflineManager()?.sync();
+        void queryClientRef.invalidateQueries();
+      });
+      realtimeManager.subscribe("invalidate", (payload) => {
+        const keys = (payload as { keys?: unknown } | undefined)?.keys;
+        void queryClientRef.invalidateQueries(
+          keys ? { queryKey: keys as readonly unknown[] } : undefined
+        );
+      });
+    }
 
     let ReactQueryDevtools:
       | ComponentType<{ initialIsOpen?: boolean }>
@@ -236,10 +266,10 @@ export function MinderDataProvider({
       authManager,
       cacheManager,
       websocketManager,
+      realtimeManager,
       environmentManager,
       proxyManager,
       debugManager,
-      store,
       queryClient: queryClientRef,
       ReactQueryDevtools,
     };
@@ -250,42 +280,52 @@ export function MinderDataProvider({
     setGlobalMinderConfig(contextValue.config);
   }, [contextValue.config]);
 
+  // Tear down the ApiClient (background timers, request cache, offline listeners)
+  // when the provider unmounts or the resolved client changes, to avoid leaks.
+  useEffect(() => {
+    const { apiClient } = contextValue;
+    return () => {
+      apiClient.destroy();
+    };
+  }, [contextValue]);
+
+  const queryClientProviderContent = (
+    <QueryClientProvider client={queryClientRef}>
+      {dehydratedState ? (
+        <HydrationBoundary state={dehydratedState}>
+          {children}
+        </HydrationBoundary>
+      ) : fallback ? (
+        <Suspense fallback={fallback}>{children}</Suspense>
+      ) : (
+        children
+      )}
+
+      {process.env.NODE_ENV !== "production" &&
+        contextValue.config.debug?.enabled !== false &&
+        contextValue.ReactQueryDevtools && (
+          <contextValue.ReactQueryDevtools initialIsOpen={false} />
+        )}
+
+      {/* Custom DevTools (lazy: own chunk, never in production bundles) */}
+      {process.env.NODE_ENV !== "production" &&
+        contextValue.config.debug?.enabled !== false &&
+        contextValue.config.debug?.devTools && (
+          <Suspense fallback={null}>
+            <LazyDevTools config={contextValue.config.debug} />
+          </Suspense>
+        )}
+    </QueryClientProvider>
+  );
+
+  // Resolve the context at render time (client component) — see ./singletons.ts.
+  // No module-scope `createContext` call to be tree-shaken away (MDPD-17).
+  const MinderContext = getMinderContext();
+
   return (
     <MinderContext.Provider value={contextValue}>
-      <ReduxProvider store={contextValue.store}>
-        <QueryClientProvider client={queryClientRef}>
-          {dehydratedState ? (
-            <HydrationBoundary state={dehydratedState}>
-              {children}
-            </HydrationBoundary>
-          ) : fallback ? (
-            <Suspense fallback={fallback}>{children}</Suspense>
-          ) : (
-            children
-          )}
-
-          {process.env.NODE_ENV !== "production" &&
-            contextValue.config.debug?.enabled !== false &&
-            contextValue.ReactQueryDevtools && (
-              <contextValue.ReactQueryDevtools initialIsOpen={false} />
-            )}
-
-          {/* Custom DevTools */}
-          {process.env.NODE_ENV !== "production" &&
-            contextValue.config.debug?.enabled !== false &&
-            contextValue.config.debug?.devTools && (
-              <DevTools config={contextValue.config.debug} />
-            )}
-        </QueryClientProvider>
-      </ReduxProvider>
+      {queryClientProviderContent}
     </MinderContext.Provider>
   );
 }
 
-export function useMinderContext(): MinderContextValue {
-  const context = useContext(MinderContext);
-  if (!context) {
-    throw new Error("useMinderContext must be used within MinderDataProvider");
-  }
-  return context;
-}

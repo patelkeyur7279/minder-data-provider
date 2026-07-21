@@ -52,13 +52,19 @@ export class PlatformDetector {
    * Detect platform on server-side
    */
   private static detectServerPlatform(): Platform {
-    // Next.js server detection
-    if (process.env.NEXT_RUNTIME ||
-        process.env.__NEXT_PROCESSED_ENV ||
-        typeof __NEXT_DATA__ !== 'undefined') {
+    // Next.js server detection.
+    // MDPD: `process` is bare-accessed here, but environments without
+    // `window` AND without `process` exist (browser Web Workers, some edge
+    // runtimes) — a bare `process.env` reference throws ReferenceError there.
+    // Guarded the same way `isElectron()` guards `process.versions?.electron`.
+    if (
+      (typeof process !== 'undefined' &&
+        (process.env?.NEXT_RUNTIME || process.env?.__NEXT_PROCESSED_ENV)) ||
+      typeof __NEXT_DATA__ !== 'undefined'
+    ) {
       return Platform.NEXT_JS;
     }
-    
+
     // Default to Node.js for server-side
     return Platform.NODE;
   }
@@ -97,11 +103,19 @@ export class PlatformDetector {
   private static isElectron(): boolean {
     const win = window as any;
     
-    // Multiple indicators for Electron
+    // Multiple indicators for Electron.
+    // MDPD-34: every navigator property must be feature-guarded. On
+    // iOS/Hermes, React Native provides `navigator` WITHOUT `userAgent`, and
+    // this method runs BEFORE isReactNative() in the detection order — a bare
+    // `navigator.userAgent.includes(...)` crashed configureMinder() at app
+    // boot on a real iPhone simulator (2/3 cold launches). Same defect class
+    // as the unguarded `document` in isNextJs() (MDPD-32).
     return !!(
       win.electron ||
       win.process?.type === 'renderer' ||
-      navigator.userAgent.includes('Electron') ||
+      (typeof navigator !== 'undefined' &&
+        typeof navigator.userAgent === 'string' &&
+        navigator.userAgent.includes('Electron')) ||
       (typeof process !== 'undefined' && process.versions?.electron)
     );
   }
@@ -131,10 +145,10 @@ export class PlatformDetector {
   private static isReactNative(): boolean {
     const win = window as any;
     
-    // Multiple indicators for React Native
+    // Multiple indicators for React Native (navigator guarded — MDPD-34)
     return !!(
       win.ReactNativeWebView ||
-      navigator.product === 'ReactNative' ||
+      (typeof navigator !== 'undefined' && navigator.product === 'ReactNative') ||
       // Check for RN-specific globals
       win.__fbBatchedBridge ||
       // Check for RN dimensions
@@ -153,7 +167,9 @@ export class PlatformDetector {
       win.__NEXT_DATA__ ||
       win.next ||
       win.__BUILD_MANIFEST ||
-      document.getElementById('__next') ||
+      // Guard `document`: React Native sets global.window = global but never
+      // defines `document`, so a bare reference throws ReferenceError there.
+      (typeof document !== 'undefined' && document.getElementById('__next')) ||
       // Check for Next.js router
       win.next?.router ||
       // Check for Next.js head

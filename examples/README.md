@@ -1,6 +1,10 @@
 # 🚀 Minder Examples - Complete Guide
 
-**Production-ready examples** demonstrating all features of Minder Data Provider across multiple platforms with **centralized configuration** and **Docker support**.
+> **Example status** (all refreshed to the current API / current deps, 2026-07):
+> - ✅ **Verified here:** [`nextjs-app/`](./nextjs-app) (React 19 / Next 15, CI-tested, all certified-provider pages + local-first) · [`web/e-commerce`](./web/e-commerce) (Vite + React 19 — install + type-check + build + vitest verified) · [`nodejs/api`](./nodejs/api) (React-free `/node` entry — type-check + build + live `minder()` smoke-run verified).
+> - ⚠️ **Refreshed but Experimental** (React 18.3 / RN 0.76 / current APIs, but **not** device/GUI-run here — per charter RK-5 they stay Experimental until on-device CI): [`electron/`](./electron) · [`expo/`](./expo) · [`react-native/`](./react-native).
+
+**Examples** demonstrating features of Minder Data Provider across multiple platforms with **centralized configuration** and **Docker support**.
 
 ## 📋 Table of Contents
 

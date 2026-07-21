@@ -17,7 +17,15 @@ export type { ConfigPreset } from '../constants/enums.js';
 export type ConfigPresetType = 'minimal' | 'standard' | 'advanced' | 'enterprise';
 
 /**
- * Preset configurations for different use cases
+ * Preset configurations for different use cases.
+ *
+ * NOTE (G-05/G-08 review): these tiers INTENTIONALLY override the library's
+ * default of `performance.retries: 1` with graduated values (standard 3 →
+ * enterprise 5) — a preset is an explicit, opted-into opinion bundle
+ * (`createConfigFromPreset('standard')`), unlike `configureMinder()`'s
+ * platform defaults, which must match the documented library defaults.
+ * No preset sets `cors.credentials`; credentialed mode stays opt-in
+ * everywhere.
  */
 export const CONFIG_PRESETS: Record<ConfigPreset, Partial<MinderConfig>> = {
   /**
@@ -74,7 +82,7 @@ export const CONFIG_PRESETS: Record<ConfigPreset, Partial<MinderConfig>> = {
     performance: {
       deduplication: true,
       batching: true,
-      batchDelay: 50,
+      batchDelay: 0,
       retries: 3,
       timeout: 30000,
       compression: true,
@@ -120,7 +128,7 @@ export const CONFIG_PRESETS: Record<ConfigPreset, Partial<MinderConfig>> = {
     performance: {
       deduplication: true,
       batching: true,
-      batchDelay: 25,
+      batchDelay: 0,
       retries: 5,
       timeout: 45000,
       compression: true,
@@ -182,7 +190,7 @@ export const CONFIG_PRESETS: Record<ConfigPreset, Partial<MinderConfig>> = {
     performance: {
       deduplication: true,
       batching: true,
-      batchDelay: 50,
+      batchDelay: 0,
       monitoring: true,
       retries: 5,
       retryDelay: 1000,
@@ -233,7 +241,7 @@ export const CONFIG_PRESETS: Record<ConfigPreset, Partial<MinderConfig>> = {
     performance: {
       deduplication: true,
       batching: true,
-      batchDelay: 30,
+      batchDelay: 0,
       retries: 3,
       timeout: 30000,
       compression: true,
@@ -284,7 +292,7 @@ export const CONFIG_PRESETS: Record<ConfigPreset, Partial<MinderConfig>> = {
     performance: {
       deduplication: true,
       batching: true,
-      batchDelay: 40,
+      batchDelay: 0,
       monitoring: true,
       retries: 4,
       retryDelay: 1000,

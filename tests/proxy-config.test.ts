@@ -11,7 +11,18 @@ describe('ProxyManager Configuration', () => {
 
         expect(code).toContain("res.setHeader('Access-Control-Allow-Origin', '*')");
         expect(code).toContain("res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')");
-        expect(code).toContain("res.setHeader('Access-Control-Allow-Credentials', 'true')");
+        // Credentials are opt-in since 2.2.0-beta.1: wildcard + credentials is unsafe.
+        expect(code).toContain("res.setHeader('Access-Control-Allow-Credentials', 'false')");
+    });
+
+    it('should refuse to generate a proxy with credentials + wildcard origin', () => {
+        const manager = new ProxyManager({
+            enabled: true,
+            baseUrl: 'https://api.example.com',
+            cors: { credentials: true }
+        });
+
+        expect(() => manager.generateNextJSProxy()).toThrow(/credentials|wildcard/i);
     });
 
     it('should generate proxy with custom CORS settings', () => {

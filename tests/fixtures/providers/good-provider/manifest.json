@@ -1,0 +1,36 @@
+{
+  "name": "@example/provider-fixture",
+  "version": "1.0.0",
+  "displayName": "Fixture Provider",
+  "categories": ["database", "auth"],
+  "capabilities": ["auth-provider", "storage", "realtime-subscriptions"],
+  "config": {
+    "clientSafe": ["url", "anonKey"],
+    "serverOnly": ["serviceRoleKey"]
+  },
+  "scopes": [
+    {
+      "scope": "database:read",
+      "why": "Fetch rows from Supabase Postgres tables on behalf of the signed-in user."
+    },
+    {
+      "scope": "database:write",
+      "why": "Persist row inserts/updates issued through the Minder data provider."
+    },
+    {
+      "scope": "auth:session",
+      "why": "Read the current Supabase auth session to attach a JWT to outgoing requests."
+    }
+  ],
+  "runtimes": ["web", "node", "edge"],
+  "frameworks": ["react", "nextjs", "vite"],
+  "peerDependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  },
+  "docs": {
+    "setup": "./README.md",
+    "example": "./example.ts",
+    "security": "./README.md"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,1734 @@
+'use strict';
+
+/**
+ * `minder` CLI implementation (F-05, provider-platform foundation).
+ *
+ * Zero dependencies, plain CommonJS, Node-only — the same style as
+ * scripts/generate-env-example.js and scripts/certify-provider.js: a pure
+ * `main(argv, io)` entry point plus exported subcommand functions for direct
+ * unit testing, with all filesystem/process side effects gated behind
+ * `require.main === module` in bin/minder.js.
+ *
+ * Why plain CJS instead of building against dist/: this file ships as
+ * source (see package.json "files") and is required directly by
+ * bin/minder.js. That keeps the CLI usable straight out of a git checkout
+ * or npm install with no build step, and keeps tests simple (no dist
+ * coupling, no build-before-test ordering).
+ *
+ * Every subcommand function takes `(argv, ctx)` where `ctx = { cwd, stdout,
+ * stderr }` and returns a process exit code (never calls `process.exit`
+ * itself) — that keeps them safely callable in-process from tests.
+ */
+
+const fs = require('fs');
+const path = require('path');
+const { execFileSync } = require('child_process');
+
+/**
+ * Single source of truth for "is this provider certified?" — the exact
+ * CERTIFIED array scripts/generate-catalog.js uses to build
+ * docs/providers/CATALOG.md's Certified table. Requiring it here is
+ * side-effect-free: everything at that module's top level is a function or
+ * constant declaration (CERTIFIED, PLANNED, findManifests, ...) — the
+ * filesystem scan and the docs/providers/CATALOG.md write only happen
+ * inside its `main()`, which itself only runs when `require.main === module`
+ * (see the bottom of scripts/generate-catalog.js). That's true when the
+ * file is executed directly (`node scripts/generate-catalog.js` / `npm run
+ * generate:catalog`) and false whenever it's `require()`-d from elsewhere,
+ * including here. scripts/generate-catalog.js also has no dependencies
+ * beyond Node builtins, and `scripts/` ships in the published npm package
+ * (see package.json "files"), so this require resolves the same way from a
+ * plain git checkout and from `npm install minder-data-provider`.
+ *
+ * G-07: PROVIDERS[].status and KEY_SOURCE_REGISTRY[].status below are
+ * hand-maintained, human-readable labels for documentation/env-file
+ * comments — cmdAdd's own certification claim must NOT be sourced from
+ * either of them, because that's exactly what let `minder add <provider>`
+ * print "EXPERIMENTAL — not yet certified" for providers the catalog had
+ * already certified. Deriving from CERTIFIED here is what prevents that
+ * drift from recurring.
+ */
+const { CERTIFIED } = require('../../scripts/generate-catalog.js');
+
+/**
+ * `minder generate --from <openapi.json>` (Task 3.2) — OpenAPI 3.x -> minder
+ * typed-routes codegen. Pure parsing/emission logic lives in
+ * scripts/lib/openapi-codegen.js (no fs/process there, see its header);
+ * `cmdGenerate` below does the file I/O and error reporting, same division
+ * of labor as `isCertifiedProvider`'s CERTIFIED require above.
+ */
+const openapiCodegen = require('../../scripts/lib/openapi-codegen.js');
+
+/**
+ * `minder codemod redux-removal` (Task C) — auto-migrate off the Redux
+ * integration removed in v3.0. Pure transform logic lives in
+ * scripts/lib/codemod-redux-removal.js (no fs there — see its header for the
+ * text/regex-vs-TS-compiler-API tradeoff); `cmdCodemod` below does the
+ * directory walk, file I/O, --dry-run diff preview, and summary reporting —
+ * same division of labor as `cmdGenerate`/openapiCodegen above.
+ */
+const codemodReduxRemoval = require('../../scripts/lib/codemod-redux-removal.js');
+
+const CATALOG_DOC = 'docs/providers/CATALOG.md';
+
+/**
+ * True when `name` (a PROVIDERS entry's `name`, e.g. 'stripe') is certified
+ * per scripts/generate-catalog.js's CERTIFIED array, keyed by manifest name
+ * (`@minder/provider-<name>`). Unknown/unregistered names are never
+ * certified.
+ */
+function isCertifiedProvider(name) {
+  return CERTIFIED.includes(`@minder/provider-${name}`);
+}
+
+/**
+ * Static key-source registry — where to get API keys for each provider.
+ * All six roadmap providers below are CERTIFIED (see the CERTIFIED array in
+ * scripts/generate-catalog.js and docs/providers/CATALOG.md). `status` here
+ * is a hand-maintained, human-readable label for `minder init`'s printed
+ * table — kept in sync with reality by hand, unlike cmdAdd's own
+ * certification claim, which is derived from CERTIFIED (see
+ * `isCertifiedProvider` above) precisely so it can't go stale the same way.
+ * This registry is purely a convenience pointer printed by `minder init`.
+ */
+const KEY_SOURCE_REGISTRY = [
+  {
+    name: 'Supabase',
+    keysUrl: 'https://supabase.com/dashboard/project/_/settings/api',
+    status: 'certified — minder add supabase',
+  },
+  {
+    name: 'Stripe',
+    keysUrl: 'https://dashboard.stripe.com/apikeys',
+    status: 'certified — minder add stripe',
+  },
+  {
+    name: 'Clerk',
+    keysUrl: 'https://dashboard.clerk.com',
+    status: 'certified — minder add clerk',
+  },
+  {
+    name: 'Firebase',
+    keysUrl: 'https://console.firebase.google.com',
+    status: 'certified — minder add firebase',
+  },
+  {
+    name: 'Razorpay',
+    keysUrl: 'https://dashboard.razorpay.com/app/website-app-settings/api-keys',
+    status: 'certified — minder add razorpay',
+  },
+  {
+    name: 'Sentry',
+    keysUrl: 'https://sentry.io/settings/',
+    status: 'certified — minder add sentry',
+  },
+];
+
+/**
+ * Registry of providers `minder add <provider>` actually knows how to
+ * scaffold. Everything not listed here exits 1 via cmdAdd's
+ * unknown-provider error, which lists the names registered here so the
+ * message can't go stale. Entries here are
+ * honestly labeled by `status` — `'certified'` means it completed the
+ * certification process (see docs/providers/CATALOG.md); a provider added
+ * ahead of certification should say `'experimental'` instead. Either way,
+ * `status` is a human-maintained label used for documentation and
+ * .env.example comments — cmdAdd's own printed certification claim is
+ * derived separately from CERTIFIED (see `isCertifiedProvider` above), so
+ * this field drifting stale can no longer make cmdAdd itself lie.
+ */
+const SUPABASE_CONFIG_SNIPPET = `// Add this to your minder.config.ts "providers" object:
+//
+// import { secret } from 'minder-data-provider/server';
+//
+// providers: {
+//   supabase: {
+//     url: process.env.NEXT_PUBLIC_SUPABASE_URL!,
+//     anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+//     serviceRoleKey: secret('SUPABASE_SERVICE_ROLE_KEY'),
+//     mock: true, // flip to false once you've added real Supabase keys
+//   },
+// }
+`;
+
+const STRIPE_CONFIG_SNIPPET = `// Add this to your minder.config.ts "providers" object:
+//
+// import { secret } from 'minder-data-provider/server';
+//
+// providers: {
+//   stripe: {
+//     publishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!,
+//     secretKey: secret('STRIPE_SECRET_KEY'),
+//     webhookSecret: secret('STRIPE_WEBHOOK_SECRET'),
+//     checkoutPath: '/api/minder/stripe/checkout',
+//     mock: true, // flip to false once you've added real Stripe keys
+//   },
+// }
+`;
+
+// Next.js App Router route handlers scaffolded by `minder add stripe`. Server
+// boundary: both import from 'minder-data-provider/providers/stripe' (the
+// zero-dependency handler factories) and resolve secrets via `secret(...)`
+// from 'minder-data-provider' — the secret key/webhook secret are never
+// embedded as raw strings in app code.
+const STRIPE_CHECKOUT_ROUTE = `import { createCheckoutHandler } from 'minder-data-provider/providers/stripe';
+import { secret } from 'minder-data-provider';
+
+const handler = createCheckoutHandler({ secretKey: secret('STRIPE_SECRET_KEY') });
+
+export async function POST(req: Request) {
+  return handler(req);
+}
+`;
+
+const STRIPE_WEBHOOK_ROUTE = `import { createStripeWebhookHandler } from 'minder-data-provider/providers/stripe';
+import { secret } from 'minder-data-provider';
+
+const handler = createStripeWebhookHandler({
+  webhookSecret: secret('STRIPE_WEBHOOK_SECRET'),
+  onEvent: async (event) => {
+    // event: { type: string, data: unknown, raw: string }
+    // TODO: switch on event.type (e.g. 'checkout.session.completed') and act on event.data
+  },
+});
+
+export async function POST(req: Request) {
+  return handler(req);
+}
+`;
+
+const CLERK_CONFIG_SNIPPET = `// Add this to your minder.config.ts "providers" object:
+//
+// import { secret } from 'minder-data-provider/server';
+//
+// providers: {
+//   clerk: {
+//     publishableKey: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY!,
+//     secretKey: secret('CLERK_SECRET_KEY'),
+//     mock: true, // flip to false once you've added real Clerk keys
+//   },
+// }
+`;
+
+// Next.js App Router route handler scaffolded by `minder add clerk`. Server
+// boundary: imports from 'minder-data-provider/providers/clerk' (the
+// zero-dependency session-verify handler factory) and resolves the secret
+// key via `secret(...)` from 'minder-data-provider' — never embedded as a
+// raw string in app code.
+const CLERK_VERIFY_ROUTE = `import { createClerkSessionHandler } from 'minder-data-provider/providers/clerk';
+import { secret } from 'minder-data-provider';
+
+const handler = createClerkSessionHandler({ secretKey: secret('CLERK_SECRET_KEY') });
+
+export async function POST(req: Request) {
+  return handler(req);
+}
+`;
+
+const FIREBASE_CONFIG_SNIPPET = `// Add this to your minder.config.ts "providers" object:
+//
+// providers: {
+//   firebase: {
+//     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!, // apiKey is a PUBLIC identifier, not a secret
+//     authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
+//     projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
+//     // serviceAccount is a FileRef — resolved server-only, contents never
+//     // logged or returned to the client:
+//     serviceAccount: { kind: 'file', source: 'path', ref: process.env.GOOGLE_APPLICATION_CREDENTIALS },
+//     mock: true, // flip to false once you've added real Firebase keys
+//   },
+// }
+`;
+
+// Next.js App Router route handler scaffolded by `minder add firebase`. Server
+// boundary: imports from 'minder-data-provider/providers/firebase' (the
+// zero-dependency service-account loader) and resolves the credential file
+// via a FileRef — the file's contents (private_key, raw client_email, etc.)
+// are never returned by this route, only the MASKED health summary.
+const FIREBASE_HEALTH_ROUTE = `import { loadServiceAccount } from 'minder-data-provider/providers/firebase';
+
+export async function GET() {
+  // GOOGLE_APPLICATION_CREDENTIALS points at the service-account JSON FILE
+  // path — never commit that file, and never inline its contents here.
+  const health = await loadServiceAccount({
+    kind: 'file',
+    source: 'path',
+    ref: process.env.GOOGLE_APPLICATION_CREDENTIALS || '',
+  });
+
+  // health is MASKED (projectId + masked clientEmail + hasPrivateKey only) —
+  // the private_key itself is never included.
+  return Response.json(health);
+}
+`;
+
+const RAZORPAY_CONFIG_SNIPPET = `// Add this to your minder.config.ts "providers" object:
+//
+// import { secret } from 'minder-data-provider/server';
+//
+// providers: {
+//   razorpay: {
+//     keyId: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID!, // keyId is a PUBLIC identifier, not a secret
+//     keySecret: secret('RAZORPAY_KEY_SECRET'),
+//     webhookSecret: secret('RAZORPAY_WEBHOOK_SECRET'),
+//     mock: true, // flip to false once you've added real Razorpay keys
+//   },
+// }
+`;
+
+// Next.js App Router route handlers scaffolded by `minder add razorpay`. Server
+// boundary: both import from 'minder-data-provider/providers/razorpay' (the
+// zero-dependency handler factories) and resolve secrets via `secret(...)`
+// from 'minder-data-provider' — the key secret/webhook secret are never
+// embedded as raw strings in app code.
+const RAZORPAY_ORDER_ROUTE = `import { createOrderHandler } from 'minder-data-provider/providers/razorpay';
+import { secret } from 'minder-data-provider';
+
+const handler = createOrderHandler({
+  keyId: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || '',
+  keySecret: secret('RAZORPAY_KEY_SECRET'),
+});
+
+export async function POST(req: Request) {
+  return handler(req);
+}
+`;
+
+const RAZORPAY_WEBHOOK_ROUTE = `import { createRazorpayWebhookHandler } from 'minder-data-provider/providers/razorpay';
+import { secret } from 'minder-data-provider';
+
+const handler = createRazorpayWebhookHandler({
+  webhookSecret: secret('RAZORPAY_WEBHOOK_SECRET'),
+  onEvent: async (e) => {
+    // e: { body, rawBody, headers }
+    // TODO: switch on e.body's event type and act on it
+  },
+});
+
+export async function POST(req: Request) {
+  return handler(req);
+}
+`;
+
+const SENTRY_CONFIG_SNIPPET = `// Add this to your minder.config.ts "providers" object:
+//
+// providers: {
+//   sentry: {
+//     dsn: process.env.NEXT_PUBLIC_SENTRY_DSN, // DSN is PUBLIC, not a secret
+//     mock: true, // flip to false once you've added a real Sentry DSN
+//   },
+// }
+`;
+
+const PROVIDERS = [
+  {
+    name: 'supabase',
+    status: 'certified',
+    envVars: ['SUPABASE_SERVICE_ROLE_KEY'],
+    configSnippet: SUPABASE_CONFIG_SNIPPET,
+    keysUrl: 'https://supabase.com/dashboard/project/_/settings/api',
+  },
+  {
+    name: 'stripe',
+    status: 'certified',
+    envVars: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'],
+    configSnippet: STRIPE_CONFIG_SNIPPET,
+    keysUrl: 'https://dashboard.stripe.com/apikeys',
+    scaffoldFiles: [
+      { path: 'app/api/minder/stripe/checkout/route.ts', content: STRIPE_CHECKOUT_ROUTE },
+      { path: 'app/api/minder/stripe/webhook/route.ts', content: STRIPE_WEBHOOK_ROUTE },
+    ],
+  },
+  {
+    name: 'clerk',
+    status: 'certified',
+    envVars: ['CLERK_SECRET_KEY'],
+    configSnippet: CLERK_CONFIG_SNIPPET,
+    keysUrl: 'https://dashboard.clerk.com',
+    scaffoldFiles: [{ path: 'app/api/minder/clerk/verify/route.ts', content: CLERK_VERIFY_ROUTE }],
+  },
+  {
+    name: 'firebase',
+    status: 'certified',
+    envVars: ['GOOGLE_APPLICATION_CREDENTIALS'],
+    configSnippet: FIREBASE_CONFIG_SNIPPET,
+    keysUrl: 'https://console.firebase.google.com',
+    scaffoldFiles: [{ path: 'app/api/minder/firebase/health/route.ts', content: FIREBASE_HEALTH_ROUTE }],
+    // Firebase is the first provider whose credential is a FILE (a
+    // service-account JSON), not a plain env-var string — cmdAdd prints this
+    // via the generic `extraNote` field (see cmdAdd) so the file-vs-string
+    // distinction isn't buried in the config snippet alone.
+    extraNote:
+      'Firebase uses a service-account JSON FILE — set GOOGLE_APPLICATION_CREDENTIALS to its path ' +
+      '(or base64 into an env var). NEVER commit the file.',
+  },
+  {
+    name: 'razorpay',
+    status: 'certified',
+    envVars: ['RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET'],
+    configSnippet: RAZORPAY_CONFIG_SNIPPET,
+    keysUrl: 'https://dashboard.razorpay.com/app/website-app-settings/api-keys',
+    scaffoldFiles: [
+      { path: 'app/api/minder/razorpay/order/route.ts', content: RAZORPAY_ORDER_ROUTE },
+      { path: 'app/api/minder/razorpay/webhook/route.ts', content: RAZORPAY_WEBHOOK_ROUTE },
+    ],
+  },
+  {
+    name: 'sentry',
+    status: 'certified',
+    // Sentry's DSN is a PUBLIC client value (NEXT_PUBLIC_SENTRY_DSN), not a
+    // secret env var — there is nothing here for `minder doctor`/env-example
+    // scaffolding to track, so this is intentionally empty.
+    envVars: [],
+    configSnippet: SENTRY_CONFIG_SNIPPET,
+    keysUrl: 'https://sentry.io/settings/',
+    // Sentry is a client observability plugin, not a server capability
+    // contract — there's no server route to scaffold, so this key is
+    // intentionally omitted (see cmdAdd's guard for providers without it).
+    extraNote:
+      'Sentry is a client observability plugin — no server route or secret key. The DSN is public. ' +
+      'Call registerSentryProvider({ dsn }) in your app entry.',
+  },
+];
+
+const ENV_EXAMPLE_SECTION_MARKER = '# minder providers';
+
+// G-07: this template used to claim "nothing is certified yet" (and the
+// inner comment "once they're certified") — stale since the six roadmap
+// providers were certified. It now defers to the catalog + `minder add`
+// instead of hardcoding a certification claim that can drift.
+const CONFIG_TEMPLATE = `/**
+ * Minder configuration.
+ *
+ * Generated by \`minder init\`. See docs/providers/CATALOG.md for the
+ * current provider catalog and each provider's certification status —
+ * \`providers\` starts empty; run \`minder add <provider>\` (e.g.
+ * \`minder add supabase\`) to scaffold a provider's config here.
+ */
+import { configureMinder } from 'minder-data-provider';
+
+export default configureMinder({
+  providers: {
+    // Add providers here with \`minder add <provider>\` — see
+    // docs/providers/CATALOG.md for the certified list and status.
+  },
+});
+`;
+
+// G-07: this help text used to hardcode "(all EXPERIMENTAL — not yet
+// certified)" in the add blurb and "none are certified yet" in the init
+// blurb — both false once the six roadmap providers were certified, and
+// both contradicting the CERTIFIED status `minder add` itself prints. The
+// wording below matches reality; the authoritative per-provider status is
+// what `minder add` derives from CERTIFIED (see `isCertifiedProvider`).
+const HELP_TEXT = `Usage: minder <command> [options]
+
+Commands:
+  init [--force]            Write minder.config.ts + a "${ENV_EXAMPLE_SECTION_MARKER}"
+                             section in .env.example, and print where to get
+                             API keys for each supported provider (see
+                             ${CATALOG_DOC} for certification status).
+                             Idempotent: skips existing files unless --force.
+
+  add <provider>             Scaffold a provider integration. Currently
+                             supports "supabase", "stripe", "clerk",
+                             "firebase", "razorpay", and "sentry" — all six
+                             CERTIFIED (see ${CATALOG_DOC}). stripe, clerk,
+                             firebase, and razorpay also scaffold Next.js App
+                             Router route handlers; sentry is a client
+                             plugin with no server route. Every other
+                             provider name exits 1 with the list of
+                             registered providers.
+
+  doctor [--fix] [--config <path>] [--bundle]
+                             Check the environment, that installed peer
+                             versions (react, react-query, …) meet minder's
+                             minimums, and that provider credentials referenced
+                             by your config are present.
+                             --fix installs the exact versions needed to satisfy
+                             any outdated/missing peers (add --dry-run to preview
+                             the command without installing).
+                             --bundle scans this app for minder-data-provider
+                             imports and reports what each subpath costs
+                             (min+gzip), with slimming tips.
+                             Reads an optional plain JSON config file
+                             (--config path/to/file.json) or falls back to
+                             scanning .env.example for variable names.
+                             Prints a masked table (kind + first 4 chars +
+                             '***' + present/missing) — never raw values —
+                             and exits 1 if any referenced variable is
+                             missing.
+                             NOTE: minder.config.ts (TypeScript) is not
+                             read by doctor yet — only a plain JSON
+                             --config file or .env.example are supported.
+                             Full TS-config loading arrives with the first
+                             provider wave.
+
+  generate --from <openapi.json> [--out minder.routes.ts]
+           [--base-path-strategy strip|keep]
+                             Generate a typed routes module from an OpenAPI
+                             3.x JSON document (3.0 and 3.1 — YAML is not
+                             supported, convert to JSON first). Emits a
+                             single .ts file: a \`routes\` const (satisfies
+                             ApiRoute, ready for createTypedMinder), request/
+                             response interfaces derived from
+                             components.schemas + operation schemas, and a
+                             RouteTypes map. --out defaults to
+                             "minder.routes.ts". --base-path-strategy
+                             defaults to "strip" (ignore servers[0].url,
+                             routes are the raw OpenAPI paths); "keep"
+                             prepends servers[0].url's path portion (e.g.
+                             "/v1") to every route.
+
+  codemod redux-removal [--dry-run] [--dir <path>]
+                             Auto-migrate off the Redux integration removed in
+                             v3.0 (see docs/MIGRATION_GUIDE.md, "v2.x -> v3.0").
+                             Renames useReduxSlice() to useMinder() and strips
+                             the redux field from configureMinder()/MinderConfig
+                             objects; useStore(), ReduxConfig, the Redux
+                             <Provider> wrapper, and DynamicLoader's redux
+                             members are flagged with TODO comments (not
+                             auto-rewritten) since they have no safe automatic
+                             replacement. --dry-run previews a diff for every
+                             file without writing; default mode writes and
+                             prints the same summary. --dir scopes the scan
+                             (default: cwd); node_modules/dist/build output are
+                             always skipped.
+
+Run with no arguments (or --help / -h) to show this message.
+`;
+
+// ── shared helpers ──────────────────────────────────────────────────────────
+
+function resolveIo(io) {
+  return {
+    stdout: (io && io.stdout) || process.stdout,
+    stderr: (io && io.stderr) || process.stderr,
+    cwd: (io && io.cwd) || process.cwd(),
+  };
+}
+
+/**
+ * Create files (never overwriting existing ones unless `opts.force`),
+ * creating parent directories as needed. Used directly by `minder init` for
+ * minder.config.ts, and is the machinery `minder add <provider>` will use
+ * once provider scaffolds exist.
+ *
+ * @param {Array<{path: string, content: string}>} files
+ * @param {{force?: boolean, cwd?: string}} [opts]
+ * @returns {{written: string[], skipped: string[]}}
+ */
+function writeScaffold(files, opts) {
+  const options = opts || {};
+  const cwd = options.cwd || process.cwd();
+  const force = Boolean(options.force);
+
+  const written = [];
+  const skipped = [];
+
+  for (const file of files) {
+    const target = path.resolve(cwd, file.path);
+    const exists = fs.existsSync(target);
+
+    if (exists && !force) {
+      skipped.push(file.path);
+      continue;
+    }
+
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, file.content, 'utf8');
+    written.push(file.path);
+  }
+
+  return { written, skipped };
+}
+
+// ── `minder init` ───────────────────────────────────────────────────────────
+
+function buildEnvExampleSection() {
+  // G-07: this header used to open with "No providers are certified yet" —
+  // stale since the six roadmap providers were certified. Defer to the
+  // catalog for status instead of hardcoding a claim here.
+  const lines = [
+    ENV_EXAMPLE_SECTION_MARKER,
+    '#',
+    '# Provider credentials go here once you add a provider with `minder add`.',
+    '# See docs/providers/CATALOG.md for the current catalog and certification',
+    "# status. Get API keys from each provider's dashboard:",
+  ];
+  for (const entry of KEY_SOURCE_REGISTRY) {
+    lines.push(`#   ${entry.name}: ${entry.keysUrl}`);
+  }
+  lines.push('');
+  return lines.join('\n') + '\n';
+}
+
+/**
+ * Create-or-append a marker-delimited section in .env.example. Unlike
+ * `writeScaffold` (whole-file, no-clobber), this file may already exist
+ * with unrelated content (e.g. from `npm run generate:env-example`), so we
+ * append rather than overwrite — and only skip when a section with this
+ * exact `marker` is already present. Shared by `writeEnvExampleSection`
+ * (minder init's provider key-source pointer block) and
+ * `writeProviderEnvVars` (minder add's per-provider env var block) — same
+ * idempotent-append / --force-replace semantics, different marker + body.
+ */
+function appendEnvExampleSection(cwd, marker, body, force) {
+  const envPath = path.resolve(cwd, '.env.example');
+  const exists = fs.existsSync(envPath);
+  const current = exists ? fs.readFileSync(envPath, 'utf8') : null;
+  const hasSection = current !== null && current.includes(marker);
+
+  if (hasSection && !force) {
+    return { written: false };
+  }
+
+  let base = current;
+  if (base === null) {
+    base = '# .env.example\n';
+  } else if (hasSection) {
+    // --force: strip the previous section before appending a fresh copy.
+    const idx = base.indexOf(marker);
+    base = base.slice(0, idx).replace(/\s+$/, '') + '\n';
+  }
+
+  const next = (base.endsWith('\n') ? base : base + '\n') + body;
+  fs.mkdirSync(path.dirname(envPath), { recursive: true });
+  fs.writeFileSync(envPath, next, 'utf8');
+  return { written: true };
+}
+
+function writeEnvExampleSection(cwd, force) {
+  return appendEnvExampleSection(cwd, ENV_EXAMPLE_SECTION_MARKER, buildEnvExampleSection(), force);
+}
+
+/**
+ * Build the per-provider ".env.example" section for `minder add <provider>`
+ * — a distinct marker from `ENV_EXAMPLE_SECTION_MARKER` so it can coexist
+ * with (and doesn't get clobbered by) `minder init`'s section, and so
+ * `minder add`-ing a second provider later doesn't strip this one. Emits
+ * real, uncommented `NAME=` lines (not just comments) so `minder doctor`'s
+ * .env.example fallback scan picks them up.
+ *
+ * G-07: the trailing "(not yet certified)" used to be unconditional — once
+ * `provider.status` says 'certified' that would read as "status: certified
+ * (not yet certified)", a straight self-contradiction. Only append it for
+ * providers `isCertifiedProvider` doesn't recognize.
+ */
+function buildProviderEnvSection(provider) {
+  const marker = `# minder provider: ${provider.name}`;
+  const statusNote = isCertifiedProvider(provider.name)
+    ? `status: ${provider.status}`
+    : `status: ${provider.status} (not yet certified)`;
+  const lines = [marker, '#', `# ${provider.name} — ${statusNote}. See ${CATALOG_DOC}.`];
+  for (const envVar of provider.envVars) {
+    lines.push(`${envVar}=`);
+  }
+  lines.push('');
+  return { marker, body: lines.join('\n') + '\n' };
+}
+
+function writeProviderEnvVars(cwd, provider, force) {
+  const { marker, body } = buildProviderEnvSection(provider);
+  return appendEnvExampleSection(cwd, marker, body, force);
+}
+
+function printKeySourceTable(stdout) {
+  stdout.write('\nKey sources (see docs/providers/CATALOG.md for full status):\n');
+  const nameWidth = KEY_SOURCE_REGISTRY.reduce((w, e) => Math.max(w, e.name.length), 'Provider'.length);
+  const statusWidth = KEY_SOURCE_REGISTRY.reduce(
+    (w, e) => Math.max(w, (e.status || 'planned').length),
+    'Status'.length
+  );
+  stdout.write(`  ${'Provider'.padEnd(nameWidth)}  ${'Status'.padEnd(statusWidth)}  Keys URL\n`);
+  for (const entry of KEY_SOURCE_REGISTRY) {
+    const status = entry.status || 'planned';
+    stdout.write(`  ${entry.name.padEnd(nameWidth)}  ${status.padEnd(statusWidth)}  ${entry.keysUrl}\n`);
+  }
+  stdout.write('\n');
+}
+
+/**
+ * Detect the project's React framework from its package.json deps and map it to
+ * the matching minder entry point, so `init` can tell a beginner exactly which
+ * import to use. Detection only — nothing about the generated config changes.
+ * Returns { framework, entry } or null when no React framework is found.
+ */
+function detectFramework(cwd) {
+  let pkg;
+  try {
+    pkg = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8'));
+  } catch {
+    return null;
+  }
+  const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+  const has = (name) => Object.prototype.hasOwnProperty.call(deps, name);
+
+  // Order matters: the most specific framework wins (Next implies react; Expo
+  // implies react-native).
+  if (has('next')) return { framework: 'Next.js', entry: 'minder-data-provider/nextjs' };
+  if (has('expo')) return { framework: 'Expo', entry: 'minder-data-provider/expo' };
+  if (has('react-native')) return { framework: 'React Native', entry: 'minder-data-provider/native' };
+  if (has('electron')) return { framework: 'Electron', entry: 'minder-data-provider/electron' };
+  if (has('vite')) return { framework: 'Vite + React', entry: 'minder-data-provider/web' };
+  if (has('react')) return { framework: 'React', entry: 'minder-data-provider' };
+  return null;
+}
+
+function renderFrameworkHint(stdout, detected) {
+  if (detected) {
+    stdout.write(`\nDetected ${detected.framework} — import minder from '${detected.entry}'.\n`);
+  } else {
+    stdout.write(
+      "\nNo React framework detected in package.json — import from 'minder-data-provider'," +
+        ' or a platform entry: /web, /nextjs, /native, /expo, /electron, /node.\n'
+    );
+  }
+}
+
+function cmdInit(argv, ctx) {
+  const { cwd, stdout } = ctx;
+  const force = argv.includes('--force');
+
+  const configResult = writeScaffold([{ path: 'minder.config.ts', content: CONFIG_TEMPLATE }], { force, cwd });
+  const envResult = writeEnvExampleSection(cwd, force);
+
+  const configWritten = configResult.written.length > 0;
+  const envWritten = envResult.written;
+
+  if (!configWritten && !envWritten) {
+    stdout.write('minder.config.ts and .env.example already exist — use --force to overwrite.\n');
+    renderFrameworkHint(stdout, detectFramework(cwd));
+    printKeySourceTable(stdout);
+    return 0;
+  }
+
+  const wrote = [];
+  if (configWritten) {
+    wrote.push('minder.config.ts');
+  } else {
+    stdout.write('minder.config.ts already exists — use --force to overwrite.\n');
+  }
+
+  if (envWritten) {
+    wrote.push('.env.example');
+  } else {
+    stdout.write(`.env.example already has a "${ENV_EXAMPLE_SECTION_MARKER}" section — use --force to overwrite.\n`);
+  }
+
+  if (wrote.length > 0) {
+    stdout.write(`Wrote: ${wrote.join(', ')}\n`);
+  }
+
+  renderFrameworkHint(stdout, detectFramework(cwd));
+  printKeySourceTable(stdout);
+  return 0;
+}
+
+// ── `minder add` ────────────────────────────────────────────────────────────
+
+/**
+ * Scaffold a registered provider (currently Supabase, Stripe, Clerk,
+ * Firebase, Razorpay, and Sentry — see `PROVIDERS`, all CERTIFIED today).
+ * Unknown provider names (everything not in `PROVIDERS`) exit 1 with an
+ * "Unknown provider" error that lists the registered names — derived from
+ * `PROVIDERS`, so the list can't go stale — and points at the catalog
+ * (G-07: this replaced the "No certified providers are available yet"
+ * message, which became false once the six roadmap providers certified).
+ *
+ * For a registered provider this does NOT write minder.config.ts (the user
+ * pastes the printed snippet in themselves) — it writes `.env.example`
+ * entries for the provider's env vars, and, when the provider entry declares
+ * `scaffoldFiles` (route handlers etc. — Supabase has none, the others do),
+ * it also writes those files via `writeScaffold` (no-clobber unless
+ * --force, same as `writeScaffold`'s general contract). It prints the
+ * config snippet, any scaffolded file paths, a certification notice — see
+ * `isCertifiedProvider` (G-07): "CERTIFIED" + the catalog link for
+ * providers in scripts/generate-catalog.js's CERTIFIED list, else the
+ * original "EXPERIMENTAL — not yet certified" wording for anything added
+ * ahead of certification — and, when the provider entry declares one, a
+ * generic `extraNote` (currently Firebase and Sentry) so nobody mistakes
+ * "installable" for more than what its actual status says.
+ */
+function cmdAdd(argv, ctx) {
+  const { cwd, stdout, stderr } = ctx;
+  const name = argv[0];
+  const force = argv.includes('--force');
+
+  const provider = PROVIDERS.find((p) => p.name === name);
+  if (!provider) {
+    // G-07: the old "No certified providers are available yet" claim became
+    // false the moment the six roadmap providers were certified — the real
+    // problem is that the typed name isn't registered. Name that problem
+    // and derive the available list from PROVIDERS so this message can't go
+    // stale as the registry grows. A bare `minder add` (no name at all)
+    // gets its own message instead of `Unknown provider "undefined"`.
+    const available = PROVIDERS.map((p) => p.name).join(', ');
+    if (!name) {
+      stderr.write(`minder add: missing provider name. Available providers: ${available} (see ${CATALOG_DOC})\n`);
+    } else {
+      stderr.write(`Unknown provider "${name}". Available providers: ${available} (see ${CATALOG_DOC})\n`);
+    }
+    return 1;
+  }
+
+  // Providers with no env vars (e.g. Sentry — its DSN is a public client
+  // value, not a secret) get no .env.example section at all: an empty
+  // `envVars` array would otherwise still produce a marker + comment block
+  // with zero `NAME=` lines, which is just noise.
+  if (provider.envVars && provider.envVars.length > 0) {
+    writeProviderEnvVars(cwd, provider, force);
+  }
+
+  let scaffoldResult = null;
+  if (provider.scaffoldFiles && provider.scaffoldFiles.length > 0) {
+    scaffoldResult = writeScaffold(provider.scaffoldFiles, { cwd, force });
+  }
+
+  stdout.write(`\n${provider.configSnippet}\n`);
+
+  if (scaffoldResult) {
+    if (scaffoldResult.written.length > 0) {
+      stdout.write('Scaffolded route files:\n');
+      for (const file of scaffoldResult.written) {
+        stdout.write(`  ${file}\n`);
+      }
+    }
+    if (scaffoldResult.skipped.length > 0) {
+      stdout.write('Skipped (already exist — use --force to overwrite):\n');
+      for (const file of scaffoldResult.skipped) {
+        stdout.write(`  ${file}\n`);
+      }
+    }
+    stdout.write('\n');
+  }
+
+  // G-07: derive the certification claim from CERTIFIED (single source of
+  // truth — see `isCertifiedProvider`) instead of hardcoding EXPERIMENTAL
+  // for every provider regardless of its actual catalog status.
+  if (isCertifiedProvider(provider.name)) {
+    stdout.write(`status: CERTIFIED — see ${CATALOG_DOC}\n`);
+    stdout.write('mock: true works with zero keys; flip mock:false when you add real keys\n');
+  } else {
+    stdout.write('status: EXPERIMENTAL — not yet certified; flip mock:false when you add real keys\n');
+  }
+  stdout.write(`Get your ${provider.name} keys: ${provider.keysUrl}\n`);
+
+  // Generic hook for providers with a note that doesn't fit the config
+  // snippet or scaffold-files sections — currently only Firebase (its
+  // credential is a service-account FILE, not a plain secret string).
+  if (provider.extraNote) {
+    stdout.write(`\nNote: ${provider.extraNote}\n`);
+  }
+
+  return 0;
+}
+
+// ── `minder doctor --bundle` ────────────────────────────────────────────────
+
+/**
+ * Import-shaped references to this package in user source. Matches both
+ * `import ... from 'minder-data-provider[/sub]'` and `require('...')`,
+ * plus dynamic `import('...')`.
+ */
+const PKG_IMPORT_RE =
+  /(?:from\s+|require\(\s*|import\(\s*)['"](minder-data-provider(?:\/[^'"]*)?)['"]/g;
+
+const BUNDLE_SCAN_EXTS = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs', '.mts', '.cts']);
+const BUNDLE_SCAN_SKIP_DIRS = new Set([
+  'node_modules', 'dist', 'build', 'out', 'coverage', '.next', '.expo', '.git', '.turbo', '.cache',
+]);
+
+/** Recursively collect package import specifiers used in the app at `cwd`. */
+function collectPackageImports(cwd) {
+  const used = new Map(); // specifier -> Set<relative file>
+  const walk = (dir, depth) => {
+    if (depth > 8) return;
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (e.name.startsWith('.') && e.name !== '.') continue;
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        if (!BUNDLE_SCAN_SKIP_DIRS.has(e.name)) walk(p, depth + 1);
+        continue;
+      }
+      if (!BUNDLE_SCAN_EXTS.has(path.extname(e.name))) continue;
+      let src;
+      try {
+        src = fs.readFileSync(p, 'utf8');
+      } catch {
+        continue;
+      }
+      for (const m of src.matchAll(PKG_IMPORT_RE)) {
+        const spec = m[1];
+        if (!used.has(spec)) used.set(spec, new Set());
+        used.get(spec).add(path.relative(cwd, p));
+      }
+    }
+  };
+  walk(cwd, 0);
+  return used;
+}
+
+/**
+ * Locate the installed package's dist/bundle-sizes.json (generated by
+ * `npm run generate:bundle-sizes` at build/publish time). Returns null when
+ * not found — doctor degrades to import-listing without cost figures.
+ */
+function loadBundleSizes(cwd) {
+  const candidates = [
+    // installed as a dependency of the app
+    path.join(cwd, 'node_modules', 'minder-data-provider', 'dist', 'bundle-sizes.json'),
+    // running inside the library repo itself
+    path.join(cwd, 'dist', 'bundle-sizes.json'),
+  ];
+  for (const c of candidates) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(c, 'utf8'));
+      if (parsed && Array.isArray(parsed.results)) return parsed.results;
+    } catch {
+      /* try next */
+    }
+  }
+  return null;
+}
+
+/** Map an import specifier to the measurement key used in bundle-sizes.json. */
+function sizeKeyForSpecifier(spec) {
+  if (spec === 'minder-data-provider') return '. (main)';
+  return spec.replace(/^minder-data-provider\//, '');
+}
+
+function cmdDoctorBundle(ctx) {
+  const { cwd, stdout } = ctx;
+  const used = collectPackageImports(cwd);
+
+  if (used.size === 0) {
+    stdout.write(
+      'doctor --bundle: no minder-data-provider imports found under this directory.\n' +
+        '(Scans .js/.jsx/.ts/.tsx sources, skipping node_modules and build output.)\n'
+    );
+    return 0;
+  }
+
+  const sizes = loadBundleSizes(cwd);
+  const kb = (bytes) => (bytes / 1024).toFixed(2) + ' KB';
+
+  stdout.write('doctor --bundle: minder-data-provider imports in this app\n\n');
+  let totalGz = 0;
+  let priced = 0;
+  for (const [spec, files] of [...used.entries()].sort()) {
+    const row = sizes?.find((r) => r.subpath === sizeKeyForSpecifier(spec));
+    let costNote = '(size table not found — run against a built/published install)';
+    if (row) {
+      costNote = `~${kb(row.gzip)} min+gz`;
+      totalGz += row.gzip;
+      priced += 1;
+    }
+    stdout.write(`  ${spec}  ${costNote}\n`);
+    stdout.write(`      used in: ${[...files].slice(0, 3).join(', ')}${files.size > 3 ? ` (+${files.size - 3} more)` : ''}\n`);
+  }
+
+  if (priced > 0) {
+    stdout.write(
+      `\n  worst-case total (each subpath fully used): ~${kb(totalGz)} min+gz\n` +
+        '  Your bundler tree-shakes unused exports, so the real cost is usually lower.\n'
+    );
+  }
+
+  // Advice: main entry vs narrower subpaths, and dev-only modules in app code.
+  if (used.has('minder-data-provider') && used.size === 1) {
+    stdout.write(
+      '\n  tip: if you only use hooks, `import { useMinder } from "minder-data-provider/hook"`\n' +
+        '  gives your bundler a smaller graph to start from than the main entry.\n'
+    );
+  }
+  for (const spec of used.keys()) {
+    if (spec.includes('/debug')) {
+      stdout.write(
+        `\n  note: ${spec} is a dev-facing module — make sure it is not imported on your production path.\n`
+      );
+    }
+  }
+  return 0;
+}
+
+// ── `minder generate` ───────────────────────────────────────────────────────
+
+const DEFAULT_GENERATE_OUT = 'minder.routes.ts';
+
+/**
+ * `minder generate --from <openapi.json> [--out <path>] [--base-path-strategy strip|keep]`
+ *
+ * Reads an OpenAPI 3.x JSON document and emits a single typed-routes `.ts`
+ * module (routes registry + request/response interfaces + a `RouteTypes`
+ * map) that plugs straight into `createTypedMinder` (src/core/typedRoutes.ts).
+ * YAML is explicitly out of scope (P11 "keep it simple", no new dependency
+ * for a YAML parser) — a non-JSON file fails fast with a clear message
+ * rather than a confusing JSON.parse stack trace.
+ *
+ * All actual parsing/derivation/emission is pure and lives in
+ * scripts/lib/openapi-codegen.js — this function only does fs I/O and turns
+ * `CodegenError`s into the CLI's stderr + exit-1 convention.
+ */
+function cmdGenerate(argv, ctx) {
+  const { cwd, stdout, stderr } = ctx;
+
+  const fromFlagIdx = argv.indexOf('--from');
+  const fromPath = fromFlagIdx !== -1 ? argv[fromFlagIdx + 1] : null;
+  if (fromFlagIdx === -1 || !fromPath) {
+    stderr.write(
+      'minder generate: missing required --from <openapi.json>.\n' +
+        'Usage: minder generate --from <openapi.json> [--out minder.routes.ts] [--base-path-strategy strip|keep]\n'
+    );
+    return 1;
+  }
+
+  const outFlagIdx = argv.indexOf('--out');
+  const outPath = outFlagIdx !== -1 ? argv[outFlagIdx + 1] : DEFAULT_GENERATE_OUT;
+  if (outFlagIdx !== -1 && !argv[outFlagIdx + 1]) {
+    stderr.write('minder generate: --out requires a path argument.\n');
+    return 1;
+  }
+
+  const strategyFlagIdx = argv.indexOf('--base-path-strategy');
+  const basePathStrategy = strategyFlagIdx !== -1 ? argv[strategyFlagIdx + 1] : 'strip';
+  if (strategyFlagIdx !== -1 && basePathStrategy !== 'strip' && basePathStrategy !== 'keep') {
+    stderr.write(
+      `minder generate: --base-path-strategy must be "strip" or "keep" (got "${basePathStrategy}").\n`
+    );
+    return 1;
+  }
+
+  const resolvedFrom = path.resolve(cwd, fromPath);
+  if (!fs.existsSync(resolvedFrom)) {
+    stderr.write(`minder generate: input file not found: ${fromPath}\n`);
+    return 1;
+  }
+
+  const raw = fs.readFileSync(resolvedFrom, 'utf8');
+  let spec;
+  try {
+    spec = JSON.parse(raw);
+  } catch {
+    stderr.write(
+      `minder generate: "${fromPath}" is not valid JSON. Only OpenAPI 3.x JSON documents are ` +
+        'supported — YAML specs are out of scope; convert to JSON first.\n'
+    );
+    return 1;
+  }
+
+  let code;
+  try {
+    code = openapiCodegen.generateRoutesModule(spec, { sourceLabel: fromPath, basePathStrategy });
+  } catch (e) {
+    if (e instanceof openapiCodegen.CodegenError) {
+      stderr.write(`minder generate: ${e.message}\n`);
+      return 1;
+    }
+    throw e;
+  }
+
+  const resolvedOut = path.resolve(cwd, outPath);
+  fs.mkdirSync(path.dirname(resolvedOut), { recursive: true });
+  fs.writeFileSync(resolvedOut, code, 'utf8');
+
+  stdout.write(`minder generate: wrote ${outPath} from ${fromPath}\n`);
+  return 0;
+}
+
+// ── `minder codemod redux-removal` ──────────────────────────────────────────
+
+/** Recursively collect source file paths under `dir`, same extension/skip-dir rules as `doctor --bundle`. */
+function collectSourceFiles(dir) {
+  const files = [];
+  const walk = (d, depth) => {
+    if (depth > 12) return;
+    let entries;
+    try {
+      entries = fs.readdirSync(d, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (e.name.startsWith('.') && e.name !== '.') continue;
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) {
+        if (!BUNDLE_SCAN_SKIP_DIRS.has(e.name)) walk(p, depth + 1);
+        continue;
+      }
+      if (!BUNDLE_SCAN_EXTS.has(path.extname(e.name))) continue;
+      files.push(p);
+    }
+  };
+  walk(dir, 0);
+  return files;
+}
+
+/**
+ * Line-based diff between `before`/`after` (LCS via DP, capped at 4M line-pair
+ * cells — beyond that a file is large enough that a full LCS is wasteful for
+ * a preview, so it falls back to a single common-prefix/suffix hunk instead).
+ * No new dependency (P11): this is `--dry-run`'s only consumer.
+ */
+function lineDiffOps(beforeLines, afterLines) {
+  const n = beforeLines.length;
+  const m = afterLines.length;
+  if (n * m > 4_000_000) {
+    let start = 0;
+    while (start < n && start < m && beforeLines[start] === afterLines[start]) start += 1;
+    let endB = n - 1;
+    let endA = m - 1;
+    while (endB >= start && endA >= start && beforeLines[endB] === afterLines[endA]) {
+      endB -= 1;
+      endA -= 1;
+    }
+    const ops = [];
+    for (let i = 0; i < start; i += 1) ops.push({ type: 'ctx', line: beforeLines[i] });
+    for (let i = start; i <= endB; i += 1) ops.push({ type: 'del', line: beforeLines[i] });
+    for (let i = start; i <= endA; i += 1) ops.push({ type: 'add', line: afterLines[i] });
+    for (let i = endB + 1; i < n; i += 1) ops.push({ type: 'ctx', line: beforeLines[i] });
+    return ops;
+  }
+
+  const dp = new Array(n + 1);
+  for (let i = 0; i <= n; i += 1) dp[i] = new Uint32Array(m + 1);
+  for (let i = n - 1; i >= 0; i -= 1) {
+    for (let j = m - 1; j >= 0; j -= 1) {
+      dp[i][j] = beforeLines[i] === afterLines[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  const ops = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (beforeLines[i] === afterLines[j]) {
+      ops.push({ type: 'ctx', line: beforeLines[i] });
+      i += 1;
+      j += 1;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      ops.push({ type: 'del', line: beforeLines[i] });
+      i += 1;
+    } else {
+      ops.push({ type: 'add', line: afterLines[j] });
+      j += 1;
+    }
+  }
+  while (i < n) {
+    ops.push({ type: 'del', line: beforeLines[i] });
+    i += 1;
+  }
+  while (j < m) {
+    ops.push({ type: 'add', line: afterLines[j] });
+    j += 1;
+  }
+  return ops;
+}
+
+/** Render diff ops as unified-style hunks (2 lines of context) with `-`/`+`/` ` prefixes. */
+function renderDiffHunks(ops, context) {
+  const ctx = context == null ? 2 : context;
+  const changeIdx = [];
+  ops.forEach((op, idx) => {
+    if (op.type !== 'ctx') changeIdx.push(idx);
+  });
+  if (changeIdx.length === 0) return '';
+
+  const ranges = [];
+  let start = Math.max(0, changeIdx[0] - ctx);
+  let end = Math.min(ops.length - 1, changeIdx[0] + ctx);
+  for (let k = 1; k < changeIdx.length; k += 1) {
+    const idx = changeIdx[k];
+    const newStart = Math.max(0, idx - ctx);
+    if (newStart <= end + 1) {
+      end = Math.min(ops.length - 1, idx + ctx);
+    } else {
+      ranges.push([start, end]);
+      start = newStart;
+      end = Math.min(ops.length - 1, idx + ctx);
+    }
+  }
+  ranges.push([start, end]);
+
+  const lines = [];
+  for (const [s, e] of ranges) {
+    lines.push('  @@');
+    for (let idx = s; idx <= e; idx += 1) {
+      const op = ops[idx];
+      const prefix = op.type === 'add' ? '  + ' : op.type === 'del' ? '  - ' : '    ';
+      lines.push(prefix + op.line);
+    }
+  }
+  return lines.join('\n') + '\n';
+}
+
+function diffPreview(before, after) {
+  return renderDiffHunks(lineDiffOps(before.split('\n'), after.split('\n')));
+}
+
+const CODEMOD_COMMANDS = { 'redux-removal': codemodReduxRemoval };
+
+/**
+ * `minder codemod redux-removal [--dry-run] [--dir <path>]` — see
+ * scripts/lib/codemod-redux-removal.js's header for the full transform list
+ * and the text/regex-vs-TS-compiler-API tradeoff. `--dry-run` prints a
+ * per-file diff-style preview and writes nothing; default mode writes
+ * changes and prints the same summary (files changed, transforms applied,
+ * manual-TODO count with file:line locations) `--dry-run` shows up front.
+ * Never touches files outside `--dir` (default: cwd); skips
+ * node_modules/dist/build output (`collectSourceFiles`, shared with `doctor
+ * --bundle`'s scan). Idempotent — re-running over already-migrated files
+ * changes nothing (see the pure module's header for why).
+ */
+function cmdCodemod(argv, ctx) {
+  const { cwd, stdout, stderr } = ctx;
+  const sub = argv[0];
+
+  if (!sub || sub.startsWith('--')) {
+    stderr.write(
+      'minder codemod: missing subcommand.\n' +
+        'Usage: minder codemod redux-removal [--dry-run] [--dir <path>]\n'
+    );
+    return 1;
+  }
+  const codemod = CODEMOD_COMMANDS[sub];
+  if (!codemod) {
+    stderr.write(
+      `minder codemod: unknown subcommand "${sub}". Available: ${Object.keys(CODEMOD_COMMANDS).join(', ')}\n`
+    );
+    return 1;
+  }
+
+  const rest = argv.slice(1);
+  const dryRun = rest.includes('--dry-run');
+  const dirFlagIdx = rest.indexOf('--dir');
+  const dirArg = dirFlagIdx !== -1 ? rest[dirFlagIdx + 1] : '.';
+  if (dirFlagIdx !== -1 && !rest[dirFlagIdx + 1]) {
+    stderr.write('minder codemod: --dir requires a path argument.\n');
+    return 1;
+  }
+
+  const targetDir = path.resolve(cwd, dirArg);
+  if (!fs.existsSync(targetDir) || !fs.statSync(targetDir).isDirectory()) {
+    stderr.write(`minder codemod: directory not found: ${dirArg}\n`);
+    return 1;
+  }
+
+  const files = collectSourceFiles(targetDir);
+  let filesChanged = 0;
+  const transformTotals = new Map();
+  let todoTotal = 0;
+  const todoLocations = [];
+
+  for (const file of files) {
+    const relPath = path.relative(cwd, file);
+    const original = fs.readFileSync(file, 'utf8');
+    const result = codemod.transformSource(original);
+    if (!result.changed) continue;
+
+    filesChanged += 1;
+    for (const t of result.transforms) {
+      transformTotals.set(t.kind, (transformTotals.get(t.kind) || 0) + t.count);
+    }
+    for (const todo of result.todos) {
+      todoTotal += 1;
+      todoLocations.push(`${relPath}:${todo.line}`);
+    }
+
+    if (dryRun) {
+      stdout.write(`\n--- ${relPath}\n+++ ${relPath} (preview only -- not written)\n`);
+      stdout.write(diffPreview(original, result.output));
+    } else {
+      fs.writeFileSync(file, result.output, 'utf8');
+    }
+  }
+
+  stdout.write(
+    `\nminder codemod ${sub}${dryRun ? ' --dry-run' : ''}: scanned ${files.length} file(s) under ${dirArg}\n`
+  );
+  stdout.write(`  files changed: ${filesChanged}\n`);
+  if (transformTotals.size > 0) {
+    stdout.write('  transforms applied:\n');
+    for (const [kind, count] of transformTotals) {
+      stdout.write(`    ${count}x ${kind}\n`);
+    }
+  }
+  stdout.write(`  manual TODOs flagged: ${todoTotal}\n`);
+  for (const loc of todoLocations) {
+    stdout.write(`    ${loc}\n`);
+  }
+  if (dryRun) {
+    stdout.write(
+      filesChanged > 0
+        ? '\n  (--dry-run: no files written. Re-run without --dry-run to apply.)\n'
+        : '\n  (--dry-run: nothing to change.)\n'
+    );
+  }
+  return 0;
+}
+
+// ── `minder doctor` ─────────────────────────────────────────────────────────
+
+/**
+ * At most the first 4 characters of `name`, plus a fixed mask suffix.
+ * Mirrors `maskLabel()` in src/security/credentials.ts exactly — duplicated
+ * here (rather than imported) because that module is TS/ESM and this CLI is
+ * plain CJS. Keep the two in sync if either changes.
+ */
+function maskLabel(name) {
+  return `${String(name).slice(0, 4)}***`;
+}
+
+/**
+ * Recognize the plain-JSON credential shapes doctor's --config file may use.
+ * Mirrors `isCredentialInput()` in src/security/credentials.ts, minus the
+ * `SecretRef` class branch (a JSON file cannot carry a live SecretRef
+ * instance) — its `env`-kind equivalent here is a plain
+ * `{ kind: 'env', name: string }` object instead.
+ */
+function isCredentialLike(v) {
+  if (v == null || typeof v !== 'object' || Array.isArray(v)) return false;
+  if (v.kind === 'env') return typeof v.name === 'string' && v.name.length > 0;
+  if (v.kind === 'serverConfig') return typeof v.key === 'string' && v.key.length > 0;
+  if (v.kind === 'file') {
+    return (v.source === 'path' || v.source === 'envJson') && typeof v.ref === 'string' && v.ref.length > 0;
+  }
+  return false;
+}
+
+/**
+ * Describe a credential-like value WITHOUT resolving it — mirrors
+ * `describeCredential()` in src/security/credentials.ts: masked label +
+ * presence boolean only, never the value itself. `envVar` (not part of the
+ * upstream shape) names the environment variable this entry's presence was
+ * checked against, if any — `doctor`'s exit-code logic uses it to name
+ * exactly which var is missing without ever touching its value.
+ */
+function describeCredentialLike(v) {
+  if (v.kind === 'env') {
+    return { kind: 'env', label: maskLabel(v.name), present: process.env[v.name] != null, envVar: v.name };
+  }
+  if (v.kind === 'serverConfig') {
+    // Presence is unknowable without the app's own server config object —
+    // conservatively reported as not present, same as describeCredential().
+    return { kind: 'serverConfig', label: maskLabel(v.key), present: false, envVar: null };
+  }
+  // v.kind === 'file'
+  if (v.source === 'envJson') {
+    return { kind: 'file', label: maskLabel(v.ref), present: process.env[v.ref] != null, envVar: v.ref };
+  }
+  // source === 'path': not an env var — check the filesystem instead.
+  return { kind: 'file', label: maskLabel(v.ref), present: fs.existsSync(v.ref), envVar: null };
+}
+
+function collectFromJsonConfig(configObj) {
+  const rows = [];
+  const providers = configObj && typeof configObj === 'object' ? configObj.providers : null;
+  if (!providers || typeof providers !== 'object') return rows;
+
+  const walk = (value, pathParts) => {
+    if (value == null || typeof value !== 'object' || Array.isArray(value)) return;
+
+    if (isCredentialLike(value)) {
+      rows.push({ path: pathParts.join('.'), ...describeCredentialLike(value) });
+      return;
+    }
+
+    for (const [key, child] of Object.entries(value)) {
+      walk(child, [...pathParts, key]);
+    }
+  };
+
+  for (const [providerName, providerConfig] of Object.entries(providers)) {
+    walk(providerConfig, [providerName]);
+  }
+
+  return rows;
+}
+
+/** Fallback source: variable names mentioned in .env.example, checked against process.env. */
+function collectFromEnvExample(cwd) {
+  const envExamplePath = path.resolve(cwd, '.env.example');
+  if (!fs.existsSync(envExamplePath)) return null;
+
+  const content = fs.readFileSync(envExamplePath, 'utf8');
+  const names = new Set();
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const match = /^([A-Za-z_][A-Za-z0-9_]*)=/.exec(trimmed);
+    if (match) names.add(match[1]);
+  }
+
+  return Array.from(names).map((name) => ({
+    path: name,
+    kind: 'env',
+    label: maskLabel(name),
+    present: process.env[name] != null,
+    envVar: name,
+  }));
+}
+
+function renderDoctorTable(stdout, rows) {
+  stdout.write('\nProvider credential check:\n');
+  if (rows.length === 0) {
+    stdout.write('  (nothing to check)\n\n');
+    return;
+  }
+  for (const row of rows) {
+    const status = row.present ? 'present' : 'MISSING';
+    stdout.write(`  ${row.kind.padEnd(12)} ${row.label.padEnd(10)} ${status.padEnd(8)} (${row.path})\n`);
+  }
+  stdout.write('\n');
+}
+
+/**
+ * Beginner "first debugging" environment checks (J-03). Each returns
+ * { label, ok, fix }. Non-fatal: doctor reports them but only missing
+ * credentials set a non-zero exit code, so a developer sees the full picture.
+ */
+function checkEnvironment(cwd) {
+  const checks = [];
+
+  // The one required peer dependency — the most common "why is nothing
+  // working" beginner mistake is forgetting to install it.
+  const hasReactQuery = fs.existsSync(
+    path.join(cwd, 'node_modules', '@tanstack', 'react-query')
+  );
+  checks.push({
+    label: '@tanstack/react-query installed (required peer)',
+    ok: hasReactQuery,
+    fix: 'npm install @tanstack/react-query',
+  });
+
+  // A minder config in the project.
+  const configFile = ['minder.config.ts', 'minder.config.js', 'minder.config.mjs'].find(
+    (f) => fs.existsSync(path.join(cwd, f))
+  );
+  checks.push({
+    label: 'minder config present',
+    ok: !!configFile,
+    fix: 'run `minder init` to scaffold minder.config.ts (optional — absolute-URL calls need no config)',
+  });
+
+  return checks;
+}
+
+function renderEnvironmentChecks(stdout, checks) {
+  stdout.write('minder doctor: environment\n');
+  for (const c of checks) {
+    stdout.write(`  ${c.ok ? '✓' : '✗'} ${c.label}\n`);
+    if (!c.ok) stdout.write(`      fix: ${c.fix}\n`);
+  }
+  stdout.write('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Peer version compatibility — does the project's installed react /
+// react-query / etc. meet the minimums minder declares? Beginners hit cryptic
+// runtime errors when a peer is too old; this turns that into a precise,
+// actionable message ("you have X, need >= Y — run npm i ..."). The minimums
+// are read from minder's OWN package.json peerDependencies (single source of
+// truth) so they can never drift from what npm actually enforces at install.
+// ---------------------------------------------------------------------------
+
+/** Lowest concrete version mentioned in a semver range, e.g. "^18.0.0 || ^19.0.0" -> "18.0.0". */
+function minVersionFromRange(range) {
+  const found = String(range).match(/\d+\.\d+\.\d+/g);
+  if (!found || found.length === 0) return null;
+  return found
+    .map((v) => v.split('.').map(Number))
+    .sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2])[0]
+    .join('.');
+}
+
+/** Numeric [major, minor, patch] from a version string (ignores prerelease/build). */
+function parseVersion(v) {
+  const m = String(v).match(/(\d+)\.(\d+)\.(\d+)/);
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+}
+
+/** installed >= minimum ? Returns true when either side is unparseable (don't cry wolf). */
+function versionGte(installed, minimum) {
+  const a = parseVersion(installed);
+  const b = parseVersion(minimum);
+  if (!a || !b) return true;
+  for (let i = 0; i < 3; i++) {
+    if (a[i] > b[i]) return true;
+    if (a[i] < b[i]) return false;
+  }
+  return true;
+}
+
+/** Installed version of a package in the target project, or null if absent. */
+function installedVersion(cwd, pkg) {
+  try {
+    const pj = path.join(cwd, 'node_modules', ...pkg.split('/'), 'package.json');
+    if (!fs.existsSync(pj)) return null;
+    return JSON.parse(fs.readFileSync(pj, 'utf8')).version || null;
+  } catch {
+    return null;
+  }
+}
+
+/** minder's declared peer minimums, from its own package.json. */
+function minderPeerMinimums() {
+  try {
+    // package.json ships in every npm tarball; from src/cli it is ../../package.json.
+    // eslint-disable-next-line global-require
+    const pkg = require(path.join(__dirname, '..', '..', 'package.json'));
+    const peers = pkg.peerDependencies || {};
+    const meta = pkg.peerDependenciesMeta || {};
+    return Object.keys(peers).map((name) => ({
+      name,
+      min: minVersionFromRange(peers[name]),
+      optional: !!(meta[name] && meta[name].optional),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Check installed peer versions against minder's declared minimums.
+ * Required peers are always checked; optional peers (provider SDKs) only when
+ * the user has actually installed them.
+ */
+function checkPeerVersions(cwd, peers) {
+  const list = peers || minderPeerMinimums();
+  const checks = [];
+  for (const { name, min, optional } of list) {
+    const have = installedVersion(cwd, name);
+    if (!have) {
+      if (optional) continue; // optional + absent -> nothing to verify
+      checks.push({
+        label: `${name} installed (required peer)`,
+        ok: false,
+        fix: min ? `npm install ${name}@^${min}` : `npm install ${name}`,
+      });
+      continue;
+    }
+    if (!min) continue;
+    const ok = versionGte(have, min);
+    checks.push({
+      label: `${name} ${have} (needs >= ${min})`,
+      ok,
+      fix: `npm install ${name}@^${min}`,
+    });
+  }
+  return checks;
+}
+
+function renderPeerVersionChecks(stdout, checks) {
+  if (!checks || checks.length === 0) return;
+  stdout.write('minder doctor: dependency versions\n');
+  for (const c of checks) {
+    stdout.write(`  ${c.ok ? '✓' : '✗'} ${c.label}\n`);
+    if (!c.ok) stdout.write(`      fix: ${c.fix}\n`);
+  }
+  stdout.write('\n');
+}
+
+/** Default installer used by `--fix` (isolated so tests can inject a fake). */
+function defaultNpmInstall(specs, cwd) {
+  execFileSync('npm', ['install', ...specs], { cwd, stdio: 'inherit' });
+}
+
+/**
+ * `minder doctor --fix`: install the exact versions needed to satisfy the failing
+ * peer checks. Running only happens because the user passed `--fix` (explicit
+ * consent); `--dry-run` prints the command without running it. Returns a summary
+ * so it is unit-testable without touching the network.
+ */
+function applyPeerFixes(stdout, checks, opts) {
+  const { cwd, dryRun, exec } = opts || {};
+  const failing = (checks || []).filter((c) => !c.ok && c.fix);
+  if (failing.length === 0) {
+    stdout.write('minder doctor --fix: nothing to fix — all checked peers meet the minimums.\n\n');
+    return { specs: [], ran: false };
+  }
+  const specs = failing.map((c) => c.fix.replace(/^npm install /, '').trim());
+  stdout.write("minder doctor --fix: to satisfy minder's minimums, run:\n");
+  stdout.write('  npm install ' + specs.join(' ') + '\n');
+  if (dryRun) {
+    stdout.write('  (--dry-run: not installing)\n\n');
+    return { specs, ran: false };
+  }
+  try {
+    (exec || defaultNpmInstall)(specs, cwd);
+    stdout.write('  ✓ done. Re-run `minder doctor` to confirm.\n\n');
+    return { specs, ran: true };
+  } catch (e) {
+    stdout.write('  ✗ install failed: ' + (e && e.message ? e.message : String(e)) + '\n\n');
+    return { specs, ran: true, error: true };
+  }
+}
+
+function cmdDoctor(argv, ctx) {
+  const { cwd, stdout, stderr } = ctx;
+
+  // `--bundle` is a standalone report: which package subpaths this app
+  // imports and what each costs (from dist/bundle-sizes.json).
+  if (argv.includes('--bundle')) {
+    return cmdDoctorBundle(ctx);
+  }
+
+  // Beginner environment checks first (non-fatal — informational).
+  renderEnvironmentChecks(stdout, checkEnvironment(cwd));
+
+  // Then: are the installed peer versions new enough for this minder?
+  const versionChecks = checkPeerVersions(cwd);
+  renderPeerVersionChecks(stdout, versionChecks);
+
+  // `--fix` installs the exact versions needed (explicit user consent).
+  // `--fix --dry-run` prints the command without running it.
+  if (argv.includes('--fix')) {
+    applyPeerFixes(stdout, versionChecks, {
+      cwd,
+      dryRun: argv.includes('--dry-run'),
+      exec: ctx.exec,
+    });
+  }
+
+  const configFlagIdx = argv.indexOf('--config');
+  const configPath = configFlagIdx !== -1 ? argv[configFlagIdx + 1] : null;
+
+  if (configFlagIdx !== -1 && !configPath) {
+    stderr.write('minder doctor: --config requires a path argument.\n');
+    return 1;
+  }
+
+  let rows;
+  let source;
+
+  if (configPath) {
+    const resolved = path.resolve(cwd, configPath);
+    if (!fs.existsSync(resolved)) {
+      stderr.write(`minder doctor: config file not found: ${configPath}\n`);
+      return 1;
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(fs.readFileSync(resolved, 'utf8'));
+    } catch {
+      stderr.write(`minder doctor: config file is not valid JSON: ${configPath}\n`);
+      return 1;
+    }
+
+    rows = collectFromJsonConfig(parsed);
+    source = configPath;
+  } else {
+    const fromEnvExample = collectFromEnvExample(cwd);
+    if (fromEnvExample === null) {
+      stdout.write(
+        'minder doctor: no --config given and no .env.example found — nothing to check.\n' +
+          '(Note: minder.config.ts is not read by doctor yet — pass a plain JSON --config file instead.)\n'
+      );
+      return 0;
+    }
+    rows = fromEnvExample;
+    source = '.env.example';
+  }
+
+  stdout.write(`minder doctor: checking provider credentials (source: ${source})\n`);
+  renderDoctorTable(stdout, rows);
+
+  const missing = rows.filter((row) => !row.present && row.envVar);
+  if (missing.length > 0) {
+    stderr.write(`minder doctor: missing environment variable(s): ${missing.map((row) => row.envVar).join(', ')}\n`);
+    return 1;
+  }
+
+  stdout.write('minder doctor: all referenced credentials are present.\n');
+  return 0;
+}
+
+// ── `minder --help` / no args ───────────────────────────────────────────────
+
+function cmdHelp(ctx) {
+  ctx.stdout.write(HELP_TEXT);
+  return 0;
+}
+
+// ── dispatcher ───────────────────────────────────────────────────────────────
+
+/**
+ * CLI entry point. Never calls `process.exit` — returns the exit code so
+ * callers (bin/minder.js, tests) decide what to do with it.
+ *
+ * @param {string[]} argv - command + args, e.g. ['init', '--force']
+ * @param {{cwd?: string, stdout?: {write: Function}, stderr?: {write: Function}}} [io]
+ * @returns {number} exit code
+ */
+function main(argv, io) {
+  const ctx = resolveIo(io);
+  const [command, ...rest] = argv;
+
+  if (!command || command === '--help' || command === '-h' || command === 'help') {
+    return cmdHelp(ctx);
+  }
+
+  switch (command) {
+    case 'init':
+      return cmdInit(rest, ctx);
+    case 'add':
+      return cmdAdd(rest, ctx);
+    case 'doctor':
+      return cmdDoctor(rest, ctx);
+    case 'generate':
+      return cmdGenerate(rest, ctx);
+    case 'codemod':
+      return cmdCodemod(rest, ctx);
+    default:
+      ctx.stderr.write(`minder: unknown command "${command}"\n\n`);
+      cmdHelp(ctx);
+      return 1;
+  }
+}
+
+if (require.main === module) {
+  const exitCode = main(process.argv.slice(2));
+  process.exit(exitCode);
+}
+
+module.exports = {
+  main,
+  cmdInit,
+  cmdAdd,
+  cmdDoctor,
+  cmdGenerate,
+  cmdCodemod,
+  cmdHelp,
+  checkPeerVersions,
+  applyPeerFixes,
+  detectFramework,
+  minVersionFromRange,
+  versionGte,
+  minderPeerMinimums,
+  writeScaffold,
+  KEY_SOURCE_REGISTRY,
+  PROVIDERS,
+  CONFIG_TEMPLATE,
+  ENV_EXAMPLE_SECTION_MARKER,
+  maskLabel,
+  cmdDoctorBundle,
+  collectPackageImports,
+  loadBundleSizes,
+  isCredentialLike,
+  describeCredentialLike,
+  collectFromJsonConfig,
+  collectFromEnvExample,
+  CATALOG_DOC,
+  isCertifiedProvider,
+  checkEnvironment,
+  collectSourceFiles,
+  diffPreview,
+  lineDiffOps,
+  renderDiffHunks,
+};

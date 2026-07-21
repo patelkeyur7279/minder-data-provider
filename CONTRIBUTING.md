@@ -66,7 +66,7 @@ Understanding the structure is key to contributing effectively.
 ```
 src/
 ├── auth/           # Authentication Manager (JWT, Storage, Refresh)
-├── cache/          # Cache Manager (Redux + TanStack Query integration)
+├── cache/          # Cache Manager (TanStack Query)
 ├── config/         # Global Configuration logic
 ├── core/           # Core logic (ApiClient, MinderDataProvider)
 ├── crud/           # CRUD operation helpers
@@ -79,7 +79,7 @@ src/
 ```
 
 ### Key Concepts
-- **Hybrid Architecture**: We use Redux for global synchronous state (Auth, UI) and TanStack Query for asynchronous server state (Data Fetching).
+- **TanStack Query core**: Server state (data fetching, caching, dedup) is built on TanStack Query. Auth/UI state is managed by MDP's own managers — MDP ships no Redux/global-store dependency.
 - **Platform Agnostic**: Core logic is separated from platform-specific code (handled by `PlatformDetector`).
 - **Manager Pattern**: Features are encapsulated in Managers (`AuthManager`, `CacheManager`, `ProxyManager`) to keep `useMinder` clean.
 
@@ -161,8 +161,8 @@ node scripts/verify-build.js
 - **Functional Components**: Use functional components with hooks. Avoid class components.
 
 ### Style
-- We use **Prettier** for formatting.
-- Run `npm run format` before committing.
+- We use **ESLint** for code quality and formatting.
+- Run `npm run lint` before committing to automatically fix issues.
 
 ---
 
@@ -190,7 +190,7 @@ node scripts/verify-build.js
 
 ## 💬 Community
 
-- **Discord**: Join our [Discord Server](https://discord.gg/minder-data-provider)
+- **Discord**: Join our [Discord Server](https://discord.gg/dN3eFFjmfy)
 - **Discussions**: Use [GitHub Discussions](https://github.com/patelkeyur7279/minder-data-provider/discussions) for questions.
 - **Issues**: Use [GitHub Issues](https://github.com/patelkeyur7279/minder-data-provider/issues) for bugs.
 

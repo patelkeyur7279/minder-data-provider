@@ -22,7 +22,9 @@ export function createCorsConfig(options?: {
 }): any {
   return {
     origin: options?.origin || '*',
-    credentials: options?.credentials ?? true,
+    // G-08: opt-in (was `?? true`) — default output combined wildcard origin
+    // with credentials, the canonical unsafe CORS configuration.
+    credentials: options?.credentials === true,
     methods: options?.methods || ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     headers: ['Content-Type', 'Authorization', 'X-Requested-With'],
   };

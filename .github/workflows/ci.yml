@@ -12,7 +12,12 @@ jobs:
     
     strategy:
       matrix:
-        node-version: [18, 20]
+        # Node 20 (maintenance LTS) + 22 (active LTS). Node 18 was dropped:
+        # it went EOL 2025-04 and, more concretely, lacks a global WebCrypto
+        # (`crypto.subtle`) — which the edge-safe webhook HMAC verification in
+        # src/server/webhooks.ts requires. WebCrypto is global on Node 20+ and
+        # on every edge/browser/Deno/Bun runtime, so 20 is the honest floor.
+        node-version: [20, 22]
     
     steps:
       - uses: actions/checkout@v4
@@ -23,20 +28,211 @@ jobs:
           node-version: ${{ matrix.node-version }}
       
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm install -g npm@11.6.2  # match packageManager — npm10/11 disagree on optional-wasm lockfile subtrees
+          npm ci
       
       - name: Run linting
-        run: npm run lint || echo "No lint script found"
-      
+        run: npm run lint:check
+
+      - name: Run type check
+        run: npm run type-check
+
       - name: Run tests
-        run: npm test
+        run: npm test -- --coverage
       
       - name: Build
         run: npm run build
-      
+
+      - name: Verify public API surface unchanged
+        run: npm run verify:api
+
+      - name: Verify consumer tree-shaking
+        run: npm run verify:treeshake
+
+      - name: Check bundle budgets
+        run: npm run budgets:check
+
+      - name: Run benchmarks (report-only — trend line, no thresholds yet)
+        run: npm run bench
+
       - name: Upload coverage
+        id: coverage
         if: matrix.node-version == 20
         uses: codecov/codecov-action@v3
         with:
           files: ./coverage/lcov.info
           fail_ci_if_error: false
+
+  # Support-Matrix evidence: React 18 compatibility (Phase 7.1 matrix leg).
+  # Peer range allows 18 — this proves it with the full suite, not hope.
+  react-18-compat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: |
+          npm install -g npm@11.6.2  # match packageManager — npm10/11 disagree on optional-wasm lockfile subtrees
+          npm ci
+
+      - name: Swap in React 18
+        run: npm install --no-save react@18 react-dom@18
+
+      - name: Run full test suite under React 18
+        run: npx jest
+
+  # Support-Matrix evidence: Next.js App Router (provider-wrapper pattern).
+  # Builds the packed library, installs it into the example exactly like a real
+  # consumer, next-builds it (incl. static prerender), and runtime-smokes both
+  # the page and the API route.
+  app-router-example:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install and build library
+        run: |
+          npm install -g npm@11.6.2  # match packageManager — npm10/11 disagree on optional-wasm lockfile subtrees
+          npm ci && npm run build
+
+      - name: Pack library tarball
+        run: npm pack
+
+      - name: Install and build example (tarball override)
+        working-directory: examples/nextjs-app-router
+        run: |
+          npm install
+          npm install ../../minder-data-provider-*.tgz
+          npm run build
+
+      - name: Runtime smoke (page + API route)
+        working-directory: examples/nextjs-app-router
+        run: |
+          npx next start -p 3199 &
+          sleep 5
+          curl -sf http://127.0.0.1:3199/api/users | grep -q "Ada"
+          curl -sf http://127.0.0.1:3199/ | grep -q "App Router example"
+
+  # Support-Matrix evidence: Vite + React (production consumer build).
+  # Builds the packed library, installs it into the example exactly like a real
+  # consumer (tarball, not the file: workspace link), builds it with tsc+vite,
+  # runs its vitest unit suite, and runtime-smokes the built preview server.
+  vite-example:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install and build library
+        run: |
+          npm install -g npm@11.6.2  # match packageManager — npm10/11 disagree on optional-wasm lockfile subtrees
+          npm ci && npm run build
+
+      - name: Pack library tarball
+        run: npm pack
+
+      - name: Install example (tarball override) and build
+        working-directory: examples/web/e-commerce
+        run: |
+          npm install
+          npm install ../../../minder-data-provider-*.tgz
+          npm run build
+
+      - name: Unit tests
+        working-directory: examples/web/e-commerce
+        run: npm test
+
+      - name: Runtime smoke (preview server)
+        working-directory: examples/web/e-commerce
+        run: |
+          npx vite preview --port 4199 --host 127.0.0.1 &
+          sleep 5
+          curl -sf http://127.0.0.1:4199/ | grep -q "<div id=\"root\""
+          curl -sf http://127.0.0.1:4199/ | grep -q "Minder Shop"
+
+  # Support-Matrix evidence: Cloudflare Workers (real workerd via wrangler local dev).
+  # Packs the library tarball, installs it into the example exactly like a real
+  # consumer, starts a plain-Node mock upstream, boots the Worker under
+  # `wrangler dev` (no Cloudflare login — pure local/offline mode), and exercises
+  # the minder() JSON data path (native-fetch transport) plus HMAC webhook
+  # verification (accept + reject) against real workerd.
+  edge-worker-example:
+    runs-on: ubuntu-latest
+    # Hard ceiling: a wedged wrangler/workerd must fail the job, never idle
+    # into the 6h default (observed: readiness curls hanging on an accepting
+    # socket while workerd never came up).
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install and build library
+        run: |
+          npm install -g npm@11.6.2  # match packageManager — npm10/11 disagree on optional-wasm lockfile subtrees
+          npm ci && npm run build
+
+      - name: Pack library tarball
+        run: npm pack
+
+      - name: Install example (tarball override)
+        working-directory: examples/edge-worker
+        run: |
+          npm install
+          npm install ../../minder-data-provider-*.tgz
+
+      - name: Start mock upstream
+        working-directory: examples/edge-worker
+        run: node mock-upstream.mjs &
+
+      - name: Start Worker (wrangler dev, local mode)
+        working-directory: examples/edge-worker
+        run: npx wrangler dev --port 8787 > wrangler.log 2>&1 &
+
+      - name: Wait for Worker readiness (workerd downloads on first run)
+        run: |
+          # --max-time bounds each probe: without it, a socket that accepts but
+          # never responds (wrangler up, workerd still downloading/wedged) hangs
+          # curl forever and this loop never advances past i=1.
+          for i in $(seq 1 120); do
+            if curl -sf --max-time 3 http://127.0.0.1:8787/users > /dev/null 2>&1; then
+              echo "Worker is up after ~${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Worker did not become ready in time — wrangler output follows" >&2
+          tail -50 examples/edge-worker/wrangler.log >&2 || true
+          exit 1
+
+      - name: Runtime smoke (data path + webhook verify)
+        run: |
+          curl -sf http://127.0.0.1:8787/users | grep -q "Ada"
+
+          BODY='{"event":"ping"}'
+          SIG=$(node -e "const c=require('crypto');process.stdout.write(c.createHmac('sha256','edge-smoke-secret').update(process.argv[1]).digest('hex'))" "$BODY")
+
+          curl -sf -X POST http://127.0.0.1:8787/webhook \
+            -H "content-type: application/json" \
+            -H "x-minder-signature: $SIG" \
+            -d "$BODY" | grep -q '"verified":true'
+
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8787/webhook \
+            -H "content-type: application/json" \
+            -H "x-minder-signature: 0000000000000000000000000000000000000000000000000000000000000000" \
+            -d "$BODY")
+          test "$STATUS" = "401"
