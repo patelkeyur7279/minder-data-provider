@@ -170,6 +170,10 @@ jobs:
   # verification (accept + reject) against real workerd.
   edge-worker-example:
     runs-on: ubuntu-latest
+    # Hard ceiling: a wedged wrangler/workerd must fail the job, never idle
+    # into the 6h default (observed: readiness curls hanging on an accepting
+    # socket while workerd never came up).
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -197,18 +201,22 @@ jobs:
 
       - name: Start Worker (wrangler dev, local mode)
         working-directory: examples/edge-worker
-        run: npx wrangler dev --port 8787 &
+        run: npx wrangler dev --port 8787 > wrangler.log 2>&1 &
 
       - name: Wait for Worker readiness (workerd downloads on first run)
         run: |
-          for i in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:8787/users > /dev/null 2>&1; then
-              echo "Worker is up after ${i}s"
+          # --max-time bounds each probe: without it, a socket that accepts but
+          # never responds (wrangler up, workerd still downloading/wedged) hangs
+          # curl forever and this loop never advances past i=1.
+          for i in $(seq 1 120); do
+            if curl -sf --max-time 3 http://127.0.0.1:8787/users > /dev/null 2>&1; then
+              echo "Worker is up after ~${i}s"
               exit 0
             fi
             sleep 1
           done
-          echo "Worker did not become ready in time" >&2
+          echo "Worker did not become ready in time — wrangler output follows" >&2
+          tail -50 examples/edge-worker/wrangler.log >&2 || true
           exit 1
 
       - name: Runtime smoke (data path + webhook verify)
