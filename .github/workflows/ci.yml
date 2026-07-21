@@ -2,7 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ dev ]
+    # v3.0-dev listed so the breaking-train branch gets the same full matrix
+    # as dev (this trigger edit lives on the v3.0-dev branch).
+    branches: [ dev, v3.0-dev ]
   pull_request:
     branches: [ dev, test, main ]
 
