@@ -5,9 +5,18 @@ All notable changes to Minder Data Provider will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.0.0] - Unreleased (planned — recommended MAJOR)
+## [2.2.0-beta.2] - Unreleased — ⚠️ carries the former v3.0 train
 
-### Removed (BREAKING)
+> **Owner decision (2026-07-22): the v3.0 branch merged into the beta line.** The
+> changes below were designed and classified as a MAJOR; they now ship in this beta.
+> Everything was re-verified post-merge: API snapshot bit-identical, full suite,
+> tree-shake guard (32 entries × Rollup+Rspack), and all 10 example consumers'
+> runtime smokes. **Recommendation for the stable cut:** because this train changes
+> two runtime behaviors vs 2.1.x (`detectMethod` verb selection and non-idempotent
+> retry policy — see below) and removes Redux, the stable release of this line
+> should be versioned **3.0.0**, not 2.2.0. Beta users: read the Breaking items.
+
+### Removed (BREAKING vs 2.1.x)
 
 - **Redux integration removed entirely.** MDP no longer ships any Redux code or
   optional peer dependency. Removed public API: the `useStore()` and
@@ -26,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no longer inlined). **Version not yet bumped in-repo; this is the recommended
   classification.**
 
-### Changed (BREAKING)
+### Changed (BREAKING vs 2.1.x)
 
 - **Enums are now `as const` objects, not `enum`s** (Spec 1.3c §3/B1): all 24
   exported "enums" (`HttpMethod`, `QueryStatus`, `LogLevel`, `Platform`,
@@ -81,8 +90,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bare `process` access guarded.
 - **useMediaUpload**: progress resets per upload; overlapping uploads serialized;
   upload lifecycle terminal phase unified to `'success'`.
-
-## [2.2.0-beta.2] - Unreleased
 
 ### Fixed
 

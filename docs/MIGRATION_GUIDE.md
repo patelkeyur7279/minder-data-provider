@@ -1,5 +1,12 @@
 # Migration Guide
 
+> **Where the "v3.0" changes actually live (updated 2026-07-22):** the v3.0 train
+> (Redux removal, `as const` enums, `sideEffects: false`, detectMethod re-contract,
+> idempotent-only retries) shipped into the **2.2.0-beta line** (beta.0 carried the
+> Redux removal; beta.2 carries the rest) by owner decision. The section headings
+> below keep the "v2.x → v3.0" names because that is the semantic migration you are
+> performing — the stable release of this train is recommended to be versioned 3.0.0.
+
 This guide covers: **v2.x → v3.0** (the Redux removal, below), **2.2.0-beta.0 → 2.2.0-beta.1**,
 and the older **v1.x → v2.0** guide (further down).
 
