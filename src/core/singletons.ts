@@ -93,3 +93,59 @@ export function minderStore(): MinderSingletonStore {
   const g = globalThis as unknown as Record<symbol, MinderSingletonStore>;
   return (g[STORE_KEY] ??= {});
 }
+
+/**
+ * Wrap a store-backed singleton in a transparent Proxy so an exported `const`
+ * binding keeps its object API (`x.method()`, `x.prop`) but does NOT construct
+ * the underlying instance at import time — construction is deferred to the FIRST
+ * property access (A4/A5, Spec 1.3c). Without this, `export const pluginManager =
+ * pluginManagerSingleton()` runs `new PluginManager()` eagerly wherever the
+ * binding is retained; the proxy defers that to first use while preserving every
+ * existing call site (`pluginManager.register(...)`, `globalAuthManager.getToken()`).
+ *
+ * - `get` returns the instance's own value/method WITHOUT re-binding it. Methods
+ *   are therefore called with `this === proxy`; the `set`/`get` traps forward
+ *   every `this.field` read/write back to the real instance, so behaviour is
+ *   identical. NOT re-binding is deliberate and load-bearing: a bound copy is a
+ *   fresh function that loses method identity, which breaks `jest.spyOn(singleton,
+ *   'method')` (the spy would never be recognized) — real tests spy on these. Safe
+ *   because neither class uses `#private` fields (which brand-check against the raw
+ *   instance and would reject a proxy `this`) and no caller destructures a method
+ *   off these singletons (verified: only `x.method()` / `x.prop` access exists).
+ * - `set`/`has`/`deleteProperty` forward too, so the wrapper is indistinguishable
+ *   from the instance for property access, assignment, and `in`.
+ * - `getPrototypeOf` forwards so `Object.getPrototypeOf(proxy)` is the class
+ *   prototype — this lets `jest.spyOn`'s prototype-walk resolve/restore the real
+ *   method descriptor cleanly.
+ * - Key ENUMERATION (`Object.keys`/spread) is deliberately NOT trapped: forwarding
+ *   `ownKeys`/`getOwnPropertyDescriptor` against the empty target would violate the
+ *   Proxy invariants. No caller enumerates these singletons, so this is safe by
+ *   construction, not by luck.
+ *
+ * Identity/dedup is unchanged: `resolve` reads the globalThis-keyed store slot, so
+ * the proxy always forwards to the ONE instance regardless of how a bundler splits
+ * chunks. Annotate the call site `/*#__PURE__*\/` so a tree-shaker can drop the
+ * whole wrapper for consumers that never reference the binding.
+ *
+ * EDGE-SAFE (P5): `Proxy`/`Reflect` are web-standard globals — no Node built-ins.
+ */
+export function lazySingletonProxy<T extends object>(resolve: () => T): T {
+  return new Proxy({} as T, {
+    get(_t, prop) {
+      const instance = resolve();
+      return Reflect.get(instance, prop, instance);
+    },
+    set(_t, prop, value) {
+      return Reflect.set(resolve(), prop, value);
+    },
+    has(_t, prop) {
+      return Reflect.has(resolve(), prop);
+    },
+    deleteProperty(_t, prop) {
+      return Reflect.deleteProperty(resolve(), prop);
+    },
+    getPrototypeOf() {
+      return Reflect.getPrototypeOf(resolve());
+    },
+  });
+}

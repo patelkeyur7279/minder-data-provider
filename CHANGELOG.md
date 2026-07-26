@@ -28,12 +28,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed (BREAKING)
 
-- **sideEffects: true** (MDPD-17): the packed library previously crashed
-  `useMinder()` in production builds under most consumer bundlers (Vite/Rollup,
-  webpack/Next, CRA, etc.) because `"sideEffects": false` let bundlers drop lazy
-  chunk-init imports; declaring `sideEffects: true` fixes it. Guarded by
-  `scripts/verify-consumer-treeshake.mjs` (real-Rollup consumer bundle) wired
-  into `release:check`/`prepublishOnly`. Bundle cost ~+10 kB on a minimal consumer.
+- **Enums are now `as const` objects, not `enum`s** (Spec 1.3c §3/B1): all 24
+  exported "enums" (`HttpMethod`, `QueryStatus`, `LogLevel`, `Platform`,
+  `WebSocketState`, `AuthState`, `ErrorCode`, …) are now `export const X = {…} as
+  const` plus a same-named union type. **Runtime values are byte-identical**
+  (`HttpMethod.GET === 'GET'`), value access is unchanged, and the packaged
+  `.d.ts` type surface is identical (API-snapshot shows zero change) — so the
+  common case needs no code changes. Breaking only for true `enum`-only TS ops:
+  an enum member used as a *type* (`let m: HttpMethod.GET` → `typeof
+  HttpMethod.GET`), `namespace`/`enum` declaration-merging onto these names, or
+  reliance on nominal `enum` identity. Migration: docs/MIGRATION_GUIDE.md (v2.x →
+  v3.0 — Enums). Rationale below (this is what makes `sideEffects: false` honest).
+- **`sideEffects: false` reclaimed** (reverses the beta-train `true`): the
+  2.2.0-beta train set `"sideEffects": true` to stop consumer bundlers dropping
+  lazy chunk-init imports (MDPD-17). v3.0 makes `false` honest and safe again by
+  eliminating every import-time side effect — the enum reshape above removes the
+  `enum` IIFE, and Spec 1.3c moved the React context and mutable singletons behind
+  lazy getters with `globalThis`-keyed identity (`src/core/singletons.ts`). The
+  `pluginManager` and `globalAuthManager` singletons additionally no longer
+  construct at import (lazy accessor-backed proxy — zero public-API change, same
+  call sites). Proven by `scripts/verify-consumer-treeshake.mjs` (all 32 export
+  entries × Rollup + Rspack, differential fail-on-broken) and re-validated to
+  still discriminate. Net effect: tree-shaking reclaimed — per-entry bundle
+  budgets re-baselined down, net −22.6 kB across 32 entries (headline:
+  `import { minder }` initial-load closure and the enum-heavy provider entries
+  each ~3 kB smaller; 8 core/platform entries pay +0.1–0.2 kB for the
+  lazy-proxy machinery — the one small counter-cost inside the net win).
 - **detectMethod re-contract**: only genuinely ID-shaped final route segments
   (numeric, UUID, 24-hex ObjectId) auto-detect as PUT; word/slug segments are
   collection names → creates now send POST (previously `/api/orders` with data

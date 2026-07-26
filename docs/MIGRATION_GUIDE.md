@@ -74,6 +74,50 @@ scope/limitations). Always review a `--dry-run` first; unusual formatting (names
 computed keys, `require()`-style imports) can fall outside what it safely rewrites, in which case
 it leaves that spot untouched rather than guessing.
 
+## v2.x → v3.0 — Enums are now `as const` objects (BREAKING for enum-only TS ops)
+
+**What changed:** the exported "enums" (`HttpMethod`, `QueryStatus`, `LogLevel`, `StorageType`,
+`CacheType`, `SecurityLevel`, `Platform`, `DataSize`, `ConfigPreset`, `WebSocketState`, `AuthState`,
+`ErrorCode`, and the rest — 24 in all) are no longer TypeScript `enum`s. Each is now an `as const`
+object plus a same-named union type:
+
+```ts
+// before (v2.x)                    // after (v3.0)
+export enum HttpMethod {            export const HttpMethod = {
+  GET = 'GET',                        GET: 'GET',
+  // …                                // …
+}                                    } as const;
+                                     export type HttpMethod =
+                                       (typeof HttpMethod)[keyof typeof HttpMethod];
+```
+
+**Why:** a non-const `enum` compiles to a runtime IIFE that mutates an object at import time — a
+module side effect that a consumer bundler treating the package as side-effect-free would drop from
+a shared chunk, leaving `HttpMethod` undefined in production (the dabd92d / MDPD-17 crash class). An
+`as const` object has no import-time mutation, which is what lets v3.0 ship `"sideEffects": false`
+honestly and reclaim tree-shaking (see the packaging note below).
+
+**What still works unchanged — the common case needs NO code changes:**
+
+- **Value access** — `HttpMethod.GET`, `HttpMethod.POST`, etc. — identical.
+- **Runtime values** — the strings are byte-identical, so `x === HttpMethod.GET`, `switch`,
+  serialization, and `Object.values(HttpMethod)` all behave exactly as before.
+- **Type annotations** — `function f(m: HttpMethod)` still compiles; the union type is if anything
+  *more* permissive (a bare `'GET'` is now assignable where the nominal `enum` previously required
+  `HttpMethod.GET`).
+- **The packaged `.d.ts` type surface is identical** — the API-snapshot gate shows zero change, so
+  most type-only consumers observe nothing.
+
+**What breaks (narrow — only true `enum`-only operations):**
+
+- Using an enum **member as a type**: `let m: HttpMethod.GET` → use the value-derived type
+  `typeof HttpMethod.GET` (or the literal `'GET'`).
+- **Declaration-merging** a `namespace`/`enum` onto one of these names — no longer possible; wrap or
+  extend the object instead.
+- Relying on **nominal `enum` identity** (e.g. code that deliberately rejected a plain string where
+  a nominal `enum` was required) — the union accepts the matching string literal now.
+
+There is no codemod for this change — the fixes are localized type edits flagged by `tsc`.
 
 
 ## 2.2.0-beta.0 → 2.2.0-beta.1
