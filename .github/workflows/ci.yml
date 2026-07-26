@@ -236,3 +236,153 @@ jobs:
             -H "x-minder-signature: 0000000000000000000000000000000000000000000000000000000000000000" \
             -d "$BODY")
           test "$STATUS" = "401"
+
+  # ---- Run-4 platform-matrix legs (uniform contract: example provides
+  # `build` + self-contained `ci:smoke` npm scripts; library installed as a
+  # real consumer via packed-tarball override). ----
+
+  pages-router-example:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install and build library
+        run: |
+          npm install -g npm@11.6.2  # match packageManager — npm10/11 disagree on optional-wasm lockfile subtrees
+          npm ci && npm run build
+      - name: Pack library tarball
+        run: npm pack
+      - name: Install example (tarball override) and build
+        working-directory: examples/nextjs-app
+        run: |
+          npm install
+          npm install ../../minder-data-provider-*.tgz
+          npm run build
+      - name: Runtime smoke (SSR page + API route)
+        working-directory: examples/nextjs-app
+        run: npm run ci:smoke
+
+  node-server-example:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install and build library
+        run: |
+          npm install -g npm@11.6.2  # match packageManager — npm10/11 disagree on optional-wasm lockfile subtrees
+          npm ci && npm run build
+      - name: Pack library tarball
+        run: npm pack
+      - name: Install example (tarball override) and build
+        working-directory: examples/nodejs/api
+        run: |
+          npm install
+          npm install ../../../minder-data-provider-*.tgz
+          npm run build
+      - name: Runtime smoke (data endpoint + server capability)
+        working-directory: examples/nodejs/api
+        run: npm run ci:smoke
+
+  electron-example:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install and build library
+        run: |
+          npm install -g npm@11.6.2  # match packageManager — npm10/11 disagree on optional-wasm lockfile subtrees
+          npm ci && npm run build
+      - name: Pack library tarball
+        run: npm pack
+      - name: Install example (tarball override) and build
+        working-directory: examples/electron/desktop-app
+        run: |
+          npm install
+          npm install ../../../minder-data-provider-*.tgz
+          npm run build
+      - name: Install xvfb (headless display for Electron)
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+      - name: Headless smoke (xvfb, hidden window, IPC data proof)
+        working-directory: examples/electron/desktop-app
+        run: npm run ci:smoke
+
+  expo-bundle-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install and build library
+        run: |
+          npm install -g npm@11.6.2  # match packageManager — npm10/11 disagree on optional-wasm lockfile subtrees
+          npm ci && npm run build
+      - name: Pack library tarball
+        run: npm pack
+      - name: Install example (tarball override) and export bundles
+        working-directory: examples/expo/quickstart
+        run: |
+          npm install
+          npm install ../../../minder-data-provider-*.tgz
+          npm run build
+      - name: Evidence (jest-expo suite + bundle-content assertion)
+        working-directory: examples/expo/quickstart
+        run: npm run ci:smoke
+
+  remix-example:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install and build library
+        run: |
+          npm install -g npm@11.6.2  # match packageManager — npm10/11 disagree on optional-wasm lockfile subtrees
+          npm ci && npm run build
+      - name: Pack library tarball
+        run: npm pack
+      - name: Install example (tarball override) and build
+        working-directory: examples/remix
+        run: |
+          npm install
+          npm install ../../minder-data-provider-*.tgz
+          npm run build
+      - name: Runtime smoke (loader SSR + client hook)
+        working-directory: examples/remix
+        run: npm run ci:smoke
+
+  astro-example:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install and build library
+        run: |
+          npm install -g npm@11.6.2  # match packageManager — npm10/11 disagree on optional-wasm lockfile subtrees
+          npm ci && npm run build
+      - name: Pack library tarball
+        run: npm pack
+      - name: Install example (tarball override) and build
+        working-directory: examples/astro
+        run: |
+          npm install
+          npm install ../../minder-data-provider-*.tgz
+          npm run build
+      - name: Runtime smoke (SSR island + server data)
+        working-directory: examples/astro
+        run: npm run ci:smoke

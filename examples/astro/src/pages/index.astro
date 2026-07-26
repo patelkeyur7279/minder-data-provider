@@ -1,0 +1,53 @@
+---
+// Server-side data path: minder() called directly in the Astro frontmatter,
+// which runs at real REQUEST time under output:'server' + @astrojs/node
+// (not just once at static build time) — proves the SSR runtime path.
+// Fetches straight from the mock upstream (../mock-upstream.mjs), same
+// upstream the /api/users relay (src/pages/api/users.ts) uses for the
+// client-side island below.
+import { minder } from 'minder-data-provider';
+import UsersIsland from '../components/UsersIsland';
+
+export const prerender = false;
+
+const UPSTREAM_BASE_URL = import.meta.env.UPSTREAM_BASE_URL ?? 'http://127.0.0.1:8788';
+
+const { data, success, error } = await minder<{ id: number; name: string }[]>(
+  '/users',
+  undefined,
+  { baseURL: UPSTREAM_BASE_URL }
+);
+
+const serverUser = success && data && data.length > 0 ? data[0].name : null;
+---
+
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Minder Data Provider — Astro example</title>
+  </head>
+  <body>
+    <main>
+      <h1>Minder Data Provider — Astro example</h1>
+      <p data-testid="ssr-marker">Astro SSR example page rendered.</p>
+
+      <section>
+        <h2>Server-side (Astro frontmatter, minder())</h2>
+        {
+          serverUser ? (
+            <p data-testid="ssr-user">Server-fetched user: {serverUser}</p>
+          ) : (
+            <p role="alert" data-testid="ssr-error">
+              Server fetch failed: {error?.message ?? 'unknown error'}
+            </p>
+          )
+        }
+      </section>
+
+      <section>
+        <UsersIsland client:load />
+      </section>
+    </main>
+  </body>
+</html>

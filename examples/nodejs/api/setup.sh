@@ -10,18 +10,15 @@ if ! command -v npm &> /dev/null; then
 fi
 
 echo ""
-echo "📦 Installing dependencies..."
-npm install
+echo "🔨 Building minder-data-provider (root package)..."
+# The example depends on "minder-data-provider": "file:../../../" — that's a
+# directory link, not a symlink, so npm install (below) just needs the root
+# package's dist/ to already exist. No `npm link` step required.
+(cd ../../.. && npm run build)
 
 echo ""
-echo "🔗 Linking minder-data-provider..."
-# Go to root and build
-cd ../../..
-npm run build
-
-# Link the package
-cd examples/nodejs/api
-npm link ../../../
+echo "📦 Installing dependencies..."
+npm install
 
 echo ""
 echo "📄 Creating .env file..."

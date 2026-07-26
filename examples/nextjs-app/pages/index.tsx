@@ -45,6 +45,12 @@ export default function Home() {
       <p>
         <Link href="/local-first">See the local-first data demo (offline fallback via LocalStore) &rarr;</Link>
       </p>
+      <p>
+        <Link href="/ssr-users">
+          See the server-rendered demo (getServerSideProps calling minder() against a
+          local mock upstream) &rarr;
+        </Link>
+      </p>
       <ul>
         {users.map((user) => (
           <li key={user.id}>

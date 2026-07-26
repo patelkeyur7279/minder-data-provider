@@ -6,12 +6,15 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "build": "electron-builder",
+    "package": "electron-builder",
     "build:mac": "electron-builder --mac",
     "build:win": "electron-builder --win",
     "build:linux": "electron-builder --linux",
     "pack": "electron-builder --dir",
-    "postinstall": "electron-builder install-app-deps"
+    "postinstall": "electron-builder install-app-deps",
+    "build": "node --check src/main.js && node --check src/preload.js && node --check smoke/main.js && node --check smoke/preload.js && node -e \"require.resolve('minder-data-provider/electron')\"",
+    "test": "node --test smoke/lib/*.test.js",
+    "ci:smoke": "node smoke/run-ci-smoke.mjs"
   },
   "keywords": [
     "electron",
@@ -22,8 +25,11 @@
   "author": "Minder Examples",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^33.0.0",
-    "electron-builder": "^24.9.1"
+    "@tanstack/react-query": "^5.90.6",
+    "electron": "^43.0.0",
+    "electron-builder": "^24.9.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "dependencies": {
     "minder-data-provider": "file:../../../"

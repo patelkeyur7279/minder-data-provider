@@ -73,10 +73,25 @@ app.on("window-all-closed", () => {
 });
 
 // IPC Handlers - API Requests
+//
+// minder()'s real signature is `minder(route, data, options)` (positional
+// data, THEN options — see src/core/minder.ts). The previous code passed
+// `{ method: "GET"/"DELETE", ...options }` and `{ method: "POST"/"PUT", body:
+// data, ...options }` as the *data* (2nd) argument instead of the *options*
+// (3rd) argument. Since `minder()`'s auto method-detection treats any
+// non-null/undefined data as "there is a body" and defaults to POST when it
+// can't otherwise tell, every "GET" and "DELETE" call was silently sent as
+// an HTTP POST, and every "POST"/"PUT" call sent a malformed body shaped
+// like `{method, body: <real data>}` instead of `<real data>` itself. Fixed
+// by passing `data` and `options` in their correct positions. Also: `minder()`
+// never throws (it returns `{ success, error }` on failure instead — see the
+// module's own doc comment) so the try/catch here never fired on API errors;
+// results now propagate `response.success`/`response.error` instead of
+// hardcoding `success: true`.
 ipcMain.handle("api:get", async (event, url, options = {}) => {
   try {
-    const response = await minder(url, { method: "GET", ...options });
-    return { success: true, data: response.data };
+    const response = await minder(url, undefined, { method: "GET", ...options });
+    return { success: response.success, data: response.data, error: response.error };
   } catch (error) {
     return { success: false, error: error.message };
   }
@@ -84,12 +99,8 @@ ipcMain.handle("api:get", async (event, url, options = {}) => {
 
 ipcMain.handle("api:post", async (event, url, data, options = {}) => {
   try {
-    const response = await minder(url, {
-      method: "POST",
-      body: data,
-      ...options,
-    });
-    return { success: true, data: response.data };
+    const response = await minder(url, data, { method: "POST", ...options });
+    return { success: response.success, data: response.data, error: response.error };
   } catch (error) {
     return { success: false, error: error.message };
   }
@@ -97,12 +108,8 @@ ipcMain.handle("api:post", async (event, url, data, options = {}) => {
 
 ipcMain.handle("api:put", async (event, url, data, options = {}) => {
   try {
-    const response = await minder(url, {
-      method: "PUT",
-      body: data,
-      ...options,
-    });
-    return { success: true, data: response.data };
+    const response = await minder(url, data, { method: "PUT", ...options });
+    return { success: response.success, data: response.data, error: response.error };
   } catch (error) {
     return { success: false, error: error.message };
   }
@@ -110,8 +117,8 @@ ipcMain.handle("api:put", async (event, url, data, options = {}) => {
 
 ipcMain.handle("api:delete", async (event, url, options = {}) => {
   try {
-    const response = await minder(url, { method: "DELETE", ...options });
-    return { success: true, data: response.data };
+    const response = await minder(url, undefined, { method: "DELETE", ...options });
+    return { success: response.success, data: response.data, error: response.error };
   } catch (error) {
     return { success: false, error: error.message };
   }
@@ -178,11 +185,32 @@ ipcMain.handle("file:write", async (event, filePath, content) => {
   }
 });
 
-// Storage Operations (using Electron Store)
+// Storage Operations
+// NOTE: the original implementation referenced an undefined `minderClient`
+// variable (main.js never constructs one — only the plain `minder`/
+// `configureMinder` functions from `minder-data-provider/node` are
+// imported), so every storage:* IPC call threw a ReferenceError at runtime.
+// Fixed with a minimal JSON-file-backed store under Electron's userData dir
+// (main process has no `localStorage`/`window`, so a Web Storage adapter
+// doesn't apply here).
+const storageFilePath = path.join(app.getPath("userData"), "storage.json");
+
+async function readStorageFile() {
+  try {
+    return JSON.parse(await fs.readFile(storageFilePath, "utf-8"));
+  } catch {
+    return {};
+  }
+}
+
+async function writeStorageFile(data) {
+  await fs.writeFile(storageFilePath, JSON.stringify(data, null, 2), "utf-8");
+}
+
 ipcMain.handle("storage:get", async (event, key) => {
   try {
-    const value = await minderClient.storage.getItem(key);
-    return { success: true, value };
+    const data = await readStorageFile();
+    return { success: true, value: data[key] ?? null };
   } catch (error) {
     return { success: false, error: error.message };
   }
@@ -190,7 +218,9 @@ ipcMain.handle("storage:get", async (event, key) => {
 
 ipcMain.handle("storage:set", async (event, key, value) => {
   try {
-    await minderClient.storage.setItem(key, value);
+    const data = await readStorageFile();
+    data[key] = value;
+    await writeStorageFile(data);
     return { success: true };
   } catch (error) {
     return { success: false, error: error.message };
@@ -199,7 +229,9 @@ ipcMain.handle("storage:set", async (event, key, value) => {
 
 ipcMain.handle("storage:remove", async (event, key) => {
   try {
-    await minderClient.storage.removeItem(key);
+    const data = await readStorageFile();
+    delete data[key];
+    await writeStorageFile(data);
     return { success: true };
   } catch (error) {
     return { success: false, error: error.message };
@@ -208,7 +240,7 @@ ipcMain.handle("storage:remove", async (event, key) => {
 
 ipcMain.handle("storage:clear", async () => {
   try {
-    await minderClient.storage.clear();
+    await writeStorageFile({});
     return { success: true };
   } catch (error) {
     return { success: false, error: error.message };

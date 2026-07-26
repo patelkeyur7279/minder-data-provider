@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <!-- connect-src must allow the loopback mock upstream (arbitrary port) or
+       axios's XHR request from the preload script fails as a silent
+       "Network error (status 0)" — CSP applies to the whole renderer,
+       preload included, not just page-authored scripts. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src http://127.0.0.1:*;">
+  <title>Minder Electron Smoke Window</title>
+</head>
+<body>
+  <!--
+    Intentionally content-free. All work happens in smoke/preload.js, which
+    fires on DOMContentLoaded and reports back to the main process over IPC.
+    This page exists only to give the preload script a document to attach to.
+  -->
+</body>
+</html>

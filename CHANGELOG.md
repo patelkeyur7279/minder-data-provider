@@ -62,7 +62,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **useMediaUpload**: progress resets per upload; overlapping uploads serialized;
   upload lifecycle terminal phase unified to `'success'`.
 
-## [2.2.0-beta.1] - 2026-07-21
+## [2.2.0-beta.2] - Unreleased
+
+### Fixed
+
+- **`react-dom` is now an optional peer dependency** (`peerDependenciesMeta`). React
+  Native / Expo consumers previously hit `ERESOLVE` on clean installs: npm auto-resolved
+  the required `react-dom ^18||^19` peer to react-dom@19, whose own peer (`react ^19`)
+  conflicts with Expo SDK 52's pinned react@18. React-DOM was never needed on native
+  platforms; installs there are now clean with no `--legacy-peer-deps` workaround.
+  Web consumers are unaffected (react-dom is still used when present). Semver: patch.
+
+### Platform support (evidence, not code — full details in docs/product/SUPPORT_MATRIX.md)
+
+- **Every React framework row in the Support Matrix is now evidence-backed.** Six new
+  CI jobs install the packed tarball like a real consumer and runtime-smoke it:
+  Next.js Pages Router (`pages-router-example` — getServerSideProps SSR + API-route
+  webhook on Next 16), Remix / React Router 7 framework mode (`remix-example` — loader
+  SSR + client hook), Astro 7 + React islands (`astro-example` — request-time SSR +
+  `client:load` island), Node server (`node-server-example` — data endpoint + Node-adapter
+  webhook HMAC), Electron 43 (`electron-example` — headless hidden-window IPC data proof
+  under xvfb), and React Native / Expo SDK 52 (`expo-bundle-evidence` — Hermes bundles
+  for both platforms with content assertions + jest-expo suite; device runtime still
+  honestly out of CI's reach).
+- Example-app fixes made while building the evidence: electron example's `minder()`
+  calls passed options as the data argument (all verbs fired POST — now correct);
+  nodejs example listened at import time (untestable — split to app factory); Next 16
+  Turbopack bugs with file-installed libraries documented and worked around
+  (`--webpack`); expo example's Metro/Jest configs rebuilt for package-exports
+  resolution and the two-React-instance symlink trap.
 
 > **At a glance.** Everything in this release is additive (semver-minor) — no
 > breaking changes; those queue behind 3.0.0 above. Three new certified auth

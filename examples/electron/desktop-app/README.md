@@ -17,9 +17,64 @@ A complete desktop application demonstrating how to integrate **minder-data-prov
 
 ## 📋 Prerequisites
 
-- Node.js 16.x or higher
+- Node.js 20.x or higher
 - npm 8.x or higher
 - macOS, Windows, or Linux
+
+## 🤖 Headless CI Proof (`npm run ci:smoke`)
+
+This example proves the **electron platform adapter** (`minder-data-provider/electron`)
+end-to-end, headlessly, so it can run unattended in CI:
+
+```
+smoke/main.js       Electron main process: creates a hidden (show:false) BrowserWindow,
+                     watches for a result over IPC, enforces a 30s internal timeout,
+                     prints the marker (or an error) and exits 0/1.
+smoke/preload.js     Runs in the renderer process. Initializes minder via the
+                     `minder-data-provider/electron` entry (configureMinder + minder()),
+                     fetches GET /users, and reports back over IPC.
+smoke/lib/electron-smoke-client.js   The data-layer piece (no Electron APIs) — unit
+                     tested directly with `npm test`.
+smoke/mock-upstream.mjs   Plain Node http server standing in for a real API, same
+                     pattern as examples/edge-worker/mock-upstream.mjs.
+smoke/run-ci-smoke.mjs    Orchestrator: starts the mock upstream, launches Electron
+                     (via xvfb-run on headless Linux, plain otherwise), checks the
+                     exit code AND stdout for the marker, always tears the upstream down.
+```
+
+Run it:
+
+```bash
+npm install
+npm run build     # syntax-checks the app + confirms the electron entry resolves
+npm run ci:smoke  # starts the mock upstream, runs the Electron smoke test, exits 0/1
+```
+
+On success, stdout contains a single verifiable line:
+
+```
+MINDER_ELECTRON_SMOKE_OK users=1 Ada
+```
+
+**What this proves headlessly (no real display needed):**
+- The `minder-data-provider/electron` entry resolves and initializes correctly in a real
+  Electron renderer (`contextIsolation: true`, `nodeIntegration: false`).
+- `configureMinder` + `minder()` successfully perform a real HTTP round-trip from inside
+  Electron to a local upstream.
+- Main-process <-> renderer IPC reporting works end-to-end.
+- A hidden (`show: false`) `BrowserWindow` boots and renders under Xvfb on headless Linux
+  (`xvfb-run -a npx electron smoke/main.js --no-sandbox --disable-gpu`) or directly on
+  macOS/Windows/a Linux desktop with a real display — `ci:smoke` auto-detects which is
+  needed (Linux + no `DISPLAY` -> wraps with `xvfb-run`; the CI runner needs the `xvfb`
+  package installed for that leg).
+
+**What still needs a real display / manual check:**
+- Visual rendering correctness of the actual app UI (`public/index.html`, `styles.css`) —
+  the smoke window is headless and loads a content-free page, not the real app.
+- Native OS chrome (custom title bar, window controls, `Notification.isSupported()` on a
+  real desktop session, native open/save dialogs).
+- Packaged installers (`npm run build:mac` / `:win` / `:linux`, and `npm run package`)
+  are unaffected by CI smoke and still require a real build machine per target OS.
 
 ## 🚀 Getting Started
 
@@ -331,14 +386,30 @@ Renderer process logs appear in DevTools Console.
 
 ## 📦 Dependencies
 
-### Production
+### Runtime
 
-- `electron`: ^28.0.0 - Desktop framework
-- `minder-data-provider`: ^2.0.0 - Data provider library
+- `minder-data-provider`: `file:../../../` - Data provider library, linked to this repo's
+  own working tree (not a published version) so the example always exercises current code.
 
 ### Development
 
-- `electron-builder`: ^24.9.1 - Build tool for packaging
+- `electron`: ^43.0.0 - Desktop framework. Bumped from the previously pinned ^33.0.0, which
+  is well outside Electron's supported window (Electron supports roughly the latest 3
+  stable major releases; 43 is current as of this update, per the `electron` package's own
+  npm registry metadata).
+- `electron-builder`: ^24.9.1 - Build tool for packaging (`npm run package`, `build:mac`,
+  `build:win`, `build:linux`)
+- `react`, `react-dom`, `@tanstack/react-query` - **not used directly by this example's UI.**
+  `minder-data-provider/electron` re-exports the full web/React hook surface (`useMinder`,
+  etc.) alongside the plain `minder`/`configureMinder` functions the smoke harness actually
+  calls; requiring the entry point eagerly resolves that whole module graph, so these peer
+  packages must be present even though nothing here renders with React. Versions match this
+  repo's own `peerDependencies` ranges.
+
+> Note: the old bare `npm run build` (electron-builder, no target) was renamed to
+> `npm run package` to make room for a `build` script with the CI-contract meaning used
+> across this repo's examples (validate + prepare for `ci:smoke`). `build:mac` / `build:win`
+> / `build:linux` are unchanged.
 
 ## 🔐 Security Considerations
 

@@ -72,6 +72,11 @@ export function rateLimiter(options: RateLimitOptions): (req: Request, res: Resp
 /**
  * Cleanup old entries periodically
  * Prevents memory leak in long-running processes
+ *
+ * `.unref()` so this timer never keeps the process (or a test runner) alive
+ * by itself — a bare `setInterval` here otherwise blocks Jest from exiting
+ * after the test suite finishes, since importing this module (via app.ts)
+ * schedules a handle nothing else is waiting on.
  */
 setInterval(() => {
   const now = Date.now();
@@ -80,4 +85,4 @@ setInterval(() => {
       delete store[key];
     }
   });
-}, 60000); // Cleanup every minute
+}, 60000).unref(); // Cleanup every minute

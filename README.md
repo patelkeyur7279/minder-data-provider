@@ -260,15 +260,16 @@ routes as raw OpenAPI paths; `keep` prepends the path portion of the spec's firs
 | Environment | Status |
 | --- | --- |
 | React 19 (web) | Confirmed |
-| Next.js (Pages Router) | Experimental |
+| Next.js (Pages Router) | Confirmed |
 | Next.js (App Router / RSC) | Confirmed (provider-wrapper pattern) |
 | Vite + React | Confirmed |
 | React 18 | Confirmed (test-suite evidence) |
-| React Native / Expo | Experimental |
-| Electron | Experimental |
-| Node (server) | Experimental |
+| Remix / React Router 7 | Confirmed |
+| Astro + React islands | Confirmed |
+| React Native / Expo | Confirmed (bundle + suite evidence) |
+| Electron | Confirmed (headless runtime evidence) |
+| Node (server) | Confirmed |
 | Edge runtimes (Workers, Vercel Edge) | Confirmed (Workers) |
-| Remix, Astro | Planned |
 
 **Confirmed** = runnable example app + CI tests. **Experimental** = built and working,
 without that evidence bar yet. **Unknown** = no evidence either way. **Inferred-works**
