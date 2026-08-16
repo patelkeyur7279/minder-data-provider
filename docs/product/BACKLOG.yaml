@@ -388,11 +388,11 @@ tasks:
     type: security
     status: verified
     evidence: >-
-      2026-07-19: provenance already wired (publish.yml: `npm publish --provenance` + `id-token:
-      write`) and SECURITY.md has a real GitHub Security Advisories reporting path (7-day SLA) —
-      status was stale. Closed the last gap by adding a 'Supply-chain integrity' section to
-      SECURITY.md (npm provenance + `npm audit signatures` verification, maintainer 2FA, no bundled
-      provider SDKs/secrets). Actual npm publish remains owner-gated.
+      2026-08-17: Provenance is forfeited by manual publishing (no workflow token). SECURITY.md
+      documents the trade-off and notes Trusted Publishing (OIDC) as the restoration path.
+      GitHub Security Advisories flow is in place (7-day SLA). 'Supply-chain integrity' section
+      in SECURITY.md covers the current posture (maintainer 2FA, no bundled SDKs/secrets).
+      Actual npm publish remains owner-gated.
   - id: OSS-07
     title: Funding rails (GitHub Sponsors/Open Collective) - sustainability without monetizing the product
     type: research

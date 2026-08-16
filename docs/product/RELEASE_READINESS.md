@@ -129,9 +129,10 @@ tree-shaking survival is guarded by `tests/dist-entry-exports.test.ts` (now pass
    publishing cannot happen until push is unblocked.
 
 **Release-process risks (owner decision recommended before 3.0):**
-3. **`publish.yml` auto-publishes** `npm publish --provenance` on push to `main`/`test` when the version differs
-   from npm — no manual/tag/approval gate. A bumped `3.0.0` merged to `main` would publish to `latest` on push.
-   Recommend adding a manual-approval / tag gate.
+3. ~~**`publish.yml` auto-publishes**...~~ **Superseded (2026-08-17):** `publish.yml` has been removed.
+   npm publishing is now a manual, owner-run step with no CI token involved; `release-guard.yml` runs
+   read-only version/CHANGELOG consistency checks on push/PR to `main` but never publishes. See
+   [`RELEASING.md`](../../RELEASING.md) for the current process.
 4. **CI/publish gate divergence** — `ci.yml` runs lint/type/test/build but **not** `verify-build`/`pack`; those
    run only in `release:check`/`prepublishOnly`. Recommend adding them to CI so packaging regressions are caught on PRs.
 

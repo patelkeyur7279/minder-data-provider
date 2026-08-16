@@ -21,6 +21,7 @@ This document provides a comprehensive guide to help you get started. We believe
   - [Verify Build](#verify-build)
 - [Coding Standards](#coding-standards)
 - [Pull Request Process](#pull-request-process)
+- [Releasing](#releasing)
 - [Documentation](#documentation)
 - [Community](#community)
 
@@ -177,6 +178,16 @@ node scripts/verify-build.js
    - Link related issues (e.g., `Closes #123`).
    - Add a clear description of changes.
    - Attach screenshots/videos for UI changes.
+
+---
+
+## 🚢 Releasing
+
+Releasing is a maintainer-only process — publishing to npm is a manual, owner-run
+step (no CI token exists for it), while GitHub's tags and Releases stay the
+authoritative record. Contributors don't need this to submit a PR; maintainers,
+see [`RELEASING.md`](RELEASING.md) for the full sequence, failure handling, and
+recovery paths.
 
 ---
 

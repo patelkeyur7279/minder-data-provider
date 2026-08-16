@@ -254,8 +254,7 @@ Cross-referenced to SUPPORT_MATRIX.md and BACKLOG.yaml. **[Confirmed]** = eviden
   `pull_request_template.md`). **[Open]** the rest of **OSS-04** (Discussions enabled,
   good-first-issue triage, maintainer guide, RFC process) — `backlog`. Enable Discussions before
   linking it (package.json already advertises a discussions URL).
-- **[Open] OSS-06 supply-chain trust** (`npm publish --provenance`, 2FA note, advisories flow) —
-  `backlog`. `publish.yml` exists; wire provenance before the first publish. **Do at publish time.**
+- **[Open] OSS-06 supply-chain trust** — `backlog`. npm provenance is forfeited by manual publishing; restore it via Trusted Publishing (OIDC) if the trade-off is revisited.
 - **[Open] OSS-07 funding rails** — `backlog`. Optional for debut.
 
 ### Product-validation caveat (not a blocker, but shapes messaging)
@@ -287,7 +286,7 @@ Cross-referenced to SUPPORT_MATRIX.md and BACKLOG.yaml. **[Confirmed]** = eviden
 1. **Unblock (Owner):** click the GitHub secret-scanning unblock → push → confirm CI (ci.yml,
    example-nextjs.yml) goes green on GitHub. Promote Next.js to Confirmed in SUPPORT_MATRIX only after.
 2. **Finish launch dependencies:** BENCHMARKS.md (OSS-05) lands + reproducible; OSS-03 StackBlitz demo
-   + repro template live; wire provenance (OSS-06) into publish.yml; enable Discussions.
+   + repro template live; enable Discussions; document npm provenance trade-off (OSS-06).
 3. **Decide L1 vs L2** and cut the release: stable version, real CHANGELOG entry, tag — **Owner
    publish**.
 4. **Soft launch:** dev.to/Hashnode article + X thread first (lower stakes, shakes out doc gaps and

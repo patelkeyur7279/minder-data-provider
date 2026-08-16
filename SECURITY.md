@@ -19,7 +19,7 @@ We take security issues seriously. If you discover a security vulnerability, ple
 
 ## Supply-chain integrity
 
-- **npm provenance.** Releases are published with [npm provenance](https://docs.npmjs.com/generating-provenance-statements) (`npm publish --provenance`, backed by the workflow's `id-token: write` permission), so the published tarball is cryptographically linked to the exact GitHub Actions build that produced it. Consumers can verify it on the package's npm page or with `npm audit signatures`.
+- **npm provenance.** Manual publishing forfeits npm provenance — the cryptographic link between the tarball and the GitHub Actions build is not available. [Trusted Publishing (OIDC)](https://docs.npmjs.com/generating-provenance-statements) is the path to restore provenance, but it is not implemented here by design.
 - **Maintainer 2FA.** Publishing requires npm two-factor authentication on the maintainer account.
 - **No bundled provider SDKs or secrets.** Provider SDKs are optional peer dependencies loaded on demand; no provider code or credentials are vendored (see `docs/product/PROVIDER_COMPLIANCE.md`).
 

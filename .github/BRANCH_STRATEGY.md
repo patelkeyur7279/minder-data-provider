@@ -18,10 +18,10 @@
 
 ### `main` (Production)
 - **Purpose**: Production-ready code
-- **Stability**: Always stable, auto-publishes to npm
+- **Stability**: Always stable; npm publish is a manual step run by the owner (see [`RELEASING.md`](../RELEASING.md))
 - **Merges from**: `test` (via PR with version bump)
 - **Merges to**: None
-- **CI**: Auto-publishes to npm registry
+- **CI**: [Release Guard](./workflows/release-guard.yml) checks version/CHANGELOG consistency — it does not publish
 
 ---
 
@@ -92,17 +92,22 @@ git push origin test
 
 **→ Create PR: `test` → `main`**
 
-### 5. Auto-Publish
+### 5. Manual Publish
 ```bash
-# After PR merged to main
-# GitHub Actions automatically:
-# 1. Detects version change
-# 2. Runs tests
-# 3. Builds package
-# 4. Creates git tag
-# 5. Publishes to npm with provenance
-# 6. Creates GitHub release
+# After PR merged to main, Release Guard runs automatically (checks only —
+# it never publishes). The owner then runs, on their own machine:
+npm run release:preflight   # read-only sanity checks
+npm publish                 # or: npm publish --tag <pre-id> for a pre-release
+git tag -a v<version> -m "Release v<version>"
+git push origin v<version>  # triggers release.yml -> creates the GitHub Release
+npm run release:verify      # read-only post-publish checks (run after pushing the tag)
 ```
+Full sequence, failure handling, and recovery paths: [`RELEASING.md`](../RELEASING.md).
+
+**Merging to `main` is no longer an irreversible publish event.** With the old
+auto-publish workflow removed, `main` is a branch you can fix, revert, and
+re-push like any other — publishing only happens when the owner deliberately
+runs the steps above.
 
 ---
 
@@ -145,12 +150,10 @@ git push origin test
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  main branch                                                │
-│  ✓ Version check                                            │
-│  ✓ Full tests                                               │
-│  ✓ Build                                                    │
-│  ✓ Create git tag                                           │
-│  ✓ Publish to npm ← AUTOMATIC                               │
-│  ✓ Create GitHub release                                    │
+│  ✓ Release Guard (version/CHANGELOG checks, no publish)     │
+│  ✗ No auto-publish — owner runs it manually                 │
+│  ✓ Owner: npm publish, then push a human-credentialed tag   │
+│  ✓ Tag push → Create Release workflow (gh, no npm token)    │
 └─────────────────────────────────────────────────────────────┘
                            │
                            ▼
@@ -300,7 +303,7 @@ npm version patch
 git revert <commit-hash>
 npm version patch
 git push origin main
-# Auto-publishes fixed version
+# Publish is a manual step — see RELEASING.md; nothing auto-publishes here
 ```
 
 ---
@@ -309,5 +312,5 @@ git push origin main
 
 - **CI Workflows**: `.github/workflows/`
 - **PR Template**: `.github/pull_request_template.md`
-- **Release Guide**: `QUICK_RELEASE.md`
-- **Setup Guide**: `GIT_NPM_SETUP.md`
+- **Release Guide**: [`RELEASING.md`](../RELEASING.md)
+- **Setup Guide**: [`.github/SETUP.md`](./SETUP.md)
