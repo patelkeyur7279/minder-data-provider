@@ -12,7 +12,7 @@ import { renderHook, act } from '@testing-library/react';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MinderDataProvider } from '../src/core/MinderDataProvider';
-import { useAuth } from '../src/hooks/index';
+import { useAuthToken } from '../src/hooks/index';
 import { useMinder } from '../src/hooks/useMinder';
 import { globalAuthManager } from '../src/auth/GlobalAuthManager';
 import { AuthManager } from '../src/core/AuthManager';
@@ -577,7 +577,7 @@ describe('🔒 AUTHENTICATION SECURITY AUDIT', () => {
     // =========================================================================
 
     describe('🔗 INTEGRATION: Hook & Provider Integration', () => {
-        it('should work with useAuth hook', async () => {
+        it('should work with useAuthToken hook', async () => {
             const config = {
                 apiBaseUrl: 'https://api.test.com',
                 routes: {
@@ -597,7 +597,7 @@ describe('🔒 AUTHENTICATION SECURITY AUDIT', () => {
                 </QueryClientProvider>
             );
 
-            const { result } = renderHook(() => useAuth(), { wrapper });
+            const { result } = renderHook(() => useAuthToken(), { wrapper });
 
             await act(async () => {
                 result.current.setToken('integration-token');

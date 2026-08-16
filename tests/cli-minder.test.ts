@@ -588,6 +588,212 @@ describe('minder add', () => {
     expect(second.status).toBe(0);
     expect(second.stdout).toContain('Sentry is a client observability plugin');
   });
+
+  // G-08: the CLI shipped 9 certified providers under providers/ but only
+  // registered 6 in PROVIDERS — `minder add auth0`, `add authjs`, and
+  // `add cognito` all failed with "Unknown provider" even though the
+  // catalog (scripts/generate-catalog.js's CERTIFIED array) already listed
+  // them as certified. These three cover the same shape as the clerk tests
+  // above (a single scaffolded verify route + certified notice) but with
+  // envVars: [] like sentry (no .env.example section — auth0/authjs/cognito
+  // carry no server secret at all, see each PROVIDERS entry's comment).
+  const auth0VerifyRoute = 'app/api/minder/auth0/verify/route.ts';
+
+  it('add auth0 scaffolds the verify route file, writes no env section, and the certified notice, exit 0', () => {
+    const auth0 = cli.PROVIDERS.find((p: { name: string }) => p.name === 'auth0');
+    expect(auth0).toBeDefined();
+    expect(auth0.envVars).toEqual([]);
+
+    const result = run(['add', 'auth0'], { cwd: tmpDir });
+
+    expect(result.status).toBe(0);
+
+    const verifyPath = path.join(tmpDir, auth0VerifyRoute);
+    expect(fs.existsSync(verifyPath)).toBe(true);
+    const verifyContent = fs.readFileSync(verifyPath, 'utf8');
+    expect(verifyContent).toContain(
+      "import { createAuth0SessionHandler } from 'minder-data-provider/providers/auth0';"
+    );
+    expect(verifyContent).toContain('export async function GET(req: Request)');
+
+    // envVars is empty, so cmdAdd must not write a ".env.example" section
+    // for auth0 at all (same reasoning as the sentry test above).
+    const envExamplePath = path.join(tmpDir, '.env.example');
+    if (fs.existsSync(envExamplePath)) {
+      const envExample = fs.readFileSync(envExamplePath, 'utf8');
+      expect(envExample).not.toContain('# minder provider: auth0');
+    }
+
+    expect(result.stdout).toContain(auth0.configSnippet.trim());
+    expect(result.stdout).toContain(auth0VerifyRoute);
+    expect(result.stdout).toContain('status: CERTIFIED');
+    expect(result.stdout).toContain(cli.CATALOG_DOC);
+    expect(result.stdout).not.toContain('not yet certified');
+    expect(result.stdout).toContain(auth0.keysUrl);
+  });
+
+  it('re-running add auth0 without --force skips the existing route file', () => {
+    const first = run(['add', 'auth0'], { cwd: tmpDir });
+    expect(first.status).toBe(0);
+
+    const verifyPath = path.join(tmpDir, auth0VerifyRoute);
+    const verifyBefore = fs.readFileSync(verifyPath, 'utf8');
+
+    const second = run(['add', 'auth0'], { cwd: tmpDir });
+    expect(second.status).toBe(0);
+    expect(second.stdout).toContain('Skipped');
+    expect(second.stdout).toContain(auth0VerifyRoute);
+
+    expect(fs.readFileSync(verifyPath, 'utf8')).toBe(verifyBefore);
+  });
+
+  it('add auth0 --force overwrites the existing route file', () => {
+    const first = run(['add', 'auth0'], { cwd: tmpDir });
+    expect(first.status).toBe(0);
+
+    const verifyPath = path.join(tmpDir, auth0VerifyRoute);
+    fs.writeFileSync(verifyPath, '// corrupted\n', 'utf8');
+
+    const forced = run(['add', 'auth0', '--force'], { cwd: tmpDir });
+    expect(forced.status).toBe(0);
+    expect(forced.stdout).toContain('Scaffolded route files');
+
+    const verifyContent = fs.readFileSync(verifyPath, 'utf8');
+    expect(verifyContent).not.toContain('// corrupted');
+    expect(verifyContent).toContain('createAuth0SessionHandler');
+  });
+
+  const authjsVerifyRoute = 'app/api/minder/authjs/verify/route.ts';
+
+  it('add authjs scaffolds the verify route file, writes no env section, and the certified notice, exit 0', () => {
+    const authjs = cli.PROVIDERS.find((p: { name: string }) => p.name === 'authjs');
+    expect(authjs).toBeDefined();
+    expect(authjs.envVars).toEqual([]);
+
+    const result = run(['add', 'authjs'], { cwd: tmpDir });
+
+    expect(result.status).toBe(0);
+
+    const verifyPath = path.join(tmpDir, authjsVerifyRoute);
+    expect(fs.existsSync(verifyPath)).toBe(true);
+    const verifyContent = fs.readFileSync(verifyPath, 'utf8');
+    expect(verifyContent).toContain(
+      "import { createAuthjsSessionHandler } from 'minder-data-provider/providers/authjs';"
+    );
+    // Auth.js bridges the app's OWN auth() via sessionResolver — the
+    // scaffolded route is a placeholder the user must point at their real
+    // auth.ts (see the AUTHJS_VERIFY_ROUTE template's TODO comment).
+    expect(verifyContent).toContain('sessionResolver');
+    expect(verifyContent).toContain('TODO');
+
+    const envExamplePath = path.join(tmpDir, '.env.example');
+    if (fs.existsSync(envExamplePath)) {
+      const envExample = fs.readFileSync(envExamplePath, 'utf8');
+      expect(envExample).not.toContain('# minder provider: authjs');
+    }
+
+    expect(result.stdout).toContain(authjs.configSnippet.trim());
+    expect(result.stdout).toContain(authjsVerifyRoute);
+    expect(result.stdout).toContain('status: CERTIFIED');
+    expect(result.stdout).toContain(cli.CATALOG_DOC);
+    expect(result.stdout).not.toContain('not yet certified');
+    expect(result.stdout).toContain(authjs.keysUrl);
+  });
+
+  it('re-running add authjs without --force skips the existing route file', () => {
+    const first = run(['add', 'authjs'], { cwd: tmpDir });
+    expect(first.status).toBe(0);
+
+    const verifyPath = path.join(tmpDir, authjsVerifyRoute);
+    const verifyBefore = fs.readFileSync(verifyPath, 'utf8');
+
+    const second = run(['add', 'authjs'], { cwd: tmpDir });
+    expect(second.status).toBe(0);
+    expect(second.stdout).toContain('Skipped');
+    expect(second.stdout).toContain(authjsVerifyRoute);
+
+    expect(fs.readFileSync(verifyPath, 'utf8')).toBe(verifyBefore);
+  });
+
+  it('add authjs --force overwrites the existing route file', () => {
+    const first = run(['add', 'authjs'], { cwd: tmpDir });
+    expect(first.status).toBe(0);
+
+    const verifyPath = path.join(tmpDir, authjsVerifyRoute);
+    fs.writeFileSync(verifyPath, '// corrupted\n', 'utf8');
+
+    const forced = run(['add', 'authjs', '--force'], { cwd: tmpDir });
+    expect(forced.status).toBe(0);
+    expect(forced.stdout).toContain('Scaffolded route files');
+
+    const verifyContent = fs.readFileSync(verifyPath, 'utf8');
+    expect(verifyContent).not.toContain('// corrupted');
+    expect(verifyContent).toContain('createAuthjsSessionHandler');
+  });
+
+  const cognitoVerifyRoute = 'app/api/minder/cognito/verify/route.ts';
+
+  it('add cognito scaffolds the verify route file, writes no env section, and the certified notice, exit 0', () => {
+    const cognito = cli.PROVIDERS.find((p: { name: string }) => p.name === 'cognito');
+    expect(cognito).toBeDefined();
+    expect(cognito.envVars).toEqual([]);
+
+    const result = run(['add', 'cognito'], { cwd: tmpDir });
+
+    expect(result.status).toBe(0);
+
+    const verifyPath = path.join(tmpDir, cognitoVerifyRoute);
+    expect(fs.existsSync(verifyPath)).toBe(true);
+    const verifyContent = fs.readFileSync(verifyPath, 'utf8');
+    expect(verifyContent).toContain(
+      "import { createCognitoSessionHandler } from 'minder-data-provider/providers/cognito';"
+    );
+    expect(verifyContent).toContain('export async function GET(req: Request)');
+
+    const envExamplePath = path.join(tmpDir, '.env.example');
+    if (fs.existsSync(envExamplePath)) {
+      const envExample = fs.readFileSync(envExamplePath, 'utf8');
+      expect(envExample).not.toContain('# minder provider: cognito');
+    }
+
+    expect(result.stdout).toContain(cognito.configSnippet.trim());
+    expect(result.stdout).toContain(cognitoVerifyRoute);
+    expect(result.stdout).toContain('status: CERTIFIED');
+    expect(result.stdout).toContain(cli.CATALOG_DOC);
+    expect(result.stdout).not.toContain('not yet certified');
+    expect(result.stdout).toContain(cognito.keysUrl);
+  });
+
+  it('re-running add cognito without --force skips the existing route file', () => {
+    const first = run(['add', 'cognito'], { cwd: tmpDir });
+    expect(first.status).toBe(0);
+
+    const verifyPath = path.join(tmpDir, cognitoVerifyRoute);
+    const verifyBefore = fs.readFileSync(verifyPath, 'utf8');
+
+    const second = run(['add', 'cognito'], { cwd: tmpDir });
+    expect(second.status).toBe(0);
+    expect(second.stdout).toContain('Skipped');
+    expect(second.stdout).toContain(cognitoVerifyRoute);
+
+    expect(fs.readFileSync(verifyPath, 'utf8')).toBe(verifyBefore);
+  });
+
+  it('add cognito --force overwrites the existing route file', () => {
+    const first = run(['add', 'cognito'], { cwd: tmpDir });
+    expect(first.status).toBe(0);
+
+    const verifyPath = path.join(tmpDir, cognitoVerifyRoute);
+    fs.writeFileSync(verifyPath, '// corrupted\n', 'utf8');
+
+    const forced = run(['add', 'cognito', '--force'], { cwd: tmpDir });
+    expect(forced.status).toBe(0);
+    expect(forced.stdout).toContain('Scaffolded route files');
+
+    const verifyContent = fs.readFileSync(verifyPath, 'utf8');
+    expect(verifyContent).not.toContain('// corrupted');
+    expect(verifyContent).toContain('createCognitoSessionHandler');
+  });
 });
 
 // G-07: `minder add <provider>` used to print a hardcoded "EXPERIMENTAL —
@@ -617,7 +823,10 @@ describe('certification lookup (unit) — G-07', () => {
   it('derives from scripts/generate-catalog.js CERTIFIED — not a hardcoded duplicate', () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { CERTIFIED } = require('../scripts/generate-catalog.js');
-    const names = ['supabase', 'stripe', 'clerk', 'firebase', 'razorpay', 'sentry', 'mailgun', 'unknown-future'];
+    const names = [
+      'supabase', 'stripe', 'clerk', 'firebase', 'razorpay', 'sentry',
+      'auth0', 'authjs', 'cognito', 'mailgun', 'unknown-future',
+    ];
     for (const name of names) {
       expect(cli.isCertifiedProvider(name)).toBe(CERTIFIED.includes(`@minder/provider-${name}`));
     }
@@ -797,13 +1006,13 @@ describe('minder --help / no args', () => {
     expect(noArgs.stdout).toBe(help.stdout);
   });
 
-  it('describes the six providers as certified, with no stale uncertified claims', () => {
+  it('describes the certified providers, with no stale uncertified claims', () => {
     const help = run(['--help'], { cwd: tmpDir });
     expect(help.status).toBe(0);
 
     // G-07: --help's add blurb hardcoded "(all EXPERIMENTAL — not yet
     // certified ...)" and its init blurb said "none are certified yet" —
-    // both false since the six roadmap providers were certified, and both
+    // both false since the roadmap providers were certified, and both
     // directly contradicting the CERTIFIED status `minder add` itself now
     // prints. Flipped to assert the accurate claim.
     expect(help.stdout).toContain('CERTIFIED');
@@ -811,6 +1020,23 @@ describe('minder --help / no args', () => {
     expect(help.stdout.toUpperCase()).not.toContain('EXPERIMENTAL');
     expect(help.stdout).not.toContain('not yet certified');
     expect(help.stdout).not.toContain('none are certified yet');
+  });
+
+  // G-08: the CLI shipped 9 certified providers but --help's `add` blurb
+  // still hardcoded "all six" and listed only 6 names — stale the moment
+  // auth0/authjs/cognito were certified. Asserts the help text names every
+  // PROVIDERS entry (derived, so this can't drift the same way again) and
+  // no longer claims "six".
+  it('help text names every registered provider and does not claim "six"', () => {
+    const help = run(['--help'], { cwd: tmpDir });
+    expect(help.status).toBe(0);
+
+    for (const p of cli.PROVIDERS as Array<{ name: string }>) {
+      expect(help.stdout).toContain(`"${p.name}"`);
+    }
+    expect((cli.PROVIDERS as Array<unknown>).length).toBe(9);
+    expect(help.stdout).toContain('all nine CERTIFIED');
+    expect(help.stdout).not.toMatch(/\bsix\b/i);
   });
 });
 

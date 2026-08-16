@@ -26,18 +26,19 @@ export { _ as AnalyticsConfig, _ as AnalyticsPlugin, _ as ApiError, _ as ApiRout
 export { _ as AuthManager } from '../AuthManager-HASH.js';
 export { _ as CacheManager } from '../CacheManager-HASH.js';
 export { _ as configureMinder, _ as minder } from '../minder-HASH.js';
-export { CSRFToken, JWTPayload, SecureAuthConfig, SecureAuthManager, TokenRefreshConfig, TokenRefreshManager, createSecureAuthManager, createTokenRefreshManager } from '../auth/index.js';
+export { _ as CSRFToken, _ as JWTPayload, _ as SecureAuthConfig, _ as SecureAuthManager, _ as TokenRefreshConfig, _ as TokenRefreshManager, _ as UseAuthReturn, _ as createSecureAuthManager, _ as createTokenRefreshManager, _ as useAuth } from '../index-HASH.js';
 export { _ as DebugManager } from '../DebugManager-HASH.js';
 export { _ as FeatureFlags, _ as FeatureLoader, _ as PlatformCapabilities, _ as PlatformCapabilityDetector, _ as createFeatureLoader } from '../FeatureLoader-HASH.js';
 export { _ as FilterOption, _ as PaginationHelper, _ as PaginationOptions, _ as PaginationResult, _ as PaginationState, _ as QueryBuilder, _ as QueryParams, _ as SortOption, _ as query, _ as usePagination, _ as useQueryBuilder } from '../QueryBuilder-HASH.js';
 export { MediaUploadManager, UploadOptions, UploadProgressDetails, createUploadManager } from '../upload/index.js';
 export { _ as MemoryStorageAdapter, _ as StorageAdapterFactory } from '../MemoryStorageAdapter-HASH.js';
 export { _ as MinderDataProvider, _ as useMinder, _ as useMinderContext } from '../index-HASH.js';
-export { _ as MinderError, _ as MinderOptions, _ as MinderResult } from '../MinderError-HASH.js';
+export { _ as MinderError } from '../MinderError-HASH.js';
+export { _ as MinderOptions, _ as MinderResult } from '../types-HASH.js';
 export { _ as Platform } from '../enums-HASH.js';
 export { _ as PlatformDetector } from '../DevTools-HASH.js';
 export { _ as PROVIDER_CATEGORIES, _ as PROVIDER_FRAMEWORKS, _ as PROVIDER_RUNTIMES, _ as ProviderCapability, _ as ProviderCategory, _ as ProviderConfigSplit, _ as ProviderDocs, _ as ProviderFramework, _ as ProviderManifest, _ as ProviderRuntime, _ as ProviderScope, _ as ValidationResult, _ as defineProviderManifest, _ as providerManifestSchema, _ as validateProviderManifest } from '../manifest-HASH.js';
-export { _ as useAuth, _ as useCache, _ as useCurrentUser, _ as useMediaUpload, _ as useWebSocket } from '../index-HASH.js';
+export { _ as useAuthToken, _ as useCache, _ as useCurrentUser, _ as useMediaUpload, _ as useWebSocket } from '../index-HASH.js';
 export { useDebug } from '../debug/index.js';
 export { WebSocketClient, WebSocketEventHandler, WebSocketMessage, WebSocketState, createWebSocketClient } from '../websocket/index.js';
 // #endregion

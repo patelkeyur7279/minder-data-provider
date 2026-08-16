@@ -46,7 +46,7 @@ describe('Package Infrastructure', () => {
     expect(pkg.peerDependencies['@tanstack/react-query']).toBeDefined();
     expect(pkg.dependencies['@tanstack/react-query']).toBeUndefined();
     // Non-context utilities stay bundled so users don't manage versions.
+    // (immer was removed as a dependency in D5 — it had zero usage in src/.)
     expect(pkg.dependencies['axios']).toBeDefined();
-    expect(pkg.dependencies['immer']).toBeDefined();
   });
 });

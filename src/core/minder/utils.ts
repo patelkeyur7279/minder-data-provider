@@ -34,12 +34,7 @@ export function detectMethod(
     return 'GET';
   }
   
-  // 3. Delete indicator
-  if (typeof data === 'object' && 'delete' in data) {
-    return 'DELETE';
-  }
-  
-  // 4. Route pattern detection — the final segment must actually LOOK like an
+  // 3. Route pattern detection — the final segment must actually LOOK like an
   // entity id: purely numeric (/users/123), a UUID, or a 24-hex Mongo ObjectId.
   // The previous pattern (/\/[a-zA-Z0-9-_]+$/) matched ANY final segment, so a
   // plain collection route like /api/orders was mis-detected as UPDATE and
@@ -49,16 +44,16 @@ export function detectMethod(
     /\/\d+$/.test(route) ||
     /\/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(route) ||
     /\/[0-9a-fA-F]{24}$/.test(route);
-  
-  // 5. Data has ID field = UPDATE
-  const hasIdInData = typeof data === 'object' && 
+
+  // 4. Data has ID field = UPDATE
+  const hasIdInData = typeof data === 'object' &&
     (('id' in data && data.id) || ('_id' in data && data._id));
-  
+
   if (hasIdInRoute || hasIdInData) {
     return 'PUT';
   }
-  
-  // 6. Default = POST (create)
+
+  // 5. Default = POST (create)
   return 'POST';
 }
 

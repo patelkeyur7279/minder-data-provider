@@ -5,16 +5,22 @@ All notable changes to Minder Data Provider will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.2.0-beta.2] - Unreleased — ⚠️ carries the former v3.0 train
+## [2.2.0] - 2026-08-16 — ⚠️ carries the former v3.0 train, BREAKING inside a minor
 
 > **Owner decision (2026-07-22): the v3.0 branch merged into the beta line.** The
-> changes below were designed and classified as a MAJOR; they now ship in this beta.
-> Everything was re-verified post-merge: API snapshot bit-identical, full suite,
-> tree-shake guard (32 entries × Rollup+Rspack), and all 10 example consumers'
-> runtime smokes. **Recommendation for the stable cut:** because this train changes
-> two runtime behaviors vs 2.1.x (`detectMethod` verb selection and non-idempotent
-> retry policy — see below) and removes Redux, the stable release of this line
-> should be versioned **3.0.0**, not 2.2.0. Beta users: read the Breaking items.
+> changes below were designed and classified as a MAJOR; they shipped through the
+> 2.2.0-beta line and land here in this stable release. Everything was re-verified
+> post-merge: API snapshot bit-identical, full suite, tree-shake guard (32 entries ×
+> Rollup+Rspack), and all 10 example consumers' runtime smokes.
+>
+> **Owner decision (2026-08-16, settled): the stable cut ships as 2.2.0, not
+> 3.0.0.** This release carries breaking changes against 2.1.4 — Redux removal, the
+> `as const` enum reshape, the `detectMethod` verb-selection rewrite, idempotent-only
+> retries, the `useAuth`/`useAuthToken` split, and `XSSSanitizer`'s fail-closed
+> behavior — accepted inside this minor by explicit owner decision rather than held
+> for a major bump. Every one is labeled under a BREAKING heading below. Consumers
+> pinned to `^2.1.4` will receive all of these on what npm treats as a routine minor
+> upgrade — **read docs/MIGRATION_GUIDE.md before upgrading.**
 
 ### Removed (BREAKING vs 2.1.x)
 
@@ -32,8 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   consumers were not using the Redux hooks/config and need no code changes.
   Measured bundle effect (min+treeshake, `import { minder }`): our-code
   170.56 kB → 166.20 kB; full bundle 323.05 kB → 280.80 kB (react-redux/@reduxjs
-  no longer inlined). **Version not yet bumped in-repo; this is the recommended
-  classification.**
+  no longer inlined). Classified BREAKING; shipped inside the 2.2.0 minor by
+  explicit owner decision (see the note at the top of this release).
 
 ### Changed (BREAKING vs 2.1.x)
 
@@ -70,6 +76,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **minder() retries are idempotent-only**: retries now apply only to
   GET/HEAD/OPTIONS/PUT/DELETE; POST/PATCH retry only with new option
   `retryNonIdempotent: true` (duplicate-write protection).
+- **`detectMethod` no longer infers `DELETE` from a `delete` key in the payload.**
+  Previously, any object body containing a `delete` property — including ordinary
+  data such as a permissions object `{ read: true, delete: true }` — was sent as an
+  HTTP `DELETE`, silently turning a write into a destructive request. That rule is
+  removed entirely. Verb resolution is now: explicit `options.method` → `GET` when
+  `data` is `null`/`undefined` → `PUT` when the route ends in an id-shaped segment
+  or the body carries `id`/`_id` → `POST` otherwise. **Migration:** if you relied on
+  `{ delete: true }` to issue a DELETE, pass the method explicitly:
+  `minder('users/1', null, { method: 'DELETE' })`. See docs/MIGRATION_GUIDE.md.
+- **One canonical `useAuth`; the legacy token-storage hook is renamed `useAuthToken`.**
+  Two incompatible hooks shipped under the name `useAuth`: the capability-contract
+  hook (root, `/web`, `/nextjs`, `/electron`) and a legacy client-side token store
+  (`/auth`, `/native`, `/expo`). `useAuth` is now the capability-contract hook on
+  **every** subpath, returning `{ ready, error, session, signOut, getProviderClient }`.
+  The token store is exported under its honest name, `useAuthToken`, with its shape
+  unchanged. No deprecated alias is provided: the two shapes share no keys, so an
+  alias could not be made compatible. **Migration:** rename `useAuth` → `useAuthToken`
+  at any import from `/auth`, `/native`, or `/expo` that used `setToken`/`getToken`/
+  `clearAuth`/`isLoggedIn`. See docs/MIGRATION_GUIDE.md.
+- **`XSSSanitizer.sanitize()` now fails closed if DOMPurify's dynamic import hasn't
+  resolved.** DOMPurify is lazy-loaded (dynamic `import('dompurify')`) so it no
+  longer sits in the static import graph of minimal entries like `core`/`hook`.
+  Previously, if the import hadn't finished — or had failed — a browser-side
+  `sanitize()` call silently fell back to a weaker regex-based sanitizer
+  (`basicSanitize()`). It now throws a `MinderError` with code
+  `SANITIZER_UNAVAILABLE` (500) instead of ever passing DOMPurify-unsanitized data
+  through. **This can trigger** when the dynamic `import()` for `dompurify` is
+  blocked in a browser — a strict CSP without script-src coverage for the chunk, an
+  offline/flaky-network window, or a bundler that fails to code-split the chunk
+  correctly — or when `sanitize()` is called before the sanitizer's `ready()`
+  promise has settled. **Migration:** catch `SANITIZER_UNAVAILABLE` around direct
+  `XSSSanitizer` usage (`minder-data-provider/utils/security`) and decide how your
+  app should degrade, or `await sanitizer.ready()` before your first `sanitize()`
+  call. `ApiClient`'s own sanitization path already awaits `ready()` internally, so
+  this only bites direct `XSSSanitizer` callers. Server-side sanitization
+  (`typeof window === 'undefined'`) is unaffected — it keeps using
+  `basicSanitize()` unconditionally, as before. See docs/MIGRATION_GUIDE.md.
+
+### Changed (mechanism — no public API change)
+
+- **`axios` is now lazy-loaded on the `minder()`/`useMinder()` request path.** It
+  remains a runtime `dependency` (owner decision — not a peer), but the static
+  `import axios from 'axios'` is gone from `src/core/minder.ts`; the module is now
+  fetched via a cached dynamic `import('axios')` the first time a request actually
+  needs the axios transport (the edge/fetch transport path never touches it at
+  all). `minder()`/`useMinder()` signatures and behavior are unchanged — this only
+  affects when and whether axios's bundle weight is paid. See README "Bundle Cost"
+  for measured before/after numbers.
+
+### Removed
+
+- **`immer` dependency removed.** It had zero usage anywhere in `src/`. The
+  now-dead `LazyDependencyLoader.loadImmer()` method and its
+  `getRecommendations()` optimistic-updates advisory (both referenced a dependency
+  nothing imported) are removed along with it. No public API read from or exposed
+  `immer`, so no action is required.
+
+### Documentation
+
+- Added a Codecov coverage badge to the README badge row
+  ([codecov.io/gh/patelkeyur7279/minder-data-provider](https://codecov.io/gh/patelkeyur7279/minder-data-provider)).
 
 ### Fixed (MDPD workspace findings)
 
@@ -119,8 +186,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`--webpack`); expo example's Metro/Jest configs rebuilt for package-exports
   resolution and the two-React-instance symlink trap.
 
-> **At a glance.** Everything in this release is additive (semver-minor) — no
-> breaking changes; those queue behind 3.0.0 above. Three new certified auth
+> **At a glance.** Everything below is additive (semver-minor). The breaking
+> changes for this release are documented under BREAKING headings above and ship
+> in this same 2.2.0, not a separate 3.0.0. Three new certified auth
 > providers (Auth.js, Auth0, AWS Cognito — bringing the catalog to nine) plus
 > `defineProvider`, a typed factory that makes integrating an uncatalogued SDK a
 > first-class path rather than a workaround. Two new opt-in capabilities: runtime
@@ -294,8 +362,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   suite. Report-only (`continue-on-error: true` per job); an early warning if upstream
   breaks us before their stable release, not a merge gate.
 - **`minder codemod redux-removal [--dry-run] [--dir <path>]`** (semver-minor, additive CLI
-  capability, Task C): auto-migrates consumer code off the Redux integration removed in v3.0 (see
-  the [3.0.0] entry above and docs/MIGRATION_GUIDE.md). Renames `useReduxSlice()` calls to
+  capability, Task C): auto-migrates consumer code off the Redux integration removed in this
+  release (see the "Redux integration removed entirely" entry above under Removed, and
+  docs/MIGRATION_GUIDE.md). Renames `useReduxSlice()` calls to
   `useMinder()` (with a review TODO for the differing return shape) and strips the `redux` field
   from `configureMinder()`/`MinderConfig` objects automatically; `useStore()`, `ReduxConfig`, the
   Redux `<Provider>` wrapper, `useMinderContext().store`, and `DynamicLoader`'s redux members are

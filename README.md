@@ -6,6 +6,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/minder-data-provider.svg?style=flat-square)](https://www.npmjs.com/package/minder-data-provider)
 [![Bundle Size](https://img.shields.io/bundlephobia/minzip/minder-data-provider?style=flat-square)](https://bundlephobia.com/package/minder-data-provider)
 [![CI](https://img.shields.io/github/actions/workflow/status/patelkeyur7279/minder-data-provider/ci.yml?style=flat-square&label=tests)](https://github.com/patelkeyur7279/minder-data-provider/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/patelkeyur7279/minder-data-provider/branch/main/graph/badge.svg)](https://codecov.io/gh/patelkeyur7279/minder-data-provider)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](./LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-100%25-blue.svg?style=flat-square)](http://www.typescriptlang.org/)
 
@@ -22,6 +23,31 @@ need them, and not before.
 [**Read the full documentation (Wiki)**](https://github.com/patelkeyur7279/minder-data-provider/wiki)
 
 </div>
+
+---
+
+## Why not just TanStack Query?
+
+`useMinder` is built directly on `@tanstack/react-query` — Minder doesn't replace
+your cache, it wraps it. What TanStack Query alone still leaves you to build by
+hand is everything *around* the cache: provider SDK glue, mock data for local
+dev, typed routes, secret-safe server code, and per-platform storage. Honest
+comparison, no invented benchmarks:
+
+| | Plain TanStack Query | Minder |
+| --- | --- | --- |
+| Auth/payments/storage/realtime providers | Wire each SDK yourself | 9 certified integrations (Clerk, Auth0, Auth.js, Cognito, Firebase, Supabase, Stripe, Razorpay, Sentry) behind one `useAuth()`/`useCheckout()`/`useStorage()`/`useLive()` contract per capability — swap `Clerk` for `Auth0`, or for a mock, without touching the call site |
+| Local development without a provider account | Stub the SDK yourself | Every certified provider ships a zero-key mock mode, so you can build the whole UI before you have real credentials |
+| Adding a provider | Read its docs, hand-write config | `npx minder add stripe` scaffolds a `.env.example` entry, config, and (where the provider needs one) real server route files |
+| Typed API routes | Hand-write types or bolt on separate codegen | `npx minder generate --from openapi.json` generates a typed route map + interfaces straight from an OpenAPI 3.x spec |
+| Server-only secrets | Your own convention for keeping keys off the client | `secret("ENV_NAME")` resolves server-side only; any secret-shaped value that's reachable from the client throws at config time, naming the offending key |
+| Cross-platform storage | Pick and wire a storage library per platform | Built-in storage adapters ship per platform — `WebStorageAdapter` (web, Next.js, Electron) and `NativeStorageAdapter` (React Native, Expo — backed by SecureStore on Expo) — exported from each platform's own subpath |
+
+None of this is required up front — Level 0 below is `useMinder(url)` and
+nothing else. Adopt the rest only when you actually need it.
+
+For AI coding agents: [`llms.txt`](./llms.txt) has a machine-readable summary of
+the API surface — read that instead of guessing from `node_modules`.
 
 ---
 
@@ -46,6 +72,8 @@ actually need it — nothing below requires anything above it.
 ### Level 0 — zero config
 
 ```tsx
+import { useMinder } from "minder-data-provider";
+
 const { data } = useMinder("https://api.example.com/users");
 ```
 
@@ -279,18 +307,38 @@ Per-capability detail (auth, WebSocket, offline, uploads, …):
 
 ## Bundle Cost — measured, budgeted, enforced
 
-Real numbers from consumer-level bundling (entry + shared chunks, min+gzip), not
-entry-file marketing math:
+Two different numbers, on purpose — know which one applies to you. axios and dompurify
+are runtime `dependencies` (not peers), so a real bundler ships them with your app; the
+CI-enforced library budgets below deliberately exclude both to price the LIBRARY's own
+code in isolation, so the "what you actually ship" numbers underneath are the ones that
+match what a browser downloads.
 
-- `import { useMinder }` initial load: **~13 KB** (local-first storage, DevTools, and
-  provider machinery load only if and when used)
+**CI-enforced library budgets** (`npm run budgets:check`,
+[`__snapshots__/bundle-budgets.json`](./__snapshots__/bundle-budgets.json)) — the
+library's own code, min+gzip, with `peerDependencies` (React, TanStack Query, …) *and*
+axios/dompurify external. A PR that regresses these fails CI:
+
 - Feature subpaths (`/crud`, `/cache`, `/websocket`, `/upload`, `/auth`): **17–23 KB** each
 - Certified providers: **5–7.5 KB** each · `/ssr` 1.4 KB · `/logger` &lt;1 KB
 
-Every number above is enforced by CI bundle budgets (`npm run budgets:check`) — a PR
-that regresses them fails. Run **`npx minder doctor --bundle`** in your own app to see
-exactly which subpaths you import and what each costs. Pipeline overhead is benchmarked
-in CI too: `minder()` adds **~0 ms** p50 over a raw axios call (`npm run bench`).
+**What you actually ship** (measured against the built `dist/`, min+gzip, entry plus
+every statically-imported chunk, peers external, axios/dompurify **bundled**):
+
+- `import { useMinder } from 'minder-data-provider/hook'` alone — no `MinderDataProvider`
+  (e.g. routes registered via the global `configureMinder()`, which `useMinder` supports
+  standalone): **~16.5 KB**. axios is lazy-loaded on the first real request, so it costs
+  nothing here.
+- `import { minder } from 'minder-data-provider/core'` (the standalone function, same
+  lazy-axios path): **~12.8 KB**.
+- `import { MinderDataProvider, useMinder }` (the realistic full-provider import):
+  **~55 KB**. `MinderDataProvider` constructs an `ApiClient`, which still creates its
+  axios instance eagerly — that eager path is tracked separately and not yet lazy, so
+  this import pays axios's full weight (~17 KB). dompurify itself now lazy-loads
+  correctly in all three cases above (well under 1 KB either way — see CHANGELOG).
+
+Run **`npx minder doctor --bundle`** in your own app to see exactly which subpaths you
+import and what each costs. Pipeline overhead is benchmarked in CI too: `minder()` adds
+**~0 ms** p50 over a raw axios call (`npm run bench`).
 
 ## What Minder is NOT
 

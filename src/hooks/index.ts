@@ -125,8 +125,22 @@ export function useOneTouchCrud<T = any>(
   };
 }
 
-// Authentication hook
-export function useAuth() {
+/**
+ * Client-side token-storage hook (raw JWT/opaque token persistence + auth-state
+ * subscription via `AuthManager`).
+ *
+ * This is NOT the capability-contract `useAuth` exported from `src/hooks/contracts.ts`
+ * (root, `/web`, `/nextjs`, `/electron`, and — as of 2.2.0 — every subpath, including
+ * `/auth`, `/native`, `/expo`). That hook models a session backed by a registered
+ * certified provider (`{ ready, error, session, signOut, getProviderClient }`) and
+ * shares no keys with this one. `useAuthToken` was previously exported under the name
+ * `useAuth` on the `/auth`, `/native`, and `/expo` subpaths; that collision is why the
+ * rename happened — see CHANGELOG.md and docs/MIGRATION_GUIDE.md (2.2.0-beta.2 → 2.2.0).
+ *
+ * @returns Token-store state and operations: `isLoggedIn`, `setToken`, `getToken`,
+ * `clearAuth`, `isAuthenticated`, `setRefreshToken`, `getRefreshToken`.
+ */
+export function useAuthToken() {
   const { authManager } = useMinderContext();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 

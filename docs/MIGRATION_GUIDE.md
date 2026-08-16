@@ -1,14 +1,143 @@
 # Migration Guide
 
-> **Where the "v3.0" changes actually live (updated 2026-07-22):** the v3.0 train
+> **Where the "v3.0" changes actually live (updated 2026-08-16):** the v3.0 train
 > (Redux removal, `as const` enums, `sideEffects: false`, detectMethod re-contract,
 > idempotent-only retries) shipped into the **2.2.0-beta line** (beta.0 carried the
-> Redux removal; beta.2 carries the rest) by owner decision. The section headings
-> below keep the "v2.x → v3.0" names because that is the semantic migration you are
-> performing — the stable release of this train is recommended to be versioned 3.0.0.
+> Redux removal; beta.2 carries the rest, plus additional breaking changes made
+> during beta — the `useAuth`/`useAuthToken` split and `XSSSanitizer`'s fail-closed
+> behavior) by owner decision. **Settled: the stable cut is 2.2.0, not 3.0.0.** The
+> section headings below keep the "v2.x → v3.0" names because that is the semantic
+> migration you are performing, even though the version number landing it is 2.2.0.
+> If your app depends on `^2.1.4`, this is a breaking upgrade delivered as a minor
+> version bump — **start with the checklist immediately below.**
 
-This guide covers: **v2.x → v3.0** (the Redux removal, below), **2.2.0-beta.0 → 2.2.0-beta.1**,
-and the older **v1.x → v2.0** guide (further down).
+If you're upgrading a real app pinned to `^2.1.4`, read **"Upgrading from 2.1.4 to
+2.2.0"** right below — one checklist covering every breaking and default-changing
+item in this release, each linked to its full write-up. The detail sections after
+it (**2.2.0-beta.2 → 2.2.0**, **v2.x → v3.0**, **2.2.0-beta.0 → 2.2.0-beta.1**, and
+the older **v1.x → v2.0** guide further down) are the reference material the
+checklist links into — you don't need to read them front-to-back.
+
+## Upgrading from 2.1.4 to 2.2.0
+
+Everything below lands on `^2.1.4` consumers as part of a routine `npm update` —
+none of it is gated behind a major version bump. Work down the table; "Action
+needed" tells you whether your code has to change.
+
+| # | Change | Action needed | Details |
+|---|---|---|---|
+| 1 | Redux integration removed (`useStore`, `useReduxSlice`, `ReduxConfig`, the Redux `<Provider>` wrapper) | Only if you used the Redux hooks/config — try `npx minder codemod redux-removal --dry-run` | [Redux removed](#v2x--v30--redux-integration-removed-breaking) |
+| 2 | Exported "enums" (`HttpMethod`, `QueryStatus`, …) are now `as const` objects, not TS `enum`s | Only for enum-member-as-type usage or `enum` declaration merging | [Enums as const](#v2x--v30--enums-are-now-as-const-objects-breaking-for-enum-only-ts-ops) |
+| 3 | `"sideEffects": false` restored in `package.json` | None — informational; this is what makes tree-shaking honest again | [Enums as const](#v2x--v30--enums-are-now-as-const-objects-breaking-for-enum-only-ts-ops) |
+| 4 | `detectMethod`: only ID-shaped final route segments (numeric/UUID/24-hex) auto-detect `PUT`; slug/word segments now default to `POST` | Only if a slug route relied on auto-`PUT` — pass `options.method` or an `id`/`_id` field | [detectMethod re-contract](#v2x--v30--detectmethod-only-auto-detects-put-on-id-shaped-segments-breaking) |
+| 5 | `detectMethod` no longer infers `DELETE` from a `delete` key in the payload | Only if you relied on `{ delete: true }` issuing `DELETE` — pass `{ method: 'DELETE' }` explicitly | [delete-key inference removed](#detectmethod-no-longer-turns-a-delete-key-into-an-http-delete) |
+| 6 | `minder()` retries are idempotent-only by default (GET/HEAD/OPTIONS/PUT/DELETE); POST/PATCH no longer auto-retry | Pass `retryNonIdempotent: true` if you relied on POST/PATCH retrying | [Idempotent-only retries](#v2x--v30--minder-retries-are-idempotent-only-by-default-breaking) |
+| 7 | One canonical `useAuth` everywhere (capability-contract hook); the old token-storage hook is renamed `useAuthToken` | Rename `useAuth` → `useAuthToken` at any import from `/auth`, `/native`, or `/expo` using `setToken`/`getToken`/`clearAuth`/`isLoggedIn` | [useAuth / useAuthToken split](#useauth-is-one-hook-everywhere-the-token-store-is-now-useauthtoken) |
+| 8 | `XSSSanitizer.sanitize()` throws `SANITIZER_UNAVAILABLE` instead of silently degrading if DOMPurify hasn't loaded yet | Only if you call `XSSSanitizer` directly (not through `ApiClient`) — catch the error or `await sanitizer.ready()` first | [XSSSanitizer fails closed](#xsssanitizersanitize-now-fails-closed) |
+| 9 | `isAuthenticated()` fails closed on a corrupt/expired JWT-shaped token (was previously treated as valid) | Only if you intentionally stored JWT-shaped-but-invalid strings — use `getToken() !== null` instead | [Fail-closed isAuthenticated](#1-fail-closed-isauthenticated) |
+| 10 | CORS defaults no longer combine a wildcard origin with credentials (`credentials: false` by default) | Only if you relied on credentialed wildcard CORS — set an explicit origin allowlist | [CORS defaults](#2-cors-defaults) |
+| 11 | No forced CORS preflight: default request headers are just `Content-Type`/`Accept`; `withCredentials` defaults to `false` | Only if you relied on cookies being sent by default, or on security-response headers being attached to requests | [No forced CORS preflight](#3-no-forced-cors-preflight) |
+| 12 | Default query retry is 1, not 3; explicit `retries: 0` / `retryDelay: 0` now actually disable retries | Set `performance.retries: 3` to restore the old default | [Default retry changed](#4-default-retry-changed) |
+| 13 | `@tanstack/react-query`, `@tanstack/query-core`, and the optional Redux/devtools packages moved from `dependencies` to `peerDependencies` | Make sure `@tanstack/react-query` is in your own `package.json` (you almost certainly already have it) | [peerDependencies move](#5-peerdependencies-move) |
+
+None of this requires a code change if you weren't using the specific behavior
+listed — but items 4–8 are silent-until-runtime (no type error, no test failure
+unless you have coverage for the exact case), so a quick search for `useAuth`
+imports from `/auth`/`/native`/`/expo` and for `{ delete: ... }` payloads is worth
+doing even after `tsc`/tests pass clean. The sections below give the full
+"what changed / why / how to migrate" for every row.
+
+## 2.2.0-beta.2 → 2.2.0 (BREAKING)
+
+### `detectMethod` no longer turns a `delete` key into an HTTP DELETE
+
+**What changed.** A payload containing a `delete` property used to be sent as
+`DELETE`. Any ordinary object that happens to carry a `delete` field — permissions,
+capability flags, feature toggles — was therefore issued as a destructive request.
+That inference is gone.
+
+| Before | After |
+|---|---|
+| `minder('permissions', { delete: true })` → `DELETE /permissions` | → `POST /permissions` |
+| `minder('users/1', { delete: true })` → `DELETE /users/1` | → `PUT /users/1` |
+| `minder('users/1', null, { method: 'DELETE' })` → `DELETE /users/1` | unchanged |
+
+**Migration.** Search your codebase for object literals passed to `minder()` /
+`useMinder()` that contain a `delete` key. If the intent was a delete, pass it
+explicitly — `minder('users/1', null, { method: 'DELETE' })`, or register the route
+with `method: 'DELETE'`. If the `delete` key was ordinary data, you were sending
+the wrong verb and the new behavior is the fix.
+
+### `useAuth` is one hook everywhere; the token store is now `useAuthToken`
+
+**What changed.** `useAuth` resolved to two different hooks depending on which
+subpath you imported from. It is now always the capability-contract hook.
+
+| Import | Before | After |
+|---|---|---|
+| `from 'minder-data-provider'` / `/web` / `/nextjs` / `/electron` | contract hook | unchanged |
+| `from 'minder-data-provider/auth'` / `/native` / `/expo` | token store | **contract hook** |
+
+| Old (`useAuth` from `/auth`) | New |
+|---|---|
+| `const { isLoggedIn, setToken, getToken, clearAuth } = useAuth()` | `const { isLoggedIn, setToken, getToken, clearAuth } = useAuthToken()` |
+| `isAuthenticated()` | `useAuthToken().isAuthenticated()` |
+| session-based checks | `const { ready, session, signOut } = useAuth()` — requires a registered capability provider |
+
+**Migration.** In every file importing `useAuth` from `/auth`, `/native`, or
+`/expo`: if you use `setToken`/`getToken`/`clearAuth`/`isLoggedIn`, rename the
+import to `useAuthToken` — the shape is unchanged. If you want session state from
+a certified provider (Clerk, Supabase, Auth0, Cognito, Auth.js), keep `useAuth`
+and register the provider; it now returns `{ ready, error, session, signOut,
+getProviderClient }`. There is no deprecated alias: the two shapes share no
+properties, so a compatible alias was not possible.
+
+**Note.** Earlier docs showed `const { login, logout, isAuthenticated } = useAuth()`
+from `/auth`. No shipped `useAuth` ever returned that shape and those examples threw
+at runtime. `docs/USAGE_GUIDE.md` is corrected in this release.
+
+### `XSSSanitizer.sanitize()` now fails closed
+
+**What changed.** DOMPurify is lazy-loaded (a dynamic `import('dompurify')`) so it
+no longer sits in the static import graph of minimal entries like `core`/`hook`.
+Previously, if that dynamic import hadn't resolved yet — or had failed — a
+browser-side `sanitize()` call silently fell back to a weaker regex-based
+sanitizer (`basicSanitize()`), passing unsanitized-by-DOMPurify data through
+without any error. It now **throws** a `MinderError` with code
+`SANITIZER_UNAVAILABLE` (500) instead of ever doing that.
+
+**This can trigger** when the dynamic `import()` for `dompurify` is blocked in a
+browser — a strict CSP without `script-src` coverage for the chunk, an
+offline/flaky-network window, or a bundler that fails to code-split the chunk
+correctly — or when `sanitize()` is called before the sanitizer's `ready()`
+promise has settled.
+
+**Migration.** `ApiClient`'s own sanitization path already `await`s `ready()`
+internally, so this only affects code that imports and calls `XSSSanitizer`
+directly from `minder-data-provider/utils/security`:
+
+```typescript
+import { sanitizer } from "minder-data-provider/utils/security";
+
+// Before: sanitize() could silently degrade to a weaker sanitizer
+const clean = sanitizer.sanitize(untrusted);
+
+// After: either catch the fail-closed error and decide how your app degrades...
+try {
+  const clean = sanitizer.sanitize(untrusted);
+} catch (err) {
+  if (err.code === "SANITIZER_UNAVAILABLE") {
+    /* show a fallback, retry, or surface an error to the user */
+  }
+}
+
+// ...or await readiness before your first call:
+await sanitizer.ready();
+const clean = sanitizer.sanitize(untrusted);
+```
+
+Server-side sanitization (`typeof window === 'undefined'`) is unaffected — it
+keeps using `basicSanitize()` unconditionally, exactly as before.
 
 ## v2.x → v3.0 — Redux integration removed (BREAKING)
 
@@ -101,8 +230,10 @@ export enum HttpMethod {            export const HttpMethod = {
 **Why:** a non-const `enum` compiles to a runtime IIFE that mutates an object at import time — a
 module side effect that a consumer bundler treating the package as side-effect-free would drop from
 a shared chunk, leaving `HttpMethod` undefined in production (the dabd92d / MDPD-17 crash class). An
-`as const` object has no import-time mutation, which is what lets v3.0 ship `"sideEffects": false`
-honestly and reclaim tree-shaking (see the packaging note below).
+`as const` object has no import-time mutation, which is what lets this release ship
+`"sideEffects": false` honestly and reclaim tree-shaking — no consumer action
+needed; see CHANGELOG.md's "`sideEffects: false` reclaimed" entry for the measured
+before/after bundle numbers.
 
 **What still works unchanged — the common case needs NO code changes:**
 
@@ -126,6 +257,67 @@ honestly and reclaim tree-shaking (see the packaging note below).
 
 There is no codemod for this change — the fixes are localized type edits flagged by `tsc`.
 
+## v2.x → v3.0 — `detectMethod` only auto-detects PUT on ID-shaped segments (BREAKING)
+
+**What changed.** `detectMethod` picks an HTTP verb from the shape of the final
+route segment when you don't pass `options.method` explicitly. Previously *any*
+non-empty final segment was treated as an id, so `minder('users/1', data)` and
+`minder('orders', data)` both auto-detected `PUT`. Now only a segment that is
+genuinely ID-shaped — numeric, a UUID, or a 24-hex Mongo ObjectId — triggers
+`PUT`; a word/slug segment is read as a collection name, so it now sends `POST`.
+
+| Call | Before | After |
+|---|---|---|
+| `minder('users/1', data)` | `PUT` | `PUT` (unchanged — `1` is ID-shaped) |
+| `minder('users/a1b2c3d4-...-uuid', data)` | `PUT` | `PUT` (unchanged — UUID-shaped) |
+| `minder('orders', data)` | `PUT` | `POST` (`orders` is a collection name, not an id) |
+| `minder('api/orders', data)` | `PUT` | `POST` |
+
+**Why.** A create call against a plain collection route (`/api/orders`,
+`/api/users`) was silently sent as `PUT` instead of `POST` — the old heuristic
+couldn't distinguish "the last path segment is a word" from "the last path
+segment is an id." Most REST backends reject or misinterpret a `PUT` to a
+collection endpoint.
+
+**Migration.** If you have a slug/word-terminated route that genuinely needs
+`PUT` (an update-by-slug endpoint, for example), pass the method explicitly, or
+supply an `id`/`_id` field in the request body so the id-shaped-segment/body
+check still resolves to `PUT`:
+
+```typescript
+// Explicit method (works regardless of route shape):
+minder('articles/my-slug', data, { method: 'PUT' });
+
+// Or register the route with method: 'PUT' in your routes config.
+```
+
+If you were relying on the old behavior for a *create* against a slug-shaped
+collection route, no action is needed — it now correctly sends `POST`, which is
+almost always what you wanted.
+
+## v2.x → v3.0 — `minder()` retries are idempotent-only by default (BREAKING)
+
+**What changed.** `minder()`'s built-in retry logic previously applied to every
+HTTP method. It now only retries idempotent methods by default —
+`GET`/`HEAD`/`OPTIONS`/`PUT`/`DELETE`. `POST`/`PATCH` requests no longer
+auto-retry unless you opt in.
+
+**Why.** Retrying a `POST`/`PATCH` after a network blip or timeout can silently
+duplicate a write — the request may have actually succeeded server-side before
+the "failure" (e.g. the response was lost, not the request). Idempotent methods
+are safe to retry by definition; non-idempotent ones are not, unless your backend
+itself is safe against duplicate delivery.
+
+**Migration.** If your backend is idempotency-safe for POST/PATCH (e.g. it
+accepts and de-dupes an `Idempotency-Key` header, or the operation is naturally
+idempotent), opt back in per call:
+
+```typescript
+minder('orders', data, { method: 'POST', retryNonIdempotent: true });
+```
+
+No action is needed if you don't rely on POST/PATCH retrying — GET/PUT/DELETE
+retry behavior (and the retry count/backoff itself) is unchanged.
 
 ## 2.2.0-beta.0 → 2.2.0-beta.1
 

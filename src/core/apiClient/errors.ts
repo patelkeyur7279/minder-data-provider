@@ -1,4 +1,4 @@
-import axios, { AxiosError } from 'axios';
+import type { AxiosError } from 'axios';
 import type { ApiError } from '../types.js';
 import {
   MinderNetworkError,
@@ -41,8 +41,13 @@ export function sanitizeHeaders(headers: any): any {
  * so this function has no implicit `this` dependency.
  */
 export function buildApiError(error: unknown, offlineManager?: OfflineManager): ApiError {
-  // Check if it's an AxiosError
-  if (axios.isAxiosError(error)) {
+  // Check if it's an AxiosError.
+  // D3: duck-typed instead of `axios.isAxiosError(error)` so this module never
+  // statically imports axios (it must stay off the classify-only error path).
+  // Every axios adapter sets `isAxiosError: true` on the error it throws —
+  // this is exactly what `axios.isAxiosError` itself checks internally.
+  const isAxios = !!error && typeof error === 'object' && (error as { isAxiosError?: unknown }).isAxiosError === true;
+  if (isAxios) {
     const axiosError = error as AxiosError;
 
     const status = axiosError.response?.status || 0;

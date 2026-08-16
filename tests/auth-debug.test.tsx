@@ -12,7 +12,7 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MinderDataProvider } from '../src/core/MinderDataProvider';
-import { useAuth } from '../src/hooks/index';
+import { useAuthToken } from '../src/hooks/index';
 import { useMinder } from '../src/hooks/useMinder';
 import { globalAuthManager } from '../src/auth/GlobalAuthManager';
 
@@ -53,7 +53,7 @@ describe('AUTH DEBUG: setToken & isAuthenticated Flow', () => {
                 </QueryClientProvider>
             );
 
-            const { result } = renderHook(() => useAuth(), { wrapper });
+            const { result } = renderHook(() => useAuthToken(), { wrapper });
 
             console.log('🔍 BEFORE setToken:');
             console.log('  isAuthenticated:', result.current.isAuthenticated());
@@ -86,7 +86,7 @@ describe('AUTH DEBUG: setToken & isAuthenticated Flow', () => {
                 </QueryClientProvider>
             );
 
-            const { result } = renderHook(() => useAuth(), { wrapper });
+            const { result } = renderHook(() => useAuthToken(), { wrapper });
 
             // Create a valid JWT (expires in 1 hour)
             const exp = Math.floor(Date.now() / 1000) + 3600;
@@ -116,7 +116,7 @@ describe('AUTH DEBUG: setToken & isAuthenticated Flow', () => {
                 </QueryClientProvider>
             );
 
-            const { result } = renderHook(() => useAuth(), { wrapper });
+            const { result } = renderHook(() => useAuthToken(), { wrapper });
 
             // Create an expired JWT (expired 1 hour ago)
             const exp = Math.floor(Date.now() / 1000) - 3600;
@@ -220,7 +220,7 @@ describe('AUTH DEBUG: setToken & isAuthenticated Flow', () => {
                 </QueryClientProvider>
             );
 
-            const { result } = renderHook(() => useAuth(), { wrapper });
+            const { result } = renderHook(() => useAuthToken(), { wrapper });
 
             await act(async () => {
                 result.current.setToken('immediate-token');
@@ -239,8 +239,8 @@ describe('AUTH DEBUG: setToken & isAuthenticated Flow', () => {
                 </QueryClientProvider>
             );
 
-            const { result: auth1 } = renderHook(() => useAuth(), { wrapper });
-            const { result: auth2 } = renderHook(() => useAuth(), { wrapper });
+            const { result: auth1 } = renderHook(() => useAuthToken(), { wrapper });
+            const { result: auth2 } = renderHook(() => useAuthToken(), { wrapper });
 
             console.log('🔍 Before setToken:');
             console.log('  auth1.isAuthenticated:', auth1.current.isAuthenticated());
@@ -271,7 +271,7 @@ describe('AUTH DEBUG: setToken & isAuthenticated Flow', () => {
                 </QueryClientProvider>
             );
 
-            const { result } = renderHook(() => useAuth(), { wrapper });
+            const { result } = renderHook(() => useAuthToken(), { wrapper });
 
             // This is the exact scenario the user described
             await act(async () => {
@@ -309,7 +309,7 @@ describe('AUTH DEBUG: setToken & isAuthenticated Flow', () => {
                 </QueryClientProvider>
             );
 
-            const { result } = renderHook(() => useAuth(), { wrapper });
+            const { result } = renderHook(() => useAuthToken(), { wrapper });
 
             console.log('🐛 BUG CHECK (manual storage):');
             console.log('  Token in localStorage:', localStorage.getItem('test_token'));

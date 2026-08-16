@@ -360,20 +360,25 @@ describe('minder() - Universal Data Provider', () => {
       );
     });
 
-    it('should perform DELETE when data has delete indicator', async () => {
-      mockedAxios.mockResolvedValueOnce({ 
+    it('POSTs/PUTs a payload carrying a `delete` key instead of issuing DELETE (2.2.0: delete-indicator inference removed)', async () => {
+      // A `delete` key used to be treated as a destructive-intent signal on its
+      // own, so an ordinary object like a permissions payload was silently sent
+      // as HTTP DELETE. That inference is removed entirely — see
+      // src/core/minder/utils.ts detectMethod, CHANGELOG.md, docs/MIGRATION_GUIDE.md.
+      mockedAxios.mockResolvedValueOnce({
         data: {},
-        status: 204,
-        statusText: 'No Content',
+        status: 200,
+        statusText: 'OK',
         headers: {},
         config: {} as any
       });
 
+      // '/users/1' is an id-shaped route, so an ordinary body still resolves to PUT.
       await minder('/users/1', { delete: true });
 
       expect(mockedAxios).toHaveBeenCalledWith(
         expect.objectContaining({
-          method: 'DELETE',
+          method: 'PUT',
         })
       );
     });
@@ -896,7 +901,8 @@ describe('minder() - Universal Data Provider', () => {
       const updateResult = await minder('/users/1', { name: 'Jane' });
       expect(updateResult.data?.name).toBe('Jane');
       
-      // DELETE
+      // DELETE — a `delete` key in the body is no longer a destructive-intent
+      // signal (2.2.0 BREAKING); the method must be requested explicitly.
       mockedAxios.mockResolvedValueOnce({
         data: {},
         status: 204,
@@ -904,8 +910,8 @@ describe('minder() - Universal Data Provider', () => {
         headers: {},
         config: {} as any,
       });
-      
-      const deleteResult = await minder('/users/1', { delete: true });
+
+      const deleteResult = await minder('/users/1', null, { method: 'DELETE' });
       expect(deleteResult.status).toBe(204);
     });
 

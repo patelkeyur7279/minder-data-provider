@@ -1,6 +1,6 @@
 {
   "name": "minder-data-provider",
-  "version": "2.2.0-beta.2",
+  "version": "2.2.0",
   "description": "React data layer with one API from your UI to any backend or provider — built on TanStack Query, with auth, caching, and platform storage adapters for web, native, and server",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -16,6 +16,7 @@
     "!dist/**/*.map",
     "README.md",
     "LICENSE",
+    "llms.txt",
     "scripts",
     "bin",
     "src/cli"
@@ -209,8 +210,12 @@
   "keywords": [
     "react",
     "tanstack-query",
+    "react-query",
     "nextjs",
     "data-provider",
+    "data-fetching",
+    "api-client",
+    "hooks",
     "crud",
     "optimistic-updates",
     "typescript",
@@ -225,8 +230,7 @@
   "packageManager": "npm@11.6.2",
   "dependencies": {
     "axios": "^1.18.1",
-    "dompurify": "^3.4.12",
-    "immer": "10.2.0"
+    "dompurify": "^3.4.12"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
@@ -354,6 +358,7 @@
       }
     }
   },
+  "homepage": "https://github.com/patelkeyur7279/minder-data-provider#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/patelkeyur7279/minder-data-provider.git"
@@ -364,6 +369,5 @@
   "discussions": {
     "url": "https://github.com/patelkeyur7279/minder-data-provider/discussions"
   },
-  "Website": "https://mindertech.in",
   "Discord Community": "https://discord.gg/dN3eFFjmfy"
 }

@@ -77,10 +77,12 @@ export type {
   UseMinderReturn,
 } from './hooks/useMinder.js';
 
-// Capability contract hooks (provider foundation, task F-03). Explicit named re-exports here
-// intentionally shadow the legacy `useAuth` pulled in below via `export * from './hooks/index.js'`
-// (ES module semantics: local/explicit exports take precedence over star-exported names) — this
-// capability-contract `useAuth` is the one consumers of the root entry point get.
+// Capability contract hooks (provider foundation, task F-03). `useAuth` comes from
+// `contracts.js` (session backed by a registered certified provider); the client-side
+// token-storage hook pulled in below via `export * from './hooks/index.js'` is named
+// `useAuthToken`, so there is no longer a name collision to shadow here (as of 2.2.0 —
+// see CHANGELOG.md / docs/MIGRATION_GUIDE.md). The explicit re-export below is kept as
+// the canonical, unambiguous source for `useAuth` at the root entry point.
 export { useAuth, useCheckout, useStorage, useLive } from './hooks/contracts.js';
 export type {
   UseAuthReturn,

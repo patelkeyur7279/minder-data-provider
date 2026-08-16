@@ -158,11 +158,12 @@ export function OptimisticTodos() {
 
 ```typescript
 import { useState } from 'react';
-import { useAuth } from 'minder-data-provider/auth';
+import { minder } from 'minder-data-provider';
+import { useAuthToken } from 'minder-data-provider/auth';
 import { useRouter } from 'next/router';
 
 export function LoginForm() {
-  const { login, isAuthenticated } = useAuth();
+  const { setToken, isLoggedIn } = useAuthToken();
   const router = useRouter();
   const [credentials, setCredentials] = useState({
     email: '',
@@ -174,15 +175,18 @@ export function LoginForm() {
     e.preventDefault();
     setError('');
 
-    try {
-      await login(credentials);
-      router.push('/dashboard');
-    } catch (err: any) {
-      setError(err.message || 'Login failed');
+    // minder() never throws — it returns a structured MinderResult.
+    const { data, error: loginError } = await minder('auth/login', credentials);
+    if (loginError || !data) {
+      setError(loginError?.message || 'Login failed');
+      return;
     }
+
+    setToken(data.token);
+    router.push('/dashboard');
   };
 
-  if (isAuthenticated) {
+  if (isLoggedIn) {
     return <div>Already logged in. <a href="/dashboard">Go to Dashboard</a></div>;
   }
 
@@ -228,23 +232,26 @@ import { useRouter } from 'next/router';
 import { useEffect } from 'react';
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, user } = useAuth();
+  const { ready, error, session } = useAuth();
   const router = useRouter();
 
+  // `ready` is false until a registered certified provider's session lookup
+  // resolves. Once ready, no session (or an error, e.g. no provider registered
+  // at all — `error.code === 'NO_PROVIDER_FOR_CAPABILITY'`) means signed out.
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (ready && (error || !session)) {
       router.push('/login');
     }
-  }, [isAuthenticated]);
+  }, [ready, error, session]);
 
-  if (!isAuthenticated) {
+  if (!ready || error || !session) {
     return <div>Checking authentication...</div>;
   }
 
   return (
     <div>
       <header>
-        <div>Welcome, {user?.name}</div>
+        <div>Welcome, {session.userId}</div>
         <LogoutButton />
       </header>
       {children}
@@ -253,11 +260,11 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function LogoutButton() {
-  const { logout } = useAuth();
+  const { signOut } = useAuth();
   const router = useRouter();
 
   const handleLogout = async () => {
-    await logout();
+    await signOut();
     router.push('/login');
   };
 

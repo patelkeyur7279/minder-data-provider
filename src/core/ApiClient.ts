@@ -873,7 +873,10 @@ export class ApiClient {
       }
     }
 
-    // Handle different content types with sanitization
+    // Handle different content types with sanitization. D4: the sanitizer
+    // lazy-loads DOMPurify; await ready() so a browser call never races an
+    // in-flight import into the fail-closed SANITIZER_UNAVAILABLE throw.
+    await this.sanitizer?.ready();
     applyRequestBody(requestConfig, data, this.sanitizer);
 
     // Mutating request middleware: plugins may rewrite the outgoing config or
@@ -1013,6 +1016,8 @@ export class ApiClient {
     }
 
     // Body handling with sanitization, mirroring the registered-route path.
+    // D4: await ready() first — see the comment at the other call site above.
+    await this.sanitizer?.ready();
     applyRequestBody(requestConfig, data, this.sanitizer);
 
     // Mutating request middleware (same semantics as the registered-route path).

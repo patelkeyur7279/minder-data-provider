@@ -77,25 +77,6 @@ export class LazyDependencyLoader {
   }
 
   /**
-   * Load Immer only if optimistic updates enabled
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async loadImmer(): Promise<any> {
-    const hasOptimistic = Object.values(this.config.routes).some(
-      (route) => route.optimistic
-    );
-
-    if (!hasOptimistic) {
-      return null; // Don't load if not using optimistic updates
-    }
-
-    return this.loadModule('immer', async () => {
-      const immer = await import('immer');
-      return immer;
-    });
-  }
-
-  /**
    * Load DOMPurify only if sanitization enabled
    */
   async loadDOMPurify() {
@@ -206,7 +187,6 @@ export class LazyDependencyLoader {
     const deps = [
       { name: 'tanstack-query', version: '^5.59.0', size: '~40KB', requiredBy: ['Cache', 'CRUD'] },
       { name: 'axios', version: '^1.7.0', size: '~13KB', requiredBy: ['HTTP'] },
-      { name: 'immer', version: '^10.1.0', size: '~12KB', requiredBy: ['Optimistic Updates'] },
       { name: 'dompurify', version: '^3.3.0', size: '~20KB', requiredBy: ['Security'] },
     ];
 
@@ -309,19 +289,11 @@ export class LazyDependencyLoader {
    * Get loading recommendations
    */
   getRecommendations(): string[] {
+    // No recommendations currently generated (the only rule — flagging Immer
+    // loaded without optimistic updates — was removed with D5: immer is no
+    // longer a tracked dependency). Kept as a method (returning `[]`) rather
+    // than removed outright since `printPerformanceReport()` calls it.
     const recommendations: string[] = [];
-    const loaded = this.getLoadedModules();
-
-    // Check if Immer loaded but no optimistic updates
-    const hasOptimistic = Object.values(this.config.routes).some(
-      (route) => route.optimistic
-    );
-    if (loaded.find((m) => m.name === 'immer')?.loaded && !hasOptimistic) {
-      recommendations.push(
-        'Immer is loaded but no optimistic updates configured. Consider enabling optimistic updates.'
-      );
-    }
-
     return recommendations;
   }
 }

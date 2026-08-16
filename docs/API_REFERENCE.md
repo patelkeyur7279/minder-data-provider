@@ -86,13 +86,21 @@ const { data, loading, error, operations } = useMinder<T>(route, options);
 
 ### useAuth
 
-Hook for authentication management.
+Capability-contract hook for a session backed by a registered certified provider
+(Clerk, Firebase, Supabase, Auth0, Cognito, Auth.js, …). Same shape on every
+subpath, including root, `/web`, `/nextjs`, `/electron`, `/auth`, `/native`, and
+`/expo`.
 
 ```typescript
 import { useAuth } from "minder-data-provider/auth";
 
-const { isAuthenticated, login, logout, user } = useAuth();
+const { ready, error, session, signOut, getProviderClient } = useAuth();
+// ready: false until a provider is registered and its session lookup resolves
+// session: { userId: string; raw: unknown } | null
 ```
+
+If you just need raw client-side token storage (no certified provider), use
+`useAuthToken` instead — see [USAGE_GUIDE.md](./USAGE_GUIDE.md#useauthtoken--raw-client-side-token-storage).
 
 ### useCache
 

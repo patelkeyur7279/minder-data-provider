@@ -14,7 +14,7 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MinderDataProvider } from '../src/core/MinderDataProvider';
 import {
-    useAuth,
+    useAuthToken,
     useCurrentUser,
     useMediaUpload,
     useUIState
@@ -74,7 +74,7 @@ describe('🧪 Comprehensive Hook Testing', () => {
             const jwt = `header.${payload}.signature`;
 
             // Set token first
-            const { result: authResult } = renderHook(() => useAuth(), { wrapper });
+            const { result: authResult } = renderHook(() => useAuthToken(), { wrapper });
             await act(async () => {
                 authResult.current.setToken(jwt);
             });
@@ -111,7 +111,7 @@ describe('🧪 Comprehensive Hook Testing', () => {
                 </QueryClientProvider>
             );
 
-            const { result: authResult } = renderHook(() => useAuth(), { wrapper });
+            const { result: authResult } = renderHook(() => useAuthToken(), { wrapper });
             await act(async () => {
                 authResult.current.setToken('invalid-jwt-token');
             });
@@ -173,7 +173,7 @@ describe('🧪 Comprehensive Hook Testing', () => {
             })).toString('base64');
             const jwt = `header.${payload}.signature`;
 
-            const { result: authResult } = renderHook(() => useAuth(), { wrapper });
+            const { result: authResult } = renderHook(() => useAuthToken(), { wrapper });
             await act(async () => {
                 authResult.current.setToken(jwt);
             });
@@ -384,7 +384,7 @@ describe('🧪 Comprehensive Hook Testing', () => {
             );
 
             // If these don't throw, hooks are using static imports correctly
-            expect(() => renderHook(() => useAuth(), { wrapper })).not.toThrow();
+            expect(() => renderHook(() => useAuthToken(), { wrapper })).not.toThrow();
             expect(() => renderHook(() => useCurrentUser(), { wrapper })).not.toThrow();
             expect(() => renderHook(() => useMediaUpload('upload'), { wrapper })).not.toThrow();
             expect(() => renderHook(() => useUIState())).not.toThrow();
@@ -425,7 +425,7 @@ describe('🧪 Comprehensive Hook Testing', () => {
             const jwt = `header.${payload}.signature`;
 
             // Set token via auth hook
-            const { result: authResult } = renderHook(() => useAuth(), { wrapper });
+            const { result: authResult } = renderHook(() => useAuthToken(), { wrapper });
             await act(async () => {
                 authResult.current.setToken(jwt);
             });

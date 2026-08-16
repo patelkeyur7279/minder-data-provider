@@ -39,8 +39,7 @@
  * });
  */
 
-import axios from 'axios';
-import type { AxiosRequestConfig, AxiosProgressEvent } from 'axios';
+import type { AxiosRequestConfig, AxiosProgressEvent, AxiosInstance } from 'axios';
 import type {
   HttpMethod,
   MinderOptions,
@@ -74,6 +73,32 @@ export type {
 
 import { getGlobalMinderConfig } from './globalConfig.js';
 import { minderStore } from './singletons.js';
+
+// D3: axios is a runtime `dependency` (kept per owner decision — NOT a peer),
+// but it must not sit in the static import graph, since a plain
+// `import { useMinder }` consumer would otherwise pay for it even on the
+// edge/fetch transport path (isEdgeRuntime()), which never touches axios at
+// all. Cached module-level promise mirrors the existing lazy pattern used
+// below for `./responseValidation.js`. Deliberately module-scoped (not
+// per-call) so concurrent in-flight requests share one import().
+//
+// Type note: deliberately `Promise<unknown>`, not axios's own module type.
+// `import('axios')` (an expression) resolves against axios's ESM types,
+// while `typeof import('axios')` (a type query, used in a CJS-context file
+// under this project's NodeNext resolution) resolves against its *different*
+// CJS `export =` types — two incompatible shapes for the SAME runtime value,
+// so no single type both compiles here. Real type safety is applied at the
+// call site via the `AxiosInstance` cast instead. Verified directly (both
+// targets that actually execute this file — real Node ESM `import()`, the
+// tsup `.mjs` build's runtime, and ts-jest's commonjs downlevel used by every
+// test) that the resolved module carries a `.default` holding the callable
+// axios instance; the `??` fallback below covers a bare CJS `require()`
+// shape too, in case some future build target ever produces one.
+let axiosPromise: Promise<unknown> | undefined;
+function loadAxios(): Promise<unknown> {
+  axiosPromise ??= import('axios');
+  return axiosPromise;
+}
 
 // minder()'s URL-resolution bag (baseURL/headers/timeout/token) — C3. Together
 // with the routes-aware registry (getGlobalMinderConfig) this forms ONE unified
@@ -604,6 +629,8 @@ export async function minder<TData = any>(
           // A plugin already produced a synthetic response — skip the transport
           // entirely (responseData/status/headers were set during interception).
         } else if (!useFetch) {
+          const axiosModule = await loadAxios();
+          const axios = (axiosModule as { default?: AxiosInstance }).default ?? (axiosModule as AxiosInstance);
           const response = await axios(config);
           responseData = response.data;
           responseStatus = response.status;

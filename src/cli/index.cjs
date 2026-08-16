@@ -83,7 +83,7 @@ function isCertifiedProvider(name) {
 
 /**
  * Static key-source registry — where to get API keys for each provider.
- * All six roadmap providers below are CERTIFIED (see the CERTIFIED array in
+ * All nine roadmap providers below are CERTIFIED (see the CERTIFIED array in
  * scripts/generate-catalog.js and docs/providers/CATALOG.md). `status` here
  * is a hand-maintained, human-readable label for `minder init`'s printed
  * table — kept in sync with reality by hand, unlike cmdAdd's own
@@ -121,6 +121,21 @@ const KEY_SOURCE_REGISTRY = [
     name: 'Sentry',
     keysUrl: 'https://sentry.io/settings/',
     status: 'certified — minder add sentry',
+  },
+  {
+    name: 'Auth0',
+    keysUrl: 'https://manage.auth0.com/',
+    status: 'certified — minder add auth0',
+  },
+  {
+    name: 'Auth.js',
+    keysUrl: 'https://authjs.dev/getting-started/installation',
+    status: 'certified — minder add authjs',
+  },
+  {
+    name: 'Cognito',
+    keysUrl: 'https://console.aws.amazon.com/cognito/home',
+    status: 'certified — minder add cognito',
   },
 ];
 
@@ -320,6 +335,93 @@ const SENTRY_CONFIG_SNIPPET = `// Add this to your minder.config.ts "providers" 
 // }
 `;
 
+const AUTH0_CONFIG_SNIPPET = `// Add this to your minder.config.ts "providers" object:
+//
+// providers: {
+//   auth0: {
+//     domain: process.env.NEXT_PUBLIC_AUTH0_DOMAIN!, // e.g. 'your-tenant.us.auth0.com' — PUBLIC, not a secret
+//     clientId: process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID!,
+//     audience: process.env.NEXT_PUBLIC_AUTH0_AUDIENCE, // optional — API audience
+//     redirectUri: process.env.NEXT_PUBLIC_AUTH0_REDIRECT_URI, // optional
+//     mock: true, // flip to false once you've added real Auth0 keys
+//   },
+// }
+`;
+
+// Next.js App Router route handler scaffolded by `minder add auth0`. Server
+// boundary: imports from 'minder-data-provider/providers/auth0' (the
+// zero-dependency session-verify handler factory) — Auth0 SPA/PKCE clients
+// have no secret at all, so there is nothing to resolve via `secret(...)`
+// here; the handler forwards the caller's bearer token straight to Auth0's
+// own public /userinfo endpoint.
+const AUTH0_VERIFY_ROUTE = `import { createAuth0SessionHandler } from 'minder-data-provider/providers/auth0';
+
+const handler = createAuth0SessionHandler({
+  domain: process.env.NEXT_PUBLIC_AUTH0_DOMAIN || '',
+});
+
+export async function GET(req: Request) {
+  return handler(req);
+}
+`;
+
+const AUTHJS_CONFIG_SNIPPET = `// Add this to your minder.config.ts "providers" object:
+//
+// providers: {
+//   authjs: {
+//     basePath: '/api/auth', // Auth.js's own default route base path — change only if you customized it
+//     mock: true, // flip to false once your app's own auth.ts (AUTH_SECRET, providers) is wired up
+//   },
+// }
+`;
+
+// Next.js App Router route handler scaffolded by `minder add authjs`. Unlike
+// the other providers, Auth.js keeps its own secret (AUTH_SECRET) entirely
+// inside the app's own auth.ts — this library never imports that config
+// directly. The `sessionResolver` DI seam bridges the two; the TODO import
+// below is a placeholder the user must point at their real auth.ts.
+const AUTHJS_VERIFY_ROUTE = `// TODO: point this at your OWN auth.ts (built with next-auth / @auth/core).
+// This library never imports your auth config directly — sessionResolver is
+// the bridge (see minder-data-provider/providers/authjs's README).
+import { auth } from '@/auth';
+import { createAuthjsSessionHandler } from 'minder-data-provider/providers/authjs';
+
+const handler = createAuthjsSessionHandler({ sessionResolver: () => auth() });
+
+export async function GET(req: Request) {
+  return handler(req);
+}
+`;
+
+const COGNITO_CONFIG_SNIPPET = `// Add this to your minder.config.ts "providers" object:
+//
+// providers: {
+//   cognito: {
+//     userPoolId: process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID!, // e.g. 'us-east-1_AbCdEfGhI' — PUBLIC, not a secret
+//     userPoolClientId: process.env.NEXT_PUBLIC_COGNITO_USER_POOL_CLIENT_ID!, // MUST be a public client (no secret)
+//     region: process.env.NEXT_PUBLIC_COGNITO_REGION, // optional — inferred from userPoolId when omitted
+//     mock: true, // flip to false once you've added real Cognito keys
+//   },
+// }
+`;
+
+// Next.js App Router route handler scaffolded by `minder add cognito`. Server
+// boundary: imports from 'minder-data-provider/providers/cognito' (the
+// zero-dependency session-verify handler factory) — the Cognito App Client
+// this adapter targets has no secret at all, so there is nothing to resolve
+// via `secret(...)` here; the handler forwards the caller's bearer token
+// straight to the user pool's own OAuth2 /oauth2/userInfo endpoint.
+const COGNITO_VERIFY_ROUTE = `import { createCognitoSessionHandler } from 'minder-data-provider/providers/cognito';
+
+const handler = createCognitoSessionHandler({
+  userPoolDomain: process.env.NEXT_PUBLIC_COGNITO_USER_POOL_DOMAIN || '',
+});
+
+export async function GET(req: Request) {
+  return handler(req);
+}
+`;
+
 const PROVIDERS = [
   {
     name: 'supabase',
@@ -389,6 +491,52 @@ const PROVIDERS = [
       'Sentry is a client observability plugin — no server route or secret key. The DSN is public. ' +
       'Call registerSentryProvider({ dsn }) in your app entry.',
   },
+  {
+    name: 'auth0',
+    status: 'certified',
+    // Auth0 SPA/PKCE clients carry no secret at all (see manifest.json's
+    // empty `config.serverOnly`) — domain/clientId are public identifiers,
+    // so there is nothing here for `minder doctor`/env-example scaffolding
+    // to track, same reasoning as sentry's empty envVars above.
+    envVars: [],
+    configSnippet: AUTH0_CONFIG_SNIPPET,
+    keysUrl: 'https://manage.auth0.com/',
+    scaffoldFiles: [{ path: 'app/api/minder/auth0/verify/route.ts', content: AUTH0_VERIFY_ROUTE }],
+    extraNote:
+      'Auth0 requires no server secret — the scaffolded route calls the public /userinfo endpoint ' +
+      'on your Auth0 domain directly. Install the peer dependency: npm i @auth0/auth0-spa-js.',
+  },
+  {
+    name: 'authjs',
+    status: 'certified',
+    // Auth.js keeps its own secret (AUTH_SECRET) entirely inside the app's
+    // own auth.ts — it never passes through Minder config at all, so there
+    // is nothing here for env-example scaffolding to track either.
+    envVars: [],
+    configSnippet: AUTHJS_CONFIG_SNIPPET,
+    keysUrl: 'https://authjs.dev/getting-started/installation',
+    scaffoldFiles: [{ path: 'app/api/minder/authjs/verify/route.ts', content: AUTHJS_VERIFY_ROUTE }],
+    extraNote:
+      'Auth.js requires no config-level secret either — session verification bridges your own ' +
+      'auth() (built with next-auth in your own auth.ts). Edit the sessionResolver in the ' +
+      'scaffolded route to point at your own auth() before use.',
+  },
+  {
+    name: 'cognito',
+    status: 'certified',
+    // The Cognito App Client this adapter targets MUST be a public client
+    // (no client secret generated) — userPoolId/userPoolClientId are public
+    // identifiers, so there is nothing here for env-example scaffolding to
+    // track, same reasoning as auth0's empty envVars above.
+    envVars: [],
+    configSnippet: COGNITO_CONFIG_SNIPPET,
+    keysUrl: 'https://console.aws.amazon.com/cognito/home',
+    scaffoldFiles: [{ path: 'app/api/minder/cognito/verify/route.ts', content: COGNITO_VERIFY_ROUTE }],
+    extraNote:
+      'Cognito requires no server secret — the scaffolded route calls the OAuth2 /oauth2/userInfo ' +
+      'endpoint on your user pool Hosted UI domain directly (configure one first: Cognito console ' +
+      '-> App integration -> Domain). Install the peer dependency: npm i aws-amplify.',
+  },
 ];
 
 const ENV_EXAMPLE_SECTION_MARKER = '# minder providers';
@@ -432,11 +580,14 @@ Commands:
 
   add <provider>             Scaffold a provider integration. Currently
                              supports "supabase", "stripe", "clerk",
-                             "firebase", "razorpay", and "sentry" — all six
-                             CERTIFIED (see ${CATALOG_DOC}). stripe, clerk,
-                             firebase, and razorpay also scaffold Next.js App
-                             Router route handlers; sentry is a client
-                             plugin with no server route. Every other
+                             "firebase", "razorpay", "sentry", "auth0",
+                             "authjs", and "cognito" — all nine CERTIFIED
+                             (see ${CATALOG_DOC}). Every provider except
+                             supabase and sentry also scaffolds a Next.js
+                             App Router route handler (auth0, authjs, and
+                             cognito each get a session-verify route);
+                             sentry is a client plugin with no server
+                             route, and supabase needs none. Every other
                              provider name exits 1 with the list of
                              registered providers.
 
@@ -729,7 +880,8 @@ function cmdInit(argv, ctx) {
 
 /**
  * Scaffold a registered provider (currently Supabase, Stripe, Clerk,
- * Firebase, Razorpay, and Sentry — see `PROVIDERS`, all CERTIFIED today).
+ * Firebase, Razorpay, Sentry, Auth0, Auth.js, and Cognito — see
+ * `PROVIDERS`, all CERTIFIED today).
  * Unknown provider names (everything not in `PROVIDERS`) exit 1 with an
  * "Unknown provider" error that lists the registered names — derived from
  * `PROVIDERS`, so the list can't go stale — and points at the catalog

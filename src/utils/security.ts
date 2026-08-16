@@ -4,10 +4,23 @@
  */
 
 import { Logger, LogLevel } from './Logger.js';
-import DOMPurify from 'dompurify';
 import type { SecurityConfig } from '../core/types.js';
+import type { DOMPurify as DOMPurifyInstance } from 'dompurify';
+import { MinderError } from '../errors/index.js';
 
 const logger = /*#__PURE__*/ new Logger('SecurityUtils', { level: LogLevel.WARN });
+
+// D4: DOMPurify stays a runtime `dependency` (owner decision — NOT a peer),
+// but it must not sit in the static import graph of `core`/`hook`, which are
+// marketed as minimal entries. Cached module-level promise mirrors the
+// `loadAxios` pattern (and its documented `.default` type gap) in
+// `src/core/minder.ts`: `Promise<unknown>` here, with the concrete
+// `DOMPurifyInstance` cast applied only where the module is actually used.
+let domPurifyPromise: Promise<unknown> | undefined;
+function loadDOMPurify(): Promise<unknown> {
+  domPurifyPromise ??= import('dompurify');
+  return domPurifyPromise;
+}
 
 /**
  * Generate cryptographically secure CSRF token
@@ -116,10 +129,24 @@ export class CSRFTokenManager {
 }
 
 /**
- * Advanced XSS sanitization using DOMPurify
+ * Advanced XSS sanitization using DOMPurify.
+ *
+ * D4: DOMPurify loads lazily (see `loadDOMPurify` above). `sanitize()` stays
+ * SYNCHRONOUS — its callers (`sanitizeRequestData`/`applyRequestBody` in
+ * `apiClient/upload.ts`) are synchronous — so it cannot `await` the import
+ * inline. Instead the constructor kicks the load off immediately, exposes
+ * `ready()` for callers that can await it (ApiClient does, right before
+ * sanitizing a request body), and `sanitize()` consults the already-resolved
+ * result. FAIL CLOSED (P2 invariant): in a browser, if DOMPurify has not
+ * finished loading — or failed to load — `sanitize()` THROWS rather than
+ * silently falling back to the weaker regex-based `basicSanitize()`. The
+ * server-side path (`typeof window === 'undefined'`) is unaffected and keeps
+ * using `basicSanitize()` unconditionally, exactly as before.
  */
 export class XSSSanitizer {
   private config: any;
+  private domPurify?: DOMPurifyInstance;
+  private readonly readyPromise: Promise<void>;
 
   constructor(sanitizationConfig?: SecurityConfig['sanitization']) {
     if (typeof sanitizationConfig === 'object' && sanitizationConfig.enabled) {
@@ -135,13 +162,54 @@ export class XSSSanitizer {
         ALLOW_DATA_ATTR: false,
       };
     }
+
+    // Only the browser path needs DOMPurify at all — don't trigger the
+    // dynamic import from a server-side construction.
+    this.readyPromise = typeof window !== 'undefined'
+      ? loadDOMPurify()
+          .then((mod) => {
+            // See the `Promise<unknown>` note on `loadDOMPurify` above: the
+            // resolved module may be `.default`-wrapped (real Node ESM /
+            // ts-jest's commonjs downlevel) or, defensively, the raw CJS
+            // export value itself.
+            this.domPurify =
+              (mod as { default?: DOMPurifyInstance }).default ?? (mod as DOMPurifyInstance);
+          })
+          .catch((err) => {
+            logger.error('Failed to load DOMPurify — sanitize() will throw SANITIZER_UNAVAILABLE until this is fixed', err);
+          })
+      : Promise.resolve();
+  }
+
+  /**
+   * Resolves once the DOMPurify dynamic import has settled (success or
+   * failure). No-op on the server. Callers that construct an XSSSanitizer and
+   * can `await` before their first `sanitize()` call — like `ApiClient` —
+   * should await this so a slow-but-successful import isn't mistaken for a
+   * failed one.
+   */
+  ready(): Promise<void> {
+    return this.readyPromise;
   }
 
   sanitize(dirty: any): any {
     if (typeof dirty === 'string') {
-      // Use DOMPurify if available (browser environment)
-      if (typeof window !== 'undefined' && DOMPurify) {
-        return DOMPurify.sanitize(dirty, this.config);
+      if (typeof window !== 'undefined') {
+        if (this.domPurify) {
+          return this.domPurify.sanitize(dirty, this.config);
+        }
+
+        // Fail closed: never silently fall through to basicSanitize() in a
+        // browser. Either the import hasn't resolved yet (caller didn't
+        // await `ready()`) or it rejected (e.g. blocked by a strict CSP) —
+        // both are treated the same: refuse to pass data through unsanitized.
+        throw new MinderError(
+          'XSS sanitizer unavailable: the DOMPurify dynamic import has not resolved (or failed to load). ' +
+          'Await sanitizer.ready() before sanitizing, and check for a CSP or network condition blocking ' +
+          'the import of "dompurify".',
+          'SANITIZER_UNAVAILABLE',
+          500
+        );
       }
 
       // Fallback: basic sanitization for Node.js environments

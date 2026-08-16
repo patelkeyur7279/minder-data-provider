@@ -12,8 +12,9 @@ export declare class MinderResponseValidationError extends MinderError {
 export { configureMinder } from './config/index.js';
 export { _ as InferInput, _ as InferOutput, _ as StandardSchemaV1 } from './types-HASH.js';
 export { _ as minder } from './minder-HASH.js';
-export { _ as MinderAuthError, _ as MinderConfigError, _ as MinderNetworkError, _ as MinderOptions, _ as MinderRequestError, _ as MinderResult, _ as MinderTimeoutError, _ as MinderValidationError, _ as UploadProgress, _ as getErrorCode, _ as getErrorMessage, _ as isMinderError } from './MinderError-HASH.js';
+export { _ as MinderAuthError, _ as MinderConfigError, _ as MinderNetworkError, _ as MinderTimeoutError, _ as MinderValidationError, _ as getErrorCode, _ as getErrorMessage, _ as isMinderError } from './MinderError-HASH.js';
 export { _ as MinderDataProvider, _ as useMinder, _ as useMinderContext } from './index-HASH.js';
+export { _ as MinderOptions, _ as MinderRequestError, _ as MinderResult, _ as UploadProgress } from './types-HASH.js';
 // #endregion
 
 // #region Other

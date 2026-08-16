@@ -25,13 +25,12 @@ const checks = [
   {
     name: "Conditional loading",
     test: () => {
-      const hasOptimisticCondition = loaderSource.includes(
-        "if (!hasOptimistic)"
-      );
-      const hasSanitizationCondition = loaderSource.includes(
+      // D5: immer (and its `hasOptimistic` guard) was removed as a dead,
+      // zero-usage dependency. DOMPurify's sanitization gate is now the only
+      // remaining conditionally-loaded dependency.
+      return loaderSource.includes(
         "if (!this.config.security?.sanitization)"
       );
-      return hasOptimisticCondition && hasSanitizationCondition;
     },
     description: "Dependencies only load when config requires them",
   },
