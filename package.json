@@ -175,11 +175,12 @@
     }
   },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && node scripts/downlevel-cjs-dynamic-import.mjs",
     "dev": "tsup --watch",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "test:packaging": "jest tests/packaging --ci --testPathIgnorePatterns=/node_modules/",
     "lint": "eslint src --ext .ts,.tsx --fix",
     "lint:check": "eslint src --ext .ts,.tsx",
     "type-check": "tsc --noEmit",
@@ -194,7 +195,7 @@
     "check-versions": "node scripts/check-peer-deps.js",
     "fix-versions": "node scripts/fix-peer-deps.js",
     "certify:provider": "node scripts/certify-provider.js",
-    "release:check": "npm run clean && npm run build && npm run test && npm run verify-build && npm pack --dry-run && npm run verify:treeshake",
+    "release:check": "npm run clean && npm run build && npm run test && npm run test:packaging && npm run verify-build && npm pack --dry-run && npm run verify:treeshake",
     "release:preflight": "node scripts/release-preflight.js",
     "release:verify": "node scripts/release-preflight.js --verify",
     "verify:treeshake": "node scripts/verify-consumer-treeshake.mjs",
@@ -324,7 +325,8 @@
     "testPathIgnorePatterns": [
       "/node_modules/",
       "/dist/",
-      "/examples/"
+      "/examples/",
+      "/tests/packaging/"
     ],
     "preset": "ts-jest",
     "moduleNameMapper": {

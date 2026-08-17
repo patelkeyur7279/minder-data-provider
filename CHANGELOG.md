@@ -125,6 +125,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   affects when and whether axios's bundle weight is paid. See README "Bundle Cost"
   for measured before/after numbers.
 
+- **The CommonJS build now downlevels dynamic imports.** Making axios and
+  DOMPurify lazy introduced literal ESM `import()` expressions into the CJS
+  artifact (`dist/**/*.js`), because tsup's tree-shaking pass emits through
+  Rollup, whose `dynamicImportInCjs` default preserves them. That is fatal in any
+  CJS VM that has not opted into `--experimental-vm-modules` — notably `jest-expo`,
+  the standard Expo/React Native test runner, which failed with *"A dynamic import
+  callback was invoked without --experimental-vm-modules"*. A post-build step
+  (`scripts/downlevel-cjs-dynamic-import.mjs`) now lowers those to
+  `Promise.resolve().then(() => require(...))` in the CJS output only. Laziness is
+  unchanged in both formats, and the ESM artifact (`dist/**/*.mjs`) — which every
+  bundler and edge runtime resolves — is untouched, as `verify:treeshake` and
+  `budgets:check` confirm with unchanged numbers. Consumers who `require()` this
+  package, or test it under Jest, no longer need any flag.
+
 ### Removed
 
 - **`immer` dependency removed.** It had zero usage anywhere in `src/`. The

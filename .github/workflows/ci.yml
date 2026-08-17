@@ -46,6 +46,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Run packaging tests (dist-artifact invariants)
+        run: npm run test:packaging
+
       - name: Verify public API surface unchanged
         run: npm run verify:api
 
