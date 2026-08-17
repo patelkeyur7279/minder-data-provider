@@ -233,7 +233,7 @@
     "dompurify": "^3.4.12"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.1",
+    "@eslint/js": "^10.0.1",
     "@rollup/plugin-node-resolve": "^15.3.1",
     "@rspack/core": "^2.1.4",
     "@tanstack/query-core": "^5.90.6",
