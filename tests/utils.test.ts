@@ -438,8 +438,12 @@ describe('Security Utilities', () => {
   describe('XSSSanitizer', () => {
     const { XSSSanitizer } = require('../src/utils/security.js');
 
-    it('should sanitize malicious script tags', () => {
+    it('should sanitize malicious script tags', async () => {
       const sanitizer = new XSSSanitizer();
+      // D4: DOMPurify now loads lazily and sanitize() fails closed until the
+      // load settles — await ready() so this test exercises the real
+      // DOMPurify path (jsdom has `window`) instead of throwing.
+      await sanitizer.ready();
       const dirty = '<script>alert("XSS")</script>Hello';
       const clean = sanitizer.sanitize(dirty);
       
@@ -447,32 +451,36 @@ describe('Security Utilities', () => {
       expect(clean).not.toContain('alert');
     });
 
-    it('should sanitize iframe tags', () => {
+    it('should sanitize iframe tags', async () => {
       const sanitizer = new XSSSanitizer();
+      await sanitizer.ready();
       const dirty = '<iframe src="evil.com"></iframe>Content';
       const clean = sanitizer.sanitize(dirty);
       
       expect(clean).not.toContain('<iframe');
     });
 
-    it('should sanitize javascript: protocol', () => {
+    it('should sanitize javascript: protocol', async () => {
       const sanitizer = new XSSSanitizer();
+      await sanitizer.ready();
       const dirty = '<a href="javascript:alert(1)">Click</a>';
       const clean = sanitizer.sanitize(dirty);
       
       expect(clean).not.toContain('javascript:');
     });
 
-    it('should sanitize event handlers', () => {
+    it('should sanitize event handlers', async () => {
       const sanitizer = new XSSSanitizer();
+      await sanitizer.ready();
       const dirty = '<div onclick="alert(1)">Click</div>';
       const clean = sanitizer.sanitize(dirty);
       
       expect(clean).not.toContain('onclick=');
     });
 
-    it('should sanitize objects recursively', () => {
+    it('should sanitize objects recursively', async () => {
       const sanitizer = new XSSSanitizer();
+      await sanitizer.ready();
       const dirty = {
         name: '<script>alert("XSS")</script>John',
         bio: '<iframe src="evil.com"></iframe>Bio',
@@ -488,8 +496,9 @@ describe('Security Utilities', () => {
       expect(clean.nested.value).not.toContain('javascript:');
     });
 
-    it('should sanitize arrays', () => {
+    it('should sanitize arrays', async () => {
       const sanitizer = new XSSSanitizer();
+      await sanitizer.ready();
       const dirty = [
         '<script>alert(1)</script>',
         'Safe content',
@@ -503,8 +512,9 @@ describe('Security Utilities', () => {
       expect(clean[2]).not.toContain('<iframe>');
     });
 
-    it('should preserve safe content', () => {
+    it('should preserve safe content', async () => {
       const sanitizer = new XSSSanitizer();
+      await sanitizer.ready();
       const safe = 'This is <b>bold</b> and <i>italic</i> text';
       const result = sanitizer.sanitize(safe);
       
@@ -521,12 +531,13 @@ describe('Security Utilities', () => {
       expect(sanitizer.sanitize(undefined)).toBe(undefined);
     });
 
-    it('should use custom configuration', () => {
+    it('should use custom configuration', async () => {
       const sanitizer = new XSSSanitizer({
         enabled: true,
         allowedTags: ['b', 'i'],
         allowedAttributes: { a: ['href'] },
       });
+      await sanitizer.ready();
 
       const input = '<b>Bold</b><script>alert(1)</script>';
       const result = sanitizer.sanitize(input);

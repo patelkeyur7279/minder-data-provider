@@ -1,5 +1,674 @@
 # Migration Guide
 
+> **Where the "v3.0" changes actually live (updated 2026-08-16):** the v3.0 train
+> (Redux removal, `as const` enums, `sideEffects: false`, detectMethod re-contract,
+> idempotent-only retries) shipped into the **2.2.0-beta line** (beta.0 carried the
+> Redux removal; beta.2 carries the rest, plus additional breaking changes made
+> during beta — the `useAuth`/`useAuthToken` split and `XSSSanitizer`'s fail-closed
+> behavior) by owner decision. **Settled: the stable cut is 2.2.0, not 3.0.0.** The
+> section headings below keep the "v2.x → v3.0" names because that is the semantic
+> migration you are performing, even though the version number landing it is 2.2.0.
+> If your app depends on `^2.1.4`, this is a breaking upgrade delivered as a minor
+> version bump — **start with the checklist immediately below.**
+
+If you're upgrading a real app pinned to `^2.1.4`, read **"Upgrading from 2.1.4 to
+2.2.0"** right below — one checklist covering every breaking and default-changing
+item in this release, each linked to its full write-up. The detail sections after
+it (**2.2.0-beta.2 → 2.2.0**, **v2.x → v3.0**, **2.2.0-beta.0 → 2.2.0-beta.1**, and
+the older **v1.x → v2.0** guide further down) are the reference material the
+checklist links into — you don't need to read them front-to-back.
+
+## Upgrading from 2.1.4 to 2.2.0
+
+Everything below lands on `^2.1.4` consumers as part of a routine `npm update` —
+none of it is gated behind a major version bump. Work down the table; "Action
+needed" tells you whether your code has to change.
+
+| # | Change | Action needed | Details |
+|---|---|---|---|
+| 1 | Redux integration removed (`useStore`, `useReduxSlice`, `ReduxConfig`, the Redux `<Provider>` wrapper) | Only if you used the Redux hooks/config — try `npx minder codemod redux-removal --dry-run` | [Redux removed](#v2x--v30--redux-integration-removed-breaking) |
+| 2 | Exported "enums" (`HttpMethod`, `QueryStatus`, …) are now `as const` objects, not TS `enum`s | Only for enum-member-as-type usage or `enum` declaration merging | [Enums as const](#v2x--v30--enums-are-now-as-const-objects-breaking-for-enum-only-ts-ops) |
+| 3 | `"sideEffects": false` restored in `package.json` | None — informational; this is what makes tree-shaking honest again | [Enums as const](#v2x--v30--enums-are-now-as-const-objects-breaking-for-enum-only-ts-ops) |
+| 4 | `detectMethod`: only ID-shaped final route segments (numeric/UUID/24-hex) auto-detect `PUT`; slug/word segments now default to `POST` | Only if a slug route relied on auto-`PUT` — pass `options.method` or an `id`/`_id` field | [detectMethod re-contract](#v2x--v30--detectmethod-only-auto-detects-put-on-id-shaped-segments-breaking) |
+| 5 | `detectMethod` no longer infers `DELETE` from a `delete` key in the payload | Only if you relied on `{ delete: true }` issuing `DELETE` — pass `{ method: 'DELETE' }` explicitly | [delete-key inference removed](#detectmethod-no-longer-turns-a-delete-key-into-an-http-delete) |
+| 6 | `minder()` retries are idempotent-only by default (GET/HEAD/OPTIONS/PUT/DELETE); POST/PATCH no longer auto-retry | Pass `retryNonIdempotent: true` if you relied on POST/PATCH retrying | [Idempotent-only retries](#v2x--v30--minder-retries-are-idempotent-only-by-default-breaking) |
+| 7 | One canonical `useAuth` everywhere (capability-contract hook); the old token-storage hook is renamed `useAuthToken` | Rename `useAuth` → `useAuthToken` at any import from `/auth`, `/native`, or `/expo` using `setToken`/`getToken`/`clearAuth`/`isLoggedIn` | [useAuth / useAuthToken split](#useauth-is-one-hook-everywhere-the-token-store-is-now-useauthtoken) |
+| 8 | `XSSSanitizer.sanitize()` throws `SANITIZER_UNAVAILABLE` instead of silently degrading if DOMPurify hasn't loaded yet | Only if you call `XSSSanitizer` directly (not through `ApiClient`) — catch the error or `await sanitizer.ready()` first | [XSSSanitizer fails closed](#xsssanitizersanitize-now-fails-closed) |
+| 9 | `isAuthenticated()` fails closed on a corrupt/expired JWT-shaped token (was previously treated as valid) | Only if you intentionally stored JWT-shaped-but-invalid strings — use `getToken() !== null` instead | [Fail-closed isAuthenticated](#1-fail-closed-isauthenticated) |
+| 10 | CORS defaults no longer combine a wildcard origin with credentials (`credentials: false` by default) | Only if you relied on credentialed wildcard CORS — set an explicit origin allowlist | [CORS defaults](#2-cors-defaults) |
+| 11 | No forced CORS preflight: default request headers are just `Content-Type`/`Accept`; `withCredentials` defaults to `false` | Only if you relied on cookies being sent by default, or on security-response headers being attached to requests | [No forced CORS preflight](#3-no-forced-cors-preflight) |
+| 12 | Default query retry is 1, not 3; explicit `retries: 0` / `retryDelay: 0` now actually disable retries | Set `performance.retries: 3` to restore the old default | [Default retry changed](#4-default-retry-changed) |
+| 13 | `@tanstack/react-query`, `@tanstack/query-core`, and the optional Redux/devtools packages moved from `dependencies` to `peerDependencies` | Make sure `@tanstack/react-query` is in your own `package.json` (you almost certainly already have it) | [peerDependencies move](#5-peerdependencies-move) |
+
+None of this requires a code change if you weren't using the specific behavior
+listed — but items 4–8 are silent-until-runtime (no type error, no test failure
+unless you have coverage for the exact case), so a quick search for `useAuth`
+imports from `/auth`/`/native`/`/expo` and for `{ delete: ... }` payloads is worth
+doing even after `tsc`/tests pass clean. The sections below give the full
+"what changed / why / how to migrate" for every row.
+
+## 2.2.0-beta.2 → 2.2.0 (BREAKING)
+
+### `detectMethod` no longer turns a `delete` key into an HTTP DELETE
+
+**What changed.** A payload containing a `delete` property used to be sent as
+`DELETE`. Any ordinary object that happens to carry a `delete` field — permissions,
+capability flags, feature toggles — was therefore issued as a destructive request.
+That inference is gone.
+
+| Before | After |
+|---|---|
+| `minder('permissions', { delete: true })` → `DELETE /permissions` | → `POST /permissions` |
+| `minder('users/1', { delete: true })` → `DELETE /users/1` | → `PUT /users/1` |
+| `minder('users/1', null, { method: 'DELETE' })` → `DELETE /users/1` | unchanged |
+
+**Migration.** Search your codebase for object literals passed to `minder()` /
+`useMinder()` that contain a `delete` key. If the intent was a delete, pass it
+explicitly — `minder('users/1', null, { method: 'DELETE' })`, or register the route
+with `method: 'DELETE'`. If the `delete` key was ordinary data, you were sending
+the wrong verb and the new behavior is the fix.
+
+### `useAuth` is one hook everywhere; the token store is now `useAuthToken`
+
+**What changed.** `useAuth` resolved to two different hooks depending on which
+subpath you imported from. It is now always the capability-contract hook.
+
+| Import | Before | After |
+|---|---|---|
+| `from 'minder-data-provider'` / `/web` / `/nextjs` / `/electron` | contract hook | unchanged |
+| `from 'minder-data-provider/auth'` / `/native` / `/expo` | token store | **contract hook** |
+
+| Old (`useAuth` from `/auth`) | New |
+|---|---|
+| `const { isLoggedIn, setToken, getToken, clearAuth } = useAuth()` | `const { isLoggedIn, setToken, getToken, clearAuth } = useAuthToken()` |
+| `isAuthenticated()` | `useAuthToken().isAuthenticated()` |
+| session-based checks | `const { ready, session, signOut } = useAuth()` — requires a registered capability provider |
+
+**Migration.** In every file importing `useAuth` from `/auth`, `/native`, or
+`/expo`: if you use `setToken`/`getToken`/`clearAuth`/`isLoggedIn`, rename the
+import to `useAuthToken` — the shape is unchanged. If you want session state from
+a certified provider (Clerk, Supabase, Auth0, Cognito, Auth.js), keep `useAuth`
+and register the provider; it now returns `{ ready, error, session, signOut,
+getProviderClient }`. There is no deprecated alias: the two shapes share no
+properties, so a compatible alias was not possible.
+
+**Note.** Earlier docs showed `const { login, logout, isAuthenticated } = useAuth()`
+from `/auth`. No shipped `useAuth` ever returned that shape and those examples threw
+at runtime. `docs/USAGE_GUIDE.md` is corrected in this release.
+
+### `XSSSanitizer.sanitize()` now fails closed
+
+**What changed.** DOMPurify is lazy-loaded (a dynamic `import('dompurify')`) so it
+no longer sits in the static import graph of minimal entries like `core`/`hook`.
+Previously, if that dynamic import hadn't resolved yet — or had failed — a
+browser-side `sanitize()` call silently fell back to a weaker regex-based
+sanitizer (`basicSanitize()`), passing unsanitized-by-DOMPurify data through
+without any error. It now **throws** a `MinderError` with code
+`SANITIZER_UNAVAILABLE` (500) instead of ever doing that.
+
+**This can trigger** when the dynamic `import()` for `dompurify` is blocked in a
+browser — a strict CSP without `script-src` coverage for the chunk, an
+offline/flaky-network window, or a bundler that fails to code-split the chunk
+correctly — or when `sanitize()` is called before the sanitizer's `ready()`
+promise has settled.
+
+**Migration.** `ApiClient`'s own sanitization path already `await`s `ready()`
+internally, so this only affects code that imports and calls `XSSSanitizer`
+directly from `minder-data-provider/utils/security`:
+
+```typescript
+import { sanitizer } from "minder-data-provider/utils/security";
+
+// Before: sanitize() could silently degrade to a weaker sanitizer
+const clean = sanitizer.sanitize(untrusted);
+
+// After: either catch the fail-closed error and decide how your app degrades...
+try {
+  const clean = sanitizer.sanitize(untrusted);
+} catch (err) {
+  if (err.code === "SANITIZER_UNAVAILABLE") {
+    /* show a fallback, retry, or surface an error to the user */
+  }
+}
+
+// ...or await readiness before your first call:
+await sanitizer.ready();
+const clean = sanitizer.sanitize(untrusted);
+```
+
+Server-side sanitization (`typeof window === 'undefined'`) is unaffected — it
+keeps using `basicSanitize()` unconditionally, exactly as before.
+
+## v2.x → v3.0 — Redux integration removed (BREAKING)
+
+**What changed:** MDP no longer ships any Redux integration. Redux was an optional peer used only
+for auto-generated per-route slices that nothing on the core data path read. It has been removed
+entirely — smaller bundle, one clear state model (TanStack Query for server state).
+
+**Removed public API:**
+
+| Removed | Replace with |
+|---|---|
+| `useStore()` hook | Use your app's own Redux store (`react-redux`'s `useStore`) if you still need Redux — MDP no longer provides one. |
+| `useReduxSlice(route)` hook | Use `useMinder(route)` for data (it already exposes `data`/`loading`/`error`/`mutate`); manage any extra UI state in your own store. |
+| `ReduxConfig` type + `configureMinder({ redux })` config field | Remove the `redux` field from your config — it is no longer read. |
+| `MinderDataProvider`'s Redux `<Provider>` wrapper + `useMinderContext().store` | `MinderDataProvider` renders the `QueryClientProvider` tree directly; `ctx.store` is gone. If you need a Redux `<Provider>`, add your own around `MinderDataProvider`. |
+| `DynamicLoader` redux members (`loadRedux`, `getStore`, `isReduxLoaded`, `addReducer`, the `'redux'` preload option, and the `redux` field in `getLoadingStatus()`/`getBundleSavings()`) | None — these lazy-loaded a store MDP no longer manages. |
+| `@reduxjs/toolkit` / `react-redux` optional peer dependencies | No longer declared. If your app uses Redux independently, keep them as your own direct dependencies. |
+
+**Migration steps:**
+1. Remove any `redux` field from your `configureMinder(...)` / `MinderDataProvider` config.
+2. Replace `useStore()` / `useReduxSlice()` calls — use `useMinder()` for data; use your own store for UI state.
+3. If you relied on MDP creating a Redux store, wrap your app in your own `<Provider>` from `react-redux`.
+4. No dependency changes are required unless you were relying on MDP to pull in Redux transitively (it never did — they were optional peers).
+
+If you were **not** using the Redux hooks/config (the common case — they were read by nothing on the
+main path), **no code changes are needed.**
+
+### Automated migration
+
+`npx minder codemod redux-removal [--dry-run] [--dir <path>]` handles most of the mechanical part
+of the four migration steps above for you:
+
+```bash
+# Preview every change as a diff, without writing anything:
+npx minder codemod redux-removal --dry-run
+
+# Apply the changes:
+npx minder codemod redux-removal
+
+# Scope the scan to a subdirectory (default: cwd). node_modules/dist/build
+# output are always skipped either way.
+npx minder codemod redux-removal --dir src
+```
+
+**What it fixes automatically:**
+
+- Renames `useReduxSlice(route)` calls (and their import) to `useMinder(route)` — step 2. It also
+  inserts a `// TODO(minder-codemod): ...` comment above every renamed call, because
+  `useReduxSlice` returned `{ state, actions, selectors, dispatch }` while `useMinder` returns
+  `{ data, loading, error, mutate }` — the call is renamed correctly, but you still need to update
+  whatever you destructured from it.
+- Removes the `redux` field from `configureMinder({ ... })` calls and from object literals typed as
+  `MinderConfig` — step 1.
+
+**What it can only flag (adds a `// TODO(minder-codemod): ...` comment, does not rewrite):**
+
+- `useStore()` calls and its import — there's no automatic replacement (step 2's "use your own
+  react-redux store" is an app-specific decision).
+- `ReduxConfig` type usage — step 1's field removal doesn't imply the type import can always be
+  deleted blindly (it might still be referenced elsewhere).
+- `MinderDataProvider`'s Redux `<Provider>` wrapper and `useMinderContext().store` reads — step 3,
+  a JSX/structural change too risky to rewrite automatically.
+- `DynamicLoader`'s redux members (`loadRedux`/`getStore`/`isReduxLoaded`/`addReducer`, the
+  `'redux'` preload option, the `redux` field on `getLoadingStatus()`/`getBundleSavings()`).
+
+Every file it touches is re-runnable: running it again over already-migrated code makes no further
+changes. It only edits files it's confident about via text-anchored transforms (not the TypeScript
+compiler API — see `scripts/lib/codemod-redux-removal.js`'s header for why, and its exact
+scope/limitations). Always review a `--dry-run` first; unusual formatting (namespace imports,
+computed keys, `require()`-style imports) can fall outside what it safely rewrites, in which case
+it leaves that spot untouched rather than guessing.
+
+## v2.x → v3.0 — Enums are now `as const` objects (BREAKING for enum-only TS ops)
+
+**What changed:** the exported "enums" (`HttpMethod`, `QueryStatus`, `LogLevel`, `StorageType`,
+`CacheType`, `SecurityLevel`, `Platform`, `DataSize`, `ConfigPreset`, `WebSocketState`, `AuthState`,
+`ErrorCode`, and the rest — 24 in all) are no longer TypeScript `enum`s. Each is now an `as const`
+object plus a same-named union type:
+
+```ts
+// before (v2.x)                    // after (v3.0)
+export enum HttpMethod {            export const HttpMethod = {
+  GET = 'GET',                        GET: 'GET',
+  // …                                // …
+}                                    } as const;
+                                     export type HttpMethod =
+                                       (typeof HttpMethod)[keyof typeof HttpMethod];
+```
+
+**Why:** a non-const `enum` compiles to a runtime IIFE that mutates an object at import time — a
+module side effect that a consumer bundler treating the package as side-effect-free would drop from
+a shared chunk, leaving `HttpMethod` undefined in production (the dabd92d / MDPD-17 crash class). An
+`as const` object has no import-time mutation, which is what lets this release ship
+`"sideEffects": false` honestly and reclaim tree-shaking — no consumer action
+needed; see CHANGELOG.md's "`sideEffects: false` reclaimed" entry for the measured
+before/after bundle numbers.
+
+**What still works unchanged — the common case needs NO code changes:**
+
+- **Value access** — `HttpMethod.GET`, `HttpMethod.POST`, etc. — identical.
+- **Runtime values** — the strings are byte-identical, so `x === HttpMethod.GET`, `switch`,
+  serialization, and `Object.values(HttpMethod)` all behave exactly as before.
+- **Type annotations** — `function f(m: HttpMethod)` still compiles; the union type is if anything
+  *more* permissive (a bare `'GET'` is now assignable where the nominal `enum` previously required
+  `HttpMethod.GET`).
+- **The packaged `.d.ts` type surface is identical** — the API-snapshot gate shows zero change, so
+  most type-only consumers observe nothing.
+
+**What breaks (narrow — only true `enum`-only operations):**
+
+- Using an enum **member as a type**: `let m: HttpMethod.GET` → use the value-derived type
+  `typeof HttpMethod.GET` (or the literal `'GET'`).
+- **Declaration-merging** a `namespace`/`enum` onto one of these names — no longer possible; wrap or
+  extend the object instead.
+- Relying on **nominal `enum` identity** (e.g. code that deliberately rejected a plain string where
+  a nominal `enum` was required) — the union accepts the matching string literal now.
+
+There is no codemod for this change — the fixes are localized type edits flagged by `tsc`.
+
+## v2.x → v3.0 — `detectMethod` only auto-detects PUT on ID-shaped segments (BREAKING)
+
+**What changed.** `detectMethod` picks an HTTP verb from the shape of the final
+route segment when you don't pass `options.method` explicitly. Previously *any*
+non-empty final segment was treated as an id, so `minder('users/1', data)` and
+`minder('orders', data)` both auto-detected `PUT`. Now only a segment that is
+genuinely ID-shaped — numeric, a UUID, or a 24-hex Mongo ObjectId — triggers
+`PUT`; a word/slug segment is read as a collection name, so it now sends `POST`.
+
+| Call | Before | After |
+|---|---|---|
+| `minder('users/1', data)` | `PUT` | `PUT` (unchanged — `1` is ID-shaped) |
+| `minder('users/a1b2c3d4-...-uuid', data)` | `PUT` | `PUT` (unchanged — UUID-shaped) |
+| `minder('orders', data)` | `PUT` | `POST` (`orders` is a collection name, not an id) |
+| `minder('api/orders', data)` | `PUT` | `POST` |
+
+**Why.** A create call against a plain collection route (`/api/orders`,
+`/api/users`) was silently sent as `PUT` instead of `POST` — the old heuristic
+couldn't distinguish "the last path segment is a word" from "the last path
+segment is an id." Most REST backends reject or misinterpret a `PUT` to a
+collection endpoint.
+
+**Migration.** If you have a slug/word-terminated route that genuinely needs
+`PUT` (an update-by-slug endpoint, for example), pass the method explicitly, or
+supply an `id`/`_id` field in the request body so the id-shaped-segment/body
+check still resolves to `PUT`:
+
+```typescript
+// Explicit method (works regardless of route shape):
+minder('articles/my-slug', data, { method: 'PUT' });
+
+// Or register the route with method: 'PUT' in your routes config.
+```
+
+If you were relying on the old behavior for a *create* against a slug-shaped
+collection route, no action is needed — it now correctly sends `POST`, which is
+almost always what you wanted.
+
+## v2.x → v3.0 — `minder()` retries are idempotent-only by default (BREAKING)
+
+**What changed.** `minder()`'s built-in retry logic previously applied to every
+HTTP method. It now only retries idempotent methods by default —
+`GET`/`HEAD`/`OPTIONS`/`PUT`/`DELETE`. `POST`/`PATCH` requests no longer
+auto-retry unless you opt in.
+
+**Why.** Retrying a `POST`/`PATCH` after a network blip or timeout can silently
+duplicate a write — the request may have actually succeeded server-side before
+the "failure" (e.g. the response was lost, not the request). Idempotent methods
+are safe to retry by definition; non-idempotent ones are not, unless your backend
+itself is safe against duplicate delivery.
+
+**Migration.** If your backend is idempotency-safe for POST/PATCH (e.g. it
+accepts and de-dupes an `Idempotency-Key` header, or the operation is naturally
+idempotent), opt back in per call:
+
+```typescript
+minder('orders', data, { method: 'POST', retryNonIdempotent: true });
+```
+
+No action is needed if you don't rely on POST/PATCH retrying — GET/PUT/DELETE
+retry behavior (and the retry count/backoff itself) is unchanged.
+
+## 2.2.0-beta.0 → 2.2.0-beta.1
+
+Every default-changing or breaking behavior change in the 2.2.0-beta.1 release — see
+[CHANGELOG.md](../CHANGELOG.md) for the complete, unabridged list. These are logged
+there as behavior changes, not API removals: your code will very likely keep compiling
+and running unmodified, but several **defaults** changed, so read this even if nothing
+breaks at build time.
+
+**In this section:**
+
+- [1. Fail-closed `isAuthenticated()`](#1-fail-closed-isauthenticated)
+- [2. CORS defaults](#2-cors-defaults)
+- [3. No forced CORS preflight](#3-no-forced-cors-preflight)
+- [4. Default retry changed](#4-default-retry-changed)
+- [5. peerDependencies move](#5-peerdependencies-move)
+- [6. `useAuth` root-entry shadowing](#6-useauth-root-entry-shadowing)
+- [7. `rawUrl` and config unification](#7-rawurl-and-config-unification)
+- [8. Offline conflict resolution](#8-offline-conflict-resolution)
+
+### 1. Fail-closed `isAuthenticated()`
+
+**Old behavior:** a JWT-shaped token (three dot-separated segments) whose payload
+couldn't be decoded, or whose `exp` claim was non-numeric, was treated as
+**authenticated** (`isAuthenticated()` returned `true`). The no-provider fallback used
+by standalone `useMinder()` (`GlobalAuthManager`) was even looser: it only checked
+token *presence* — an **expired** JWT still counted as authenticated.
+
+**New behavior:** both `AuthManager.isAuthenticated()` (provider mode) and
+`GlobalAuthManager.isAuthenticated()` (standalone/no-provider mode) now fail closed —
+a JWT-shaped token that can't be decoded, or whose `exp` has passed, returns `false`.
+The two are now parity-tested against each other. Opaque (non-JWT) bearer tokens are
+unchanged — still presence-based, since there's nothing to decode. Signature
+verification was never performed client-side and still isn't; this only affects the
+shape/expiry check.
+
+**Why:** silently treating a corrupt or expired token as valid is a fail-open
+authorization bug — it let invalid sessions look "logged in" to client-side route
+guards.
+
+**Migration:**
+
+```typescript
+// Before — a corrupt or expired JWT-shaped token still passed this check
+if (auth.isAuthenticated()) {
+  /* ... */
+}
+
+// After — if you intentionally store JWT-shaped-but-not-actually-JWT strings
+// (three dot-separated segments that aren't valid JWTs) and want the old
+// presence-only semantics, check for a token instead:
+if (auth.getToken() !== null) {
+  /* ... */
+}
+```
+
+No action needed if your tokens are real JWTs or genuinely opaque strings — this is a
+pure bug fix for the corrupt/expired case.
+
+### 2. CORS defaults
+
+**Old behavior:** the library's own CORS-emitting code — the default `corsMiddleware`
+export and `ProxyManager.generateNextJSProxy()` (the Next.js proxy-route generator) —
+defaulted to `origin: '*', credentials: true`. That combination is invalid per the CORS
+spec (browsers reject it) and was already flagged by the library's own
+`CorsManager.validateConfig()`.
+
+**New behavior:** the default is now `origin: '*', credentials: false`.
+`generateNextJSProxy()` emits `Access-Control-Allow-Credentials: false` unless
+`cors.credentials` is explicitly `true` in the `ProxyConfig` you pass it — and now
+**throws** rather than generate a proxy combining `credentials: true` with a wildcard
+origin.
+
+**Why:** `Access-Control-Allow-Credentials: true` next to a wildcard origin tells
+browsers "any origin may send this browser's cookies here" — a real vulnerability if a
+server ever ships that pairing.
+
+**Migration:**
+
+```typescript
+import { ProxyManager } from "minder-data-provider";
+
+// Before (implicit): credentials always on, wildcard origin
+const proxy = new ProxyManager({ enabled: true, baseUrl: "https://api.example.com" });
+
+// After: an explicit allowlist is required to keep credentials on
+const proxy = new ProxyManager({
+  enabled: true,
+  baseUrl: "https://api.example.com",
+  cors: { origin: ["https://app.example.com"], credentials: true },
+});
+proxy.generateNextJSProxy(); // throws if origin is '*' and credentials is true
+```
+
+> **`createCorsMiddleware`:** the CHANGELOG documents a new `createCorsMiddleware(options)`
+> factory with this same safe-by-default behavior. As of this writing it lives at
+> `src/core/corsMiddleware.ts` but is **not re-exported from any published entry point**
+> (`minder-data-provider`, `/server`, `/core`, or any platform subpath) —
+> `import { createCorsMiddleware } from "minder-data-provider"` will fail today. The
+> `ProxyManager` snippet above is the reachable equivalent for Next.js proxy generation.
+
+> **`configureMinder()` history note:** earlier 2.2.0-beta.1 development builds had a
+> preset bug that undermined this change for `configureMinder()` users — the
+> web-platform preset forced `credentials: true` onto any config that didn't set it, and
+> the `corsHelper: true` boolean shorthand also defaulted credentials on. Both are fixed
+> in the current build: `configureMinder()` now defaults credentials **off on every
+> platform**, and only an explicit `corsHelper: { credentials: true }` from you turns
+> them on (explicit user values always win over presets). Note that the `cors` config
+> key is deprecated in favor of `corsHelper` — it logs a runtime deprecation warning and
+> is slated for removal in v3.0, and its `configureMinder()` type only accepts
+> `enabled`/`proxy` (no `credentials` field).
+
+### 3. No forced CORS preflight
+
+**Old behavior:** the default axios instance attached 7 response-type security headers
+(CSP, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security,
+X-XSS-Protection, Referrer-Policy, Permissions-Policy) to every outgoing *request*, and
+set `withCredentials: true` by default. Non-safelisted request headers plus credentialed
+mode force the browser to run a CORS preflight `OPTIONS` round-trip before every
+cross-origin call — roughly doubling latency.
+
+**New behavior:** default request headers are exactly `Content-Type: application/json`
+and `Accept: application/json` — nothing else. `withCredentials` defaults to `false`;
+the client reads the resolved config's `cors.credentials === true` to enable it — via
+`configureMinder()`, set `corsHelper: { credentials: true }` (this also now governs the
+token-refresh call, which previously hardcoded credentials).
+
+**Why:** this was a performance bug, not a security feature — the security-response
+headers never belonged on a *request*, and most apps don't need cookies sent
+cross-origin. The internal helper that builds those response headers
+(`getSecurityHeaders()` in `src/utils/security.ts`) is unaffected — it's just no
+longer applied to outgoing requests. Note it is an internal helper today, not exported
+from any public entry point; set your own server response headers if you need them.
+
+**Migration:**
+
+```typescript
+// If your API relies on cookies for auth, opt back in explicitly (pair with an
+// explicit origin allowlist server-side — see item 2). Use `corsHelper`, not the
+// deprecated `cors` key (see the note in item 2):
+configureMinder({
+  apiUrl: "https://api.example.com",
+  routes: { /* ... */ },
+  corsHelper: { credentials: true },
+});
+
+// If you were relying on the old default request headers, use route- or call-level
+// headers instead — they were never meant to be silent global defaults:
+useMinder("users", { headers: { "X-Custom-Header": "value" } });
+```
+
+> Earlier 2.2.0-beta.1 development builds had a `configureMinder()` preset bug that
+> re-enabled `credentials: true` on web by default, undoing this change; it is fixed in
+> the current build — see the history note in item 2.
+
+### 4. Default retry changed
+
+**Old behavior:** failed queries retried 3 times by default
+(`performance.retries: 3`). Explicitly passing `performance.retries: 0` or
+`retryDelay: 0` to disable retries silently didn't work — the code used `||`-style
+fallbacks (`retries || <default>`), and `||` treats `0` as falsy, reverting to the
+default anyway.
+
+**New behavior:** the default query retry is now 1
+(`config.performance?.retries ?? 1` — `??`, not `||`). An explicit `0` is now honored
+and genuinely disables retries.
+
+**Why:** 3 retries meant a truly-down backend took ~3x longer to surface an error to the
+user; 1 retry balances resilience against transient blips with a faster failure signal.
+The `||` → `??` change is a correctness fix — `0` is a legitimate value that was being
+silently discarded.
+
+**Migration:**
+
+```typescript
+// Restore the old 3-retry behavior explicitly:
+configureMinder({
+  apiUrl: "https://api.example.com",
+  routes: { /* ... */ },
+  performance: { retries: 3 },
+});
+
+// Explicit zero now works (previously silently reverted to the default):
+configureMinder({
+  apiUrl: "https://api.example.com",
+  routes: { /* ... */ },
+  performance: { retries: 0 },
+});
+```
+
+> `retryDelay` is not a `configureMinder()` option (its `performance` block accepts
+> `deduplication`/`retries`/`timeout`/`compression`). The `retryDelay: 0` fix applies
+> when you construct a `MinderConfig` for `<MinderDataProvider>` directly, where
+> `performance.retryDelay` exists.
+
+> **`configureMinder()` history note:** earlier 2.2.0-beta.1 development builds had a
+> preset bug here too — every platform preset hardcoded `performance.retries: 3`, which
+> pre-empted the new default for anyone configuring through `configureMinder()`. Fixed
+> in the current build: `configureMinder()` presets now emit `retries: 1` on every
+> platform, and an explicit user value (including `retries: 0`) still wins. Precision
+> note on where the `?? 1` fallback lives: it is `MinderDataProvider`'s **query-layer**
+> retry default (what TanStack Query uses when `performance.retries` is completely
+> unset). `ApiClient`'s own interceptor-level exponential-backoff retry treats unset
+> `performance.retries` as `0` — it adds no HTTP-layer retries unless you configure
+> some.
+
+### 5. peerDependencies move
+
+**Old behavior:** `@tanstack/react-query`, `@tanstack/query-core`,
+`@reduxjs/toolkit`, `react-redux`, and `@tanstack/react-query-devtools` were regular
+`dependencies` — your package manager installed the library's own copies alongside
+whatever version (if any) your app already had.
+
+**New behavior:** all five moved to `peerDependencies` with caret ranges.
+`@tanstack/react-query` and `@tanstack/query-core` are **required** peers;
+`@reduxjs/toolkit`, `react-redux`, and `@tanstack/react-query-devtools` are **optional**
+peers.
+
+**Why:** a hard dependency on `@tanstack/react-query` could install a second copy
+alongside your app's own, silently breaking `QueryClientProvider` context — React
+context identity is per-module-instance, so two copies of react-query means two
+incompatible `QueryClient` implementations sharing one tree. This also shrank the
+packed install by roughly 73% (928kB → 252kB).
+
+**Migration:**
+
+```bash
+# Required — you almost certainly already have this if you use React Query elsewhere:
+npm install @tanstack/react-query
+
+# Only if you use the Redux-backed hooks:
+npm install @reduxjs/toolkit react-redux
+```
+
+No code changes — this is purely an installation-time change. A peer-dependency warning
+after upgrading is telling you exactly this.
+
+### 6. `useAuth` root-entry shadowing
+
+**Old behavior:** `import { useAuth } from "minder-data-provider"` resolved to the
+legacy `AuthManager`-based hook — token get/set, `isAuthenticated()`, and the rest of
+the request-layer auth API described in the README's Security Model.
+
+**New behavior:** the root entry's `useAuth` is now the **capability-contract** hook —
+the same shape backing provider integrations (Supabase/Clerk/Firebase's
+`useAuth()`: `{ ready, session, error, signOut, getProviderClient }`). It's a different
+contract for a different job: a swappable auth *provider* interface, not the
+request-layer token manager. The legacy hook didn't go away — it's reachable through
+`useMinder().auth`.
+
+**Why:** the provider-platform capability contracts (`useAuth`, `useCheckout`,
+`useStorage`, `useLive`) needed the name every provider's own docs already use for it.
+Explicit named exports at the root entry intentionally shadow the star-exported legacy
+`useAuth` (ES module semantics: local exports win over `export *`).
+
+**Migration:**
+
+```typescript
+// Before (2.2.0-beta.0 and earlier) — root import was the token/session manager
+import { useAuth } from "minder-data-provider";
+const { isAuthenticated, getToken, setToken } = useAuth();
+
+// After — same legacy hook, reached through useMinder()
+import { useMinder } from "minder-data-provider";
+const { auth } = useMinder("anyRouteName");
+const isLoggedIn = auth.isAuthenticated();
+
+// After — root `useAuth` is now the capability-contract hook (requires a
+// registered auth provider — see the README's Level 2)
+import { useAuth } from "minder-data-provider";
+const { session, ready, signOut } = useAuth();
+```
+
+### 7. `rawUrl` and config unification
+
+**Old behavior:** `useMinder("https://api.example.com/users")` or
+`useMinder("/some/path", { rawUrl: true })` threw `"Route not found"` whenever a
+`MinderDataProvider` was mounted — the escape hatch only worked in standalone
+(no-provider) mode. Separately, `configureMinder()`'s routes registry and the
+standalone `minder()` function's URL resolver were two independent stores: calling
+standalone `useMinder("routeName")` after `configureMinder()` treated the route name as
+a literal path instead of resolving it from your registry.
+
+**New behavior:** `ApiClient.request` now dispatches ad-hoc URLs (absolute
+`http(s)://`, `rawUrl: true`, or an unregistered leading-slash path) through the same
+client instance in provider mode too — auth, interceptors, and plugins still run.
+Unknown *bare* route names (no scheme, no leading slash) still throw, so typos are
+still caught. `configureMinder()` now feeds both stores, so standalone
+`useMinder("routeName")` correctly resolves url/method/headers/timeout from your
+registry. `minder.config()` still works but logs a deprecation warning.
+
+**Why:** this was both a capability gap (the escape hatch existed in only one of the
+two usage modes) and a bug (two configs meant to be one source of truth silently
+weren't).
+
+**Migration:**
+
+```tsx
+// Now works identically whether or not <MinderDataProvider> is mounted:
+const { data: status } = useMinder("https://third-party.example.com/status");
+const { data: raw } = useMinder("/unregistered/path", { rawUrl: true });
+
+// Standalone useMinder("routeName") now honors configureMinder()'s registry:
+configureMinder({ apiUrl: "https://api.example.com", routes: { users: "/users" } });
+const { data: users } = useMinder("users"); // resolves via the registry, no provider needed
+```
+
+No action needed unless you were working around the old `"Route not found"` behavior
+(e.g. avoiding `rawUrl` in provider mode) — that workaround is no longer necessary.
+
+### 8. Offline conflict resolution
+
+**Additive — no action required.** `OfflineConfig.conflictResolution`/`onConflict` were declared
+but never read; a queued mutation whose replay came back with a 409/412 simply retried up to
+`maxRetries` and was then silently dropped — neither "server wins" nor "client wins," just
+blind-retry-then-drop. That config is now wired into the replay pipeline (Spec 5.1): new optional
+`conflictStatuses`, `resolveConflict`, `conflictResolveTimeoutMs`, `strictOrder`, `onDeadLetter`,
+and `deadLetterKey` fields on `OfflineConfig`, all opt-in.
+
+**The only observable default-path change:** with zero conflict config set, a 409/412 replay now
+resolves via the documented default (`conflictResolution: 'server-wins'`) immediately, instead of
+retrying 3 times and then dropping. The end state is identical either way (the queued mutation is
+gone) — this is a bugfix (fewer wasted retries, deterministic instead of accidental), not a
+behavior you were relying on. See [FEATURES.md § Conflict resolution](FEATURES.md#conflict-resolution-spec-51)
+for the full API.
+
+### 9. Managed SSE transport (Spec 5.2)
+
+**Additive — no action required.** `MinderConfig.realtime` is widened from `boolean` to
+`boolean | RealtimeConfig`; the boolean form (`realtime: true`) is preserved verbatim and keeps
+meaning exactly what it did before (enable realtime via WebSocket). WebSocket stays the default
+transport for every existing app.
+
+Opt into the new managed, auto-reconnecting SSE transport by passing an object instead:
+
+```ts
+// Before (WebSocket, unchanged):
+configureMinder({ /* ... */, realtime: true, websocket: { url } });
+
+// New, opt-in (SSE):
+configureMinder({ /* ... */, realtime: { transport: 'sse', url } });
+```
+
+New additive exports: `RealtimeConfig`, `RealtimeTransport`, and `SseTransport` (via the new
+`minder-data-provider/realtime` subpath). No existing export was removed or changed. See
+[FEATURES.md § Managed SSE transport](FEATURES.md#managed-sse-transport-spec-52) for the full API.
+
+---
+
+## v1.x → v2.0
+
 Guide for migrating from Minder Data Provider v1.x to v2.0.
 
 ## Table of Contents

@@ -8,7 +8,6 @@
  * - Model class integration (encode/decode)
  * - Automatic error handling (never throws)
  * - TanStack Query integration (caching, deduplication)
- * - Redux Toolkit integration (state management)
  * - WebSocket support (realtime updates)
  * 
  * @example
@@ -40,22 +39,23 @@
  * });
  */
 
-import axios from 'axios';
-import type { AxiosRequestConfig, AxiosProgressEvent } from 'axios';
-import type { 
-  HttpMethod, 
-  MinderOptions, 
-  MinderResult, 
+import type { AxiosRequestConfig, AxiosProgressEvent, AxiosInstance } from 'axios';
+import type {
+  HttpMethod,
+  MinderOptions,
+  MinderResult,
   MinderError,
   MinderConfig,
-  UploadProgress 
+  UploadProgress
 } from './minder/types.js';
-import { 
-  detectMethod, 
-  isFileUpload, 
-  encodeWithModel, 
-  decodeWithModel, 
-  handleError 
+import type { InferOutput, StandardSchemaV1 } from '../types/standard-schema.js';
+import {
+  detectMethod,
+  isFileUpload,
+  encodeWithModel,
+  decodeWithModel,
+  handleError,
+  isEdgeRuntime
 } from './minder/utils.js';
 
 // Re-export types for backward compatibility
@@ -71,18 +71,89 @@ export type {
 // GLOBAL CONFIGURATION
 // ============================================================================
 
-let globalConfig: MinderConfig = {
+import { getGlobalMinderConfig } from './globalConfig.js';
+import { minderStore } from './singletons.js';
+
+// D3: axios is a runtime `dependency` (kept per owner decision — NOT a peer),
+// but it must not sit in the static import graph, since a plain
+// `import { useMinder }` consumer would otherwise pay for it even on the
+// edge/fetch transport path (isEdgeRuntime()), which never touches axios at
+// all. Cached module-level promise mirrors the existing lazy pattern used
+// below for `./responseValidation.js`. Deliberately module-scoped (not
+// per-call) so concurrent in-flight requests share one import().
+//
+// Type note: deliberately `Promise<unknown>`, not axios's own module type.
+// `import('axios')` (an expression) resolves against axios's ESM types,
+// while `typeof import('axios')` (a type query, used in a CJS-context file
+// under this project's NodeNext resolution) resolves against its *different*
+// CJS `export =` types — two incompatible shapes for the SAME runtime value,
+// so no single type both compiles here. Real type safety is applied at the
+// call site via the `AxiosInstance` cast instead. Verified directly (both
+// targets that actually execute this file — real Node ESM `import()`, the
+// tsup `.mjs` build's runtime, and ts-jest's commonjs downlevel used by every
+// test) that the resolved module carries a `.default` holding the callable
+// axios instance; the `??` fallback below covers a bare CJS `require()`
+// shape too, in case some future build target ever produces one.
+let axiosPromise: Promise<unknown> | undefined;
+function loadAxios(): Promise<unknown> {
+  axiosPromise ??= import('axios');
+  return axiosPromise;
+}
+
+// minder()'s URL-resolution bag (baseURL/headers/timeout/token) — C3. Together
+// with the routes-aware registry (getGlobalMinderConfig) this forms ONE unified
+// config: the registry supplies url/method/headers/timeout for registered route
+// NAMES, and this bag supplies the baseURL/headers/token used to actually
+// dispatch the request. `configureMinder()` from `src/config` is the single
+// source of truth that writes both stores.
+//
+// This bag is a DISTINCT store from the routes-aware globalConfig.ts one (C1):
+// they have different defaults (C1 starts `null`; this one starts populated with
+// baseURL/timeout/headers) and different write paths, so they are NOT merged
+// into one cell — see the C1/C3 note in the Spec 1.3c report. Both now live on
+// the process-wide singleton store (./singletons.ts) for chunk-duplication-proof
+// identity, so `configureMinder()` and standalone minder() reads can never land
+// on opposite sides of a forked copy.
+const defaultMinderUrlConfig = (): MinderConfig => ({
   baseURL: '',
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
-};
+});
+
+function minderUrlConfig(): MinderConfig {
+  const s = minderStore();
+  return (s.minderUrlConfig ??= defaultMinderUrlConfig());
+}
 
 /**
- * Configure minder globally
- * Call this once in your app initialization
- * 
+ * Internal: write minder()'s URL-resolution config (baseURL/headers/timeout/
+ * token). Used by the unified `configureMinder()` (src/config) so both global
+ * stores stay in sync. Does NOT emit a deprecation warning.
+ * @internal
+ */
+export function setMinderGlobalConfig(config: Partial<MinderConfig>): void {
+  minderStore().minderUrlConfig = { ...minderUrlConfig(), ...config };
+}
+
+/**
+ * Internal: read minder()'s current URL-resolution config (for tests/tools).
+ * @internal
+ */
+export function getMinderGlobalConfig(): MinderConfig {
+  return minderUrlConfig();
+}
+
+/**
+ * Configure minder globally.
+ *
+ * @deprecated Use `configureMinder` from `minder-data-provider` (or
+ * `minder-data-provider/config`) instead — it is the single source of truth and
+ * also registers your routes. This baseURL/headers-only configurator is kept as
+ * a deprecated alias (exposed as `minder.config()`) that writes the same
+ * underlying store.
+ *
  * @example
  * minder.config({
  *   baseURL: 'https://api.example.com',
@@ -90,11 +161,218 @@ let globalConfig: MinderConfig = {
  * });
  */
 export function configureMinder(config: Partial<MinderConfig>): void {
-  globalConfig = { ...globalConfig, ...config };
+  const s = minderStore();
+  if (!s.minderDeprecationWarned) {
+    s.minderDeprecationWarned = true;
+    console.warn(
+      '[Minder] `minder.config()` / `configureMinder` from core is deprecated. ' +
+      'Use `configureMinder` from "minder-data-provider" instead (it also registers routes).'
+    );
+  }
+  setMinderGlobalConfig(config);
 }
 
 import { StreamClient, type StreamOptions } from './StreamClient.js';
-import { pluginManager } from '../plugins/PluginSystem.js';
+import { pluginManager, isShortCircuitResponse } from '../plugins/PluginSystem.js';
+import type { InterceptableRequest } from '../plugins/PluginSystem.js';
+
+// ============================================================================
+// RETRY SUPPORT (MDPD-23)
+// ============================================================================
+
+/**
+ * Backoff sleep used between minder() retry attempts. Injectable so tests can
+ * substitute a zero-delay implementation instead of waiting on real timers.
+ * @internal
+ */
+const defaultRetrySleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+// Held on the singleton store (C3) so a test's injected sleep and the retry loop
+// that consumes it can never end up on opposite sides of a duplicated chunk.
+function retrySleep(ms: number): Promise<void> {
+  const s = minderStore();
+  return (s.minderRetrySleep ??= defaultRetrySleep)(ms);
+}
+
+/**
+ * Testing hook: override (or reset, by passing null) the retry backoff sleep.
+ * @internal
+ */
+export function __setRetrySleepForTesting(
+  fn: ((ms: number) => Promise<void>) | null
+): void {
+  minderStore().minderRetrySleep = fn ?? defaultRetrySleep;
+}
+
+/**
+ * Whether a failed request should be retried. Retry network errors (status 0),
+ * 5xx server errors, and 429 rate-limits — but NOT 4xx client errors, which are
+ * deterministic and would just fail again.
+ */
+function isRetryableFailure(status: number): boolean {
+  return status === 0 || status === 429 || status >= 500;
+}
+
+/**
+ * Methods safe to retry by default. Per RFC 7231 these are idempotent — resending
+ * them cannot produce duplicate side effects — matching axios-retry's convention.
+ * POST/PATCH are deliberately excluded so a transient 502/503/429 never silently
+ * resubmits a non-idempotent write; callers opt those in with
+ * `retryNonIdempotent: true`.
+ */
+const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE']);
+
+/**
+ * Whether the given method may be retried. Idempotent methods always may; POST
+ * and PATCH only when the caller explicitly opts in via `retryNonIdempotent`.
+ */
+function isRetryableMethod(method: string, retryNonIdempotent: boolean): boolean {
+  return retryNonIdempotent || IDEMPOTENT_METHODS.has(method.toUpperCase());
+}
+
+/** Backoff delay for a given (1-based) attempt: 100ms * attempt, capped at 1s. */
+function retryBackoffMs(attempt: number): number {
+  return Math.min(100 * attempt, 1000);
+}
+
+// ============================================================================
+// RESPONSE CACHE (MDPD-24)
+// ============================================================================
+
+/** Default response-cache TTL when neither options.cacheTTL nor config supplies one. */
+const DEFAULT_CACHE_TTL_MS = 60_000;
+
+interface CacheEntry {
+  /** Deep-copied successful MinderResult (data/status/headers). */
+  result: MinderResult;
+  /** Epoch ms after which this entry is stale. */
+  expiresAt: number;
+  /** Epoch ms when this entry was stored (used for CacheHitEvent.age). */
+  storedAt: number;
+}
+
+/**
+ * Module-level TTL cache for standalone minder() GET results. Only populated
+ * when a caller opts in with `{ cache: true }`. Keyed by
+ * method+URL+params+auth-identity — the auth component (a short hash of
+ * `options.token` / the Authorization header, never the raw value) partitions
+ * entries per credential so one user's cached authenticated response can never
+ * be served to a different user on a shared (SSR/Node) process. Capped at
+ * MAX_RESPONSE_CACHE_ENTRIES; the oldest entry is evicted on overflow.
+ * @internal
+ */
+function responseCache(): Map<string, CacheEntry> {
+  const s = minderStore();
+  return (s.minderResponseCache ??= new Map<string, CacheEntry>()) as Map<string, CacheEntry>;
+}
+
+/** Hard cap on cached entries; oldest (insertion order) evicted on overflow. */
+const MAX_RESPONSE_CACHE_ENTRIES = 200;
+
+/**
+ * djb2 hash, hex-encoded — a tiny non-cryptographic fingerprint used ONLY to
+ * partition cache keys by credential without embedding the raw token/header
+ * value in the key string (keys can surface in debug output). Edge-safe.
+ */
+function hashAuthIdentity(value: string): string {
+  let h = 5381;
+  for (let i = 0; i < value.length; i++) {
+    h = ((h << 5) + h + value.charCodeAt(i)) | 0;
+  }
+  return (h >>> 0).toString(16);
+}
+
+/**
+ * Derive the cache key's auth-identity component from the per-request
+ * credentials: `options.token` and/or an Authorization header. No credentials →
+ * the stable constant 'anon'.
+ */
+function cacheAuthIdentity(
+  token: string | undefined,
+  headers: Record<string, unknown> | undefined
+): string {
+  const authHeader = headers
+    ? Object.entries(headers).find(([k]) => k.toLowerCase() === 'authorization')?.[1]
+    : undefined;
+  if (!token && authHeader === undefined) return 'anon';
+  return hashAuthIdentity(`${token ?? ''}\u0000${String(authHeader ?? '')}`);
+}
+
+/**
+ * Absolute-URL test with axios parity (axios's own isAbsoluteURL): a scheme
+ * (`https://`, `custom-scheme:`) OR a protocol-relative `//host/...` prefix
+ * bypasses baseURL. Keeping the cache key and the fetch transport on the same
+ * regex axios uses means keys always match what is actually dispatched.
+ */
+const ABSOLUTE_URL_RE = /^(?:[a-z][a-z\d+\-.]*:)?\/\//i;
+
+/** Store a cache entry, evicting the oldest entry when the cap is exceeded. */
+function setCacheEntry(key: string, entry: CacheEntry): void {
+  const cache = responseCache();
+  // Delete-first so a re-set refreshes the key's insertion position.
+  cache.delete(key);
+  cache.set(key, entry);
+  if (cache.size > MAX_RESPONSE_CACHE_ENTRIES) {
+    // Maps iterate in insertion order — the first key is the oldest entry.
+    const oldest = cache.keys().next().value;
+    if (oldest !== undefined) cache.delete(oldest);
+  }
+}
+
+/**
+ * Clear the standalone minder() response cache. Called on (re)configuration and
+ * exposed for tests.
+ * @internal
+ */
+export function clearMinderCache(): void {
+  responseCache().clear();
+}
+
+/** Structured deep copy so cached results can't be mutated through aliasing. */
+function deepCopyResult<T>(value: T): T {
+  const sc = (globalThis as { structuredClone?: <V>(v: V) => V }).structuredClone;
+  if (typeof sc === 'function') {
+    try {
+      return sc(value);
+    } catch {
+      /* fall through to JSON clone */
+    }
+  }
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+/**
+ * Build the cache key from method, resolved URL, serialized params, and the
+ * auth-identity fingerprint (see cacheAuthIdentity — never the raw credential).
+ */
+function buildCacheKey(
+  method: string,
+  resolvedUrl: string,
+  params: unknown,
+  authIdentity: string
+): string {
+  let serializedParams = '';
+  if (params && typeof params === 'object') {
+    const entries = Object.entries(params as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined && v !== null)
+      .sort(([a], [b]) => a.localeCompare(b));
+    serializedParams = JSON.stringify(entries);
+  }
+  return `${method} ${resolvedUrl} ${serializedParams} ${authIdentity}`;
+}
+
+/**
+ * Resolve the effective cache TTL: explicit option wins, then the global config
+ * cache's staleTime/ttl, then a 60s default.
+ */
+function resolveCacheTtl(optionTtl: number | undefined): number {
+  if (typeof optionTtl === 'number') return optionTtl;
+  const cfg = getGlobalMinderConfig() as
+    | { cache?: { staleTime?: number; ttl?: number } }
+    | undefined;
+  return cfg?.cache?.staleTime ?? cfg?.cache?.ttl ?? DEFAULT_CACHE_TTL_MS;
+}
 
 // ============================================================================
 // CORE MINDER FUNCTION
@@ -102,10 +380,24 @@ import { pluginManager } from '../plugins/PluginSystem.js';
 
 /**
  * 🎯 MINDER - The universal data provider function
- * 
+ *
  * Handles all HTTP operations with smart detection
  * NEVER throws errors - always returns structured result
  */
+// Task 3.1: when a per-call `options.schema` is present, infer `data`'s type
+// from the validator instead of the caller-supplied `TData` generic — the
+// route-def `ApiRoute.schema` (registry-only) stays runtime-only, matching
+// the rest of the untyped string-route registry.
+export async function minder<S extends StandardSchemaV1<any, any>>(
+  route: string,
+  data: any,
+  options: MinderOptions & { schema: S }
+): Promise<MinderResult<InferOutput<S>>>;
+export async function minder<TData = any>(
+  route: string,
+  data?: any,
+  options?: MinderOptions
+): Promise<MinderResult<TData>>;
 export async function minder<TData = any>(
   route: string,
   data?: any,
@@ -114,24 +406,50 @@ export async function minder<TData = any>(
   const startTime = Date.now();
   
   try {
-    // 1. Detect HTTP method
-    const method = detectMethod(route, data, options);
-    
+    // 0. Consult the unified route registry: when `route` is a registered NAME,
+    //    resolve its url/method/headers/timeout from the registry entry (with
+    //    trivial `:param` substitution). When `route` is a URL/path, behavior is
+    //    unchanged — it is used verbatim.
+    const registry = getGlobalMinderConfig();
+    const registryRoute = registry?.routes?.[route];
+
+    let url = route;
+    if (registryRoute) {
+      url = registryRoute.url;
+      if (options?.params) {
+        Object.entries(options.params).forEach(([key, value]) => {
+          url = url.replace(`:${key}`, String(value));
+        });
+      }
+    }
+
+    // 1. Detect HTTP method (explicit option > registry entry > auto-detect)
+    let method = detectMethod(route, data, options);
+    if (registryRoute && !options?.method) {
+      method = registryRoute.method as unknown as HttpMethod;
+    }
+
     // 2. Build request config
+    const urlConfig = minderUrlConfig();
     const config: AxiosRequestConfig = {
-      baseURL: options?.baseURL || globalConfig.baseURL,
-      url: route,
+      baseURL:
+        options?.baseURL ||
+        urlConfig.baseURL ||
+        (registryRoute ? registry?.apiBaseUrl : undefined) ||
+        '',
+      url,
       method,
-      timeout: options?.timeout || globalConfig.timeout,
+      timeout: options?.timeout || registryRoute?.timeout || urlConfig.timeout,
       headers: {
-        ...globalConfig.headers,
+        ...urlConfig.headers,
+        ...registryRoute?.headers,
         ...options?.headers,
       },
       params: options?.params,
     };
-    
+
     // 3. Add authentication token
-    const token = options?.token || globalConfig.token;
+    const token = options?.token || urlConfig.token;
     if (token) {
       config.headers!.Authorization = `Bearer ${token}`;
     }
@@ -143,7 +461,9 @@ export async function minder<TData = any>(
       // Convert to FormData if needed
       if (!(data instanceof FormData)) {
         const formData = new FormData();
-        if (data instanceof FileList) {
+        // Guard the browser-only FileList global (undefined in Node/edge) so a
+        // File/Blob upload on the server doesn't throw "FileList is not defined".
+        if (typeof FileList !== 'undefined' && data instanceof FileList) {
           Array.from(data).forEach((file, index) => {
             formData.append(`file${index}`, file);
           });
@@ -178,8 +498,93 @@ export async function minder<TData = any>(
     
     // 6. Execute request
     let responseData: any;
-    let responseStatus: number;
+    let responseStatus = 0;
     let responseHeaders: Record<string, string> = {};
+    let shortCircuited = false;
+
+    // MDPD-24: opt-in response cache for standalone minder() GETs. Only active
+    // when the caller passes `{ cache: true }` — the default and cache:false
+    // paths are unchanged. A fresh cache hit returns a deep copy with
+    // metadata.cached=true and never touches the transport.
+    const cacheEnabled = options?.cache === true && method === 'GET';
+    let cacheKey: string | null = null;
+    if (cacheEnabled) {
+      const requestUrlForKey = config.url || '';
+      const resolvedUrl = ABSOLUTE_URL_RE.test(requestUrlForKey)
+        ? requestUrlForKey
+        : (config.baseURL || '') + requestUrlForKey;
+      const authIdentity = cacheAuthIdentity(
+        options?.token,
+        (options?.headers ?? config.headers) as Record<string, unknown> | undefined
+      );
+      cacheKey = buildCacheKey(method, resolvedUrl, config.params, authIdentity);
+      const entry = responseCache().get(cacheKey);
+      if (entry && entry.expiresAt > Date.now()) {
+        const cached = deepCopyResult(entry.result) as MinderResult<TData>;
+        // Entries store the RAW (pre-model-decode) response data; decode per hit
+        // so `options.model` consumers get a fresh instance with its prototype
+        // intact (structuredClone would strip class prototypes if we cached the
+        // decoded object). Without a model this is a pass-through.
+        cached.data = decodeWithModel<TData>(cached.data, options?.model);
+        cached.metadata = {
+          ...(cached.metadata as NonNullable<MinderResult['metadata']>),
+          duration: Date.now() - startTime,
+          cached: true,
+        };
+        // MDPD-5: notify cache-observability plugins of the hit (fire-and-forget,
+        // error-isolated per plugin). Zero-overhead when no plugin is registered.
+        if (pluginManager.size > 0) {
+          void pluginManager.executeCacheHitHooks({
+            key: cacheKey,
+            value: cached.data,
+            age: Date.now() - entry.storedAt,
+            timestamp: Date.now(),
+          });
+        }
+        if (options?.onSuccess) {
+          options.onSuccess(cached.data);
+        }
+        return cached;
+      }
+      if (entry) {
+        // Stale — drop it so the map doesn't grow unbounded with dead entries.
+        responseCache().delete(cacheKey);
+      }
+      // MDPD-5: a cache-enabled GET with no fresh entry is a miss (first-ever or
+      // expired) — notify observability plugins before we touch the transport.
+      if (pluginManager.size > 0) {
+        void pluginManager.executeCacheMissHooks(cacheKey);
+      }
+    }
+
+    // Mutating request middleware: registered plugins may rewrite the outgoing
+    // config or short-circuit the request with a synthetic response. Runs after
+    // the config is fully assembled and before the transport dispatch. Guarded
+    // so there is zero overhead when no plugin implements the hook.
+    if (pluginManager.size > 0 && pluginManager.hasRequestInterceptors()) {
+      const interceptable: InterceptableRequest = {
+        url: config.url || route,
+        method,
+        headers: (config.headers as Record<string, string>) || {},
+        params: config.params as Record<string, unknown> | undefined,
+        data: config.data,
+        routeName: registryRoute ? route : undefined,
+      };
+      const intercepted = await pluginManager.executeRequestInterceptors(interceptable);
+      if (isShortCircuitResponse(intercepted)) {
+        responseData = intercepted.response.data;
+        responseStatus = intercepted.response.status;
+        responseHeaders = intercepted.response.headers || {};
+        shortCircuited = true;
+      } else {
+        // Apply the middleware's mutations back onto the outgoing config.
+        config.url = intercepted.url;
+        config.method = intercepted.method as HttpMethod;
+        config.headers = intercepted.headers;
+        config.params = intercepted.params;
+        config.data = intercepted.data;
+      }
+    }
 
     // Fire plugin request hooks (global plugins; non-blocking observability)
     if (pluginManager.size > 0) {
@@ -194,72 +599,146 @@ export async function minder<TData = any>(
 
     // Transport selection:
     // - Complex requests (file uploads / progress) always use axios.
-    // - Otherwise default to axios for predictable, feature-complete behavior
-    //   (withCredentials/cookies, axiosConfig, consistent error shapes). The
-    //   faster native-fetch fast-path is OPT-IN via `transport: 'fetch'` so it
-    //   can never silently change request semantics for existing callers.
+    // - `transport: 'fetch'` forces the native-fetch fast-path; `'axios'` forces axios.
+    // - `'auto'` (and unset) pick fetch ONLY in an edge runtime (isEdgeRuntime),
+    //   where axios's Node HTTP adapter is unavailable and would otherwise fail.
+    //   Node and browser keep the axios default unchanged — so this can never
+    //   silently change request semantics for existing Node/browser callers; it
+    //   only makes edge (previously broken with the default) transparently work.
     const isComplexRequest = isFileUpload(data) || options?.onProgress || config.onUploadProgress;
-    const useFetch = options?.transport === 'fetch' && !isComplexRequest;
+    const transport = options?.transport;
+    const wantsFetch =
+      transport === 'fetch' ||
+      ((transport === 'auto' || transport === undefined) && isEdgeRuntime());
+    const useFetch = wantsFetch && !isComplexRequest;
 
-    if (!useFetch) {
-      const response = await axios(config);
-      responseData = response.data;
-      responseStatus = response.status;
-      responseHeaders = response.headers as Record<string, string>;
-    } else {
-      // Super-fast native fetch path
-      let fullUrl = (config.baseURL || '') + (config.url || '');
+    // MDPD-23: explicit retry for the standalone minder() path. minder() never
+    // rejects, so TanStack's retry can't help here — retryable transport
+    // failures (network / 5xx / 429; NOT 4xx) are retried up to options.retries
+    // times with a small backoff. Short-circuited (plugin-synthesized) responses
+    // are never retried. The never-throws contract is preserved: after retries
+    // are exhausted the original error propagates to the terminal handler below,
+    // which fires onError/plugin hooks exactly once and returns a failure result.
+    const maxRetries =
+      options?.retries && options.retries > 0 ? Math.floor(options.retries) : 0;
+    let retryAttempt = 0;
+
+    while (true) {
+      try {
+        if (shortCircuited) {
+          // A plugin already produced a synthetic response — skip the transport
+          // entirely (responseData/status/headers were set during interception).
+        } else if (!useFetch) {
+          const axiosModule = await loadAxios();
+          const axios = (axiosModule as { default?: AxiosInstance }).default ?? (axiosModule as AxiosInstance);
+          const response = await axios(config);
+          responseData = response.data;
+          responseStatus = response.status;
+          responseHeaders = response.headers as Record<string, string>;
+        } else {
+          // Super-fast native fetch path
+          // MDPD-18: absolute http(s) URLs bypass the configured baseURL, mirroring
+          // the axios path — otherwise baseURL is double-prefixed onto the absolute
+          // URL (e.g. 'http://BASEhttp://x/api').
+          const requestUrl = config.url || '';
+          let fullUrl = ABSOLUTE_URL_RE.test(requestUrl)
+            ? requestUrl
+            : (config.baseURL || '') + requestUrl;
       
-      // Handle query parameters
-      if (config.params) {
-        const queryParams = new URLSearchParams();
-        Object.entries(config.params).forEach(([key, value]) => {
-          if (value !== undefined && value !== null) {
-            queryParams.append(key, String(value));
+          // Handle query parameters
+          if (config.params) {
+            const queryParams = new URLSearchParams();
+            Object.entries(config.params).forEach(([key, value]) => {
+              if (value !== undefined && value !== null) {
+                queryParams.append(key, String(value));
+              }
+            });
+            const queryString = queryParams.toString();
+            if (queryString) {
+              fullUrl += (fullUrl.includes('?') ? '&' : '?') + queryString;
+            }
           }
-        });
-        const queryString = queryParams.toString();
-        if (queryString) {
-          fullUrl += (fullUrl.includes('?') ? '&' : '?') + queryString;
-        }
-      }
 
-      const fetchOptions: RequestInit = {
-        method: config.method,
-        headers: config.headers as Record<string, string>,
-        body: (config.method !== 'GET' && config.method !== 'HEAD' && config.data) 
-          ? (typeof config.data === 'string' ? config.data : JSON.stringify(config.data)) 
-          : undefined,
-      };
+          const fetchOptions: RequestInit = {
+            method: config.method,
+            headers: config.headers as Record<string, string>,
+            body: (config.method !== 'GET' && config.method !== 'HEAD' && config.data) 
+              ? (typeof config.data === 'string' ? config.data : JSON.stringify(config.data)) 
+              : undefined,
+          };
       
-      const controller = new AbortController();
-      const timeoutId = config.timeout ? setTimeout(() => controller.abort(), config.timeout) : null;
-      fetchOptions.signal = controller.signal;
+          const controller = new AbortController();
+          const timeoutId = config.timeout ? setTimeout(() => controller.abort(), config.timeout) : null;
+          fetchOptions.signal = controller.signal;
       
-      const response = await fetch(fullUrl, fetchOptions);
-      if (timeoutId) clearTimeout(timeoutId);
+          const response = await fetch(fullUrl, fetchOptions);
+          if (timeoutId) clearTimeout(timeoutId);
       
-      responseStatus = response.status;
-      response.headers.forEach((value, key) => {
-        responseHeaders[key] = value;
-      });
+          responseStatus = response.status;
+          response.headers.forEach((value, key) => {
+            responseHeaders[key] = value;
+          });
       
-      if (!response.ok) {
-         // Create axios-like error for compatibility with handleError
-         const error: any = new Error(response.statusText);
-         error.response = { status: responseStatus, data: await response.text().catch(() => ''), headers: responseHeaders };
-         error.isAxiosError = true;
-         throw error;
-      }
+          if (!response.ok) {
+             // Create axios-like error for compatibility with handleError
+             const error: any = new Error(response.statusText);
+             error.response = { status: responseStatus, data: await response.text().catch(() => ''), headers: responseHeaders };
+             error.isAxiosError = true;
+             throw error;
+          }
       
-      const contentType = response.headers.get('content-type');
-      if (contentType?.includes('application/json')) {
-        responseData = await response.json().catch(() => null);
-      } else {
-        responseData = await response.text().catch(() => '');
+          const contentType = response.headers.get('content-type');
+          if (contentType?.includes('application/json')) {
+            responseData = await response.json().catch(() => null);
+          } else {
+            responseData = await response.text().catch(() => '');
+          }
+        }
+        // Transport succeeded — leave the retry loop.
+        break;
+      } catch (transportError: unknown) {
+        const failure = handleError(transportError);
+        if (
+          !shortCircuited &&
+          maxRetries > 0 &&
+          retryAttempt < maxRetries &&
+          isRetryableFailure(failure.status) &&
+          // Never resubmit non-idempotent methods (POST/PATCH) unless the caller
+          // explicitly accepts the duplicate-write risk via retryNonIdempotent.
+          // Judge config.method — request-intercept plugins may have rewritten
+          // the method after `method` was derived, and config is what dispatches.
+          isRetryableMethod(String(config.method ?? method), options?.retryNonIdempotent === true)
+        ) {
+          retryAttempt++;
+          await retrySleep(retryBackoffMs(retryAttempt));
+          continue;
+        }
+        // Not retryable or retries exhausted — propagate the ORIGINAL error to
+        // the terminal handler so onError/plugin hooks fire exactly once.
+        throw transportError;
       }
     }
-    
+
+    // Task 3.1: opt-in runtime response validation via Standard Schema.
+    // Per-call `options.schema` wins over the route-def `registryRoute.schema`
+    // — the same "explicit option > registry entry" precedence used for
+    // method/timeout/headers above. Validates the RAW wire body (pre-model
+    // decode), since schemas describe JSON shape, not a decoded model
+    // instance. The validator, the error class, AND the throw/message logic
+    // all live in the deferred `responseValidation.js` chunk, so callers who
+    // never configure a schema pay only the bare presence-guard below.
+    const effSchema = options?.schema ?? registryRoute?.schema;
+    if (effSchema) {
+      const { validateResponseOrThrow } = await import('./responseValidation.js');
+      // Throws MinderResponseValidationError on mismatch → falls into the
+      // existing terminal `catch` below (the SAME path a transport failure
+      // takes), which gives this feature the never-throws contract (unless
+      // `throwOnError`), the `onError`/plugin-onError hooks, and the `.raw`
+      // attachment for free. On success `responseData` is replaced with the
+      // validator's (possibly transformed) output before model decode.
+      responseData = await validateResponseOrThrow(responseData, effSchema, responseStatus);
+    }
+
     // 7. Decode response with model if provided
     const decodedData = decodeWithModel<TData>(responseData, options?.model);
     
@@ -283,7 +762,7 @@ export async function minder<TData = any>(
     }
     
     // 10. Return success result
-    return {
+    const successResult: MinderResult<TData> = {
       data: decodedData,
       error: null,
       status: responseStatus,
@@ -296,10 +775,31 @@ export async function minder<TData = any>(
         cached: false,
       },
     };
-    
+
+    // MDPD-24: store the fresh (non-short-circuited) GET result when caching was
+    // opted into. The entry holds the RAW (pre-model-decode) response data — the
+    // hit path re-decodes per call so model prototypes survive — and a deep copy
+    // is stored so later callers can't mutate the entry. setCacheEntry enforces
+    // the size cap (oldest evicted).
+    if (cacheEnabled && cacheKey && !shortCircuited) {
+      setCacheEntry(cacheKey, {
+        result: deepCopyResult({ ...successResult, data: responseData }),
+        expiresAt: Date.now() + resolveCacheTtl(options?.cacheTTL),
+        storedAt: Date.now(),
+      });
+    }
+
+    return successResult;
+
   } catch (error: unknown) {
     // Handle error - NEVER throw
     const minderError = handleError(error);
+
+    // Expose the ORIGINAL underlying error (e.g. the raw AxiosError) as `.raw` so
+    // consumers can inspect the untouched transport error, not just the normalized
+    // Minder shape. Survives into both the returned error result and the thrown
+    // throwOnError error below.
+    (minderError as { raw?: unknown }).raw = error;
 
     // Fire plugin error hooks (non-blocking)
     if (pluginManager.size > 0) {
@@ -323,6 +823,8 @@ export async function minder<TData = any>(
         status: minderError.status,
         details: minderError.details,
         minderError,
+        // Original underlying error, so throwOnError consumers get `.raw` too.
+        raw: error,
       });
       throw err;
     }
@@ -356,7 +858,7 @@ export async function minder<TData = any>(
  * Attach Server-Sent Events stream capability
  */
 (minder as any).stream = async (url: string, options: StreamOptions) => {
-  const streamClient = new StreamClient(globalConfig as any);
+  const streamClient = new StreamClient(minderUrlConfig() as any);
   return streamClient.stream(url, options);
 };
 

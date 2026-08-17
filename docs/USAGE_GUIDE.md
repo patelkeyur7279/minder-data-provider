@@ -90,44 +90,92 @@ const { data } = useMinder('users', {
 
 ## Authentication (`useAuth`)
 
-Manage user sessions, login, and route protection.
+> **2.2.0 note:** `useAuth` used to mean different things depending on the subpath
+> you imported it from, and this section previously documented a fourth shape that
+> no shipped `useAuth` ever returned (`login`/`logout`/`isAuthenticated` — those
+> examples threw at runtime). As of 2.2.0, `useAuth` is **one hook, everywhere**:
+> the capability-contract hook backed by a registered certified provider (Clerk,
+> Firebase, Supabase, Razorpay's auth, etc. — see `docs/providers/CATALOG.md`). See
+> `docs/MIGRATION_GUIDE.md` if you were relying on `setToken`/`getToken`/
+> `clearAuth`/`isLoggedIn` from `minder-data-provider/auth` — that hook is now
+> named `useAuthToken`.
 
-### 1. Login & Logout
+`useAuth` manages a session backed by whichever certified provider you've
+registered. It never issues network requests itself — the provider's SDK does —
+`useAuth` just gives you a consistent shape to read it through.
+
+### 1. Reading session state
 
 ```typescript
-import { useAuth } from 'minder-data-provider/auth';
+import { useAuth } from 'minder-data-provider/auth'; // also available from the
+                                                        // root, /web, /nextjs, /electron
 
-function Login() {
-  const { login, logout, isAuthenticated } = useAuth();
-  const [email, setEmail] = useState('');
+function ProtectedPage() {
+  const { ready, error, session, signOut } = useAuth();
 
-  const handleLogin = async () => {
-    try {
-      // POSTs to your configured auth endpoint
-      await login({ email, password: '...' });
-    } catch (err) {
-      alert('Login failed');
-    }
-  };
+  // `ready` is false until a certified provider has been registered AND its
+  // session lookup has resolved. No provider registered => ready stays false
+  // and `error.code` is 'NO_PROVIDER_FOR_CAPABILITY'.
+  if (!ready) return <Login />;
+  if (error) return <div>Auth error: {error.message}</div>;
+  if (!session) return <Login />;
 
   return (
-    <button onClick={handleLogin}>Log In</button>
+    <div>
+      Welcome, {session.userId}
+      <button onClick={() => signOut()}>Log out</button>
+    </div>
   );
 }
 ```
 
-### 2. Protecting Routes
-Check `isAuthenticated` to gate access.
+### 2. Signing out
 
 ```typescript
-import { useAuth } from 'minder-data-provider/auth';
+const { signOut } = useAuth();
 
-function ProtectedPage() {
-  const { isAuthenticated, user } = useAuth();
+async function handleLogout() {
+  await signOut(); // delegates to the registered provider's signOut()
+}
+```
 
-  if (!isAuthenticated) return <Login />;
+### 3. Reaching the underlying provider client
 
-  return <div>Welcome, {user.name}</div>;
+```typescript
+const { getProviderClient } = useAuth();
+
+const clerkClient = getProviderClient(); // typed as `unknown` — cast to your
+                                          // provider's client type as needed
+```
+
+### `useAuthToken` — raw client-side token storage
+
+If you're not using a certified provider and just need to persist a raw
+JWT/opaque token client-side (with `AuthManager`-backed storage and an
+auth-state subscription), use `useAuthToken` instead. This is a different hook
+with a different shape — it does **not** model a provider session.
+
+```typescript
+import { minder } from 'minder-data-provider';
+import { useAuthToken } from 'minder-data-provider/auth';
+
+function Login() {
+  const { setToken, getToken, isLoggedIn, clearAuth } = useAuthToken();
+  const [email, setEmail] = useState('');
+
+  const handleLogin = async () => {
+    // minder() never throws — it returns a structured MinderResult, so the
+    // response body is under `data`, not the top-level result.
+    const { data, error } = await minder('auth/login', { email, password: '...' });
+    if (error || !data) return;
+    setToken(data.token);
+  };
+
+  if (isLoggedIn) {
+    return <button onClick={() => clearAuth()}>Log out</button>;
+  }
+
+  return <button onClick={handleLogin}>Log In</button>;
 }
 ```
 

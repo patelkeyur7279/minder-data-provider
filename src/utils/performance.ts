@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * Performance Optimization Utilities for minder-data-provider
  * Provides memoization, request batching, bundle analysis, and monitoring
@@ -11,7 +13,7 @@ import type { BatchedRequest, PendingRequest, PerformanceMetrics } from './perfo
 // Re-export types for backward compatibility
 export type { BatchedRequest, PendingRequest, PerformanceMetrics } from './performance/types.js';
 
-const logger = new Logger('Performance', { level: LogLevel.WARN });
+const logger = /*#__PURE__*/ new Logger('Performance', { level: LogLevel.WARN });
 
 // ============================================================================
 // REQUEST BATCHING
@@ -424,7 +426,6 @@ export function getBundleSizeImpact(features: string[]): {
     'upload': 7,
     'debug': 5,
     'ssr': 6,
-    'redux': 20,
     'tanstack-query': 25,
   };
 
@@ -433,10 +434,6 @@ export function getBundleSizeImpact(features: string[]): {
   }, 0);
 
   const recommendations: string[] = [];
-
-  if (features.includes('redux') && features.includes('tanstack-query')) {
-    recommendations.push('Consider using only one state management solution');
-  }
 
   if (estimatedSize > 100) {
     recommendations.push('Bundle size is large. Consider code splitting or removing unused features');

@@ -1,4 +1,4 @@
-import { useMinderContext } from '../core/MinderDataProvider.js';
+import { useMinderContext } from '../core/MinderContext.js';
 import type { DebugLogEntry } from './DebugManager.js';
 import { DebugLogType } from '../constants/enums.js';
 

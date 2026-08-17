@@ -1,0 +1,8 @@
+# Public config (safe to expose to the browser). Vite only exposes VITE_-prefixed vars.
+# VITE_API_URL=https://api.example.com
+
+# ── Provider SECRETS — never commit real values, never expose to the browser ──
+# Secret keys (Stripe secretKey, service-account JSON, webhook secrets, DB URLs)
+# must stay server-side. Reference them with `secret('NAME')` in config and
+# resolve them only on the server via `minder-data-provider/server`.
+# STRIPE_SECRET_KEY=

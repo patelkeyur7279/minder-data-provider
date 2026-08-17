@@ -6,11 +6,11 @@
  * - No heavy deps loaded at init
  * - Only load what's needed based on config
  * - Reduces initial bundle by 60-70%
- * 
+ *
  * @example
- * // Redux only loaded when user actually uses Redux
+ * // Axios only loaded when the client actually makes a request
  * const loader = new LazyDependencyLoader(config);
- * const redux = await loader.loadRedux(); // Loads on first use
+ * const axios = await loader.loadAxios(); // Loads on first use
  */
 
 import type { MinderConfig } from './types.js';
@@ -57,27 +57,6 @@ export class LazyDependencyLoader {
   }
 
   /**
-   * Load Redux only if user has redux config
-   */
-  async loadRedux() {
-    if (!this.config.redux) {
-      return null; // Don't load if not configured
-    }
-
-    return this.loadModule('redux', async () => {
-      const [toolkit, reactRedux] = await Promise.all([
-        import('@reduxjs/toolkit'),
-        import('react-redux'),
-      ]);
-      
-      return {
-        toolkit,
-        reactRedux,
-      };
-    });
-  }
-
-  /**
    * Load TanStack Query (always needed for caching)
    */
   async loadTanStackQuery() {
@@ -94,25 +73,6 @@ export class LazyDependencyLoader {
     return this.loadModule('axios', async () => {
       const axios = await import('axios');
       return axios;
-    });
-  }
-
-  /**
-   * Load Immer only if optimistic updates enabled
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async loadImmer(): Promise<any> {
-    const hasOptimistic = Object.values(this.config.routes).some(
-      (route) => route.optimistic
-    );
-
-    if (!hasOptimistic) {
-      return null; // Don't load if not using optimistic updates
-    }
-
-    return this.loadModule('immer', async () => {
-      const immer = await import('immer');
-      return immer;
     });
   }
 
@@ -212,11 +172,6 @@ export class LazyDependencyLoader {
     promises.push(this.loadTanStackQuery());
     promises.push(this.loadAxios());
 
-    // Load based on config
-    if (this.config.redux) {
-      promises.push(this.loadRedux());
-    }
-
     // Load async (don't block)
     Promise.all(promises).catch((error) => {
       this.logger.error('Failed to preload dependencies:', error);
@@ -230,10 +185,8 @@ export class LazyDependencyLoader {
     const modules: DependencyModule[] = [];
 
     const deps = [
-      { name: 'redux', version: '^2.3.0', size: '~15KB', requiredBy: ['ReduxConfig'] },
       { name: 'tanstack-query', version: '^5.59.0', size: '~40KB', requiredBy: ['Cache', 'CRUD'] },
       { name: 'axios', version: '^1.7.0', size: '~13KB', requiredBy: ['HTTP'] },
-      { name: 'immer', version: '^10.1.0', size: '~12KB', requiredBy: ['Optimistic Updates'] },
       { name: 'dompurify', version: '^3.3.0', size: '~20KB', requiredBy: ['Security'] },
     ];
 
@@ -336,26 +289,11 @@ export class LazyDependencyLoader {
    * Get loading recommendations
    */
   getRecommendations(): string[] {
+    // No recommendations currently generated (the only rule — flagging Immer
+    // loaded without optimistic updates — was removed with D5: immer is no
+    // longer a tracked dependency). Kept as a method (returning `[]`) rather
+    // than removed outright since `printPerformanceReport()` calls it.
     const recommendations: string[] = [];
-    const loaded = this.getLoadedModules();
-
-    // Check if Redux loaded but no redux config
-    if (loaded.find((m) => m.name === 'redux')?.loaded && !this.config.redux) {
-      recommendations.push(
-        'Redux is loaded but not configured. Consider removing redux dependency.'
-      );
-    }
-
-    // Check if Immer loaded but no optimistic updates
-    const hasOptimistic = Object.values(this.config.routes).some(
-      (route) => route.optimistic
-    );
-    if (loaded.find((m) => m.name === 'immer')?.loaded && !hasOptimistic) {
-      recommendations.push(
-        'Immer is loaded but no optimistic updates configured. Consider enabling optimistic updates.'
-      );
-    }
-
     return recommendations;
   }
 }

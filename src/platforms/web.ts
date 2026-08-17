@@ -8,6 +8,24 @@
 export { minder, configureMinder } from '../core/minder.js';
 export { useMinder } from '../hooks/useMinder.js';
 
+// Capability contract hooks (provider foundation, task F-03) + the registration function apps
+// need to wire a provider up. The full contracts barrel (types + getCapabilityProvider etc.) is
+// exported from the root entry point only — see src/index.ts.
+export { useAuth, useCheckout, useStorage, useLive } from '../hooks/contracts.js';
+export { registerCapabilityProvider } from '../contracts/registry.js';
+export { registerMockProvider, getProviderConfig } from '../contracts/mockRegistry.js';
+export { registerClientSafeProviderKeys } from '../config/validateConfig.js';
+
+// Enums (re-exported directly so platform-entry consumers don't need to
+// reach into `constants/enums.js` themselves). Uses a concrete value binding
+// so esbuild eagerly runs the lazily-wrapped enum init thunk under
+// `splitting` + `sideEffects:false`. See src/index.ts for the full rationale
+// and tests/dist-entry-exports.test.ts for the regression guard.
+import { HttpMethod as _HttpMethod } from '../constants/enums.js';
+export const HttpMethod = _HttpMethod;
+// eslint-disable-next-line @typescript-eslint/no-redeclare -- legal TS value+type merge; the pair is what keeps the enum eagerly initialized
+export type HttpMethod = _HttpMethod;
+
 // Platform detection
 export { PlatformDetector } from '../platform/PlatformDetector.js';
 export { PlatformCapabilityDetector } from '../platform/PlatformCapabilities.js';

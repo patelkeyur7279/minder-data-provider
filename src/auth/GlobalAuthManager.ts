@@ -12,7 +12,8 @@
  * - Refresh token support
  */
 
-import { parseJWT as decodeJwt } from '../utils/jwt.js';
+import { parseJWT as decodeJwt, isTokenUsable } from '../utils/jwt.js';
+import { minderStore, lazySingletonProxy } from '../core/singletons.js';
 
 interface GlobalAuthConfig {
   storage?: 'localStorage' | 'sessionStorage' | 'memory';
@@ -129,8 +130,13 @@ class GlobalAuthManager {
     }
   }
 
+  /**
+   * Same fail-closed semantics as AuthManager.isAuthenticated() (this is the
+   * no-provider fallback path in useMinder). No signature verification —
+   * see isTokenUsable().
+   */
   isAuthenticated(): boolean {
-    return !!this.token;
+    return isTokenUsable(this.token);
   }
 
   getCurrentUser(): any {
@@ -157,8 +163,28 @@ class GlobalAuthManager {
   }
 }
 
-// Global singleton instance
-export const globalAuthManager = new GlobalAuthManager();
+// Global singleton instance (A5). Backed by the process-wide singleton store
+// (../core/singletons.ts) so its identity survives however a consumer's bundler
+// splits/duplicates chunks — one auth manager, one restored-token state, shared
+// across every entry. Exported through `lazySingletonProxy` so the binding keeps
+// its object API (`globalAuthManager.getToken()`, etc. — P1, zero public-API
+// change) while DEFERRING `new GlobalAuthManager()` from import time to the first
+// property access (A5, Spec 1.3c). `/*#__PURE__*/` lets a tree-shaker drop it for
+// consumers that never reference it.
+//
+// P2 — security invariants UNTOUCHED. Client auth = presence + expiry only, and
+// corrupt JWTs fail closed via isTokenExpired/isTokenUsable; those live in the
+// class methods, which the proxy forwards to verbatim. The only behavioural delta
+// is TIMING: constructor work (incl. restoreFromStorage) now runs on first access
+// instead of at import. This is safe — the first method call constructs-then-runs,
+// so any consumer that reads the manager still observes the restored token before
+// acting; no auth decision is made against an unconstructed manager. The exported
+// value binding and its `GlobalAuthManager` type are unchanged (P1).
+function globalAuthManagerSingleton(): GlobalAuthManager {
+  const s = minderStore();
+  return (s.globalAuthManager ??= new GlobalAuthManager());
+}
+export const globalAuthManager = /*#__PURE__*/ lazySingletonProxy(globalAuthManagerSingleton);
 
 // Export class for custom instances
 export { GlobalAuthManager };

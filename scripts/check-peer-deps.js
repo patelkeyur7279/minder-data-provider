@@ -1,239 +1,121 @@
 #!/usr/bin/env node
 
 /**
- * Automatic Peer Dependency Version Checker
+ * Postinstall peer-dependency notice.
  *
- * This script prevents version conflicts by:
- * 1. Detecting multiple React/ReactDOM installations
- * 2. Checking peer dependency compatibility
- * 3. Warning about potential issues
- * 4. Suggesting fixes
+ * Runs after `npm install minder-data-provider`. Gently WARNS (never blocks the
+ * install) when the consuming project's required peers are missing or below the
+ * minimums minder declares, or when multiple React copies are present (a common
+ * "hooks broke" cause). Points the developer at `npx minder doctor --fix`.
+ *
+ * Zero dependencies, no network, no secrets, no telemetry. Minimums are read
+ * from minder's OWN package.json peerDependencies (single source of truth).
  */
 
-const fs = require("fs");
-const path = require("path");
-const { execSync } = require("child_process");
+'use strict';
 
-const COLORS = {
-  reset: "\x1b[0m",
-  red: "\x1b[31m",
-  green: "\x1b[32m",
-  yellow: "\x1b[33m",
-  blue: "\x1b[34m",
-  cyan: "\x1b[36m",
-  bold: "\x1b[1m",
-};
+const fs = require('fs');
+const path = require('path');
 
-function log(message, color = "reset") {
-  console.log(`${COLORS[color]}${message}${COLORS.reset}`);
+// The CONSUMING project directory. npm runs a dependency's lifecycle scripts
+// with cwd = the dependency's own dir, but exposes the original project dir via
+// INIT_CWD — use it so we inspect the user's node_modules, not our own.
+function projectDir() {
+  return process.env.INIT_CWD || process.cwd();
 }
 
-function checkReactVersions() {
-  log("\n🔍 Checking React versions...", "cyan");
-
-  const projectRoot = process.cwd();
-  const issues = [];
-  const warnings = [];
-
+// minder's own package.json (this script lives in <pkg>/scripts/).
+function minderPkg() {
   try {
-    // Check if this is a workspace/monorepo
-    const isMonorepo =
-      fs.existsSync(path.join(projectRoot, "demo")) ||
-      fs.existsSync(path.join(projectRoot, "packages"));
-
-    if (isMonorepo) {
-      log("  📦 Monorepo detected", "blue");
-    }
-
-    // Get installed React versions
-    let reactVersions = new Map();
-    let reactDomVersions = new Map();
-
-    // Check main package
-    try {
-      const mainReact = path.join(
-        projectRoot,
-        "node_modules",
-        "react",
-        "package.json"
-      );
-      const mainReactDom = path.join(
-        projectRoot,
-        "node_modules",
-        "react-dom",
-        "package.json"
-      );
-
-      if (fs.existsSync(mainReact)) {
-        const version = JSON.parse(fs.readFileSync(mainReact, "utf8")).version;
-        reactVersions.set("main", version);
-        log(`  ✓ Main package React: ${version}`, "green");
-      }
-
-      if (fs.existsSync(mainReactDom)) {
-        const version = JSON.parse(
-          fs.readFileSync(mainReactDom, "utf8")
-        ).version;
-        reactDomVersions.set("main", version);
-      }
-    } catch (err) {
-      // React not installed in main package (this is OK for libraries)
-    }
-
-    // Check demo/workspace packages
-    if (isMonorepo) {
-      const workspaces = ["demo", "packages"];
-
-      for (const workspace of workspaces) {
-        const workspacePath = path.join(projectRoot, workspace);
-        if (!fs.existsSync(workspacePath)) continue;
-
-        const reactPath = path.join(
-          workspacePath,
-          "node_modules",
-          "react",
-          "package.json"
-        );
-        const reactDomPath = path.join(
-          workspacePath,
-          "node_modules",
-          "react-dom",
-          "package.json"
-        );
-
-        if (fs.existsSync(reactPath)) {
-          const version = JSON.parse(
-            fs.readFileSync(reactPath, "utf8")
-          ).version;
-          reactVersions.set(workspace, version);
-          log(`  ✓ ${workspace} React: ${version}`, "green");
-        }
-
-        if (fs.existsSync(reactDomPath)) {
-          const version = JSON.parse(
-            fs.readFileSync(reactDomPath, "utf8")
-          ).version;
-          reactDomVersions.set(workspace, version);
-        }
-      }
-    }
-
-    // Check for version conflicts
-    const uniqueReactVersions = new Set(reactVersions.values());
-    const uniqueReactDomVersions = new Set(reactDomVersions.values());
-
-    if (uniqueReactVersions.size > 1) {
-      issues.push({
-        type: "MULTIPLE_REACT_VERSIONS",
-        message: "Multiple React versions detected!",
-        versions: Array.from(reactVersions.entries()),
-        severity: "error",
-      });
-    }
-
-    if (uniqueReactDomVersions.size > 1) {
-      issues.push({
-        type: "MULTIPLE_REACTDOM_VERSIONS",
-        message: "Multiple ReactDOM versions detected!",
-        versions: Array.from(reactDomVersions.entries()),
-        severity: "error",
-      });
-    }
-
-    // Check React/ReactDOM version match
-    for (const [pkg, reactVer] of reactVersions.entries()) {
-      const reactDomVer = reactDomVersions.get(pkg);
-      if (reactDomVer && reactVer !== reactDomVer) {
-        issues.push({
-          type: "VERSION_MISMATCH",
-          message: `React and ReactDOM version mismatch in ${pkg}`,
-          details: { react: reactVer, reactDom: reactDomVer },
-          severity: "error",
-        });
-      }
-    }
-
-    // Check peer dependencies
-    const packageJson = JSON.parse(
-      fs.readFileSync(path.join(projectRoot, "package.json"), "utf8")
-    );
-    const peerDeps = packageJson.peerDependencies || {};
-
-    if (peerDeps.react) {
-      const requiredRange = peerDeps.react;
-      for (const [pkg, version] of reactVersions.entries()) {
-        if (!satisfiesRange(version, requiredRange)) {
-          warnings.push({
-            type: "PEER_DEP_WARNING",
-            message: `React version in ${pkg} (${version}) may not satisfy peer dependency (${requiredRange})`,
-            severity: "warning",
-          });
-        }
-      }
-    }
-
-    // Report issues
-    if (issues.length > 0) {
-      log("\n❌ Issues found:", "red");
-      issues.forEach((issue) => {
-        log(`  • ${issue.message}`, "red");
-        if (issue.versions) {
-          issue.versions.forEach(([pkg, ver]) => {
-            log(`    - ${pkg}: ${ver}`, "yellow");
-          });
-        }
-        if (issue.details) {
-          log(`    ${JSON.stringify(issue.details, null, 2)}`, "yellow");
-        }
-      });
-
-      log("\n💡 Suggested fixes:", "cyan");
-      log("  1. Run: npm run fix-versions", "cyan");
-      log("  2. Or manually remove React from main node_modules:", "cyan");
-      log("     rm -rf node_modules/react node_modules/react-dom", "cyan");
-      log(
-        "  3. Ensure React is only in peerDependencies, not dependencies/devDependencies",
-        "cyan"
-      );
-
-      return false;
-    }
-
-    if (warnings.length > 0) {
-      log("\n⚠️  Warnings:", "yellow");
-      warnings.forEach((warning) => {
-        log(`  • ${warning.message}`, "yellow");
-      });
-    }
-
-    if (issues.length === 0 && warnings.length === 0) {
-      log("\n✅ All version checks passed!", "green");
-    }
-
-    return issues.length === 0;
-  } catch (error) {
-    log(`\n⚠️  Error checking versions: ${error.message}`, "yellow");
-    return true; // Don't block installation on errors
-  }
-}
-
-function satisfiesRange(version, range) {
-  // Simple range check (supports ^X.Y.Z and >=X.Y.Z || ^A.B.C format)
-  try {
-    const cleanVersion = version.replace(/[^0-9.]/g, "");
-    const [major] = cleanVersion.split(".").map(Number);
-
-    // Extract major versions from range
-    const rangeMatches = range.match(/\d+/g);
-    if (!rangeMatches) return true;
-
-    const allowedMajors = rangeMatches.map(Number);
-    return allowedMajors.includes(major);
+    return require(path.join(__dirname, '..', 'package.json'));
   } catch {
-    return true; // Assume OK if can't parse
+    return null;
   }
 }
 
-// Run check
-const success = checkReactVersions();
-process.exit(success ? 0 : 1);
+/** Lowest concrete version in a range, e.g. "^18.0.0 || ^19.0.0" -> "18.0.0". */
+function minVersionFromRange(range) {
+  const found = String(range).match(/\d+\.\d+\.\d+/g);
+  if (!found || found.length === 0) return null;
+  return found
+    .map((v) => v.split('.').map(Number))
+    .sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2])[0]
+    .join('.');
+}
+
+/** installed >= minimum ? true when either is unparseable (don't cry wolf). */
+function gte(installed, minimum) {
+  const a = String(installed).match(/(\d+)\.(\d+)\.(\d+)/);
+  const b = String(minimum).match(/(\d+)\.(\d+)\.(\d+)/);
+  if (!a || !b) return true;
+  for (let i = 1; i <= 3; i++) {
+    if (+a[i] > +b[i]) return true;
+    if (+a[i] < +b[i]) return false;
+  }
+  return true;
+}
+
+/** Installed version of a package under a directory's node_modules, or null. */
+function installedVersion(dir, pkg) {
+  try {
+    const pj = path.join(dir, 'node_modules', ...pkg.split('/'), 'package.json');
+    if (!fs.existsSync(pj)) return null;
+    return JSON.parse(fs.readFileSync(pj, 'utf8')).version || null;
+  } catch {
+    return null;
+  }
+}
+
+// The peers that must be present and current for minder to work at all.
+const REQUIRED = ['react', 'react-dom', '@tanstack/react-query', '@tanstack/query-core'];
+
+/** Build the list of human-readable warnings (empty = all good). */
+function collectWarnings(dir, pkg) {
+  const warnings = [];
+  const peers = (pkg && pkg.peerDependencies) || {};
+  const meta = (pkg && pkg.peerDependenciesMeta) || {};
+
+  for (const name of REQUIRED) {
+    if (!peers[name] || (meta[name] && meta[name].optional)) continue;
+    const min = minVersionFromRange(peers[name]);
+    const have = installedVersion(dir, name);
+    if (!have) {
+      warnings.push(`${name} is not installed — minder needs >= ${min}. Run: npm install ${name}@^${min}`);
+      continue;
+    }
+    if (min && !gte(have, min)) {
+      warnings.push(`${name} ${have} is older than the required ${min}. Run: npm install ${name}@^${min}`);
+    }
+  }
+
+  // Light duplicate-React check: a second nested React under minder's own
+  // node_modules at a different version is the classic invalid-hook-call cause.
+  const top = installedVersion(dir, 'react');
+  const nested = installedVersion(path.join(dir, 'node_modules', 'minder-data-provider'), 'react');
+  if (top && nested && top !== nested) {
+    warnings.push(`Multiple React versions detected (${top} and ${nested}) — dedupe React to a single copy.`);
+  }
+
+  return warnings;
+}
+
+/** Print warnings (never throws). Returns the number of warnings. */
+function run(dir, pkg, log) {
+  const warnings = collectWarnings(dir, pkg);
+  if (warnings.length === 0) return 0; // silent on success — no install noise
+  log('\n⚠️  minder-data-provider: peer dependency check');
+  for (const w of warnings) log('  • ' + w);
+  log('  ↳ Run `npx minder doctor --fix` to resolve.\n');
+  return warnings.length;
+}
+
+if (require.main === module) {
+  try {
+    run(projectDir(), minderPkg(), (m) => console.warn(m));
+  } catch {
+    // Never let a diagnostic crash an install.
+  }
+  process.exit(0); // Non-blocking by contract.
+}
+
+module.exports = { collectWarnings, minVersionFromRange, gte, installedVersion, run, REQUIRED };

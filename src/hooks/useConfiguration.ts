@@ -1,10 +1,12 @@
+"use client";
+
 /**
  * Hook for managing Minder configuration
  * Allows runtime configuration updates and feature toggling
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { useMinderContext } from '../core/MinderDataProvider.js';
+import { useMinderContext } from '../core/MinderContext.js';
 import type { MinderConfig } from '../core/types.js';
 import { SmartConfigManager } from '../core/SmartConfig.js';
 import { telemetry } from '../utils/TelemetryTracker.js';

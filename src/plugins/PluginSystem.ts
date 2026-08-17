@@ -4,6 +4,7 @@
  */
 
 import { Logger, LogLevel } from '../utils/Logger.js';
+import { minderStore, lazySingletonProxy } from '../core/singletons.js';
 
 /**
  * Capabilities a plugin can declare (used for introspection + lazy loading).
@@ -41,9 +42,32 @@ export interface MinderPlugin {
   onRequest?: (request: PluginRequest) => void | Promise<void>;
   onResponse?: (response: PluginResponse) => void | Promise<void>;
   onError?: (error: PluginError) => void | Promise<void>;
+  /**
+   * Fired on a fresh hit in minder()'s opt-in `{ cache: true }` response cache
+   * (MDPD-5). Receives the cache key, cached value, and entry age.
+   */
   onCacheHit?: (cacheEntry: CacheHitEvent) => void | Promise<void>;
+  /**
+   * Fired when a `{ cache: true }` GET has no fresh entry (first call or expired)
+   * before the transport is consulted (MDPD-5).
+   */
   onCacheMiss?: (cacheKey: string) => void | Promise<void>;
   onDestroy?: () => void | Promise<void>;
+
+  /**
+   * Mutating request middleware. Unlike the fire-and-forget `onRequest`
+   * observer, this hook can REWRITE the outgoing request or SHORT-CIRCUIT it
+   * entirely. Plugins run in registration order, each receiving the previous
+   * plugin's output config. Return the (possibly mutated) config to continue
+   * the chain, or a {@link ShortCircuitResponse} to stop the chain AND the
+   * request — the caller then receives that synthetic response as if it had
+   * come from the network. Throwing is treated as a bug: the throwing plugin
+   * is logged and skipped, and the chain continues with the prior config
+   * (deliberate short-circuits are returns, never throws).
+   */
+  onRequestIntercept?: (
+    config: InterceptableRequest
+  ) => InterceptableRequest | ShortCircuitResponse | Promise<InterceptableRequest | ShortCircuitResponse>;
 
   // Capability hooks — all optional, fired only when present.
   /** Supply an auth token (auth-provider plugins: Firebase, Auth0, Clerk…). */
@@ -64,6 +88,51 @@ export interface PluginRequest {
   headers?: Record<string, string>;
   body?: any;
   timestamp: number;
+}
+
+/**
+ * The mutable request shape handed to {@link MinderPlugin.onRequestIntercept}.
+ * A plugin may return a modified copy (or the same object) to continue the
+ * chain.
+ */
+export interface InterceptableRequest {
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+  params?: Record<string, unknown>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data?: any;
+  /** The registered route name, when the request originated from one. */
+  routeName?: string;
+}
+
+/**
+ * Returned by {@link MinderPlugin.onRequestIntercept} to stop the middleware
+ * chain and the request itself — the caller receives `response` as though the
+ * network had returned it (no transport call is made).
+ */
+export interface ShortCircuitResponse {
+  shortCircuit: true;
+  response: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data: any;
+    status: number;
+    headers?: Record<string, string>;
+  };
+}
+
+/**
+ * Narrow an {@link MinderPlugin.onRequestIntercept} result to a
+ * {@link ShortCircuitResponse}.
+ */
+export function isShortCircuitResponse(
+  value: InterceptableRequest | ShortCircuitResponse
+): value is ShortCircuitResponse {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as ShortCircuitResponse).shortCircuit === true
+  );
 }
 
 export interface PluginResponse {
@@ -90,19 +159,26 @@ export interface CacheHitEvent {
 }
 
 export interface UploadLifecycleEvent {
-  phase: 'start' | 'progress' | 'complete' | 'error';
+  phase: 'start' | 'progress' | 'success' | 'complete' | 'error';
   uploadId: string;
   url?: string;
+  /** The upload route/endpoint this event refers to. */
+  route?: string;
   file?: { name: string; size: number; type: string };
   progress?: { loaded: number; total: number; percentage: number };
+  /** The upload result payload (present on the `success` phase). */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  result?: any;
   error?: { message: string; code?: string };
   timestamp: number;
 }
 
 export interface SyncLifecycleEvent {
-  phase: 'start' | 'progress' | 'complete' | 'error';
+  phase: 'start' | 'progress' | 'success' | 'complete' | 'error';
   pending?: number;
   processed?: number;
+  /** Number of requests in the offline queue at emission time. */
+  queueSize?: number;
   error?: { message: string; code?: string };
   timestamp: number;
 }
@@ -123,16 +199,26 @@ export class PluginManager {
   }
 
   /**
-   * Register a plugin
+   * Register a plugin.
+   *
+   * Returns `true` when the plugin was newly registered, `false` when it was
+   * skipped because a plugin with the same name is already registered (the
+   * existing warning still fires). Callers that track ownership of the names
+   * they register (e.g. `configureMinder`'s config-plugin bookkeeping) MUST
+   * check this return value rather than assuming registration always
+   * succeeds — otherwise they can end up believing they own a name actually
+   * registered by a different caller, and later unregister it out from under
+   * that caller.
    */
-  register(plugin: MinderPlugin): void {
+  register(plugin: MinderPlugin): boolean {
     if (this.plugins.has(plugin.name)) {
       this.logger.warn(`Plugin "${plugin.name}" is already registered`);
-      return;
+      return false;
     }
 
     this.plugins.set(plugin.name, plugin);
     this.logger.info(`✓ Plugin registered: ${plugin.name}${plugin.version ? ` v${plugin.version}` : ''}`);
+    return true;
   }
 
   /**
@@ -243,6 +329,52 @@ export class PluginManager {
   }
 
   /**
+   * Whether any registered plugin implements the mutating
+   * {@link MinderPlugin.onRequestIntercept} middleware. Lets the hot request
+   * path skip all interception work (zero overhead) when nobody opted in.
+   */
+  hasRequestInterceptors(): boolean {
+    for (const plugin of this.plugins.values()) {
+      if (plugin.onRequestIntercept) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Run the mutating request-intercept middleware chain. Plugins execute in
+   * REGISTRATION ORDER, each receiving the previous plugin's output config.
+   *
+   * - A plugin returning a {@link ShortCircuitResponse} stops the chain and is
+   *   returned immediately — the caller must then resolve with that synthetic
+   *   response WITHOUT hitting the transport.
+   * - A plugin that THROWS is logged and SKIPPED; the chain continues with the
+   *   prior config (deliberate short-circuits are returns, never throws).
+   *
+   * Returns either the final (possibly mutated) {@link InterceptableRequest} or
+   * the {@link ShortCircuitResponse} that halted the chain.
+   */
+  async executeRequestInterceptors(
+    request: InterceptableRequest
+  ): Promise<InterceptableRequest | ShortCircuitResponse> {
+    let current: InterceptableRequest = request;
+    for (const [name, plugin] of this.plugins) {
+      if (!plugin.onRequestIntercept) continue;
+      try {
+        const result = await plugin.onRequestIntercept(current);
+        if (isShortCircuitResponse(result)) {
+          return result;
+        }
+        // Guard against a plugin returning nothing — keep the prior config.
+        current = result ?? current;
+      } catch (error) {
+        this.logger.warn(`Plugin "${name}" onRequestIntercept threw; skipping`, error);
+        // Chain continues with the prior config (current unchanged).
+      }
+    }
+    return current;
+  }
+
+  /**
    * Execute auth-refresh hooks (after the client rotates its tokens).
    */
   async executeAuthRefreshHooks(tokens: { accessToken?: string; refreshToken?: string }): Promise<void> {
@@ -348,8 +480,21 @@ export class PluginManager {
   }
 }
 
-// Global plugin manager instance
-export const pluginManager = new PluginManager();
+// Global plugin manager instance (A4). Backed by the process-wide singleton
+// store (../core/singletons.ts) so its identity survives however a consumer's
+// bundler splits/duplicates chunks — every entry sees the SAME manager, so a
+// plugin registered once is observed everywhere. The `/*#__PURE__*/` annotation
+// lets a tree-shaker drop it entirely for consumers that never reference it.
+// The exported value binding and its `PluginManager` type are unchanged (P1).
+function pluginManagerSingleton(): PluginManager {
+  const s = minderStore();
+  return (s.pluginManager ??= new PluginManager());
+}
+// A4 (Spec 1.3c): lazy accessor-backed binding. The store slot guarantees ONE
+// bundler-independent instance; the proxy keeps the `pluginManager.method()` API
+// identical (P1 — zero public-API change) while deferring `new PluginManager()`
+// from import time to first property access.
+export const pluginManager = /*#__PURE__*/ lazySingletonProxy(pluginManagerSingleton);
 
 /**
  * Built-in Plugins
@@ -359,7 +504,7 @@ export const pluginManager = new PluginManager();
  * Logger Plugin - Logs all requests and responses (only in debug mode)
  */
 export const createLoggerPlugin = (debug: boolean = false): MinderPlugin => {
-  const logger = new Logger('LoggerPlugin', {
+  const logger = /*#__PURE__*/ new Logger('LoggerPlugin', {
     level: debug ? LogLevel.DEBUG : LogLevel.WARN
   });
   
@@ -475,7 +620,7 @@ export class CacheWarmupPlugin implements MinderPlugin {
  * Performance Monitor Plugin - Track performance metrics
  */
 export const createPerformanceMonitorPlugin = (debug: boolean = false): MinderPlugin => {
-  const logger = new Logger('PerformanceMonitorPlugin', {
+  const logger = /*#__PURE__*/ new Logger('PerformanceMonitorPlugin', {
     level: debug ? LogLevel.DEBUG : LogLevel.WARN
   });
   
@@ -502,8 +647,32 @@ export function createPlugin(plugin: MinderPlugin): MinderPlugin {
 }
 
 /**
- * Helper to register multiple plugins at once
+ * Helper to register multiple plugins at once.
+ *
+ * Accepts both the variadic form `registerPlugins(a, b)` and — MDPD-30 — the
+ * array form `registerPlugins([a, b])`, which previously registered the array
+ * object itself as a (nameless) plugin. Array arguments are flattened to ANY
+ * depth (`registerPlugins([[a, b], c])`, `registerPlugins([[[a]]])`, etc.) —
+ * a one-level-only flatten silently dropped a nested array with a misleading
+ * "no string name" warning instead of registering the plugins inside it. Any
+ * entry lacking a string `name` is warned and skipped rather than silently
+ * registered under an `undefined` key.
  */
-export function registerPlugins(...plugins: MinderPlugin[]): void {
-  plugins.forEach(plugin => pluginManager.register(plugin));
+export function registerPlugins(
+  ...plugins: Array<MinderPlugin | MinderPlugin[]>
+): void {
+  const flattened: unknown[] = (plugins as unknown[]).flat(Infinity);
+
+  const logger = /*#__PURE__*/ new Logger('PluginSystem', { level: LogLevel.WARN });
+  for (const candidate of flattened) {
+    const plugin = candidate as MinderPlugin | null | undefined;
+    if (!plugin || typeof plugin.name !== 'string' || plugin.name.length === 0) {
+      logger.warn(
+        'registerPlugins: ignored an entry with no string "name". ' +
+          'Each plugin must be an object with a unique string `name`.'
+      );
+      continue;
+    }
+    pluginManager.register(plugin);
+  }
 }

@@ -52,3 +52,12 @@ export type {
 
 // Note: Offline support will be added in Phase 5
 // export * from '../platform/offline/index.js';
+
+// HttpMethod re-exported via a concrete value binding (eager enum init under
+// tsup splitting + sideEffects:false) — same fix as web.ts, so RN/Expo/Node
+// consumers get a defined enum instead of undefined. Guarded by
+// tests/dist-entry-exports.test.ts.
+import { HttpMethod as _HttpMethod } from '../constants/enums.js';
+export const HttpMethod = _HttpMethod;
+// eslint-disable-next-line @typescript-eslint/no-redeclare -- legal TS value+type merge keeps the enum eagerly initialized
+export type HttpMethod = _HttpMethod;

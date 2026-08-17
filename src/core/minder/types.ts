@@ -2,6 +2,8 @@
  * Type definitions for Minder data provider
  */
 
+import type { StandardSchemaV1, StandardSchemaIssue } from '../../types/standard-schema.js';
+
 // ============================================================================
 // PUBLIC TYPES
 // ============================================================================
@@ -37,6 +39,20 @@ export interface MinderOptions<TModel = any> {
    * model: UserModel
    */
   model?: new (...args: any[]) => TModel;
+
+  /**
+   * Opt-in runtime validation of the response body against any Standard
+   * Schema validator (Zod >=3.24, Valibot, ArkType, Effect Schema, or any
+   * object implementing the `~standard` interface). Distinct from `validate`
+   * (client-side pre-flight over the OUTGOING data on mutations): `schema`
+   * checks what the server sent back, AFTER the network round-trip. On
+   * success `data` is typed as `InferOutput<S>` and replaced with the
+   * validator's (possibly transformed) output; on failure `minder()` returns
+   * `{ success: false, error }` with `error.code ===
+   * 'RESPONSE_VALIDATION_FAILED'` — it never silently lets bad data through.
+   * Wins over a route-def `schema` when both are set.
+   */
+  schema?: StandardSchemaV1<any, any>;
 
   /**
    * Upload progress callback
@@ -85,14 +101,17 @@ export interface MinderOptions<TModel = any> {
   timeout?: number;
 
   /**
-   * Enable caching
-   * @default true
+   * Opt-in response cache for standalone minder() GET requests. Entries are
+   * keyed by method+URL+params+auth-identity (a hash of token/Authorization —
+   * never shared across different credentials) and capped at 200 entries.
+   * @default false (no caching unless explicitly enabled)
    */
   cache?: boolean;
 
   /**
-   * Cache time to live in milliseconds
-   * @default 300000 (5 minutes)
+   * Cache time to live in milliseconds. Falls back to the global config's
+   * cache.staleTime/ttl when unset.
+   * @default 60000 (60 seconds)
    */
   cacheTTL?: number;
 
@@ -109,10 +128,23 @@ export interface MinderOptions<TModel = any> {
   optimistic?: boolean;
 
   /**
-   * Retry failed requests
-   * @default 3
+   * Retry transiently-failed requests (network error / 5xx / 429; never 4xx)
+   * up to this many times with a small backoff. Retries apply only to
+   * idempotent methods (GET/HEAD/OPTIONS/PUT/DELETE) unless
+   * `retryNonIdempotent` is also set.
+   * @default 0 (no retries unless explicitly enabled)
    */
   retries?: number;
+
+  /**
+   * DANGER: also retry non-idempotent methods (POST/PATCH) when `retries` is
+   * set. A retried POST can duplicate a side-effectful write (double order /
+   * double charge) if the server processed the original request but the
+   * response was lost. Enable only when the endpoint is idempotent by design
+   * (e.g. guarded by an idempotency key).
+   * @default false
+   */
+  retryNonIdempotent?: boolean;
 
   /**
    * Base URL override
@@ -206,6 +238,13 @@ export interface MinderError {
    * Suggested solution
    */
   solution?: string;
+
+  /**
+   * Standard Schema validation issues. Populated only when `code ===
+   * 'RESPONSE_VALIDATION_FAILED'` (see `MinderOptions.schema` /
+   * `ApiRoute.schema`); absent otherwise.
+   */
+  issues?: readonly StandardSchemaIssue[];
 }
 
 // ============================================================================

@@ -1,0 +1,36 @@
+{
+  "name": "@minder/provider-cognito",
+  "version": "0.1.0",
+  "displayName": "Cognito",
+  "categories": ["auth"],
+  "capabilities": ["auth", "session-verification"],
+  "config": {
+    "clientSafe": ["userPoolId", "userPoolClientId", "region", "mock"],
+    "serverOnly": []
+  },
+  "scopes": [
+    {
+      "scope": "auth:session",
+      "why": "Read the current Cognito session via Amplify's fetchAuthSession() (decoded ID token payload) to expose the signed-in user via useAuth()."
+    },
+    {
+      "scope": "auth:signout",
+      "why": "Sign the user out (Amplify signOut) when the app calls useAuth().signOut()."
+    },
+    {
+      "scope": "session:verify",
+      "why": "Verify a request's Cognito access token server-side by calling the user pool's own OAuth2 GET {userPoolDomain}/oauth2/userInfo endpoint, applying fail-closed handling before any protected server route trusts the caller. Requires an access token obtained via the Hosted UI / OAuth2 authorization-code flow (scoped) — tokens from a direct username/password InitiateAuth call are not accepted by this endpoint."
+    }
+  ],
+  "runtimes": ["web", "node", "edge"],
+  "frameworks": ["react", "nextjs", "vite"],
+  "peerDependencies": {
+    "aws-amplify": "^6.0.0"
+  },
+  "docs": {
+    "setup": "./README.md",
+    "example": "./example.ts",
+    "security": "./README.md"
+  },
+  "license": "MIT"
+}

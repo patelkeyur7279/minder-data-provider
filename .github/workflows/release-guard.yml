@@ -1,0 +1,129 @@
+name: Release Guard
+
+# Read-only consistency checks for package.json <-> CHANGELOG.md <-> npm/git
+# state. This workflow NEVER publishes anything and needs no secrets — it
+# only reads files already in the checkout and makes anonymous reads against
+# the npm registry and this repo's own public git refs.
+#
+# See RELEASING.md for the manual publish sequence this guard's summary
+# points at.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Read package version
+        id: pkg
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          NAME=$(node -p "require('./package.json').name")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: "G3 - package.json version is valid SemVer"
+        run: |
+          VERSION="${{ steps.pkg.outputs.version }}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::G3 FAIL — package.json version '$VERSION' is not valid SemVer."
+            exit 1
+          fi
+          echo "G3 OK — '$VERSION' is valid SemVer."
+
+      - name: "G1/G2 - CHANGELOG.md has the section, and it's the topmost one"
+        run: |
+          VERSION="${{ steps.pkg.outputs.version }}"
+
+          if ! node scripts/changelog-section.js "$VERSION" > /tmp/section.md; then
+            echo "::error::G1 FAIL — CHANGELOG.md has no '## [$VERSION]' section for the current package.json version."
+            exit 1
+          fi
+          echo "G1 OK — CHANGELOG.md has a '## [$VERSION]' section."
+
+          TOPMOST=$(grep -m1 -oE '^## \[[^]]+\]' CHANGELOG.md | sed -E 's/^## \[(.*)\]$/\1/')
+          if [ "$TOPMOST" != "$VERSION" ]; then
+            echo "::error::G2 FAIL — the topmost CHANGELOG.md section is '$TOPMOST' but package.json is '$VERSION'. Either the version bump or the CHANGELOG entry was forgotten."
+            exit 1
+          fi
+          echo "G2 OK — topmost CHANGELOG.md section ('$TOPMOST') matches package.json."
+
+      - name: "G4 - npm registry collision (warning only)"
+        run: |
+          VERSION="${{ steps.pkg.outputs.version }}"
+          NAME="${{ steps.pkg.outputs.name }}"
+          PUBLISHED=$(npm view "$NAME@$VERSION" version 2>/dev/null || echo "")
+          if [ -n "$PUBLISHED" ]; then
+            echo "::warning::G4 — $NAME@$VERSION is already published on npm. This push does not auto-publish (publishing is a manual, owner-run step) — this is informational only, confirming the bump is intentional."
+          else
+            echo "G4 OK — $NAME@$VERSION is not on npm yet."
+          fi
+
+      - name: "G5 - pre-release reminder (warning only)"
+        run: |
+          VERSION="${{ steps.pkg.outputs.version }}"
+          if [[ "$VERSION" == *-* ]]; then
+            PRE_TAG="${VERSION#*-}"; PRE_TAG="${PRE_TAG%%.*}"
+            echo "::warning::G5 — '$VERSION' is a pre-release. When publishing manually, the pre-release dist-tag flag is mandatory (e.g. tag '$PRE_TAG') or the release becomes 'latest' by accident. See RELEASING.md."
+          else
+            echo "G5 — stable version, no reminder needed."
+          fi
+
+      - name: "G6 - tag already on origin (warning only)"
+        run: |
+          VERSION="${{ steps.pkg.outputs.version }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null 2>&1; then
+            echo "::warning::G6 — tag v$VERSION already exists on origin."
+          else
+            echo "G6 OK — tag v$VERSION does not exist on origin yet."
+          fi
+
+      - name: Manual release runbook (always printed)
+        if: always()
+        run: |
+          VERSION="${{ steps.pkg.outputs.version }}"
+          NAME="${{ steps.pkg.outputs.name }}"
+
+          PUB_CMD="npm publish"
+          if [[ "$VERSION" == *-* ]]; then
+            PRE_TAG="${VERSION#*-}"; PRE_TAG="${PRE_TAG%%.*}"
+            PUB_CMD="npm publish --tag $PRE_TAG"
+          fi
+
+          {
+            echo "## Release Guard summary — $NAME@$VERSION"
+            echo ""
+            echo "Publishing to npm is a manual, owner-run step (no CI token exists for it)."
+            echo "The full sequence, including failure handling and recovery paths, lives in"
+            echo "[RELEASING.md](../../blob/main/RELEASING.md). Copy-paste entry point for this version:"
+            echo ""
+            echo '```bash'
+            echo "$PUB_CMD"
+            echo "git tag -a v$VERSION -m \"Release v$VERSION\""
+            echo "git push origin v$VERSION"
+            echo "npm run release:verify"
+            echo '```'
+            echo ""
+            echo "(run release:verify AFTER the tag push above — its tag-on-origin and"
+            echo "\`gh release view\` checks can only pass once the tag exists remotely.)"
+            echo ""
+            echo "If the tag push ever fails to trigger \`release.yml\` (e.g. it was pushed by an"
+            echo "automation credential instead of a human one), recover with:"
+            echo '```bash'
+            echo "gh workflow run release.yml -f tag=v$VERSION"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

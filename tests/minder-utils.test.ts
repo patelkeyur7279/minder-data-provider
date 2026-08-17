@@ -2,6 +2,7 @@
  * @jest-environment jsdom
  */
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import axios from 'axios';
 import {
   detectMethod,
   isFileUpload,
@@ -9,6 +10,7 @@ import {
   decodeWithModel,
   handleError,
 } from '../src/core/minder/utils';
+import { minder, setMinderGlobalConfig, clearMinderCache } from '../src/core/minder';
 
 // Mock Logger to suppress console output during tests
 jest.mock('../src/utils/Logger', () => ({
@@ -25,6 +27,10 @@ jest.mock('../src/utils/Logger', () => ({
     ERROR: 'error',
   },
 }));
+
+// Mocked transport for the detectMethod/minder() integration guard below.
+jest.mock('axios');
+const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 describe('Minder Utils', () => {
   describe('detectMethod', () => {
@@ -44,17 +50,47 @@ describe('Minder Utils', () => {
       expect(detectMethod('/posts', undefined)).toBe('GET');
     });
 
-    it('should return DELETE when data has delete indicator', () => {
-      expect(detectMethod('/users/123', { delete: true })).toBe('DELETE');
-      expect(detectMethod('/posts/456', { delete: 1 })).toBe('DELETE');
-      expect(detectMethod('/items', { delete: 'yes' })).toBe('DELETE');
+    it('POSTs a payload carrying a `delete` key instead of issuing DELETE (regression: permissions objects)', () => {
+      // A `delete` key used to be treated as a destructive-intent signal, so an
+      // ordinary object like a permissions/capability payload was silently sent
+      // as HTTP DELETE. That inference is removed entirely (2.2.0 BREAKING) —
+      // see CHANGELOG.md / docs/MIGRATION_GUIDE.md.
+      expect(detectMethod('/api/permissions', { delete: true })).toBe('POST');
+      expect(detectMethod('/api/permissions', { delete: false })).toBe('POST');
+      expect(detectMethod('/api/roles', { read: true, delete: true })).toBe('POST');
+      expect(detectMethod('/api/items', { delete: 'yes' })).toBe('POST');
     });
 
-    it('should return PUT when route has ID pattern', () => {
+    it('still resolves DELETE when the caller asks for it explicitly', () => {
+      expect(detectMethod('/users/123', { delete: true }, { method: 'DELETE' })).toBe('DELETE');
+      expect(detectMethod('/users/123', null, { method: 'DELETE' })).toBe('DELETE');
+    });
+
+    it('keeps id-shaped-route PUT detection for payloads containing a `delete` key', () => {
+      expect(detectMethod('/users/123', { delete: true })).toBe('PUT');
+      expect(detectMethod('/users', { delete: true })).toBe('POST');
+    });
+
+    it('keeps id-in-data PUT detection for payloads containing a `delete` key', () => {
+      expect(detectMethod('/api/perms', { id: 7, delete: true })).toBe('PUT');
+    });
+
+    it('should return PUT only when the final segment is genuinely ID-shaped', () => {
+      // Release-audit re-contract: the old pattern treated ANY final segment as
+      // an ID, so plain collection routes (/api/orders) sent creates as PUT.
+      // Now only numeric, UUID, or 24-hex (ObjectId) segments count as IDs.
       expect(detectMethod('/users/123', { name: 'John' })).toBe('PUT');
-      expect(detectMethod('/posts/abc-def-ghi', { title: 'Test' })).toBe('PUT');
-      expect(detectMethod('/items/user_123', { value: 100 })).toBe('PUT');
-      expect(detectMethod('/data/a1b2c3', {})).toBe('PUT');
+      expect(
+        detectMethod('/posts/6f9619ff-8b86-d011-b42d-00c04fc964ff', { title: 'T' })
+      ).toBe('PUT');
+      expect(
+        detectMethod('/posts/507f1f77bcf86cd799439011', { title: 'T' })
+      ).toBe('PUT');
+      // Slug/word segments are ambiguous with collection names → POST default.
+      // Slug-id updates pass options.method or an id field in data explicitly.
+      expect(detectMethod('/posts/abc-def-ghi', { title: 'Test' })).toBe('POST');
+      expect(detectMethod('/items/user_123', { value: 100 })).toBe('POST');
+      expect(detectMethod('/data/a1b2c3', {})).toBe('POST');
     });
 
     it('should return PUT when data has id field', () => {
@@ -87,19 +123,23 @@ describe('Minder Utils', () => {
     });
 
     it('should handle route patterns correctly', () => {
-      // Should detect as PUT (has ID in route)
+      // Numeric final segment → PUT (entity update).
       expect(detectMethod('/api/users/123', { name: 'John' })).toBe('PUT');
-      expect(detectMethod('/v1/posts/abc', { title: 'Test' })).toBe('PUT');
-      
+      // Word final segment is a collection name, not an ID → POST (create).
+      expect(detectMethod('/v1/posts/abc', { title: 'Test' })).toBe('POST');
+
       // Should detect as POST (route ending with /)
       expect(detectMethod('/api/users/', { name: 'John' })).toBe('POST');
       expect(detectMethod('/users/', { name: 'John' })).toBe('POST');
     });
 
     it('should handle complex route patterns', () => {
-      expect(detectMethod('/users/123/posts', { title: 'Test' })).toBe('PUT');
-      expect(detectMethod('/users/abc-123-def', { name: 'John' })).toBe('PUT');
-      expect(detectMethod('/items/user_456', { value: 100 })).toBe('PUT');
+      // Nested-collection create: ends in a collection segment → POST (the old
+      // heuristic wrongly returned PUT because an ID appears mid-route).
+      expect(detectMethod('/users/123/posts', { title: 'Test' })).toBe('POST');
+      // Slug-shaped segments are not treated as IDs → POST default.
+      expect(detectMethod('/users/abc-123-def', { name: 'John' })).toBe('POST');
+      expect(detectMethod('/items/user_456', { value: 100 })).toBe('POST');
     });
 
     it('should handle empty objects as POST', () => {
@@ -641,8 +681,11 @@ describe('Minder Utils', () => {
       // UPDATE (with ID in data)
       expect(detectMethod('/api/products/', { id: 123, ...data })).toBe('PUT');
       
-      // DELETE
-      expect(detectMethod('/products/123', { delete: true })).toBe('DELETE');
+      // DELETE — explicit method required; a `delete` key in the body is no
+      // longer a destructive-intent signal (2.2.0 BREAKING). The id-shaped
+      // route still resolves to PUT for an ordinary body.
+      expect(detectMethod('/products/123', { delete: true })).toBe('PUT');
+      expect(detectMethod('/products/123', null, { method: 'DELETE' })).toBe('DELETE');
     });
 
     it('should handle complex error scenarios', () => {
@@ -663,5 +706,38 @@ describe('Minder Utils', () => {
       expect(serverError.solution).toBeTruthy();
       expect(unknownError.solution).toBeTruthy();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// detectMethod / minder() integration guard (regression: permissions objects)
+// ---------------------------------------------------------------------------
+describe('minder() honors the detectMethod contract over a mocked transport', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    clearMinderCache();
+    setMinderGlobalConfig({ baseURL: 'http://api.example.com' });
+  });
+
+  afterEach(() => {
+    clearMinderCache();
+    setMinderGlobalConfig({ baseURL: '' });
+  });
+
+  it('a `delete`-keyed payload is sent as POST, never DELETE', async () => {
+    mockedAxios.mockResolvedValue({
+      data: { ok: true },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: {},
+    } as any);
+
+    await minder('permissions', { delete: true });
+
+    expect(mockedAxios).toHaveBeenCalledTimes(1);
+    const observedConfig = mockedAxios.mock.calls[0][0] as any;
+    expect(observedConfig.method?.toUpperCase()).toBe('POST');
+    expect(observedConfig.method?.toUpperCase()).not.toBe('DELETE');
   });
 });

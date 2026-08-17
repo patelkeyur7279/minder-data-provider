@@ -1,0 +1,98 @@
+{
+  "$schema": "https://patelkeyur7279.github.io/minder-data-provider/wiki-book.schema.json",
+  "description": "Book manifest for scripts/build-wiki.mjs. Every docs/*.md file (outside docs/development/ and docs/superpowers/) must appear in exactly one chapter's \"pages\" list, or in \"excluded\" below. The generator fails the build if any file is neither listed nor excluded — this is deliberate: it forces a conscious decision every time a doc is added. A page entry is either a plain string (the docs-relative file path) or an object { \"file\": ..., \"title\": ... } when the source H1 is unsuitable for a book TOC/breadcrumb/sidebar.",
+  "titleOverrideRule": "Only add a \"title\" override when the source H1 doesn't read well out of context (emoji, a date, a version-number prefix, or a long subtitle). Rule of thumb: no emoji, no dates, no version prefixes, ≤ 4 words where possible. The override replaces the title EVERYWHERE (page H1, breadcrumb, sidebar, Home TOC, chapter index) — descriptions still come from the page's own content.",
+  "chapters": [
+    {
+      "num": 1,
+      "title": "Getting Started",
+      "pages": [
+        { "file": "USAGE_GUIDE.md", "title": "Usage Guide" },
+        "CONFIG_GUIDE.md",
+        "EXAMPLES.md",
+        { "file": "examples/01-DATA-FETCHING-APPROACHES.md", "title": "Data Fetching Approaches" },
+        { "file": "examples/FEATURE_CODE_SNIPPETS.md", "title": "Feature Code Snippets" }
+      ]
+    },
+    {
+      "num": 2,
+      "title": "Features",
+      "pages": [
+        { "file": "FEATURES.md", "title": "Features & Capabilities" },
+        { "file": "ADVANCED_FEATURES.md", "title": "Advanced Features" },
+        { "file": "LOCAL_FIRST.md", "title": "Local-First Data" },
+        "DYNAMIC_IMPORTS.md"
+      ]
+    },
+    {
+      "num": 3,
+      "title": "Platforms",
+      "pages": [
+        { "file": "PLATFORM_GUIDE.md", "title": "Platform Guide" },
+        { "file": "NEXTJS_APP_ROUTER.md", "title": "Next.js App Router" },
+        { "file": "EDGE.md", "title": "Edge Runtimes" },
+        "COMPATIBILITY.md"
+      ]
+    },
+    {
+      "num": 4,
+      "title": "Providers",
+      "pages": [
+        "providers/CATALOG.md",
+        "providers/CUSTOM.md",
+        "providers/CERTIFICATION.md"
+      ]
+    },
+    {
+      "num": 5,
+      "title": "API Reference",
+      "pages": [
+        "API_REFERENCE.md"
+      ]
+    },
+    {
+      "num": 6,
+      "title": "Quality & Security",
+      "pages": [
+        "PERFORMANCE_GUIDE.md",
+        { "file": "BENCHMARKS.md", "title": "Benchmarks" },
+        "SECURITY_GUIDE.md",
+        "ACCESSIBILITY.md",
+        "product/SUPPORT_MATRIX.md"
+      ]
+    },
+    {
+      "num": 7,
+      "title": "Migrations",
+      "pages": [
+        "MIGRATION_GUIDE.md",
+        { "file": "MIGRATION_STORAGE.md", "title": "Storage Migration (Cookies)" }
+      ]
+    },
+    {
+      "num": 8,
+      "title": "Project",
+      "pages": [
+        { "file": "product/BRIEF.md", "title": "Product Brief" },
+        "product/ROADMAP.md",
+        { "file": "product/STATUS.md", "title": "Project Status" },
+        { "file": "product/ECOSYSTEM_MATRIX.md", "title": "Ecosystem Matrix" },
+        { "file": "releases/RELEASE_NOTES_2.0.3.md", "title": "Release Notes 2.0.3" },
+        { "file": "releases/UPGRADE_GUIDE_2.0.3.md", "title": "Upgrade Guide 2.0.3" },
+        { "file": "releases/RELEASE_2.0.3_COMPLETE.md", "title": "Release 2.0.3 Summary" }
+      ]
+    }
+  ],
+  "excluded": [
+    "TEST_COVERAGE_PLAN.md",
+    "_Sidebar.md",
+    "product/LAUNCH_PLAN.md",
+    "product/NAMING_DECISION.md",
+    "product/PROVIDER_COMPLIANCE.md",
+    "product/QUALITY_ROADMAP.md",
+    "product/RELEASE_READINESS.md",
+    "product/RISKS_AND_THREAT_MODEL.md",
+    "releases/IMPROVEMENT_PLAN_2.0.3.md",
+    "releases/RELEASE_2.0.3_ANALYSIS.md"
+  ]
+}

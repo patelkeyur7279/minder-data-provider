@@ -38,13 +38,15 @@ describe('Package Infrastructure', () => {
     expect(pkg.peerDependencies['react-dom']).toBeDefined();
   });
 
-  it('should have required dependencies bundled', () => {
+  it('keeps React-context singletons as peers and utilities as dependencies', () => {
     const pkg = require('../package.json');
-    expect(pkg.dependencies).toBeDefined();
-    // These should be bundled so users don't manage versions
-    expect(pkg.dependencies['@tanstack/react-query']).toBeDefined();
-    expect(pkg.dependencies['@reduxjs/toolkit']).toBeDefined();
+    // React-context singleton libraries must be PEER deps: shipping them as
+    // hard deps installs a second copy alongside the consumer's own, breaking
+    // Redux/QueryClient context (fixed in 2.2.0-beta.1).
+    expect(pkg.peerDependencies['@tanstack/react-query']).toBeDefined();
+    expect(pkg.dependencies['@tanstack/react-query']).toBeUndefined();
+    // Non-context utilities stay bundled so users don't manage versions.
+    // (immer was removed as a dependency in D5 — it had zero usage in src/.)
     expect(pkg.dependencies['axios']).toBeDefined();
-    expect(pkg.dependencies['immer']).toBeDefined();
   });
 });

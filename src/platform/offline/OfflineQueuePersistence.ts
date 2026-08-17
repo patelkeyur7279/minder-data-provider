@@ -14,7 +14,7 @@ import type { StorageAdapter } from '../adapters/storage/StorageAdapter.js';
 import type { OfflineConfig } from './types.js';
 import { Logger, LogLevel } from '../../utils/Logger.js';
 
-const logger = new Logger('OfflineQueuePersistence', { level: LogLevel.INFO });
+const logger = /*#__PURE__*/ new Logger('OfflineQueuePersistence', { level: LogLevel.INFO });
 
 /**
  * Get storage adapter for offline queue based on platform

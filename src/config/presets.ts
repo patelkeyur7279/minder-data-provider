@@ -17,7 +17,15 @@ export type { ConfigPreset } from '../constants/enums.js';
 export type ConfigPresetType = 'minimal' | 'standard' | 'advanced' | 'enterprise';
 
 /**
- * Preset configurations for different use cases
+ * Preset configurations for different use cases.
+ *
+ * NOTE (G-05/G-08 review): these tiers INTENTIONALLY override the library's
+ * default of `performance.retries: 1` with graduated values (standard 3 →
+ * enterprise 5) — a preset is an explicit, opted-into opinion bundle
+ * (`createConfigFromPreset('standard')`), unlike `configureMinder()`'s
+ * platform defaults, which must match the documented library defaults.
+ * No preset sets `cors.credentials`; credentialed mode stays opt-in
+ * everywhere.
  */
 export const CONFIG_PRESETS: Record<ConfigPreset, Partial<MinderConfig>> = {
   /**

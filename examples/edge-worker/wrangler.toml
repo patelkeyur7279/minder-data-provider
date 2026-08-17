@@ -1,0 +1,11 @@
+name = "minder-edge-worker"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+
+# Deliberately NO `compatibility_flags = ["nodejs_compat"]` — this Worker must run
+# on bare workerd with no Node polyfills, so a green run here is real evidence
+# for the Support Matrix's edge-runtime row (see ../../docs/EDGE.md).
+
+[vars]
+API_BASE_URL = "http://127.0.0.1:8788"
+EDGE_WEBHOOK_SECRET = "edge-smoke-secret"

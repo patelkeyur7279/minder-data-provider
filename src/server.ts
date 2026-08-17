@@ -39,3 +39,27 @@ export function resolveSecret(ref: SecretRef | string): string {
 }
 
 export { secret, env, SecretRef, isSecretRef, redactSecrets, findExposedSecrets } from './security/secrets.js';
+
+// ── Typed credential model (G-06) — server-only resolution ──────────────────
+// `CredentialInput`/`isCredentialInput`/`describeCredential` mirror the root
+// entry point's exports (see src/index.ts), but `resolveCredential` belongs
+// HERE ONLY: it touches process.env/fs and throws immediately if called in
+// the browser, so it must never be reachable from the root entry point. Every
+// certified provider's server handler (e.g. createClerkSessionHandler) and
+// createWebhookHandler resolve their CredentialInput via this function.
+export { resolveCredential, describeCredential, isCredentialInput } from './security/credentials.js';
+export type { CredentialInput } from './security/credentials.js';
+
+// ── Web-standard server handler core (F-02) ─────────────────────────────────
+// Edge-safe handler types + JSON helper, HMAC webhook verification, and the
+// Node mount adapter. `toNodeHandler` is re-exported by name (its `http`
+// dependency is type-only, so this stays edge-importable).
+export * from './server/handlers.js';
+export * from './server/webhooks.js';
+export { toNodeHandler } from './server/nodeMount.js';
+
+// G-08: the dependency-free CORS middleware factory (refuses the unsafe
+// credentials+wildcard combination) is server-side utility surface — exported
+// here, deliberately NOT from the root entry.
+export { createCorsMiddleware } from './core/corsMiddleware.js';
+export type { CorsMiddlewareOptions } from './core/corsMiddleware.js';

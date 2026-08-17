@@ -1,0 +1,27 @@
+{
+  "name": "minder-nextjs-example",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
+    "start": "next start -p 3123",
+    "test": "jest",
+    "ci:smoke": "node scripts/ci-smoke.mjs"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.90.6",
+    "minder-data-provider": "file:../..",
+    "next": "^16.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.19.24",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "jest": "^29.7.0",
+    "typescript": "^5.9.3"
+  }
+}

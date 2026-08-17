@@ -1,0 +1,32 @@
+{
+  "name": "@minder/provider-sentry",
+  "version": "0.1.0",
+  "displayName": "Sentry",
+  "categories": ["analytics"],
+  "capabilities": ["crash-reporting", "plugin:observability"],
+  "config": {
+    "clientSafe": ["dsn", "mock"],
+    "serverOnly": []
+  },
+  "scopes": [
+    {
+      "scope": "observability:capture-exception",
+      "why": "Forward errors observed by the MDP plugin bus (onError, fired from ApiClient/MinderClient request failures) to Sentry.captureException so they surface in the Sentry project tied to the configured DSN."
+    },
+    {
+      "scope": "observability:breadcrumb",
+      "why": "Optionally record request/response lifecycle events (onRequest/onResponse) as Sentry breadcrumbs so an error report includes the request that led to it."
+    }
+  ],
+  "runtimes": ["web", "node", "edge"],
+  "frameworks": ["react", "nextjs", "vite"],
+  "peerDependencies": {
+    "@sentry/browser": "^8.0.0"
+  },
+  "docs": {
+    "setup": "./README.md",
+    "example": "./example.ts",
+    "security": "./README.md"
+  },
+  "license": "MIT"
+}

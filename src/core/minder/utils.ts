@@ -5,7 +5,7 @@
 import type { HttpMethod, MinderError, MinderOptions } from './types.js';
 import { Logger, LogLevel } from '../../utils/Logger.js';
 
-const logger = new Logger('Minder', { level: LogLevel.WARN });
+const logger = /*#__PURE__*/ new Logger('Minder', { level: LogLevel.WARN });
 
 // ============================================================================
 // SMART OPERATION DETECTION
@@ -34,24 +34,26 @@ export function detectMethod(
     return 'GET';
   }
   
-  // 3. Delete indicator
-  if (typeof data === 'object' && 'delete' in data) {
-    return 'DELETE';
-  }
-  
-  // 4. Route pattern detection
-  // /users/123 or /users/abc-def-ghi = UPDATE
-  const hasIdInRoute = /\/[a-zA-Z0-9-_]+$/.test(route);
-  
-  // 5. Data has ID field = UPDATE
-  const hasIdInData = typeof data === 'object' && 
+  // 3. Route pattern detection — the final segment must actually LOOK like an
+  // entity id: purely numeric (/users/123), a UUID, or a 24-hex Mongo ObjectId.
+  // The previous pattern (/\/[a-zA-Z0-9-_]+$/) matched ANY final segment, so a
+  // plain collection route like /api/orders was mis-detected as UPDATE and
+  // creates were sent as PUT instead of POST (release-audit fix). Callers with
+  // non-standard id shapes can always pass options.method explicitly.
+  const hasIdInRoute =
+    /\/\d+$/.test(route) ||
+    /\/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(route) ||
+    /\/[0-9a-fA-F]{24}$/.test(route);
+
+  // 4. Data has ID field = UPDATE
+  const hasIdInData = typeof data === 'object' &&
     (('id' in data && data.id) || ('_id' in data && data._id));
-  
+
   if (hasIdInRoute || hasIdInData) {
     return 'PUT';
   }
-  
-  // 6. Default = POST (create)
+
+  // 5. Default = POST (create)
   return 'POST';
 }
 
@@ -60,12 +62,40 @@ export function detectMethod(
  */
 export function isFileUpload(data: unknown): boolean {
   if (!data) return false;
-  
+
+  // Guard every browser-only global with `typeof` before `instanceof`: in Node,
+  // SSR, and edge runtimes `File`/`FileList` are undefined, so a bare
+  // `data instanceof FileList` throws `ReferenceError: FileList is not defined`.
+  // That crashed EVERY minder() write (POST/PUT/PATCH with a body) outside the
+  // browser — masked in tests because jsdom provides these globals.
   return (
-    data instanceof File ||
-    data instanceof Blob ||
-    data instanceof FileList ||
+    (typeof File !== 'undefined' && data instanceof File) ||
+    (typeof Blob !== 'undefined' && data instanceof Blob) ||
+    (typeof FileList !== 'undefined' && data instanceof FileList) ||
     (typeof FormData !== 'undefined' && data instanceof FormData)
+  );
+}
+
+/**
+ * True ONLY in an edge runtime (Cloudflare Workers / Vercel Edge / Deno Deploy):
+ * a global `fetch` exists, it is NOT Node (no `process.versions.node`), and it is
+ * NOT a classic browser (no `XMLHttpRequest`). Used to pick the native-fetch
+ * transport for `transport: 'auto'`/unset ONLY where axios's Node HTTP adapter is
+ * unavailable — so Node and browser behavior (axios default) is unchanged, while
+ * edge, where axios simply fails, transparently works. The env is injectable for
+ * testing. Deliberately conservative: any doubt -> false -> axios.
+ */
+export function isEdgeRuntime(
+  env: {
+    fetch?: unknown;
+    process?: { versions?: { node?: unknown } };
+    XMLHttpRequest?: unknown;
+  } = globalThis as unknown as { fetch?: unknown }
+): boolean {
+  return (
+    typeof env.fetch === 'function' &&
+    typeof env.process?.versions?.node === 'undefined' &&
+    typeof env.XMLHttpRequest === 'undefined'
   );
 }
 
@@ -224,13 +254,45 @@ export function handleError(error: unknown): MinderError {
     };
   }
   
+  // Task 3.1 adaptation: a thrown MinderError-shaped value (e.g.
+  // MinderResponseValidationError from schema validation) already carries its
+  // own code/status/issues — preserve them instead of flattening to
+  // UNKNOWN_ERROR below. Checked ONLY here, after the axios-shaped branches
+  // above: a real (thrown-by-axios) AxiosError also has top-level `.code`/
+  // `.status`, but it ALWAYS carries `.request` too (set by every axios
+  // adapter), so it is already caught by `hasResponse`/`hasRequest` and never
+  // reaches this point — this duck-type can only match our own errors.
+  // Duck-typed (not `instanceof`) so this file never statically imports the
+  // errors module, keeping the lazy-loaded response-validation feature's
+  // synchronous bundle cost at zero for callers who never configure a schema.
+  if (
+    error instanceof Error &&
+    typeof (error as { code?: unknown }).code === 'string' &&
+    typeof (error as { status?: unknown }).status === 'number'
+  ) {
+    const minderLike = error as Error & {
+      code: string;
+      status: number;
+      context?: Record<string, unknown>;
+      issues?: unknown;
+    };
+    return {
+      message: minderLike.message,
+      code: minderLike.code,
+      status: minderLike.status,
+      details: minderLike.context,
+      issues: minderLike.issues as MinderError['issues'],
+      solution: 'See error.issues (if present) or error.details for more information',
+    };
+  }
+
   // Other errors (Error instances or plain objects)
-  const errorMessage = error instanceof Error 
-    ? error.message 
+  const errorMessage = error instanceof Error
+    ? error.message
     : (error && typeof error === 'object' && 'message' in error)
       ? String((error as { message: unknown }).message)
       : 'Unknown error';
-      
+
   return {
     message: errorMessage,
     code: 'UNKNOWN_ERROR',

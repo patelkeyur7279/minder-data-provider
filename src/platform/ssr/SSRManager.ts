@@ -32,7 +32,7 @@ export type {
   SSRResult,
 } from './types.js';
 
-const logger = new Logger('SSRManager', { level: LogLevel.WARN });
+const logger = /*#__PURE__*/ new Logger('SSRManager', { level: LogLevel.WARN });
 
 // Type-only imports - won't be bundled, only used for type checking
 import type { QueryClient, DehydratedState } from '@tanstack/react-query';

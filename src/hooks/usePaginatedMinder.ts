@@ -84,7 +84,7 @@ import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import type { UseInfiniteQueryOptions } from '@tanstack/react-query';
 import { minder } from '../core/minder.js';
 import type { MinderOptions, MinderResult } from '../core/minder.js';
-import { useMinderContext } from '../core/MinderDataProvider.js';
+import { useMinderContextSafe } from '../core/MinderContext.js';
 import { HttpMethod } from '../constants/enums.js';
 
 // ============================================================================
@@ -303,13 +303,10 @@ export function usePaginatedMinder<TData = any>(
 ): UsePaginatedMinderReturn<TData> {
   const queryClient = useQueryClient();
   
-  // Try to get context (ApiClient) - gracefully fallback if not available
-  let context: any = null;
-  try {
-    context = useMinderContext();
-  } catch {
-    // Not within MinderDataProvider - use global config
-  }
+  // Context is null in standalone (no-provider) mode — non-throwing accessor
+  // keeps the hook order stable (react-hooks/rules-of-hooks).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const context: any = useMinderContextSafe();
   
   // Extract pagination config with defaults
   const paginationConfig = useMemo(() => ({

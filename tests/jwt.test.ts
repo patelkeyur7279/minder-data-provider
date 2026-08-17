@@ -4,7 +4,7 @@
  * Phase 2: the single shared JWT utility that all auth managers now delegate to.
  */
 import { describe, it, expect } from '@jest/globals';
-import { parseJWT, getTokenExpiry, isTokenExpired } from '../src/utils/jwt';
+import { parseJWT, getTokenExpiry, isTokenExpired, isJwtShaped } from '../src/utils/jwt';
 
 const b64url = (obj: unknown) =>
   Buffer.from(JSON.stringify(obj))
@@ -41,5 +41,18 @@ describe('jwt util (Phase 2 consolidation)', () => {
     expect(isTokenExpired(token({ exp: future }))).toBe(false);
     expect(isTokenExpired(token({}))).toBe(false); // no exp => not expired
     expect(getTokenExpiry('garbage')).toBeNull();
+  });
+});
+
+describe('isJwtShaped', () => {
+  it('recognizes 3-segment JWT-shaped tokens (even if payload is garbage)', () => {
+    expect(isJwtShaped(token({ sub: '1' }))).toBe(true);
+    expect(isJwtShaped('aaa.@@@garbage@@@.ccc')).toBe(true);
+  });
+
+  it('rejects opaque and malformed shapes', () => {
+    for (const t of ['', 'opaque-session-id-12345', 'a.b', 'a.b.c.d', '..', 'a..c', null, undefined]) {
+      expect(isJwtShaped(t as any)).toBe(false);
+    }
   });
 });

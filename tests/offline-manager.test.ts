@@ -1,90 +1,70 @@
-import { OfflineManager } from '../src/core/OfflineManager';
-import { StorageType } from '../src/constants/enums';
+/**
+ * @jest-environment jsdom
+ *
+ * Unified OfflineManager (MDPD) — the two-manager split (a hook-less core
+ * manager used by ApiClient auto-queue, and a separate platform manager wired by
+ * configureMinder that emitted the plugin hooks) was collapsed into the single
+ * platform `OfflineManager`. The old `src/core/OfflineManager` was deleted; this
+ * suite now exercises the unified manager's queue / executor-replay / retry
+ * contract directly (the shapes ApiClient's auto-queue path adapts onto).
+ */
+import { describe, it, expect } from '@jest/globals';
+import { OfflineManager } from '../src/platform/offline/OfflineManager';
 
-describe('OfflineManager', () => {
-    let offlineManager: OfflineManager;
-    let mockStorage: Record<string, string> = {};
+describe('OfflineManager (unified)', () => {
+  it('queues a mutation request via addToQueue', async () => {
+    const mgr = new OfflineManager({ enabled: true });
 
-    beforeEach(() => {
-        mockStorage = {};
-        Object.defineProperty(window, 'localStorage', {
-            value: {
-                getItem: jest.fn((key) => mockStorage[key] || null),
-                setItem: jest.fn((key, value) => { mockStorage[key] = value; }),
-                removeItem: jest.fn((key) => { delete mockStorage[key]; }),
-                clear: jest.fn(() => { mockStorage = {}; }),
-            },
-            writable: true
-        });
-        Object.defineProperty(navigator, 'onLine', { value: true, writable: true });
-        Object.defineProperty(global, 'crypto', {
-            value: {
-                randomUUID: jest.fn(() => 'test-uuid')
-            }
-        });
-    });
+    await mgr.addToQueue('POST', '/api/users', { body: { name: 'Test' } });
 
-    it('should queue mutation requests when enabled', () => {
-        offlineManager = new OfflineManager({ enabled: true });
+    expect(mgr.getQueueSize()).toBe(1);
+    expect(mgr.getQueue()[0]).toMatchObject({ method: 'POST', url: '/api/users' });
+  });
 
-        offlineManager.queueRequest({
-            url: '/api/users',
-            method: 'POST',
-            body: { name: 'Test' }
-        });
+  it('replays queued requests through the injected executor and removes them on success', async () => {
+    const mgr = new OfflineManager({ enabled: true });
+    const executor = jest.fn().mockResolvedValue({ ok: true });
+    mgr.setRequestExecutor(executor);
 
-        expect(offlineManager.getQueueLength()).toBe(1);
-        expect(window.localStorage.setItem).toHaveBeenCalled();
-    });
+    await mgr.addToQueue('POST', '/api/users', { body: { name: 'Test' } });
+    await mgr.sync(); // online by default (networkState.isConnected === true)
 
-    it('should NOT queue GET requests', () => {
-        offlineManager = new OfflineManager({ enabled: true });
+    expect(executor).toHaveBeenCalledTimes(1);
+    expect(executor.mock.calls[0][0]).toMatchObject({ method: 'POST', url: '/api/users' });
+    expect(mgr.getQueueSize()).toBe(0);
+  });
 
-        offlineManager.queueRequest({
-            url: '/api/users',
-            method: 'GET'
-        });
+  it('retries a failing request up to maxRetries, then drops it', async () => {
+    const mgr = new OfflineManager({ enabled: true, maxRetries: 2 });
+    const executor = jest.fn().mockRejectedValue(new Error('Network Error'));
+    mgr.setRequestExecutor(executor);
 
-        expect(offlineManager.getQueueLength()).toBe(0);
-    });
+    await mgr.addToQueue('POST', '/api/users', {});
 
-    it('should replay queued requests when processing queue', async () => {
-        offlineManager = new OfflineManager({ enabled: true });
-        const processCallback = jest.fn().mockResolvedValue(undefined);
-        offlineManager.setProcessQueueCallback(processCallback);
+    // First sync: retries -> 1 (< 2), request stays queued.
+    await mgr.sync();
+    expect(mgr.getQueueSize()).toBe(1);
 
-        offlineManager.queueRequest({
-            url: '/api/users',
-            method: 'POST',
-            body: { name: 'Test' }
-        });
+    // Second sync: retries -> 2 (>= maxRetries), request is dropped.
+    await mgr.sync();
+    expect(mgr.getQueueSize()).toBe(0);
+    expect(executor).toHaveBeenCalledTimes(2);
+  });
 
-        await offlineManager.processQueue();
+  it('falls back to fetch when no executor is injected', async () => {
+    const prevFetch = (global as any).fetch;
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200, json: async () => ({ ok: true }) });
+    (global as any).fetch = fetchMock;
 
-        expect(processCallback).toHaveBeenCalledTimes(1);
-        expect(offlineManager.getQueueLength()).toBe(0);
-    });
+    const mgr = new OfflineManager({ enabled: true });
+    await mgr.addToQueue('POST', 'https://api.example.com/users', { body: { a: 1 } });
+    await mgr.sync();
 
-    it('should retry failed requests up to maxRetries', async () => {
-        offlineManager = new OfflineManager({ enabled: true, maxRetries: 2 });
-        const processCallback = jest.fn().mockRejectedValue(new Error('Network Error'));
-        offlineManager.setProcessQueueCallback(processCallback);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(mgr.getQueueSize()).toBe(0);
 
-        offlineManager.queueRequest({
-            url: '/api/users',
-            method: 'POST'
-        });
-
-        // First attempt
-        await offlineManager.processQueue();
-        expect(offlineManager.getQueueLength()).toBe(1); // Re-queued
-
-        // Second attempt
-        await offlineManager.processQueue();
-        expect(offlineManager.getQueueLength()).toBe(1); // Re-queued again
-
-        // Third attempt (exceeds maxRetries=2)
-        await offlineManager.processQueue();
-        expect(offlineManager.getQueueLength()).toBe(0); // Dropped
-    });
+    (global as any).fetch = prevFetch;
+  });
 });

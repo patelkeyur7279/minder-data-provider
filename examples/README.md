@@ -1,6 +1,10 @@
 # 🚀 Minder Examples - Complete Guide
 
-**Production-ready examples** demonstrating all features of Minder Data Provider across multiple platforms with **centralized configuration** and **Docker support**.
+> **Example status** (all refreshed to the current API / current deps, 2026-07):
+> - ✅ **Verified here:** [`nextjs-app/`](./nextjs-app) (React 19 / Next 16, CI-tested, all certified-provider pages + local-first) · [`web/e-commerce`](./web/e-commerce) (Vite + React 19 — install + type-check + build + vitest verified) · [`nodejs/api`](./nodejs/api) (React-free `/node` entry — type-check + build + live `minder()` smoke-run verified).
+> - ⚠️ **Refreshed but Experimental** (React 18.3 / RN 0.76 / current APIs, but **not** device/GUI-run here — per charter RK-5 they stay Experimental until on-device CI): [`electron/`](./electron) · [`expo/`](./expo) · [`react-native/`](./react-native).
+
+**Examples** demonstrating features of Minder Data Provider across multiple platforms with **centralized configuration** and **Docker support**.
 
 ## 📋 Table of Contents
 
@@ -12,43 +16,28 @@
 - [Available APIs](#-available-apis)
 - [Troubleshooting](#-troubleshooting)
 
+Every path below exists in this directory — confirmed with `ls` before writing this file down, not carried over from an older draft.
+
 ```
 examples/
-├── web/                    # Web (React) Examples
-│   ├── e-commerce/         # Product list, cart, checkout
-│   ├── admin-dashboard/    # Full CRUD admin panel
-│   ├── social-feed/        # Infinite scroll, real-time updates
-│   └── search-app/         # Debounced search, filters
-│
-├── nextjs/                 # Next.js Examples
-│   ├── ssr-blog/           # getServerSideProps with auth
-│   ├── ssg-docs/           # getStaticProps with ISR
-│   ├── api-routes/         # REST API with minder
-│   └── middleware/         # Rate limiting, auth
-│
-├── react-native/           # React Native Examples
-│   ├── todo-offline/       # Offline-first todo app
-│   ├── auth-biometric/     # Fingerprint/Face ID
-│   ├── photo-upload/       # Image picker + upload
-│   └── chat-app/           # Real-time chat
-│
-├── expo/                   # Expo Examples
-│   ├── quick-start/        # Basic Expo app
-│   ├── secure-storage/     # SecureStore integration
-│   └── file-manager/       # FileSystem + uploads
-│
-├── electron/               # Electron Examples
-│   ├── desktop-app/        # Main + renderer process
-│   └── native-storage/     # Native file system
-│
-├── nodejs/                 # Node.js Examples
-│   ├── express-api/        # Express REST API
-│   ├── cron-jobs/          # Scheduled tasks
-│   └── cli-tool/           # Command-line tool
-│
-└── cross-platform/         # Universal Examples
-    ├── platform-detection/ # Detect & adapt
-    └── progressive-app/    # Works everywhere
+├── astro/                 # Astro + React islands (SSR) — CI-tested
+├── custom-provider/       # defineProvider() reference implementation
+├── edge-worker/           # Cloudflare Workers (workerd runtime) — CI-tested
+├── electron/
+│   └── desktop-app/       # Electron desktop app — CI headless smoke (xvfb)
+├── expo/
+│   └── quickstart/        # Expo SDK 52 / RN 0.76 — CI bundle + jest-expo evidence
+├── mock-api/               # Shared mock API server used by several examples below
+├── nextjs-app/             # Next.js Pages Router — CI-tested
+├── nextjs-app-router/       # Next.js App Router / RSC — CI-tested
+├── nodejs/
+│   └── api/                 # Express API — Node-server evidence — CI-tested
+├── react-native/
+│   └── offline-todo/         # Offline-first RN todo app — not yet wired into CI
+├── remix/                    # React Router v7, framework mode — CI-tested
+├── shared/                    # Shared config/types reused across examples
+└── web/
+    └── e-commerce/             # Vite + React 19 e-commerce app — CI-tested
 ```
 
 ---
@@ -62,9 +51,9 @@ Navigate to your platform folder:
 ```bash
 cd examples/web/e-commerce
 # or
-cd examples/nextjs/ssr-blog
+cd examples/nextjs-app
 # or
-cd examples/react-native/todo-offline
+cd examples/react-native/offline-todo
 ```
 
 ### 2. Install Dependencies
@@ -95,148 +84,195 @@ npm test
 
 ## 🏆 Featured Examples
 
-### Web Examples
+Descriptions below state what each example demonstrates and whether it runs in CI —
+not test-pass counts, which this file doesn't run and won't guess at. See the status
+banner at the top for the evidence behind "CI-tested."
 
-#### 🛒 E-commerce Product List
+### Web
 
-**Path**: `web/e-commerce/`  
-**Features**:
+#### 🛒 Vite + React 19 E-commerce
 
-- Product listing with `useMinder()`
-- Shopping cart with optimistic updates
-- Checkout flow with error handling
-- **Tests**: ✅ 15 passing
+**Path**: `web/e-commerce/`
+
+Product listing, shopping cart with optimistic updates, checkout flow. Install,
+type-check, build, and the vitest suite all run in CI.
 
 ```bash
 cd examples/web/e-commerce
-npm install && npm start
-```
-
-#### 📊 Admin Dashboard
-
-**Path**: `web/admin-dashboard/`  
-**Features**:
-
-- Full CRUD with `useMinder()`
-- User management
-- Real-time stats
-- **Tests**: ✅ 20 passing
-
-```bash
-cd examples/web/admin-dashboard
-npm install && npm start
-```
-
----
-
-### Next.js Examples
-
-#### 📝 SSR Blog
-
-**Path**: `nextjs/ssr-blog/`  
-**Features**:
-
-- getServerSideProps with auth
-- Dynamic routes
-- SEO optimized
-- **Tests**: ✅ 12 passing
-
-```bash
-cd examples/nextjs/ssr-blog
-npm install && npm run dev
-```
-
-#### 🔌 API Routes
-
-**Path**: `nextjs/api-routes/`  
-**Features**:
-
-- REST API with minder()
-- Rate limiting
-- JWT authentication
-- **Tests**: ✅ 18 passing
-
-```bash
-cd examples/nextjs/api-routes
 npm install && npm run dev
 ```
 
 ---
 
-### React Native Examples
+### Next.js
 
-#### ✅ Offline Todo App
+#### Pages Router
 
-**Path**: `react-native/todo-offline/`  
-**Features**:
+**Path**: `nextjs-app/`
 
-- Offline-first architecture
-- Background sync
-- Conflict resolution
-- **Tests**: ✅ 25 passing
+`MinderDataProvider` + `useMinder` client-side, `getServerSideProps` + `minder()`
+server-side, a webhook API route (`createWebhookHandler` + `toNodeHandler`), and a
+zero-key mock-mode Stripe checkout route. Consumed as a real npm package (packed
+tarball, not `src/`). CI-tested.
 
 ```bash
-cd examples/react-native/todo-offline
+cd examples/nextjs-app
+npm install && npm run dev
+```
+
+#### App Router / RSC
+
+**Path**: `nextjs-app-router/`
+
+Server Component root layout mounting a client `Providers` component
+(`QueryClientProvider` + `MinderDataProvider`), a Server Component page rendering a
+client component that calls `useMinder`, and a local route handler. Proves the RSC
+boundary works. CI-tested (`next build`, including static prerender).
+
+```bash
+cd examples/nextjs-app-router
+npm install && npm run dev
+```
+
+---
+
+### React Router (Remix)
+
+**Path**: `remix/`
+
+Proves the library on React Router v7 framework mode — the current continuation of
+Remix. An SSR loader calling `minder()` server-side, plus a client `useMinder()` call
+against a same-origin resource route (no CORS config needed). CI-tested.
+
+```bash
+cd examples/remix
+npm install && npm run dev
+```
+
+---
+
+### Astro
+
+**Path**: `astro/`
+
+Server-rendered `.astro` page calling `minder()` directly at request time
+(`output: 'server'` + `@astrojs/node`, not a static build-time fetch), plus a
+hydrated React island calling `useMinder()` in the browser. CI-tested.
+
+```bash
+cd examples/astro
+npm install && npm run dev
+```
+
+---
+
+### Cloudflare Workers (edge)
+
+**Path**: `edge-worker/`
+
+Runs on real workerd (no `nodejs_compat` flag) — the evidence behind the Support
+Matrix's `Edge runtimes: Confirmed` row. A `minder()` JSON data path over native
+fetch, plus HMAC-SHA256 webhook verification via `minder-data-provider/server`'s
+`createWebhookHandler` (WebCrypto only). CI-tested.
+
+```bash
+cd examples/edge-worker
+npm install && npm run dev
+```
+
+---
+
+### Node.js
+
+#### Express API
+
+**Path**: `nodejs/api/`
+
+The Node-server evidence: `minder()` over `minder-data-provider/node`, plus the same
+HMAC webhook verification as the edge-worker example, mounted onto Express via
+`toNodeHandler`. CI-tested.
+
+```bash
+cd examples/nodejs/api
+npm install && npm run dev
+```
+
+---
+
+### Electron
+
+**Path**: `electron/desktop-app/`
+
+Desktop app: REST data via `useMinder()`, native file dialogs, Electron-native local
+storage, IPC via context bridge, multi-view UI (Dashboard, Users, Products, Files,
+Settings). CI runs a headless smoke test under `xvfb` (hidden window, IPC data
+proof) — not a full on-device GUI run; see the status banner above.
+
+```bash
+cd examples/electron/desktop-app
+npm install && npm start
+```
+
+---
+
+### Expo
+
+**Path**: `expo/quickstart/`
+
+Expo SDK 52 / React Native 0.76 / React 18.3.1: `useMinder()` for data fetching,
+plus SecureStore, FileSystem, and ImagePicker integration. CI runs the jest-expo
+suite and a bundle-content assertion — not an on-device run; see the status banner
+above.
+
+```bash
+cd examples/expo/quickstart
+npm install && npm start
+```
+
+---
+
+### React Native
+
+#### Offline Todo App
+
+**Path**: `react-native/offline-todo/`
+
+Offline-first architecture, optimistic UI updates, background sync, conflict
+resolution, AsyncStorage, network detection, retry logic. Not currently wired into
+CI (no `ci:smoke` job) — treat as Experimental until it is.
+
+```bash
+cd examples/react-native/offline-todo
 npm install && npm run ios
 # or
 npm run android
 ```
 
-#### 🔐 Biometric Auth
+---
 
-**Path**: `react-native/auth-biometric/`  
-**Features**:
+### Supporting code (not standalone apps)
 
-- Fingerprint/Face ID
-- Secure storage
-- Token refresh
-- **Tests**: ✅ 10 passing
-
-```bash
-cd examples/react-native/auth-biometric
-npm install && npm run ios
-```
+- **`custom-provider/`** — reference implementation for `defineProvider()`, linked
+  from the main [README](../README.md) and
+  [`docs/providers/CUSTOM.md`](../docs/providers/CUSTOM.md).
+- **`mock-api/`** — local mock API server used by several examples above.
+- **`shared/`** — config/types reused across examples.
 
 ---
 
 ## 🧪 Testing
 
-All examples include comprehensive tests:
-
-- **Unit Tests**: Component logic
-- **Integration Tests**: API interactions
-- **E2E Tests**: Full user flows
-
-Run all tests:
+There's no single root-level `test:examples` (or per-platform `test:web` /
+`test:nextjs` / `test:native`) script — each example is its own package with its
+own scripts. Most have a `test` script, and the CI-tested ones (see the status
+banner at the top) also have a `ci:smoke` script that's the actual evidence:
 
 ```bash
-# In project root
-npm run test:examples
+cd examples/<example-path>
+npm install
+npm test        # where present
+npm run ci:smoke  # where present — same check CI runs
 ```
-
-Run specific platform tests:
-
-```bash
-npm run test:web
-npm run test:nextjs
-npm run test:native
-```
-
----
-
-## 📊 Example Statistics
-
-| Platform       | Examples | Components | Tests | Coverage |
-| -------------- | -------- | ---------- | ----- | -------- |
-| Web            | 4        | 32         | 68    | 95%      |
-| Next.js        | 4        | 28         | 52    | 93%      |
-| React Native   | 4        | 24         | 48    | 91%      |
-| Expo           | 3        | 15         | 30    | 89%      |
-| Electron       | 2        | 12         | 20    | 87%      |
-| Node.js        | 3        | 8          | 25    | 94%      |
-| Cross-Platform | 2        | 10         | 18    | 92%      |
-
-**Total**: 22 examples, 129 components, 261 tests
 
 ---
 
@@ -244,59 +280,50 @@ npm run test:native
 
 ### Beginner
 
-1. Start with `web/e-commerce/` - Simple product list
-2. Try `nextjs/ssr-blog/` - Learn SSR basics
-3. Explore `nodejs/express-api/` - Backend integration
+1. Start with [`web/e-commerce/`](./web/e-commerce) — a plain Vite + React app,
+   simplest place to see `useMinder()` in a real UI.
+2. Try [`nextjs-app/`](./nextjs-app) — Pages Router, learn SSR via
+   `getServerSideProps` + `minder()`.
+3. Explore [`nodejs/api/`](./nodejs/api) — backend integration, no React at all.
 
 ### Intermediate
 
-1. `web/admin-dashboard/` - Full CRUD operations
-2. `react-native/todo-offline/` - Offline-first patterns
-3. `nextjs/api-routes/` - Build REST APIs
+1. [`nextjs-app-router/`](./nextjs-app-router) — Server Components, the RSC
+   boundary, and `useMinder()` inside a client component.
+2. [`remix/`](./remix) — React Router v7 framework mode, loader-based SSR.
+3. [`react-native/offline-todo/`](./react-native/offline-todo) — offline-first
+   patterns, background sync, conflict resolution.
 
 ### Advanced
 
-1. `react-native/chat-app/` - Real-time WebSocket
-2. `cross-platform/progressive-app/` - Universal code
-3. `electron/desktop-app/` - Desktop applications
+1. [`edge-worker/`](./edge-worker) — running on bare workerd, plus HMAC webhook
+   verification over WebCrypto.
+2. [`astro/`](./astro) — request-time SSR data fetching alongside a hydrated
+   React island.
+3. [`electron/desktop-app/`](./electron/desktop-app) — desktop app with native
+   file/storage integration.
 
 ---
 
 ## 🔧 Requirements
 
-Each platform has specific requirements:
+The library itself requires **Node ≥ 20** and **npm ≥ 9** (see the main
+[README](../README.md#install)) — every example inherits that floor. Per-example
+framework versions (verified against each example's own `package.json`):
 
-### Web
+| Example                | Framework version pinned    |
+| ----------------------- | --------------------------- |
+| `nextjs-app/`            | Next.js ^16                 |
+| `nextjs-app-router/`      | Next.js ^15                 |
+| `remix/`                  | React Router ^7             |
+| `astro/`                   | Astro (server output, `@astrojs/node`) |
+| `web/e-commerce/`           | Vite + React 19              |
+| `electron/desktop-app/`      | Electron ^43                 |
+| `expo/quickstart/`            | Expo ~52 / React Native 0.76.5 |
+| `react-native/offline-todo/`   | React Native 0.76.5          |
 
-- Node.js 18+
-- React 18+
-- Modern browser
-
-### Next.js
-
-- Node.js 18+
-- Next.js 14+
-
-### React Native
-
-- Node.js 18+
-- React Native 0.72+
-- iOS: Xcode 14+
-- Android: Android Studio
-
-### Expo
-
-- Node.js 18+
-- Expo SDK 49+
-
-### Electron
-
-- Node.js 18+
-- Electron 25+
-
-### Node.js
-
-- Node.js 18+
+iOS builds (Electron packaging aside) additionally need Xcode; Android builds need
+Android Studio / the Android SDK. See each example's own README for specifics.
 
 ---
 
@@ -337,12 +364,10 @@ npm run ios
 
 ## 📚 Documentation
 
-Each example includes:
-
-- `README.md` - Overview and setup
-- `ARCHITECTURE.md` - Code structure
-- `TESTING.md` - Test strategy
-- Inline code comments
+Each example includes its own `README.md` with overview, setup, and (for the
+CI-tested examples) exactly what it proves and how. There's no separate
+`ARCHITECTURE.md` or `TESTING.md` per example — that detail lives in the README
+itself.
 
 ---
 
@@ -360,8 +385,3 @@ Want to add an example?
 ## 📝 License
 
 All examples are MIT licensed, same as the main package.
-
----
-
-**Last Updated**: November 6, 2025  
-**Version**: 2.1.x

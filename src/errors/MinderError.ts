@@ -1,6 +1,6 @@
 /**
  * Custom Error Classes for Minder Data Provider
- * 
+ *
  * Provides typed, structured errors with error codes for better error handling
  */
 
@@ -17,6 +17,16 @@ export class MinderError extends Error {
   public suggestions: ErrorSuggestion[] = [];
 
   public status: number;
+
+  /**
+   * The ORIGINAL underlying error this MinderError wraps (e.g. the raw
+   * AxiosError). Lets consumers reach the untouched transport-level error —
+   * inspect `isAxiosError`, `response`, `config`, `code`, etc. — instead of only
+   * the normalized Minder shape. Populated by the layer that constructs/throws
+   * the error (ApiClient.handleError, minder()); left `undefined` when there is
+   * no distinct underlying error.
+   */
+  public raw?: unknown;
 
   constructor(
     message: string,
@@ -82,7 +92,7 @@ export class MinderConfigError extends MinderError {
       this.addSuggestion({
         message: `Invalid configuration at: ${configPath}`,
         action: 'Check your configuration object for typos or incorrect values',
-        link: 'https://github.com/patelkeyur7279/minder-data-provider/blob/main/docs/CONFIG_REFERENCE.md'
+        link: 'https://github.com/patelkeyur7279/minder-data-provider/blob/main/docs/CONFIG_GUIDE.md'
       });
     } else {
       this.addSuggestion({
@@ -187,6 +197,14 @@ export class MinderNetworkError extends MinderError {
           link: 'https://github.com/patelkeyur7279/minder-data-provider/blob/main/docs/CONFIG_GUIDE.md#cors'
         });
         break;
+
+      default:
+        this.addSuggestion({
+          message: `Request failed with status ${statusCode}`,
+          action: 'Inspect the response body and confirm the endpoint, method, and payload',
+          link: 'https://github.com/patelkeyur7279/minder-data-provider/blob/main/docs/API_REFERENCE.md'
+        });
+        break;
     }
   }
 }
@@ -220,9 +238,22 @@ export class MinderValidationError extends MinderError {
           });
         });
       });
+    } else {
+      this.addSuggestion({
+        message: 'The submitted data failed validation',
+        action: "Check the request payload against the endpoint's required fields and formats",
+        link: 'https://github.com/patelkeyur7279/minder-data-provider/blob/main/docs/API_REFERENCE.md',
+      });
     }
   }
 }
+
+/**
+ * Response validation errors (Task 3.1 — Standard Schema) live in the
+ * lazy-loaded validation chunk, not here, so they cost zero bytes for
+ * consumers who never configure a schema. See
+ * {@link MinderResponseValidationError} in `../core/responseValidation.ts`.
+ */
 
 /**
  * Authentication errors
@@ -269,6 +300,13 @@ export class MinderStorageError extends MinderError {
   constructor(message: string, code: string = 'STORAGE_ERROR', context?: Record<string, unknown>) {
     super(message, code, undefined, context);
     this.name = 'MinderStorageError';
+
+    this.addSuggestion({
+      message: 'A storage operation failed (persistence layer / storage adapter)',
+      action:
+        'Verify the platform storage adapter is available with quota and permissions (localStorage, AsyncStorage, SecureStore, electron-store)',
+      link: 'https://github.com/patelkeyur7279/minder-data-provider/blob/main/docs/PLATFORM_GUIDE.md',
+    });
   }
 }
 
@@ -279,6 +317,13 @@ export class MinderPlatformError extends MinderError {
   constructor(message: string, public platform: string, code: string = 'PLATFORM_ERROR') {
     super(message, code, undefined, { platform });
     this.name = 'MinderPlatformError';
+
+    this.addSuggestion({
+      message: `This feature is not available on the current platform${platform ? `: ${platform}` : ''}`,
+      action:
+        'Use the matching platform entry (minder-data-provider/web|native|expo|electron|node) or install the platform peer dependency named in the message',
+      link: 'https://github.com/patelkeyur7279/minder-data-provider/blob/main/docs/PLATFORM_GUIDE.md',
+    });
   }
 }
 
@@ -289,6 +334,13 @@ export class MinderSecurityError extends MinderError {
   constructor(message: string, code: string = 'SECURITY_ERROR', context?: Record<string, unknown>) {
     super(message, code, undefined, context);
     this.name = 'MinderSecurityError';
+
+    this.addSuggestion({
+      message: 'A security check failed (e.g. a secret key would be exposed to the client bundle)',
+      action:
+        'Keep secret keys server-side — reference them with env()/secret() and never inline secret values in client config',
+      link: 'https://github.com/patelkeyur7279/minder-data-provider/blob/main/docs/SECURITY_GUIDE.md',
+    });
   }
 }
 
@@ -329,12 +381,33 @@ export class MinderOfflineError extends MinderError {
 }
 
 /**
+ * Offline conflict-resolution errors (Spec 5.1) — thrown when a conflict
+ * resolver fails closed: it threw, returned a malformed `ConflictResolution`,
+ * timed out, or `conflictResolution` resolved to `'merge'`/`'manual'` with no
+ * resolver configured. Always routed into the existing retry→dead-letter
+ * path (`OfflineManager.handleRequestError`) — never a silent discard/accept.
+ */
+export class MinderConflictError extends MinderError {
+  constructor(message: string, code: string = 'CONFLICT_ERROR') {
+    super(message, code, 409);
+    this.name = 'MinderConflictError';
+  }
+}
+
+/**
  * Plugin errors
  */
 export class MinderPluginError extends MinderError {
   constructor(message: string, public pluginName: string, code: string = 'PLUGIN_ERROR') {
     super(message, code, undefined, { pluginName });
     this.name = 'MinderPluginError';
+
+    this.addSuggestion({
+      message: `Plugin "${pluginName}" failed`,
+      action:
+        'Inspect that plugin\'s hooks (onRequest/onResponse/onError) for a thrown error; a misbehaving plugin is isolated, but its contribution to the request is skipped',
+      link: 'https://github.com/patelkeyur7279/minder-data-provider/blob/main/docs/ADVANCED_FEATURES.md',
+    });
   }
 }
 
@@ -349,6 +422,13 @@ export class MinderWebSocketError extends MinderError {
   ) {
     super(message, code, undefined, { event });
     this.name = 'MinderWebSocketError';
+
+    this.addSuggestion({
+      message: `Realtime/WebSocket error${event ? ` (event: ${event})` : ''}`,
+      action:
+        'Confirm the WebSocket URL and that the current runtime supports WebSocket (browsers and React Native do; a Node server does not without a ws library)',
+      link: 'https://github.com/patelkeyur7279/minder-data-provider/blob/main/docs/FEATURES.md',
+    });
   }
 }
 
@@ -363,6 +443,13 @@ export class MinderUploadError extends MinderError {
   ) {
     super(message, code, undefined, { fileName });
     this.name = 'MinderUploadError';
+
+    this.addSuggestion({
+      message: `File upload failed${fileName ? `: ${fileName}` : ''}`,
+      action:
+        'Check the file size/type against your limits, and that a file-picker library is installed for this platform (e.g. expo-document-picker or react-native-document-picker)',
+      link: 'https://github.com/patelkeyur7279/minder-data-provider/blob/main/docs/FEATURES.md',
+    });
   }
 }
 

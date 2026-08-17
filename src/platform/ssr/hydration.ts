@@ -10,7 +10,7 @@
 import { Logger, LogLevel } from '../../utils/Logger.js';
 import type { QueryClient, DehydratedState } from '@tanstack/react-query';
 
-const logger = new Logger('Hydration', { level: LogLevel.WARN });
+const logger = /*#__PURE__*/ new Logger('Hydration', { level: LogLevel.WARN });
 
 /**
  * Hydration configuration

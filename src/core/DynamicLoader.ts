@@ -1,9 +1,8 @@
 /**
  * 🚀 DynamicLoader - Lazy load heavy dependencies
- * 
+ *
  * Reduces bundle size from 160KB to <50KB core by loading dependencies on demand:
  * - @tanstack/react-query (~30KB) - loaded only when using React hooks
- * - @reduxjs/toolkit (~40KB) - loaded only when using Redux features
  * - axios (~15KB) - loaded only when making HTTP requests
  * 
  * Benefits:
@@ -24,7 +23,7 @@ export interface DynamicLoaderConfig {
   /**
    * Pre-load specific modules on init
    */
-  preload?: ('query' | 'redux' | 'axios')[];
+  preload?: ('query' | 'axios')[];
   
   /**
    * Cache loaded modules
@@ -45,7 +44,6 @@ export interface DynamicLoaderConfig {
 
 export class DynamicLoader {
   private static queryClient: any = null;  // Use 'any' to avoid type mismatch
-  private static store: any | null = null;
   private static axios: any | null = null;
   private static loading: Map<string, Promise<any>> = new Map();
   
@@ -64,9 +62,6 @@ export class DynamicLoader {
         switch (module) {
           case 'query':
             this.loadQueryClient().catch(console.error);
-            break;
-          case 'redux':
-            this.loadRedux().catch(console.error);
             break;
           case 'axios':
             this.loadAxios().catch(console.error);
@@ -152,97 +147,6 @@ export class DynamicLoader {
   }
   
   // ==========================================================================
-  // REDUX
-  // ==========================================================================
-  
-  /**
-   * Lazy load @reduxjs/toolkit (~40KB)
-   * Only loads when using Redux features
-   */
-  async loadRedux(reducers: Record<string, any> = {}): Promise<any> {
-    if (this.config.debug) {
-      console.log('[DynamicLoader] 📦 Loading @reduxjs/toolkit...');
-    }
-    
-    // Return cached if available
-    if (this.config.cache && DynamicLoader.store) {
-      if (this.config.debug) {
-        console.log('[DynamicLoader] ✅ Using cached Redux store');
-      }
-      return DynamicLoader.store;
-    }
-    
-    // Check if already loading
-    if (DynamicLoader.loading.has('redux')) {
-      return DynamicLoader.loading.get('redux')!;
-    }
-    
-    // Load module
-    const loadPromise = (async () => {
-      const startTime = performance.now();
-      
-      const { configureStore } = await import('@reduxjs/toolkit');
-      
-      DynamicLoader.store = configureStore({
-        reducer: reducers,
-        middleware: (getDefaultMiddleware) =>
-          getDefaultMiddleware({
-            serializableCheck: {
-              // Ignore these action types
-              ignoredActions: ['your/action/type'],
-              // Ignore these field paths in all actions
-              ignoredActionPaths: ['meta.arg', 'payload.timestamp'],
-              // Ignore these paths in the state
-              ignoredPaths: ['items.dates'],
-            },
-          }),
-      });
-      
-      const loadTime = performance.now() - startTime;
-      if (this.config.debug) {
-        console.log(`[DynamicLoader] ✅ Redux store loaded in ${loadTime.toFixed(2)}ms`);
-      }
-      
-      DynamicLoader.loading.delete('redux');
-      return DynamicLoader.store;
-    })();
-    
-    DynamicLoader.loading.set('redux', loadPromise);
-    return loadPromise;
-  }
-  
-  /**
-   * Get Redux store if already loaded, otherwise return null
-   */
-  getStore(): any | null {
-    return DynamicLoader.store;
-  }
-  
-  /**
-   * Check if Redux is loaded
-   */
-  isReduxLoaded(): boolean {
-    return DynamicLoader.store !== null;
-  }
-  
-  /**
-   * Add reducer to Redux store dynamically
-   */
-  async addReducer(name: string, reducer: any): Promise<void> {
-    if (!DynamicLoader.store) {
-      throw new Error('Redux store not loaded');
-    }
-    
-    // This requires the store to support dynamic reducers
-    // You may need to set this up in your store configuration
-    if (typeof DynamicLoader.store.injectReducer === 'function') {
-      DynamicLoader.store.injectReducer(name, reducer);
-    } else {
-      console.warn('[DynamicLoader] Store does not support dynamic reducer injection');
-    }
-  }
-  
-  // ==========================================================================
   // AXIOS
   // ==========================================================================
   
@@ -309,14 +213,13 @@ export class DynamicLoader {
   /**
    * Load all dependencies at once
    */
-  async loadAll(reducers: Record<string, any> = {}): Promise<void> {
+  async loadAll(): Promise<void> {
     if (this.config.debug) {
       console.log('[DynamicLoader] 📦 Loading all dependencies...');
     }
     
     await Promise.all([
       this.loadQueryClient(),
-      this.loadRedux(reducers),
       this.loadAxios(),
     ]);
     
@@ -329,51 +232,46 @@ export class DynamicLoader {
    * Check if all dependencies are loaded
    */
   areAllLoaded(): boolean {
-    return this.isQueryClientLoaded() && this.isReduxLoaded() && this.isAxiosLoaded();
+    return this.isQueryClientLoaded() && this.isAxiosLoaded();
   }
-  
+
   /**
    * Get loading status
    */
   getLoadingStatus(): {
     queryClient: boolean;
-    redux: boolean;
     axios: boolean;
     all: boolean;
   } {
     return {
       queryClient: this.isQueryClientLoaded(),
-      redux: this.isReduxLoaded(),
       axios: this.isAxiosLoaded(),
       all: this.areAllLoaded(),
     };
   }
-  
+
   /**
    * Clear all cached modules (for testing)
    */
   static clearCache(): void {
     DynamicLoader.queryClient = null;
-    DynamicLoader.store = null;
     DynamicLoader.axios = null;
     DynamicLoader.loading.clear();
   }
-  
+
   /**
    * Get bundle size savings
    * Estimates based on typical gzipped sizes
    */
   static getBundleSavings(): {
     queryClient: number;
-    redux: number;
     axios: number;
     total: number;
   } {
     return {
       queryClient: 30, // KB
-      redux: 40, // KB
       axios: 15, // KB
-      total: 85, // KB total savings
+      total: 45, // KB total savings
     };
   }
 }

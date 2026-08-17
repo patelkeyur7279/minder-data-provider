@@ -1,56 +1,210 @@
 name: Create Release
 
+# Creates/refreshes the GitHub Release for a version tag. Uses only the
+# preinstalled `gh` CLI and the default GITHUB_TOKEN — no npm publish, no
+# npm token, no third-party marketplace action.
+#
+# Two ways to run:
+#   1. push a tag matching v* (must be pushed with a human's own git
+#      credentials — GITHUB_TOKEN-authored tag pushes do not trigger
+#      workflow runs; see RELEASING.md).
+#   2. workflow_dispatch with an existing tag — the standing recovery path
+#      for any tag that never got a Release (including historic backfill).
+
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag, e.g. v2.1.4'
+        required: true
+        type: string
+      overwrite:
+        description: 'Refresh notes if the Release already exists'
+        type: boolean
+        default: false
+      mark_latest:
+        description: 'Mark as Latest (stable versions only; ignored for pre-releases)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      # SECURITY: inputs.tag is attacker-controlled free text. It is never
+      # interpolated directly into a `run:` line — it comes in through env:
+      # and is read as "$TAG_INPUT", then validated below before any other
+      # step trusts it. Direct ${{ }} interpolation into a shell command
+      # here would be a command-injection hole against a contents:write
+      # token.
+      - name: Resolve and validate the tag
+        id: resolve
+        env:
+          TAG_INPUT: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG="$TAG_INPUT"
+          else
+            TAG="$REF_NAME"
+          fi
+
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::Tag '$TAG' does not match ^v<semver>\$ — refusing to proceed."
+            exit 1
+          fi
+
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      # Checkout the DEFAULT BRANCH, not the tag. Release notes come from
+      # the cumulative CHANGELOG.md on main, and the extraction script also
+      # lives on main — checking out an old tag would give a stale
+      # CHANGELOG and possibly predate the script entirely. gh resolves the
+      # tag server-side (--verify-tag below), so the tag ref is never
+      # needed in the workspace.
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0
-      
-      - name: Get version from tag
-        id: tag_version
-        run: |
-          echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-      
-      - name: Generate changelog
-        id: changelog
-        run: |
-          PREV_TAG=$(git describe --abbrev=0 --tags $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo "")
-          if [ -z "$PREV_TAG" ]; then
-            CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges)
-          else
-            CHANGELOG=$(git log $PREV_TAG..HEAD --pretty=format:"- %s (%h)" --no-merges)
-          fi
-          echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGELOG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-      
-      - name: Create GitHub Release
-        uses: actions/create-release@v1
+
+      - name: Compose release body
+        id: body
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release v${{ steps.tag_version.outputs.VERSION }}
-          body: |
-            ## What's Changed
-            
-            ${{ steps.changelog.outputs.CHANGELOG }}
-            
-            **Full Changelog**: https://github.com/${{ github.repository }}/compare/v${{ steps.tag_version.outputs.VERSION }}
-            
-            ### Install
-            ```bash
-            npm install minder-data-provider@${{ steps.tag_version.outputs.VERSION }}
-            ```
-          draft: false
-          prerelease: false
+          TAG: ${{ steps.resolve.outputs.tag }}
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          set +e
+          node scripts/changelog-section.js "$VERSION" > /tmp/section.md
+          SECTION_STATUS=$?
+          set -e
+
+          PKG_NAME=$(node -p "require('./package.json').name")
+          IS_PRE=false
+          case "$VERSION" in *-*) IS_PRE=true ;; esac
+
+          : > /tmp/body.md
+          if [ "$SECTION_STATUS" -eq 0 ]; then
+            cat /tmp/section.md >> /tmp/body.md
+            echo "::notice::Curated CHANGELOG.md section found for $VERSION."
+          else
+            # Never fail the job for missing notes — a Release existing at
+            # all is the requirement; curated notes are the goal.
+            echo "::notice::No CHANGELOG.md section for $VERSION — using a stub body."
+            {
+              echo "Release $TAG."
+              echo ""
+              echo "See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for the full history."
+            } >> /tmp/body.md
+          fi
+
+          {
+            echo ""
+            echo "### Install"
+            echo '```bash'
+            echo "npm install ${PKG_NAME}@${VERSION}"
+            if [ "$IS_PRE" = "true" ]; then
+              PRE_TAG="${VERSION#*-}"; PRE_TAG="${PRE_TAG%%.*}"
+              echo "# or track the pre-release channel:"
+              echo "npm install ${PKG_NAME}@${PRE_TAG}"
+            fi
+            echo '```'
+          } >> /tmp/body.md
+
+          PREV_TAG=$(node -e "
+            const { execSync } = require('node:child_process');
+            const { compareSemver } = require('./scripts/semver-compare.js');
+            const tag = process.env.TAG;
+            const tags = execSync('git tag --list \"v*\"').toString().trim().split('\n').filter(Boolean);
+            tags.sort(compareSemver);
+            const idx = tags.indexOf(tag);
+            process.stdout.write(idx > 0 ? tags[idx - 1] : '');
+          ")
+          if [ -n "$PREV_TAG" ]; then
+            {
+              echo ""
+              echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${TAG}"
+            } >> /tmp/body.md
+          fi
+
+          # GitHub caps Release bodies at 125,000 chars — truncate well before
+          # that. A raw byte cut (`head -c`) can land mid-UTF-8-sequence or
+          # mid-code-fence, so cut on the last full LINE within the byte
+          # budget instead (a newline is always a single ASCII byte, so this
+          # can never split a multi-byte character).
+          BODY_SIZE=$(wc -c < /tmp/body.md)
+          if [ "$BODY_SIZE" -gt 120000 ]; then
+            node -e "
+              const fs = require('node:fs');
+              const buf = fs.readFileSync('/tmp/body.md');
+              const limit = 120000;
+              const window = buf.subarray(0, Math.min(limit, buf.length));
+              const lastNewline = window.lastIndexOf(0x0a);
+              const cut = lastNewline === -1 ? window : window.subarray(0, lastNewline + 1);
+              fs.writeFileSync('/tmp/body-truncated.md', cut);
+            "
+            {
+              echo ""
+              echo "…"
+              echo ""
+              echo "_Notes truncated — see [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for the rest._"
+            } >> /tmp/body-truncated.md
+            mv /tmp/body-truncated.md /tmp/body.md
+          fi
+
+          echo "is_pre=$IS_PRE" >> "$GITHUB_OUTPUT"
+
+      - name: Create or refresh the GitHub Release
+        env:
+          TAG: ${{ steps.resolve.outputs.tag }}
+          IS_PRE: ${{ steps.body.outputs.is_pre }}
+          EVENT_NAME: ${{ github.event_name }}
+          OVERWRITE: ${{ inputs.overwrite }}
+          MARK_LATEST: ${{ inputs.mark_latest }}
+        run: |
+          PRERELEASE_FLAG=""
+          LATEST_FLAG="--latest=false"
+
+          if [ "$IS_PRE" = "true" ]; then
+            # Pre-release: never steals the Latest badge.
+            PRERELEASE_FLAG="--prerelease"
+            LATEST_FLAG="--latest=false"
+          elif [ "$EVENT_NAME" = "push" ]; then
+            # Stable version arriving via a real tag push -> becomes Latest.
+            LATEST_FLAG="--latest"
+          elif [ "$MARK_LATEST" = "true" ]; then
+            # Stable version backfilled via workflow_dispatch -> Latest only
+            # if explicitly requested (default false, so an old backfilled
+            # version can never silently steal the badge).
+            LATEST_FLAG="--latest"
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            if [ "$OVERWRITE" = "true" ]; then
+              echo "::notice::Release $TAG already exists — refreshing its notes."
+              gh release edit "$TAG" --notes-file /tmp/body.md $PRERELEASE_FLAG $LATEST_FLAG
+            else
+              echo "::notice::Release $TAG already exists — skipping (re-run with overwrite=true to refresh notes)."
+            fi
+          else
+            # --verify-tag is not optional: without it, a typo'd dispatch
+            # input makes gh create a brand-new tag off the default branch
+            # instead of failing — a phantom release for a version that
+            # never existed.
+            gh release create "$TAG" --verify-tag --title "$TAG" --notes-file /tmp/body.md $PRERELEASE_FLAG $LATEST_FLAG
+            echo "::notice::Created Release $TAG."
+          fi

@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * DevTools Component
  * Browser extension integration for debugging and monitoring

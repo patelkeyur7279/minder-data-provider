@@ -10,7 +10,17 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    # The default GITHUB_TOKEN is read-only in this repo, so the final push to
+    # the .wiki.git 403'd — the wiki-sync had been failing on every run. Grant
+    # write so the token can push the wiki. (If it still fails, a PAT secret
+    # with repo scope is the fallback.)
+    permissions:
+      contents: write
+    steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
       - name: Sync Wiki
         run: |
           echo "Configuring git..."
@@ -27,8 +37,12 @@ jobs:
           find . -maxdepth 1 ! -name '.git' ! -name '.' ! -name '..' -exec rm -rf {} +
           cd ..
 
-          # Copy docs content to wiki repo
-          cp -a docs/. wiki_repo/
+          # Build the numbered documentation book from docs/ (single source of
+          # truth, never modified) straight into the cleaned wiki repo. The
+          # generator itself fails the job (non-zero exit) if a docs/*.md file
+          # is uncurated (neither listed nor excluded in wiki-book.json) or if
+          # any generated link is broken — see scripts/build-wiki.mjs.
+          node scripts/build-wiki.mjs --out wiki_repo
 
           echo "Committing changes..."
           cd wiki_repo

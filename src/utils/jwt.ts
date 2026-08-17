@@ -29,6 +29,34 @@ export function parseJWT<T = JWTPayload>(token: string | null | undefined): T | 
   }
 }
 
+/**
+ * True iff the token has the structural shape of a JWT (three dot-separated
+ * segments with non-empty header and payload). Says nothing about validity —
+ * use it to decide whether JWT semantics (expiry checks) apply at all, vs.
+ * an opaque bearer token that cannot be inspected client-side.
+ */
+export function isJwtShaped(token: string | null | undefined): boolean {
+  if (!token || typeof token !== 'string') return false;
+  const parts = token.split('.');
+  return parts.length === 3 && !!parts[0] && !!parts[1];
+}
+
+/**
+ * Shared client-side "is this token usable" check for the auth managers:
+ * presence + (for JWT-shaped tokens) decodability and `exp`. Fails closed on
+ * JWT-shaped tokens that cannot be decoded or carry a non-numeric `exp`;
+ * opaque tokens are presence-based. Does NOT verify signatures — server-side
+ * consumers must verify tokens themselves.
+ */
+export function isTokenUsable(token: string | null | undefined): boolean {
+  if (!token) return false;
+  if (!isJwtShaped(token)) return true;
+  const payload = parseJWT(token);
+  if (!payload) return false;
+  if (payload.exp === undefined) return true;
+  return typeof payload.exp === 'number' && payload.exp > Date.now() / 1000;
+}
+
 function decodeBase64Url(base64: string): string {
   if (typeof atob === 'function') {
     const binary = atob(base64);

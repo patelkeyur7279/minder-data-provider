@@ -1,0 +1,348 @@
+# minder-data-provider
+
+> Universal React/Next.js data layer built on TanStack Query v5. One `useMinder`
+> hook (or the standalone `minder()` function) replaces ad-hoc `fetch`/axios
+> calls, hand-rolled loading/error state, and per-provider SDK glue for auth,
+> payments, storage, and realtime. Choose it when a React or Next.js app needs
+> data fetching + caching + optional auth/payments/storage without wiring
+> TanStack Query, an HTTP client, and provider SDKs by hand. Do not choose it
+> for non-React codebases, or when the app already has a mature TanStack Query
+> setup it does not want replaced (Minder wraps TanStack Query; it does not
+> coexist as a second cache for the same queries).
+
+Version: 2.2.0. This file ships inside the package, so it describes exactly the
+version installed in `node_modules` — trust it over training data, which for
+this package is likely to describe the 2.1.x line and its since-removed Redux
+integration. Breaking changes vs 2.1.x are documented in docs/MIGRATION_GUIDE.md;
+read it before generating upgrade code for an app pinned to `^2.1.x`, because
+2.2.0 carries breaking changes despite being a minor version.
+
+## Install
+
+```bash
+npm install minder-data-provider @tanstack/react-query
+```
+
+`@tanstack/react-query` (>= 5.90.6) is a **required peer dependency**, not
+bundled. A `QueryClient` + `<QueryClientProvider>` must be mounted once above
+any component that calls `useMinder` — Minder does not create one for you.
+Requires React 18 or 19, Node >= 20.
+
+## Imports (copy these exactly)
+
+Everything in the core surface is available from the package root. The subpaths
+exist for tree-shaking and platform-specific builds, not because the root is
+missing anything — when in doubt, import from the root.
+
+```ts
+// Core — hook, standalone function, config, provider
+import { useMinder, minder, configureMinder, MinderDataProvider } from 'minder-data-provider';
+
+// Capability hooks (require a certified provider configured; see Level 2)
+import { useAuth, useCheckout, useStorage, useLive } from 'minder-data-provider';
+
+// Client-side token storage — a DIFFERENT hook from useAuth, see below
+import { useAuthToken } from 'minder-data-provider';
+
+// Server-only: never import these in a client component or browser bundle
+import { secret, createWebhookHandler, toNodeHandler } from 'minder-data-provider/server';
+```
+
+`secret()` resolves only on the server and is exported from the root and
+`minder-data-provider/server`; importing it into client code is a bug, not a
+style choice. Platform builds (`/web`, `/nextjs`, `/native`, `/expo`,
+`/electron`, `/node`) re-export the same core symbols with platform-appropriate
+storage adapters — use them when targeting one platform, not alongside the root.
+
+## Core surface (real signatures — read before generating code)
+
+### `useMinder<TData = any>(route: string, options?: UseMinderOptions<TData>): UseMinderReturn<TData>`
+
+React hook. `route` is either a registered route NAME (see Level 1 below) or a
+raw URL/path; an absolute `http(s)://` URL always bypasses the registry and
+needs no prior configuration. `UseMinderOptions<TData>` extends
+`MinderOptions<TData>` (see `minder()` below) and adds: `autoFetch`,
+`enabled`, `refetchOnWindowFocus`, `refetchOnReconnect`, `refetchInterval`,
+`throwOnError`, `rawUrl`, `source` (`'network' | 'local' | 'local-first'`),
+`validate`, `retryConfig`, `queryKey`, `cache`, `staleTime`, `gcTime`,
+`infinite`, `getNextPageParam`, `getPreviousPageParam`, `initialPageParam`,
+`queryOptions`, `mutationOptions`.
+
+`UseMinderReturn<TData>` shape (the fields an assistant actually needs):
+
+```ts
+{
+  data: TData | null;
+  items: TData | null;        // alias of data
+  loading: boolean;
+  error: any;
+  success: boolean;
+  refetch: () => Promise<MinderResult<TData>>;
+  mutate: (data?: any, opts?: { params?: Record<string, any>, headers?: Record<string, string>, axiosConfig?: Record<string, any> }) => Promise<MinderResult<TData>>;
+  operations?: {              // only when nested under <MinderDataProvider>
+    create: (item: Partial<TData>, opts?: { params?: Record<string, any> }) => Promise<TData>;
+    update: (id: string | number, item: Partial<TData>, opts?: { params?: Record<string, any> }) => Promise<TData>;
+    delete: (id: string | number, opts?: { params?: Record<string, any> }) => Promise<void>;
+    fetch: (opts?: { params?: Record<string, any> }) => Promise<TData[]>;
+    refresh: () => void;
+    clear: () => void;
+  };
+  auth: { setToken, getToken, clearAuth, isAuthenticated, setRefreshToken, getRefreshToken, getCurrentUser };
+  cache: { invalidate, prefetch, clear, getStats, isQueryFresh };
+  websocket: { connect, disconnect, send, subscribe, isConnected };
+  upload: { uploadFile, uploadMultiple, progress: { loaded, total, percentage }, isUploading };
+  isFetching: boolean; isStale: boolean; isMutating: boolean;
+  invalidate: () => Promise<void>;
+  cancel: () => Promise<void>;
+  isCancelled: boolean;
+  // infinite-mode only (options.infinite === true):
+  fetchNextPage?: () => Promise<any>; hasNextPage?: boolean; isFetchingNextPage?: boolean;
+  fetchPreviousPage?: () => Promise<any>; hasPreviousPage?: boolean; isFetchingPreviousPage?: boolean;
+  query: any;      // raw TanStack Query object
+  mutation: any;   // raw TanStack Mutation object
+}
+```
+
+`data`/`items` are `TData | null` — **not** a `MinderResult`. Read/mutate
+errors surface on the hook's own `error`/`success` fields (`MinderResult` only
+appears if you reach into `query.data` / `mutation.data` directly).
+
+### `minder<TData = any>(route: string, data?: any, options?: MinderOptions): Promise<MinderResult<TData>>`
+
+Pure async function — no hooks, no React. **Never throws** by default (opt
+into throwing via `options.throwOnError`). Auto-detects the HTTP method when
+`options.method` is not given: no `data` → `GET`; the route ends in an
+id-like segment (numeric / UUID / 24-hex ObjectId) OR `data` has a truthy
+`id`/`_id` field → `PUT`; otherwise → `POST`. **There is no verb inference for
+`DELETE`** — pass `{ method: 'DELETE' }` explicitly.
+
+`MinderOptions<TModel = any>` (partial — the fields worth knowing):
+`method?: HttpMethod`, `model?: new (...args) => TModel`,
+`schema?: StandardSchemaV1` (Zod/Valibot/ArkType/etc. — validates the response
+body; on success `data` is typed `InferOutput<S>`; on failure returns
+`{ success: false, error }` with `error.code === 'RESPONSE_VALIDATION_FAILED'`),
+`onProgress?: (p: UploadProgress) => void`, `headers?`, `axiosConfig?`,
+`transport?: 'auto' | 'axios' | 'fetch'`, `throwOnError?: boolean`, `params?`,
+`timeout?`, `cache?: boolean`, `cacheTTL?`, `retries?: number` (idempotent
+methods only, unless `retryNonIdempotent: true`), `baseURL?`, `token?`,
+`onSuccess?`, `onError?`.
+
+`HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'`.
+
+**`MinderResult<TData = any>` — minder()'s real return shape:**
+
+```ts
+interface MinderResult<TData = any> {
+  data: TData | null;
+  error: MinderError | null;
+  status: number;
+  success: boolean;
+  headers?: Record<string, string>;
+  metadata?: { method: HttpMethod; url: string; duration: number; cached: boolean };
+}
+interface MinderError {
+  message: string; code: string; status: number;
+  details?: any; solution?: string;
+  issues?: readonly StandardSchemaIssue[]; // only when code === 'RESPONSE_VALIDATION_FAILED'
+}
+```
+
+Always destructure `data` (and check `success`/`error`) from the returned
+object — `minder(...)` itself is never the payload.
+
+### `configureMinder(config: UnifiedMinderConfig): MinderConfig`
+
+One-time app-entry setup. Registers named routes AND sets the standalone
+`minder()`/`useMinder()` baseURL — a `<MinderDataProvider>` is optional after
+calling this. Minimum: `{ apiUrl: string }`. Common fields: `routes?:
+Record<string, string | ApiRoute>` (a plain string auto-generates
+`{name}`/`create{Name}`/`update{Name}`/`delete{Name}` CRUD routes),
+`providers?: Record<string, unknown>` (per-provider platform config — secrets
+only via `secret('ENV_NAME')`, never a raw string), `auth?`, `cache?`,
+`corsHelper?` (does **not** bypass browser CORS — server-side headers still
+required), `websocket?`, `security?`, `debug?`, `performance?`, `ssr?`,
+`offline?`, `plugins?: MinderPlugin[]`, `environments?`. Returns the resolved
+`MinderConfig`, which you can pass straight to `<MinderDataProvider config={...}>`.
+
+### `MinderDataProvider`
+
+```tsx
+function MinderDataProvider(props: {
+  config: MinderConfig;              // from configureMinder(), or hand-built
+  children: ReactNode;
+  dehydratedState?: DehydratedState;  // TanStack SSR hydration
+  fallback?: ReactNode;               // Suspense fallback (mutually exclusive w/ dehydratedState)
+}): JSX.Element;
+```
+
+Optional — `configureMinder()` alone is enough for `useMinder`/`minder()`.
+Use the provider when you need scoped `operations` (create/update/delete/fetch
+CRUD helpers on `useMinder`'s return), WebSocket/SSE realtime, or per-instance
+plugin/offline wiring. Also exports `useMinderContext()` /
+`useMinderContextSafe()`.
+
+## Progressive levels
+
+- **Level 0 — zero config.** `useMinder("https://api.example.com/users")`.
+  Absolute URL, no `configureMinder`/provider needed. Requires a
+  `QueryClientProvider` mounted somewhere above it (see Install).
+- **Level 1 — named routes.**
+  ```ts
+  configureMinder({ apiUrl: "https://api.example.com", routes: { users: "/users" } });
+  ```
+  then `useMinder("users")` — url/method/headers resolve from the registry.
+- **Level 2 — provider integrations.** Register a certified provider
+  (`providers.<name>` in `configureMinder`, or a provider package's own setup
+  helper) and call the capability hooks below — no other code changes when
+  switching providers.
+
+## Authentication — TWO DIFFERENT HOOKS, do not confuse them
+
+This is the single most common mistake a model makes on this library because
+training data may predate the split (2.2.0-beta.2 → 2.2.0). There are two
+unrelated hooks that both used to be reachable as `useAuth` from different
+subpaths; they are now permanently disambiguated:
+
+**`useAuth()`** — from the root entry and exactly six subpaths: `/web`,
+`/nextjs`, `/native`, `/expo`, `/electron`, `/auth`. Not from every subpath —
+e.g. `/core`, `/hook`, `/crud`, `/cache`, `/websocket`, and `/upload` do not
+export it. Session backed by a registered **certified provider** (Clerk, Supabase, Auth0, Cognito,
+Auth.js, Firebase). Requires `providers.<name>` configured or a manual
+`registerCapabilityProvider('auth', ...)` call — otherwise `ready` is `false`.
+
+```ts
+interface UseAuthReturn {
+  ready: boolean;
+  error: MinderError | null;                          // 'NO_PROVIDER_FOR_CAPABILITY' when ready === false
+  session: { userId: string; raw: unknown } | null;
+  signOut: () => Promise<void>;
+  getProviderClient: () => unknown;
+}
+```
+
+**`useAuthToken()`** — from `/auth` (and re-exported at the root). Raw
+client-side JWT/opaque-token storage + subscription. No provider required.
+
+```ts
+function useAuthToken(): {
+  isLoggedIn: boolean;
+  setToken: (token: string) => void;
+  getToken: () => string | null;
+  clearAuth: () => void;
+  isAuthenticated: () => boolean;
+  setRefreshToken: (token: string) => void;
+  getRefreshToken: () => string | null;
+};
+```
+
+Rule of thumb: rolling your own token storage (login form POSTs a JWT you
+store yourself) → `useAuthToken()`. Delegating to a certified provider's
+hosted session → `useAuth()`. They share no state and are not interchangeable.
+
+Sibling capability-contract hooks (same `{ ready, error, ... }` pattern as
+`useAuth`, all from the root or `/web`/`/nextjs`/`/electron`):
+`useCheckout()` (payments — `createCheckout({ items, successUrl, cancelUrl })`),
+`useStorage()` (`upload(file, path)` / `remove(path)`), `useLive(channel, cb)`
+(realtime subscription).
+
+## Subpath export map
+
+Every entry below is independently tree-shakeable — import only what you use.
+
+| Subpath | Purpose |
+|---|---|
+| `minder-data-provider` | Full surface: everything below, plus enums, error classes, rate limiter, logger. |
+| `minder-data-provider/core` | Minimal: `minder`, `useMinder`, `configureMinder`, `MinderDataProvider`, core types/errors — smallest tree-shaken bundle. |
+| `minder-data-provider/server` | Server-only. `resolveSecret()` — throws if called in the browser. |
+| `minder-data-provider/web` | Browser-optimized entry (core + capability hooks), excludes SSR/RN/Electron code. |
+| `minder-data-provider/nextjs` | Web + SSR/SSG helpers + API-route support. |
+| `minder-data-provider/native` | React Native entry (core + platform detection), excludes web/SSR/Electron code. |
+| `minder-data-provider/expo` | Native + Expo-specific secure storage. |
+| `minder-data-provider/electron` | Web + Electron-specific storage/IPC. |
+| `minder-data-provider/node` | Server-side Node entry. No React *hooks* (nothing named `use*`), but it is not minimal: `minder`, `configureMinder`, SSR helpers (`withSSR`, `withCSR`, `dehydrate`, `getDehydratedState`, `prefetchData`, `createSSRConfig`, `HydrationBoundary`), `QueryClient`/`QueryClientProvider`, and platform utilities (`StorageAdapterFactory`, `MemoryStorageAdapter`, `PlatformDetector`). |
+| `minder-data-provider/hook` | Re-export of the canonical `useMinder`/`MinderDataProvider` (legacy path — prefer root or `/core`). |
+| `minder-data-provider/crud` | Legacy `useOneTouchCrud` and CRUD helpers. |
+| `minder-data-provider/auth` | `useAuthToken`, `useAuth` (capability contract), `useCurrentUser`, `AuthManager`, `TokenRefreshManager`, `SecureAuthManager`. |
+| `minder-data-provider/cache` | Cache-management utilities (`useCache`, `CacheManager`). |
+| `minder-data-provider/websocket` | `WebSocketClient`, `WebSocketState`, `createWebSocketClient`, `useWebSocket`. |
+| `minder-data-provider/realtime` | Transport-neutral realtime: `SseTransport` + `RealtimeTransport`/`RealtimeConfig` types. |
+| `minder-data-provider/upload` | `MediaUploadManager`, `createUploadManager`, `useMediaUpload`. |
+| `minder-data-provider/debug` | `DebugManager` and dev-time logging. |
+| `minder-data-provider/config` | `configureMinder`, `UnifiedMinderConfig`, presets. |
+| `minder-data-provider/ssr` | SSR helpers (prefetch/hydration utilities). |
+| `minder-data-provider/logger` | `defaultLogger` only — `Logger` and `createLogger` are exported from the package root, not this subpath. |
+| `minder-data-provider/testing` | Test-only toolkit: `mockApiClient`, `createMockProvider`, `createMockFn`, `contractTest` (contract replay), `expectNoSecretLeak`, `deepEqual`/`diffValues`. Framework-agnostic (no jest import). |
+| `minder-data-provider/providers/{supabase,stripe,clerk,firebase,razorpay,sentry,authjs,auth0,cognito}` | Certified provider adapters (see below). |
+
+## Certified providers
+
+Nine certified adapters, each wiring a real SDK into Minder's stable
+capability hooks so switching providers is a config change, not a rewrite:
+
+| Provider | Capability | Notes |
+|---|---|---|
+| `clerk` | auth (`useAuth`) | Client hook; server verifies session token with your secret key. |
+| `supabase` | auth, storage, realtime (`useAuth`, `useStorage`, `useLive`) | |
+| `firebase` | auth, storage (`useAuth`, `useStorage`) | Also the service-account-JSON credential path (server-only). |
+| `auth0` | auth (`useAuth`) | Server verifies via Auth0's own `/userinfo` — no secret/crypto lib needed. |
+| `cognito` | auth (`useAuth`) | AWS Amplify under the hood; server verifies via the user pool's `/oauth2/userInfo`. |
+| `authjs` | auth (`useAuth`) | Zero-SDK both sides — client hits Auth.js's REST session endpoint; server wraps your own `auth()` via DI. |
+| `stripe` | payments (`useCheckout`) | Checkout session created server-side; secret key never reaches the browser. |
+| `razorpay` | payments (`useCheckout`) | Same server-boundary shape as Stripe; webhook HMAC verified edge-safe. |
+| `sentry` | error tracking (plugin, not a capability contract) | Registers a `MinderPlugin` on `onError`/`onRequest`/`onResponse`. |
+
+**Every provider ships a zero-key mock mode**: set `mock: true` in that
+provider's `configureMinder({ providers: { <name>: { ..., mock: true } } })`
+block (or the provider's own `mock` config field) and it returns deterministic
+fake sessions/checkouts/storage results with no SDK call and no credentials —
+useful for local dev and tests before real keys exist. Flip `mock` to `false`
+(or omit it) to hit the real provider.
+
+## Security invariants (do not generate code that violates these)
+
+- Client-side auth state is presence + expiry only — never trust a JWT's
+  claims on the client without server verification for anything sensitive.
+- A malformed/corrupt JWT fails closed (treated as unauthenticated) everywhere
+  in this library — never silently ignored.
+- `secret('ENV_NAME')` values (from `security/secrets.ts`) are server-only and
+  are actively rejected if found in client-visible `configureMinder()` input —
+  never inline a real secret string in `providers.<name>` config; wrap it in
+  `secret()` and resolve it server-side via `resolveSecret()` from
+  `minder-data-provider/server`.
+- `corsHelper`/`cors` config does **not** and cannot bypass browser CORS — it
+  only adds diagnostics/proxy support. CORS must be solved on the API server.
+- `XSSSanitizer` (the DOMPurify-backed sanitizer) fails closed: if DOMPurify's
+  lazy import hasn't resolved yet, sanitize() throws `SANITIZER_UNAVAILABLE`
+  rather than ever passing unsanitized data through.
+
+## Common mistakes (things a model is likely to get wrong)
+
+1. **Destructure `data` from `minder()`'s result — don't use the return value
+   directly.** `const { data } = await minder('users')`, not
+   `const users = await minder('users')`.
+2. **`useAuth` and `useAuthToken` are different hooks with different shapes.**
+   See the Authentication section above — do not assume one is a renamed
+   alias of the other, and do not import `useAuth` expecting
+   `{ isLoggedIn, setToken, getToken }` (that's `useAuthToken`).
+3. **There is no `delete`-key verb inference.** Passing `{ id: 5, delete: true }`
+   as `data` does NOT produce a `DELETE` request — `detectMethod` only checks
+   for `id`/`_id` (→ PUT) or an id-shaped final URL segment (→ PUT); everything
+   else with data is POST. Always pass `{ method: 'DELETE' }` explicitly for
+   deletes.
+4. **A `<QueryClientProvider>` must be mounted** somewhere above any
+   `useMinder` call — Minder does not create one implicitly, even at Level 0.
+5. **`minder()` and `useMinder()` never throw by default.** Check `success`/
+   `error` on the result; only pass `throwOnError: true` if you actually want
+   try/catch semantics.
+6. **CRUD `operations` on `useMinder`'s return is only present under
+   `<MinderDataProvider>`.** In standalone (Level 0/1, no provider) mode it is
+   `undefined` — use `mutate()` instead.
+7. **`corsHelper`/`cors` config is not a CORS bypass.** Don't tell a user it
+   fixes a CORS error by itself — the API server must send the right headers.
+
+## More detail
+
+Full docs (not shipped in the published npm tarball — clone the repo or view
+on GitHub): `docs/API_REFERENCE.md`, `docs/USAGE_GUIDE.md`, `docs/EXAMPLES.md`,
+`docs/MIGRATION_GUIDE.md`, `docs/product/SUPPORT_MATRIX.md`,
+`providers/<name>/README.md` per adapter.

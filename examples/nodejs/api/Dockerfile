@@ -1,4 +1,4 @@
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
@@ -11,8 +11,8 @@ RUN npm install
 # Copy source code
 COPY . .
 
-# Expose port
-EXPOSE 3003
+# Expose port (matches PORT in .env.example / src/index.ts default)
+EXPOSE 3001
 
 # Start development server
 CMD ["npm", "run", "dev"]

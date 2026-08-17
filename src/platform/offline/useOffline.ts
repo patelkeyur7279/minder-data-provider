@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * React Hooks for Offline Support
  * 
@@ -7,8 +9,49 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import type { OfflineManager } from './OfflineManager.js';
+import type { OfflineManager, OfflineManagerSnapshot } from './OfflineManager.js';
 import type { NetworkState, QueuedRequest, SyncStats } from './types.js';
+
+/**
+ * Shallow-compare two NetworkState objects field by field.
+ */
+function isNetworkStateEqual(a: NetworkState, b: NetworkState): boolean {
+  return (
+    a === b ||
+    (a.isConnected === b.isConnected &&
+      a.type === b.type &&
+      a.isExpensive === b.isExpensive &&
+      a.isMetered === b.isMetered)
+  );
+}
+
+/**
+ * Shallow-compare two queue arrays by length and per-index reference.
+ * OfflineManager.getQueue() always returns a fresh array copy, so reference
+ * equality alone would never match even when the contents are unchanged.
+ */
+function isQueueEqual(a: QueuedRequest[], b: QueuedRequest[]): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Resolve current browser connectivity, falling back to "online" when
+ * `navigator` isn't available (SSR / non-browser environments).
+ */
+function getBrowserOnlineStatus(): boolean {
+  return typeof navigator !== 'undefined' && 'onLine' in navigator ? navigator.onLine : true;
+}
 
 /**
  * Hook return type for useOffline
@@ -84,19 +127,56 @@ export function useOffline(offlineManager: OfflineManager): UseOfflineResult {
   const [queue, setQueue] = useState<QueuedRequest[]>(offlineManager.getQueue());
   const [queueSize, setQueueSize] = useState(offlineManager.getQueueSize());
 
-  // Update state when network changes
+  // Subscribe to manager-driven state changes (network, sync, queue) instead
+  // of polling. Each setState is guarded by an equality check so no-op
+  // notifications don't trigger a re-render.
   useEffect(() => {
-    const updateState = () => {
-      setIsOnline(offlineManager.isOnline());
-      setNetworkState(offlineManager.getNetworkState());
-      setQueue(offlineManager.getQueue());
-      setQueueSize(offlineManager.getQueueSize());
+    const applySnapshot = (snapshot: OfflineManagerSnapshot) => {
+      setIsOnline((prev) => (prev === snapshot.isOnline ? prev : snapshot.isOnline));
+      setIsSyncing((prev) => (prev === snapshot.isSyncing ? prev : snapshot.isSyncing));
+      setNetworkState((prev) =>
+        isNetworkStateEqual(prev, snapshot.networkState) ? prev : snapshot.networkState
+      );
+      setQueue((prev) => (isQueueEqual(prev, snapshot.queue) ? prev : snapshot.queue));
+      setQueueSize((prev) => (prev === snapshot.queueSize ? prev : snapshot.queueSize));
     };
 
-    // Poll for changes (since OfflineManager uses callbacks)
-    const interval = setInterval(updateState, 1000);
+    const handleManagerChange = () => applySnapshot(offlineManager.getSnapshot());
+    const unsubscribe = offlineManager.subscribe(handleManagerChange);
 
-    return () => clearInterval(interval);
+    // Fallback: listen directly to the browser's connectivity events in case
+    // this OfflineManager instance hasn't wired up its own window listeners
+    // (e.g. initialize() hasn't been called yet).
+    const handleWindowConnectivityChange = () => {
+      const isOnlineNow = getBrowserOnlineStatus();
+      const snapshot = offlineManager.getSnapshot();
+      applySnapshot({
+        ...snapshot,
+        isOnline: isOnlineNow,
+        networkState: {
+          ...snapshot.networkState,
+          isConnected: isOnlineNow,
+          type: isOnlineNow ? snapshot.networkState.type ?? 'unknown' : 'none',
+        },
+      });
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', handleWindowConnectivityChange);
+      window.addEventListener('offline', handleWindowConnectivityChange);
+    }
+
+    // Reconcile any state change that happened between initial render and
+    // this effect's mount.
+    handleManagerChange();
+
+    return () => {
+      unsubscribe();
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', handleWindowConnectivityChange);
+        window.removeEventListener('offline', handleWindowConnectivityChange);
+      }
+    };
   }, [offlineManager]);
 
   const addToQueue = useCallback(
@@ -180,12 +260,43 @@ export function useNetworkState(offlineManager: OfflineManager): {
   const [networkState, setNetworkState] = useState(offlineManager.getNetworkState());
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setIsOnline(offlineManager.isOnline());
-      setNetworkState(offlineManager.getNetworkState());
-    }, 1000);
+    const applySnapshot = (nextIsOnline: boolean, nextNetworkState: NetworkState) => {
+      setIsOnline((prev) => (prev === nextIsOnline ? prev : nextIsOnline));
+      setNetworkState((prev) => (isNetworkStateEqual(prev, nextNetworkState) ? prev : nextNetworkState));
+    };
 
-    return () => clearInterval(interval);
+    const handleManagerChange = (snapshot: OfflineManagerSnapshot) =>
+      applySnapshot(snapshot.isOnline, snapshot.networkState);
+    const unsubscribe = offlineManager.subscribe(handleManagerChange);
+
+    // Fallback: listen directly to the browser's connectivity events in case
+    // this OfflineManager instance hasn't wired up its own window listeners.
+    const handleWindowConnectivityChange = () => {
+      const isOnlineNow = getBrowserOnlineStatus();
+      const currentNetworkState = offlineManager.getNetworkState();
+      applySnapshot(isOnlineNow, {
+        ...currentNetworkState,
+        isConnected: isOnlineNow,
+        type: isOnlineNow ? currentNetworkState.type ?? 'unknown' : 'none',
+      });
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', handleWindowConnectivityChange);
+      window.addEventListener('offline', handleWindowConnectivityChange);
+    }
+
+    // Reconcile any state change that happened between initial render and
+    // this effect's mount.
+    applySnapshot(offlineManager.isOnline(), offlineManager.getNetworkState());
+
+    return () => {
+      unsubscribe();
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', handleWindowConnectivityChange);
+        window.removeEventListener('offline', handleWindowConnectivityChange);
+      }
+    };
   }, [offlineManager]);
 
   const refreshNetworkState = useCallback(async () => {
@@ -215,12 +326,22 @@ export function useOfflineQueue(offlineManager: OfflineManager): {
   const [queueSize, setQueueSize] = useState(offlineManager.getQueueSize());
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setQueue(offlineManager.getQueue());
-      setQueueSize(offlineManager.getQueueSize());
-    }, 1000);
+    const applySnapshot = (nextQueue: QueuedRequest[], nextQueueSize: number) => {
+      setQueue((prev) => (isQueueEqual(prev, nextQueue) ? prev : nextQueue));
+      setQueueSize((prev) => (prev === nextQueueSize ? prev : nextQueueSize));
+    };
 
-    return () => clearInterval(interval);
+    const handleManagerChange = (snapshot: OfflineManagerSnapshot) =>
+      applySnapshot(snapshot.queue, snapshot.queueSize);
+    const unsubscribe = offlineManager.subscribe(handleManagerChange);
+
+    // Reconcile any state change that happened between initial render and
+    // this effect's mount.
+    applySnapshot(offlineManager.getQueue(), offlineManager.getQueueSize());
+
+    return () => {
+      unsubscribe();
+    };
   }, [offlineManager]);
 
   const addToQueue = useCallback(

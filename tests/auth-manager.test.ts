@@ -146,15 +146,15 @@ describe('AuthManager', () => {
       expect(authManager.isAuthenticated()).toBe(true);
     });
 
-    it('should handle invalid JWT format', () => {
+    it('should treat a non-JWT (opaque) token as valid by presence', () => {
       authManager.setToken('invalid-jwt');
-      expect(authManager.isAuthenticated()).toBe(true); // Falls back to treating as valid
+      expect(authManager.isAuthenticated()).toBe(true); // Opaque token: presence-based
     });
 
-    it('should handle malformed JWT payload', () => {
+    it('should fail closed on a JWT-shaped token with a malformed payload', () => {
       const jwt = 'header.invalid-base64.signature';
       authManager.setToken(jwt);
-      expect(authManager.isAuthenticated()).toBe(true); // Falls back to treating as valid
+      expect(authManager.isAuthenticated()).toBe(false); // Corrupt JWT: rejected
     });
   });
 

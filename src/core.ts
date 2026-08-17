@@ -44,3 +44,14 @@ export {
   getErrorMessage,
   getErrorCode,
 } from './errors/index.js';
+
+// Response-validation error (Task 3.1). Exported TYPE-ONLY: the class lives in
+// the lazy validation chunk (see responseValidation.ts) so it never enters the
+// eager bundle for consumers who don't use `schema`. Runtime branching is via
+// `error.code === 'RESPONSE_VALIDATION_FAILED'` (+ `error.issues`); the instance
+// is reachable at `result.error.raw`.
+export type { MinderResponseValidationError } from './core/responseValidation.js';
+
+// Vendored Standard Schema interface (Task 3.1 — response validation via
+// `ApiRoute.schema` / `MinderOptions.schema`). Type-only: zero runtime bytes.
+export type { StandardSchemaV1, InferOutput, InferInput } from './types/standard-schema.js';

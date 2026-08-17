@@ -107,7 +107,10 @@ const SECRET_VALUE_PATTERNS: { re: RegExp; label: string }[] = [
   { re: /\bSG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}/, label: 'SendGrid API key' },
 ];
 
-const SUSPICIOUS_KEY =
+// Exported (in addition to being used internally below) so callers outside this
+// module — e.g. `minder-data-provider/testing`'s `expectNoSecretLeak` — can reuse
+// the same "does this key name look secret-shaped?" heuristic without duplicating it.
+export const SUSPICIOUS_KEY =
   /(secret|password|passwd|private[_-]?key|client[_-]?secret|api[_-]?secret|access[_-]?key[_-]?secret|auth[_-]?token|service[_-]?account)/i;
 
 export interface ExposedSecret {

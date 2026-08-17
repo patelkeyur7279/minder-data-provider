@@ -1,11 +1,18 @@
 {
   "compilerOptions": {
     "target": "esnext",
-    "module": "commonjs",
+    "module": "esnext",
     "lib": ["es2017"],
     "jsx": "react-native",
     "strict": true,
-    "moduleResolution": "node",
+    // "bundler" (not "node", classic Node resolution) is required so tsc
+    // understands minder-data-provider's package.json "exports" map (e.g.
+    // "minder-data-provider/expo") the same way Metro's bundler resolver
+    // does. Requires `module` to be esnext/es2022+ — Babel (not tsc) does
+    // the actual transpilation for Metro, so this only affects
+    // type-checking, not the emitted/bundled code.
+    "moduleResolution": "bundler",
+    "noEmit": true,
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "skipLibCheck": true,

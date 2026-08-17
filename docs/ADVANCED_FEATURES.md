@@ -69,20 +69,6 @@ function Monitor() {
 
 ## State Management
 
-### Redux Integration
-Minder exposes its internal Redux store if you need to dispatch manually or read state without hooks.
-
-```typescript
-import { useStore, useReduxSlice } from 'minder-data-provider';
-
-function MyComponent() {
-  const store = useStore();
-  
-  // Create a slice on the fly
-  const { actions, selectors } = useReduxSlice('custom-data');
-}
-```
-
 ### UI State
 Built-in helper for managing UI states like modals and notifications.
 

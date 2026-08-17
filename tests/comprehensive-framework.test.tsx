@@ -4,7 +4,7 @@
  * Tests ALL features across different configurations:
  * 1. All storage types (localStorage, sessionStorage, memory, cookies)
  * 2. All authentication flows
- * 3. All hooks (useAuth, useMinder, useCurrentUser)
+ * 3. All hooks (useAuthToken, useMinder, useCurrentUser)
  * 4. Token refresh
  * 5. Multi-tab synchronization
  * 6. Error handling
@@ -16,7 +16,7 @@ import { renderHook, act } from '@testing-library/react';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MinderDataProvider } from '../src/core/MinderDataProvider';
-import { useAuth } from '../src/hooks/index';
+import { useAuthToken } from '../src/hooks/index';
 import { useMinder } from '../src/hooks/useMinder';
 import { globalAuthManager } from '../src/auth/GlobalAuthManager';
 import { StorageType, HttpMethod } from '../src/constants/enums';
@@ -69,7 +69,7 @@ describe('🧪 COMPREHENSIVE FRAMEWORK TESTING', () => {
                     </QueryClientProvider>
                 );
 
-                const { result } = renderHook(() => useAuth(), { wrapper });
+                const { result } = renderHook(() => useAuthToken(), { wrapper });
 
                 // Test setToken
                 await act(async () => {
@@ -165,7 +165,7 @@ describe('🧪 COMPREHENSIVE FRAMEWORK TESTING', () => {
                 </QueryClientProvider>
             );
 
-            const { result } = renderHook(() => useAuth(), { wrapper });
+            const { result } = renderHook(() => useAuthToken(), { wrapper });
 
             // Set access token
             await act(async () => {
@@ -191,7 +191,7 @@ describe('🧪 COMPREHENSIVE FRAMEWORK TESTING', () => {
     // =========================================================================
 
     describe('🪝 Hook Integration Tests', () => {
-        it('should work with useAuth hook', async () => {
+        it('should work with useAuthToken hook', async () => {
             const config = {
                 apiBaseUrl: 'https://api.test.com',
                 routes: {
@@ -211,7 +211,7 @@ describe('🧪 COMPREHENSIVE FRAMEWORK TESTING', () => {
                 </QueryClientProvider>
             );
 
-            const { result } = renderHook(() => useAuth(), { wrapper });
+            const { result } = renderHook(() => useAuthToken(), { wrapper });
 
             // All auth methods should be available
             expect(typeof result.current.setToken).toBe('function');
@@ -310,7 +310,7 @@ describe('🧪 COMPREHENSIVE FRAMEWORK TESTING', () => {
                 </QueryClientProvider>
             );
 
-            const { result } = renderHook(() => useAuth(), { wrapper });
+            const { result } = renderHook(() => useAuthToken(), { wrapper });
 
             const exp = Math.floor(Date.now() / 1000) + 3600; // Expires in 1 hour
             const jwt = createJWT({ exp, userId: '123' });
@@ -342,7 +342,7 @@ describe('🧪 COMPREHENSIVE FRAMEWORK TESTING', () => {
                 </QueryClientProvider>
             );
 
-            const { result } = renderHook(() => useAuth(), { wrapper });
+            const { result } = renderHook(() => useAuthToken(), { wrapper });
 
             const exp = Math.floor(Date.now() / 1000) - 3600; // Expired 1 hour ago
             const jwt = createJWT({ exp, userId: '123' });
@@ -374,7 +374,7 @@ describe('🧪 COMPREHENSIVE FRAMEWORK TESTING', () => {
                 </QueryClientProvider>
             );
 
-            const { result } = renderHook(() => useAuth(), { wrapper });
+            const { result } = renderHook(() => useAuthToken(), { wrapper });
 
             const jwt = createJWT({ exp: 0 });
 
@@ -406,7 +406,7 @@ describe('🧪 COMPREHENSIVE FRAMEWORK TESTING', () => {
                 </QueryClientProvider>
             );
 
-            const { result } = renderHook(() => useAuth(), { wrapper });
+            const { result } = renderHook(() => useAuthToken(), { wrapper });
 
             const jwt = createJWT({ exp: 'invalid-exp' });
 
@@ -414,8 +414,9 @@ describe('🧪 COMPREHENSIVE FRAMEWORK TESTING', () => {
                 result.current.setToken(jwt);
             });
 
-            // Non-numeric exp should be treated as no expiration (Bug #5 fix)
-            expect(result.current.isAuthenticated()).toBe(true);
+            // Non-numeric exp claim is malformed: fails closed (2.2.0-beta.1).
+            // (Bug #5's actual fix — not crashing on malformed tokens — still holds.)
+            expect(result.current.isAuthenticated()).toBe(false);
         });
     });
 
@@ -463,8 +464,8 @@ describe('🧪 COMPREHENSIVE FRAMEWORK TESTING', () => {
                 </QueryClientProvider>
             );
 
-            const { result: result1 } = renderHook(() => useAuth(), { wrapper: wrapper1 });
-            const { result: result2 } = renderHook(() => useAuth(), { wrapper: wrapper2 });
+            const { result: result1 } = renderHook(() => useAuthToken(), { wrapper: wrapper1 });
+            const { result: result2 } = renderHook(() => useAuthToken(), { wrapper: wrapper2 });
 
             // Set different tokens
             await act(async () => {
@@ -505,8 +506,8 @@ describe('🧪 COMPREHENSIVE FRAMEWORK TESTING', () => {
                 </QueryClientProvider>
             );
 
-            const { result: result1 } = renderHook(() => useAuth(), { wrapper: wrapper1 });
-            const { result: result2 } = renderHook(() => useAuth(), { wrapper: wrapper2 });
+            const { result: result1 } = renderHook(() => useAuthToken(), { wrapper: wrapper1 });
+            const { result: result2 } = renderHook(() => useAuthToken(), { wrapper: wrapper2 });
 
             // Set token in instance 1
             await act(async () => {
@@ -544,7 +545,7 @@ describe('🧪 COMPREHENSIVE FRAMEWORK TESTING', () => {
                 </QueryClientProvider>
             );
 
-            const { result } = renderHook(() => useAuth(), { wrapper });
+            const { result } = renderHook(() => useAuthToken(), { wrapper });
 
             expect(result.current.getToken()).toBeNull();
             expect(result.current.isAuthenticated()).toBe(false);
@@ -570,7 +571,7 @@ describe('🧪 COMPREHENSIVE FRAMEWORK TESTING', () => {
                 </QueryClientProvider>
             );
 
-            const { result } = renderHook(() => useAuth(), { wrapper });
+            const { result } = renderHook(() => useAuthToken(), { wrapper });
 
             await act(async () => {
                 result.current.setToken('');
@@ -608,7 +609,7 @@ describe('🧪 COMPREHENSIVE FRAMEWORK TESTING', () => {
                     </QueryClientProvider>
                 );
 
-                renderHook(() => useAuth(), { wrapper });
+                renderHook(() => useAuthToken(), { wrapper });
             }).not.toThrow();
         });
 
@@ -630,7 +631,7 @@ describe('🧪 COMPREHENSIVE FRAMEWORK TESTING', () => {
                     </QueryClientProvider>
                 );
 
-                renderHook(() => useAuth(), { wrapper });
+                renderHook(() => useAuthToken(), { wrapper });
             }).not.toThrow();
         });
     });

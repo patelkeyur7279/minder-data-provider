@@ -14,7 +14,7 @@ import { NativeStorageAdapter } from './NativeStorageAdapter.js';
 import { ExpoStorageAdapter } from './ExpoStorageAdapter.js';
 import { ElectronStorageAdapter } from './ElectronStorageAdapter.js';
 
-const logger = new Logger('StorageAdapterFactory', { level: LogLevel.WARN });
+const logger = /*#__PURE__*/ new Logger('StorageAdapterFactory', { level: LogLevel.WARN });
 
 export class StorageAdapterFactory {
   /**

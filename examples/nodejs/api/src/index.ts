@@ -1,88 +1,19 @@
-import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import compression from 'compression';
-import dotenv from 'dotenv';
-import usersRouter from './routes/users';
-import { errorHandler, notFoundHandler } from './middleware/errorHandler';
-import { rateLimiter } from './middleware/rateLimiter';
+import createApp from './app';
+
+const PORT = process.env.PORT ? Number(process.env.PORT) : 3001;
+
+const app = createApp();
 
 /**
- * Load environment variables
+ * Start server — only when this file is run directly (`node dist/index.js`,
+ * `tsx src/index.ts`), never when imported (e.g. by tests importing
+ * `createApp` from ./app, or any other module importing this one). Guards
+ * against double-binding the port and lets the app be tested without a live
+ * listener.
  */
-dotenv.config();
-
-/**
- * Create Express app
- */
-const app = express();
-const PORT = process.env.PORT || 3001;
-
-/**
- * Security & Performance Middleware
- * 
- * Why each middleware?
- * - helmet: Sets security HTTP headers
- * - cors: Enables cross-origin requests
- * - compression: Compresses responses
- * - express.json: Parses JSON bodies
- */
-app.use(helmet());
-app.use(cors());
-app.use(compression());
-app.use(express.json());
-
-/**
- * Rate Limiting
- * 
- * Protects API from abuse
- * - 100 requests per 15 minutes
- */
-app.use(
-  rateLimiter({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    maxRequests: 100,
-  })
-);
-
-/**
- * Health check endpoint
- * 
- * Why needed?
- * - Load balancers use this
- * - Monitoring systems check health
- * - Quick way to verify server is up
- */
-app.get('/health', (_req, res) => {
-  res.json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
-  });
-});
-
-/**
- * API Routes
- */
-app.use('/api/users', usersRouter);
-
-/**
- * 404 Handler
- * Must be after all routes
- */
-app.use(notFoundHandler);
-
-/**
- * Error Handler
- * Must be last middleware
- */
-app.use(errorHandler);
-
-/**
- * Start server
- */
-app.listen(PORT, () => {
-  console.log(`
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`
 ╔══════════════════════════════════════╗
 ║  Minder API Server                   ║
 ║                                      ║
@@ -97,8 +28,10 @@ app.listen(PORT, () => {
 ║  POST   /api/users                   ║
 ║  PUT    /api/users/:id               ║
 ║  DELETE /api/users/:id               ║
+║  POST   /api/webhook                 ║
 ╚══════════════════════════════════════╝
-  `);
-});
+    `);
+  });
+}
 
 export default app;

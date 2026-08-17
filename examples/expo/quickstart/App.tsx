@@ -10,7 +10,7 @@ import {
   Alert,
 } from "react-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useMinder } from "minder-data-provider";
+import { useMinder } from "minder-data-provider/expo";
 import * as SecureStore from "expo-secure-store";
 import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
@@ -51,11 +51,9 @@ function MainApp() {
    */
   const {
     data: user,
-    isLoading,
+    loading,
     error,
-  } = useMinder<User>({
-    route: `https://jsonplaceholder.typicode.com/users/${userId}`,
-  });
+  } = useMinder<User>(`https://jsonplaceholder.typicode.com/users/${userId}`);
 
   /**
    * SecureStore Example
@@ -148,7 +146,7 @@ function MainApp() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>📡 Data Fetching</Text>
 
-        {isLoading && <Text>Loading user...</Text>}
+        {loading && <Text>Loading user...</Text>}
         {error && <Text style={styles.error}>Error: {error.message}</Text>}
 
         {user && (

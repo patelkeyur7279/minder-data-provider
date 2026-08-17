@@ -328,9 +328,15 @@ const config = configureMinder({
 | ---------------------------- | ------- | -------- | ------------------------------------ |
 | `cache`                      | boolean | true     | Enable caching                       |
 | `cache.staleTime`            | number  | 15min    | Time to live in ms                   |
+| `cache.ttl`                  | number  | —        | Alias for `staleTime` (presets shape) |
 | `cache.gcTime`               | number  | 10min    | Garbage collect time                 |
+| `cache.maxSize`              | number  | —        | Maximum number of cached entries     |
 | `cache.refetchOnWindowFocus` | boolean | true     | Refetch when tab focused             |
 | `cache.refetchOnReconnect`   | boolean | true     | Refetch when back online             |
+
+`cache.ttl` and `cache.staleTime` both control the same underlying value (`ttl` matches the shape MDP's own presets emit — `{ type, ttl, maxSize }`). **When both are supplied, `staleTime` wins** — `ttl` only takes effect when `staleTime` is absent. This is current, tested behavior (see `tests/mdpd-9-cache-ttl-config.test.ts`).
+
+`cache.ttl`, `cache.staleTime`, `cache.gcTime`, and `cache.maxSize` are all validated: each must be a non-negative number when present (`0` is valid — e.g. `gcTime: 0` to disable the garbage-collection delay). A negative value or a non-number (e.g. a string) fails `configureMinder()` with a `CONFIG_VALIDATION_ERROR`, the same way `performance.timeout`/`performance.retries` are validated.
 
 ### Security
 
@@ -483,7 +489,7 @@ Starting in v2.2, your `minder.config.ts` can wire up integrations (crash report
 
 There are two ways to register plugins, and they cover different needs:
 
-- **Per-instance — `config.plugins`**: attach plugins to a specific Minder configuration. This is the recommended default. Plugins live alongside the rest of your config and are scoped to that instance.
+- **Per-instance — `config.plugins`**: attach plugins to a specific Minder configuration. This is the recommended default. Plugins live alongside the rest of your config.
 - **Global — `registerPlugins(...)`**: register plugins on the global singleton `pluginManager`. Use this when you can't (or don't want to) thread config through, e.g. registering a crash reporter from an app bootstrap file before any config is built.
 
 ```ts
@@ -499,6 +505,15 @@ import { registerPlugins } from 'minder-data-provider';
 
 registerPlugins(crashReporter, analytics);
 ```
+
+The real contract of `config.plugins` is two-part, because Minder has two ways of making requests:
+
+1. **Per-instance for `<MinderDataProvider>` / `ApiClient`.** When `config.plugins` is non-empty, any `ApiClient` built from that config (including the one behind `<MinderDataProvider>`) creates its **own, isolated `PluginManager`** and registers only that config's plugins into it. Two providers built from two different configs never see each other's plugins, and neither sees globally-registered ones.
+2. **Also active for standalone `minder()` calls — until the next `configureMinder()` replaces them.** `minder()` (the function, not a provider) always dispatches through the shared global `pluginManager`, not a per-instance one. To make `config.plugins` observable there too, `configureMinder()` additionally registers each plugin onto the global manager. Calling `configureMinder()` again with a new `plugins` array unregisters the previous call's plugins from the global manager first — the new array *replaces* the old one, it does not merge with it. Plugins registered directly via `registerPlugins(...)` are untouched by this replacement (see collision rule below).
+
+Practical effect: a plugin passed via `config.plugins` fires for both a `<MinderDataProvider>` built from that config *and* for standalone `minder()` calls, but a re-configure only swaps out the `minder()`-visible copy — provider instances already constructed from the old config keep their own already-registered plugins.
+
+**Name collisions are never silently overwritten.** If a `config.plugins` entry shares a name with a plugin already registered globally (e.g. via `registerPlugins(...)` from app bootstrap), registration is skipped for that entry and a warning is logged — the original, globally-registered plugin keeps running. This also means `configureMinder()` bookkeeping never unregisters a plugin it didn't itself register: only names it successfully registered are ever removed on the next re-configure.
 
 Either way, plugin hooks fire on **every request** — both through `<MinderDataProvider>` and through standalone `minder()` calls.
 

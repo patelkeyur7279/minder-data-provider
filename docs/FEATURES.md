@@ -2,7 +2,7 @@
 
 The single authoritative reference of everything **minder-data-provider** can do as of
 `2.2.0-beta.0`. The library is a data provider for React / Next.js / React Native / Electron
-built over **TanStack Query** + **Redux Toolkit** + **axios**, with first-class auth, caching,
+built over **TanStack Query** + **axios**, with first-class auth, caching,
 real-time, offline, file upload, a plugin/integration system, and secret-key safety.
 
 ---
@@ -17,7 +17,7 @@ real-time, offline, file upload, a plugin/integration system, and secret-key saf
 | Auth | token lifecycle + `provideToken()` plugins (Firebase/Auth0/Clerk) | `/auth` |
 | Caching | TanStack-backed query cache, TTL, invalidation, hydration | `/cache` |
 | Real-time | WebSocket subscriptions + SSE stream | `/websocket` |
-| Offline | offline manager, IndexedDB→localStorage fallback, sync events | `/config`, plugins |
+| Offline | unified offline manager, auto-queue of failed requests, opt-in persistence, sync events | `/config`, plugins |
 | File upload | media upload manager + progress + upload lifecycle plugin hook | `/upload` |
 | CRUD | `operations.create/read/update/delete` on the hook | `/crud` |
 | Plugins | request/response/error/auth/upload/sync hooks, isolation guarantee | full surface |
@@ -258,7 +258,6 @@ configureMinder({
   cache,
   corsHelper,   // 'cors' is deprecated
   websocket,
-  redux,
   performance,
   debug,
   security,
@@ -333,7 +332,11 @@ Caching is backed by TanStack Query (the cache layer imports from `@tanstack/que
 - Config-level cache options via `configureMinder({ cache })`.
 - Result metadata reports `cached: boolean`.
 - The hook exposes `invalidate`, `cancel`, `isStale`, and a `cache` sub-object (stable identity).
-- Plugins observe cache activity via `onCacheHit(e)` / `onCacheMiss(key)`.
+- `onCacheHit`/`onCacheMiss` plugin hooks are emitted from the standalone `minder()` opt-in
+  response cache (MDPD-5): a `{ cache: true }` GET fires `onCacheMiss(key)` on the first/expired call
+  and `onCacheHit({ key, value, age, timestamp })` on a fresh hit (which skips the transport).
+  Requests without `cache: true` do not use this cache and emit neither hook; use
+  `onRequest`/`onResponse` for request-level observation.
 
 ```ts
 // Cache a GET for 30s
@@ -360,6 +363,25 @@ const { data, websocket } = useMinder('messages', { realtime: true });
 websocket.subscribe?.('messages');
 ```
 
+**Canonical public path.** Three WebSocket layers exist; the supported public surface is:
+
+- **`WebSocketClient`** from `minder-data-provider/websocket` — a standalone client with
+  connect/disconnect, event subscribe/dispatch, an offline send-queue, heartbeat, and
+  auto-reconnect with exponential backoff (`reconnect` on by default; `heartbeat` in ms). Use it
+  when you want a socket independent of a provider/route.
+- **`useWebSocket()`** and **`useMinder().websocket`** — thin hooks that delegate to the provider's
+  selected realtime transport (require `MinderDataProvider`). They route through the transport-neutral
+  realtime manager, so the **same `connect()`/`disconnect()`/`subscribe()` surface drives either
+  transport** — WebSocket by default, or the reconnecting SSE transport when `realtime: { transport:
+  'sse' }` is configured (`send()` is a receive-only no-op under SSE). They add no lifecycle side
+  effects of their own, so there is nothing to leak across mount/unmount; `subscribe(event, cb)`
+  returns the manager's unsubscribe function for your own cleanup.
+
+The core `WebSocketManager` (`src/core/WebSocketManager.ts`) is **internal plumbing** for
+`MinderDataProvider` (platform-adapter selection, auth-token URL) — not a public API. All three
+layers remain live; they are intentionally not consolidated (high-risk), only the public path above
+is supported/tested.
+
 ### Server-Sent Events
 
 ```ts
@@ -371,14 +393,89 @@ const stream = minder.stream('/events', {
 
 > Reliability: `StreamClient` routes async errors to `onError` (they no longer escape unhandled).
 
+`minder.stream()` above is a **one-shot** primitive — no reconnect, no resume. For a long-lived,
+managed subscription see the next section.
+
+### Managed SSE transport (Spec 5.2)
+
+An opt-in, **managed, auto-reconnecting** SSE transport, selectable alongside WebSocket behind the
+same subscribe surface:
+
+```ts
+configureMinder({
+  apiUrl: env('NEXT_PUBLIC_API_URL'),
+  routes: { /* ... */ },
+  realtime: { transport: 'sse', url: env('NEXT_PUBLIC_SSE_URL') },
+});
+```
+
+```tsx
+const { realtimeManager } = useMinderContext();
+useEffect(() => {
+  realtimeManager?.connect();
+  const unsub = realtimeManager?.subscribe('order.updated', (data) => console.log(data));
+  return () => { unsub?.(); realtimeManager?.disconnect(); };
+}, [realtimeManager]);
+```
+
+- **`realtime: boolean | RealtimeConfig`.** The legacy `realtime: true` boolean is unchanged
+  (WebSocket, as before). The new object form additionally selects the transport:
+  `{ transport: 'ws' | 'sse', url?, auth?, reconnect?, stallTimeoutMs?, lastEventIdHeader?,
+  withCredentials? }`. **`transport` defaults to `'ws'`** — SSE is opt-in only. This top-level
+  config field is a different concern from the per-hook `useMinder(route, { realtime: true })`
+  option above (subscription intent for that hook call, unaffected).
+- **`RealtimeTransport` surface** — `connect()`, `disconnect()`, `subscribe(event, cb)`,
+  `isConnected()`, optional `send()` — is identical for both transports. `MinderDataProvider`
+  exposes the selected one as `realtimeManager` in context (alongside the existing
+  `websocketManager`, which stays populated only for the WS branch).
+- **Header-based auth, never a URL token.** Built on `fetch` + `ReadableStream` (not native
+  `EventSource`, which cannot set headers) specifically so the token goes in
+  `Authorization: Bearer <token>`, re-read from your auth manager on every (re)connect.
+- **Reconnect:** jittered exponential backoff (`reconnect.baseDelayMs`/`maxDelayMs`, default
+  1s/30s, full jitter), honoring a server `Retry-After` header when present. Gives up after
+  `reconnect.maxAttempts` (default 10; `0` = unlimited) and emits a terminal
+  `subscribe('__closed', ({ reason, attempts }) => ...)` event.
+- **Resume via `Last-Event-ID`:** the first connect sends none; a reconnect after a received
+  `id:` line resends it so the server can replay missed events.
+- **Stall detection:** no bytes (including comment keepalives) within `stallTimeoutMs` (default
+  45s) aborts and reconnects.
+- **Permanent vs. transient:** `401`/`403`/`404`/`204` stop for good (no further fetch, terminal
+  `__closed`); `429`/`5xx`/network drops/stalls reconnect.
+- **Resync convention:** a `'resync'` event triggers `offlineManager.sync()` +
+  `queryClient.invalidateQueries()`; an `'invalidate'` event invalidates `{ keys }`. Both are
+  server-side conventions your backend opts into, not hard contracts.
+- **`send()` is a no-op** (with a `console.warn`) — SSE is receive-only. Use REST/mutations for
+  client→server, or `transport: 'ws'` for bidirectional.
+- **Bundle cost:** `minder-data-provider/realtime` is an independently-importable subpath;
+  `SseTransport` is lazy-loaded (dynamic `import()`) inside `MinderDataProvider`, so apps that
+  don't set `transport: 'sse'` pay zero bytes for it.
+- **Platform support (honest, see SUPPORT_MATRIX.md):** **Experimental** on web, Node ≥20, and
+  edge runtimes (all have `fetch` + `ReadableStream`). **Unknown** on React Native/Expo — RN's
+  `fetch` does not implement a readable response body; the transport detects this and fails fast
+  with a clear error rather than hanging silently. A `react-native-fetch-api`-style polyfill is
+  the app's choice to add, not a dependency of this package.
+
 ---
 
 ## Offline
 
-- An offline manager queues work and syncs when connectivity returns.
-- **IndexedDB storage falls back to localStorage** when IndexedDB is unavailable.
-- The offline manager **removes its window listeners on destroy** (no leaks).
+- A single **unified** offline manager queues work and syncs when connectivity returns.
+- **Requests that fail with a network error are auto-queued into this SAME manager**, and are
+  replayed through the ApiClient's own axios instance on reconnect (so auth/CSRF/CORS/interceptors
+  all still apply). Because there is now one manager, `onSync` / `onConnectivityChange` fire for
+  these genuinely-failed auto-queued requests — not only for items pushed manually via
+  `getOfflineManager().addToQueue(...)`.
+- **Persistence is opt-in.** Without a `storage` adapter (`offline: { storage }`) the queue is
+  **in-memory only and is lost on reload/restart**. Provide a `StorageAdapter` to persist it.
+- The offline manager **removes its window listeners on destroy** (no leaks); exactly one
+  online/offline listener pair is registered per active manager.
 - Plugins observe offline behavior through `onConnectivityChange(online)` and `onSync(event)`.
+- `configureMinder({ offline: { enabled: true } })` instantiates and wires the OfflineManager
+  (MDPD-6): it drives those hooks and is reachable via `getOfflineManager()` (exported from the
+  package root and `minder-data-provider/config`). A standalone `new ApiClient(...)` with offline
+  enabled reuses that wired instance when present, or creates+owns its own when there is none.
+  Re-configuring destroys the prior manager first, so its window listeners are removed (no
+  duplicate emissions).
 
 ```ts
 configureMinder({
@@ -397,12 +494,65 @@ configureMinder({
 
 `SyncLifecycleEvent`: `{ phase, pending?, processed?, error?, timestamp }`.
 
+### Conflict resolution (Spec 5.1)
+
+A replay that comes back with a status in `conflictStatuses` (default `[409, 412]`) is now
+resolved deterministically instead of blindly retrying and silently dropping the mutation after
+`maxRetries`. Configure it on `offline`:
+
+```ts
+offline: {
+  enabled: true,
+  conflictResolution: 'server-wins',   // default — discard the queued mutation, accept the server
+  // conflictResolution: 'last-write-wins' | 'client-wins',  // re-issue the client mutation as-is
+  // conflictResolution: 'merge' | 'manual',                 // invoke resolveConflict below
+  conflictStatuses: [409, 412],        // override to add e.g. a custom 428
+  conflictResolveTimeoutMs: 15000,     // resolver is raced against this; timeout fails closed
+  resolveConflict: async (ctx) => {
+    // ctx: { request, clientBody, base?, server, status, signal }
+    return { action: 'retry', body: { ...ctx.clientBody, ...ctx.server, version: undefined } };
+    // or: { action: 'discard' }  (accept server, drop the mutation)
+    // or: { action: 'keep' }     (leave queued for a later manual sync)
+  },
+},
+```
+
+- **Strategies:** `'server-wins'` (default, discard + accept server) · `'last-write-wins'` /
+  `'client-wins'` (alias — re-issue the client mutation, client wins) · `'merge'` / `'manual'`
+  (alias — invokes `resolveConflict`, or the deprecated `onConflict(request, serverData)` adapter
+  if that's all that's configured). If both `resolveConflict` and `onConflict` are set,
+  `resolveConflict` wins and `onConflict` is ignored (one-time warning).
+- **Per-mutation override:** pass a strategy name (not a function — it must survive
+  `JSON.stringify` for persistence) via `metadata.conflictResolution` on `addToQueue`; it beats the
+  global `conflictResolution` for that request. A `base` snapshot for `resolveConflict`'s
+  `ctx.base` can similarly be stashed at enqueue time as `metadata.conflictBase`.
+- **Fail-closed:** if `resolveConflict` throws, returns a malformed result, or exceeds
+  `conflictResolveTimeoutMs`, the request falls through to the normal retry→dead-letter path —
+  never a silent discard or silent accept.
+- **`strictOrder`** (default `false`): when `true`, replay goes fully sequential and a `'keep'`
+  resolution or a replay failure halts the remainder of that sync pass — trades throughput for
+  causal safety (mutation N+1 never applies against a base N was supposed to establish). Default
+  keeps today's concurrent `syncBatchSize` batching.
+- **`onDeadLetter?(request, lastError)`** (+ optional `deadLetterKey` storage key): opt-in
+  observability for a request dropped at `maxRetries` — the existing silent-drop is unchanged by
+  default.
+- **Backward compat:** with no conflict config at all, the only observable change is that a
+  409/412 replay now resolves via `server-wins` immediately instead of retrying 3× and then
+  dropping — same end state (mutation gone), fewer wasted retries.
+- SSE / server-push transport for proactively notifying clients of conflicts is a separate,
+  not-yet-shipped deliverable (Spec 5.1 §5) — this section covers replay-time detection only.
+
 ---
 
 ## File Upload
 
 The media upload manager handles file uploads with progress. Use the hook's `upload` sub-object
 (stable identity) or `onProgress` on a request.
+
+`useMediaUpload(route, { throttleMs })` throttles progress state commits (trailing-edge, default
+100ms) so a burst of progress events no longer re-renders the consumer once per event (MDPD-4 /
+perf audit A4); the terminal 100% value is always committed. `useMinder().upload` keeps progress in
+a ref (its identity never changes across a progress stream).
 
 ```tsx
 const { upload } = useMinder('avatar');
@@ -412,7 +562,10 @@ async function onPick(file: File) {
 }
 ```
 
-Plugins observe the media pipeline via `onUpload(event)`:
+Plugins observe the media pipeline via `onUpload(event)` — fired both by the standalone
+`MediaUploadManager` (`minder-data-provider/upload`) and by the `useMinder` / `useMediaUpload` hook
+path (they route through `ApiClient.uploadFile`, MDPD-6). The hook path emits
+`start` → `progress` (per tick) → `complete`, or `error` if the transport fails:
 
 ```ts
 {
@@ -483,15 +636,15 @@ interface MinderPlugin {
   onRequest?(req: PluginRequest): void | Promise<void>;
   onResponse?(res: PluginResponse): void | Promise<void>;
   onError?(err: PluginError): void | Promise<void>;
-  onCacheHit?(e): void;
-  onCacheMiss?(key: string): void;
+  onCacheHit?(e): void;                                     // fired by minder()'s opt-in `{ cache: true }` response cache (MDPD-5)
+  onCacheMiss?(key: string): void;                          // fired by minder()'s opt-in `{ cache: true }` response cache (MDPD-5)
   onDestroy?(): void;
 
   provideToken?(): string | null | Promise<string | null>; // supplies a token when auth has none
   onAuthRefresh?(tokens): void;          // fired on token rotation
-  onUpload?(event: UploadLifecycleEvent): void;             // media pipeline
-  onSync?(event: SyncLifecycleEvent): void;                 // offline sync
-  onConnectivityChange?(online: boolean): void;
+  onUpload?(event: UploadLifecycleEvent): void;             // fired by both useMinder/useMediaUpload path and MediaUploadManager; terminal phase 'success'
+  onSync?(event: SyncLifecycleEvent): void;                 // fired by the unified OfflineManager, including automatically-queued failed requests
+  onConnectivityChange?(online: boolean): void;             // fired by the unified OfflineManager on connectivity changes
 }
 ```
 

@@ -86,13 +86,21 @@ const { data, loading, error, operations } = useMinder<T>(route, options);
 
 ### useAuth
 
-Hook for authentication management.
+Capability-contract hook for a session backed by a registered certified provider
+(Clerk, Firebase, Supabase, Auth0, Cognito, Auth.js, …). Same shape on every
+subpath, including root, `/web`, `/nextjs`, `/electron`, `/auth`, `/native`, and
+`/expo`.
 
 ```typescript
 import { useAuth } from "minder-data-provider/auth";
 
-const { isAuthenticated, login, logout, user } = useAuth();
+const { ready, error, session, signOut, getProviderClient } = useAuth();
+// ready: false until a provider is registered and its session lookup resolves
+// session: { userId: string; raw: unknown } | null
 ```
+
+If you just need raw client-side token storage (no certified provider), use
+`useAuthToken` instead — see [USAGE_GUIDE.md](./USAGE_GUIDE.md#useauthtoken--raw-client-side-token-storage).
 
 ### useCache
 
@@ -213,6 +221,7 @@ Minimal surface for smaller bundles.
 ```ts
 transport?: 'auto' | 'axios' | 'fetch'   // default: 'axios'
 throwOnError?: boolean                    // default: false
+schema?: StandardSchemaV1<any, any>       // default: undefined (no validation)
 ```
 
 - `transport` — selects the request engine. `'fetch'` opts into a faster native-fetch
@@ -220,6 +229,35 @@ throwOnError?: boolean                    // default: false
   use it only for plain requests.
 - `throwOnError` — when `true`, `minder()` **throws** the `MinderError` instead of
   returning it inside the structured `MinderResult`. Defaults to `false` (never throws).
+- `schema` — see [Response validation (Standard Schema)](#response-validation-standard-schema) below.
+
+### Response validation (Standard Schema)
+
+`ApiRoute.schema` (route-def) and `MinderOptions.schema` (per-call, overrides the
+route-def) accept any [Standard Schema](https://standardschema.dev) validator — Zod
+≥3.24, Valibot, ArkType, Effect Schema, or a hand-written object implementing the
+`~standard` interface. Zero runtime dependency: `StandardSchemaV1` is a vendored,
+type-only interface (`minder-data-provider/core` and the main entry both export it).
+
+```ts
+import { minder } from "minder-data-provider";
+import type { StandardSchemaV1 } from "minder-data-provider/core";
+
+const { data, error } = await minder("users/1", undefined, { schema: userSchema });
+// data: InferOutput<typeof userSchema> | null
+```
+
+Validates the raw response body (before any `model` decode) and, on success, replaces
+`data` with the validator's output — honoring transforms. On failure, `minder()`
+returns `{ success: false, error }` with `error.code === 'RESPONSE_VALIDATION_FAILED'`,
+`error.status` set to the real HTTP status (often `200` — the request succeeded, the
+payload didn't), and `error.issues: readonly { message: string; path?: (PropertyKey |
+{ key: PropertyKey })[] }[]` populated. Distinct from the existing input `validate`
+option (client-side, pre-flight over OUTGOING mutation data — see the README's
+[Response Validation](../README.md#response-validation-standard-schema) section for the
+full contrast). A validator that itself throws is treated as a failure, never a pass
+(fail-closed). Does not count toward `retries` (deterministic, not transient) and does
+not affect `retries`/short-circuit plugin logic.
 
 ### New `useMinder` options
 
@@ -275,16 +313,16 @@ interface MinderPlugin {
   onRequest?(req: PluginRequest): void | Promise<void>;
   onResponse?(res: PluginResponse): void | Promise<void>;
   onError?(err: PluginError): void | Promise<void>;
-  onCacheHit?(e): void | Promise<void>;
-  onCacheMiss?(key: string): void | Promise<void>;
+  onCacheHit?(e): void | Promise<void>;                     // fired by minder()'s opt-in {cache:true} response cache (hit on fresh)
+  onCacheMiss?(key: string): void | Promise<void>;          // fired by minder()'s opt-in {cache:true} response cache (miss on first/expired call)
   onDestroy?(): void | Promise<void>;
 
   provideToken?(): string | null | Promise<string | null>;   // supplies auth token when the auth manager has none (Firebase/Auth0/Clerk)
   onAuthRefresh?(tokens): void | Promise<void>;              // fired on token rotation
 
-  onUpload?(event: UploadLifecycleEvent): void | Promise<void>;   // media pipeline
-  onSync?(event: SyncLifecycleEvent): void | Promise<void>;       // offline-sync
-  onConnectivityChange?(online: boolean): void | Promise<void>;
+  onUpload?(event: UploadLifecycleEvent): void | Promise<void>;   // fired by both useMinder/useMediaUpload path and MediaUploadManager; terminal phase 'success'
+  onSync?(event: SyncLifecycleEvent): void | Promise<void>;       // fired by the unified OfflineManager, including automatically-queued failed requests
+  onConnectivityChange?(online: boolean): void | Promise<void>;   // fired by the unified OfflineManager on connectivity changes
 }
 ```
 
@@ -379,3 +417,57 @@ resolveSecret(ref: SecretRef | string): string
 > secrets → `secret()` plus a server route / `resolveSecret`. Never put a raw secret in
 > client config — `configureMinder` throws (`MinderConfigError`,
 > `'CONFIG_EXPOSED_SECRET'`) in the browser.
+
+### CLI: `minder generate` — OpenAPI codegen for typed routes
+
+```
+minder generate --from <openapi.json> [--out minder.routes.ts] [--base-path-strategy strip|keep]
+```
+
+Reads an OpenAPI 3.x JSON document (3.0 and 3.1 — **YAML is not supported**; convert to
+JSON first) and emits a single `.ts` module wired for
+[`createTypedMinder`](#typed-routes-optional):
+
+- `export const routes = { ... } as const satisfies Record<string, ApiRoute>` — one entry
+  per operation, `url`/`method` derived from the spec.
+- One `export interface`/`export type` per `components.schemas` entry, plus a synthesized
+  named type for any inline (non-`$ref`) request-body or response schema.
+- `export interface RouteTypes { [routeName]: { body?: ...; response?: ... } }` for
+  consumers who want the request/response shapes without going through
+  `createTypedMinder`.
+
+**Route naming.** `operationId` is used (sanitized to a valid TS identifier) when
+present; otherwise a name is derived as `<method><PascalCasePath>` — e.g. `GET /pets` →
+`getPets`, `GET /pets/{petId}` → `getPetsByPetId` (each `{param}` segment becomes
+`By<PascalCaseParam>`). Colliding names are deduped deterministically with a numeric
+suffix (`_2`, `_3`, ...), in the order operations appear in the spec.
+
+**Path parameters.** OpenAPI's `{param}` becomes minder's own `:param` URL-template
+convention — the same one `ApiClient` interpolates at request time (see
+`src/core/ApiClient.ts`) — not the `{param}` braces themselves.
+
+**JSON Schema subset.** Supported: `object` (`properties`/`required`), `array`, `string`
+/`number`/`integer`/`boolean`, `enum` (string or number members), `oneOf` (emitted as a
+TS union), and `$ref` resolved against this document's own `components.schemas`.
+Anything else — `allOf`/`anyOf`, a `$ref` outside `components.schemas`, a schema with no
+usable `type`/`properties` — lowers to `unknown` with an explanatory comment rather than
+a wrong guess. Runtime validators (`ApiRoute.schema`, see
+[Response validation](#response-validation-standard-schema) above) are **not** emitted —
+codegen only produces compile-time types.
+
+**`--base-path-strategy`** (default `strip`): `strip` ignores the spec's `servers[0].url`
+entirely — every route is the raw OpenAPI path. `keep` prepends the *path portion* of
+`servers[0].url` (e.g. `"https://api.example.com/v1"` → `/v1`) to every route — use this
+when the spec's server URL carries a prefix your app's own `apiBaseUrl` does not already
+include.
+
+**Determinism.** Regenerating from an unchanged spec produces byte-identical output (no
+wall-clock timestamp is embedded in the file header) — safe to commit and diff.
+
+```ts
+import { createTypedMinder } from 'minder-data-provider';
+import { routes } from './minder.routes'; // generated
+
+const api = createTypedMinder(routes);
+const { data } = api.useMinder('listPets'); // typed from RouteTypes/components.schemas
+```

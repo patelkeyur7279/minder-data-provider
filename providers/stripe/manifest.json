@@ -1,0 +1,32 @@
+{
+  "name": "@minder/provider-stripe",
+  "version": "0.1.0",
+  "displayName": "Stripe",
+  "categories": ["payments"],
+  "capabilities": ["payments", "hosted-checkout", "webhooks"],
+  "config": {
+    "clientSafe": ["publishableKey", "checkoutPath", "mock"],
+    "serverOnly": ["secretKey", "webhookSecret"]
+  },
+  "scopes": [
+    {
+      "scope": "checkout:session:create",
+      "why": "Create hosted Stripe Checkout sessions server-side (POST /v1/checkout/sessions) when the app calls useCheckout().createCheckout(); the secret key is resolved per-request and never reaches the browser."
+    },
+    {
+      "scope": "webhooks:verify",
+      "why": "Verify inbound Stripe webhook signatures (the 'stripe-signature: t=,v1=' header) with the webhook signing secret so payment events are processed only when authentic."
+    }
+  ],
+  "runtimes": ["web", "node", "edge"],
+  "frameworks": ["react", "nextjs", "vite"],
+  "peerDependencies": {
+    "stripe": "^14.0.0"
+  },
+  "docs": {
+    "setup": "./README.md",
+    "example": "./example.ts",
+    "security": "./README.md"
+  },
+  "license": "MIT"
+}
