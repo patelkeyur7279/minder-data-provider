@@ -5,7 +5,7 @@ All notable changes to Minder Data Provider will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.2.0] - 2026-08-16 — ⚠️ carries the former v3.0 train, BREAKING inside a minor
 
 ### Security — per-call request options are now an ALLOWLIST, not a denylist (BREAKING)
 
@@ -286,7 +286,6 @@ place, `package/dist/bundle-sizes.json` is present.
   and [docs/product/RELEASE_READINESS.md](./docs/product/RELEASE_READINESS.md). If you need offline
   resilience today, call `addToQueue()` yourself from your own error handling.
 
-## [2.2.0] - 2026-08-16 — ⚠️ carries the former v3.0 train, BREAKING inside a minor
 
 > **Owner decision (2026-07-22): the v3.0 branch merged into the beta line.** The
 > changes below were designed and classified as a MAJOR; they shipped through the
