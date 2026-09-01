@@ -18,6 +18,13 @@ export default defineConfig({
     // replay, secret-leak assertion — for provider/adapter authors' tests)
     testing: 'src/testing/index.ts',
 
+    // OPT-IN devtools entry (B5, fix-2.2.0-blockers): re-exports
+    // `@tanstack/react-query-devtools` (an OPTIONAL peer). Deliberately NOT
+    // imported by any other entry above — importing this one is the
+    // consumer's explicit opt-in. See src/devtools-rq.ts header for the
+    // full B5 backstory.
+    'devtools-rq': 'src/devtools-rq.ts',
+
     // Platform-specific entry points
     'platforms/web': 'src/platforms/web.ts',
     'platforms/nextjs': 'src/platforms/nextjs.ts',
@@ -117,4 +124,30 @@ export default defineConfig({
   esbuildOptions(options) {
     // Removed global "use client" banner - should only be in specific files that need it
   },
+
+  // MEDIUM (transport-and-packaging fix): tsup's own minification pass
+  // strips the `/* webpackIgnore: true */` magic comment
+  // src/security/credentials.ts:214 puts on its dynamic `node:fs` import
+  // (esbuild's `legalComments` option only controls where comments it
+  // already classifies as "legal" land — an ordinary comment like this one
+  // is removed by minification regardless of that setting; verified
+  // empirically). scripts/preserve-webpack-ignore.mjs re-inserts it into the
+  // built ESM chunk post-build — wired here via tsup's own `onSuccess` hook
+  // (rather than package.json's `build` script, which is STRONG/out of this
+  // change's scope) so it runs as an inseparable part of `tsup`'s own build
+  // step, not a step a future edit to the npm script chain could drop.
+  //
+  // BLOCKER 1 (fix-nextjs-appouter-build-and-redirect-header-leak):
+  // `splitting:true` (required, see above) merges every source module that
+  // starts with a real `"use client";` directive into a SHARED chunk whose
+  // top-level code esbuild wraps in a deferred lazy initializer — which
+  // demotes that directive from a module-level directive into an inert
+  // string expression buried inside a function body, so Next.js's build
+  // never recognizes the chunk as client-marked and any App Router import of
+  // `minder`/`configureMinder` fails `next build`/`next dev` outright.
+  // scripts/fix-use-client-directive.mjs re-hoists it to the file's true
+  // first statement post-build — see its own header comment for the full
+  // mechanism and why it is chained here (same "inseparable part of tsup's
+  // own build step" rationale as preserve-webpack-ignore.mjs above).
+  onSuccess: 'node scripts/preserve-webpack-ignore.mjs && node scripts/fix-use-client-directive.mjs',
 });

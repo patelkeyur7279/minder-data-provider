@@ -82,7 +82,7 @@ describe('XSSSanitizer — lazy DOMPurify, fail-closed (D4)', () => {
     }
   });
 
-  it('server-side (no window) always uses basicSanitize and never imports dompurify', async () => {
+  it('server-side (no window) never imports dompurify and fails closed instead of falling back to basicSanitize (H2)', async () => {
     jest.resetModules();
     const domPurifyFactory = jest.fn(() => {
       throw new Error('dompurify must not be imported when window is undefined');
@@ -94,16 +94,26 @@ describe('XSSSanitizer — lazy DOMPurify, fail-closed (D4)', () => {
 
     try {
       const { XSSSanitizer } = require('../src/utils/security.js');
+      const { MinderError } = require('../src/errors/index.js');
       const sanitizer = new XSSSanitizer();
       await sanitizer.ready();
 
       const dirty = '<script>alert(1)</script>Hello';
-      const clean = sanitizer.sanitize(dirty);
 
-      // basicSanitize's regex fallback strips the script tag, unchanged
-      // behavior from before D4.
-      expect(clean).not.toContain('<script>');
-      expect(clean).toContain('Hello');
+      // H2 (fix-2.2.0-blockers, ratified): basicSanitize() — the weaker
+      // regex-based fallback — was DELETED. A non-browser runtime never has
+      // a usable DOMPurify instance (no DOM to sanitize against), so
+      // sanitize() must fail closed and throw rather than silently degrade.
+      let thrown: unknown;
+      try {
+        sanitizer.sanitize(dirty);
+        throw new Error('sanitize() should have thrown but did not');
+      } catch (err) {
+        thrown = err;
+      }
+
+      expect(thrown).toBeInstanceOf(MinderError);
+      expect((thrown as InstanceType<typeof MinderError>).code).toBe('SANITIZER_UNAVAILABLE');
       expect(domPurifyFactory).not.toHaveBeenCalled();
     } finally {
       (global as any).window = savedWindow;

@@ -63,6 +63,51 @@ function noProviderError(capability: Capability): MinderError {
 }
 
 // ---------------------------------------------------------------------------
+// H5 (fix-2.2.0-blockers): v2.1.4's root `useAuth` export was the raw
+// token-storage hook now named `useAuthToken` (`{ isLoggedIn, setToken,
+// getToken, clearAuth, ... }`). HEAD's `useAuth` is this capability-contract
+// hook instead — a disjoint shape sharing no keys — shipped under a MINOR
+// version as an undeclared breaking change. Untouched v2.1.4 consumer code
+// (`const { setToken, getToken, isLoggedIn, clearAuth } = useAuth()`)
+// previously read `undefined` for all four and failed with a generic
+// TypeError only at the first real call/use. These four legacy accessors
+// convert that into a directed error, at the same access site, naming the
+// hook to migrate to (`useAuthToken`). Defined as own properties via
+// `Object.defineProperty` (not part of `UseAuthReturn`) so typed consumers
+// never see them; `enumerable: false` so `{...useAuth()}` / `JSON.stringify`
+// / `Object.keys` don't trip the throw — only an explicit `.setToken` /
+// `.getToken` / `.clearAuth` / `.isLoggedIn` access does.
+// ---------------------------------------------------------------------------
+
+const LEGACY_TOKEN_ACCESSOR_KEYS = ['setToken', 'getToken', 'clearAuth', 'isLoggedIn'] as const;
+type LegacyTokenAccessorKey = (typeof LEGACY_TOKEN_ACCESSOR_KEYS)[number];
+
+function legacyTokenAccessorRemoved(key: LegacyTokenAccessorKey): never {
+  throw new MinderError(
+    `useAuth().${key} no longer exists. useAuth() is now the capability-contract session hook ` +
+      '({ ready, error, session, signOut, getProviderClient }) — the raw client-side ' +
+      "token-storage API you're looking for moved to useAuthToken() (import from " +
+      "'minder-data-provider' or 'minder-data-provider/auth'). See CHANGELOG.md and " +
+      'docs/MIGRATION_GUIDE.md ("useAuth -> useAuthToken").',
+    'USE_AUTH_LEGACY_ACCESSOR_REMOVED',
+    500
+  );
+}
+
+function attachLegacyTokenAccessorShim<T extends object>(result: T): T {
+  for (const key of LEGACY_TOKEN_ACCESSOR_KEYS) {
+    Object.defineProperty(result, key, {
+      configurable: true,
+      enumerable: false,
+      get(): never {
+        return legacyTokenAccessorRemoved(key);
+      },
+    });
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // useAuth
 // ---------------------------------------------------------------------------
 
@@ -119,13 +164,13 @@ export function useAuth(): UseAuthReturn {
     return provider.getProviderClient();
   }, [provider]);
 
-  return {
+  return attachLegacyTokenAccessorShim({
     ready: provider !== null,
     error: provider ? null : noProviderError('auth'),
     session,
     signOut,
     getProviderClient,
-  };
+  });
 }
 
 // ---------------------------------------------------------------------------

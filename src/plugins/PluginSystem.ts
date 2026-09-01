@@ -486,9 +486,56 @@ export class PluginManager {
 // plugin registered once is observed everywhere. The `/*#__PURE__*/` annotation
 // lets a tree-shaker drop it entirely for consumers that never reference it.
 // The exported value binding and its `PluginManager` type are unchanged (P1).
-function pluginManagerSingleton(): PluginManager {
+//
+// fix-a-app-router-crash-offline-parity (BLOCKER 1) — ROOT CAUSE, verified
+// against a REAL `next build` + Route Handler + Server Component: under tsup's
+// cross-entry `splitting:true`, this whole file (the `PluginManager` CLASS
+// declaration itself, the `pluginManager` Proxy assignment, and the eager
+// `LoggerPlugin`/`PerformanceMonitorPlugin` instances further down) is emitted
+// as ONE shared chunk whose top-level code — INCLUDING the class declaration,
+// not just the Proxy assignment — is wrapped in esbuild's deferred "call once"
+// initializer (the same shape the `minderStore()` P1 postmortem in
+// ../core/singletons.ts documents, but esbuild groups an entire shared
+// chunk's top-level code together, so exporting a plain accessor FUNCTION
+// alone is not sufficient — its own body still reaches into that same
+// deferred class). esbuild reliably inserts the matching trigger call at
+// every import site WITHIN its own bundle graph (confirmed: a plain Node
+// script importing the published package never crashes), but Next.js App
+// Router's webpack, which re-processes our built ESM, does not reliably
+// preserve that trigger. First fix attempt (export a plain
+// `pluginManagerSingleton()` function and call it fresh at each use site)
+// only got PAST the Proxy-undefined crash to a SECOND one one line deeper —
+// `new PluginManager()` throwing "is not a constructor" — proving the class
+// itself, not merely the Proxy wrapper, is what's unavailable.
+//
+// REAL FIX: `pluginManagerSingleton()` (below) still exists for callers that
+// must construct-if-absent (e.g. `registerPlugins()`, `ApiClient`'s
+// custom-config-plugins branch — a per-call `new PluginManager({...})`, an
+// entirely separate, always-eager instance untouched by this bug). But every
+// call site that only wants to fire hooks IF plugins exist
+// (`core/minder.ts`, `platform/offline/OfflineManager.ts`) doesn't actually
+// need to construct anything to learn "there are zero plugins" — that is
+// ALREADY the true answer when no manager has been created yet on this
+// store. `peekPluginManager()` reads the store slot WITHOUT the `??=`
+// construction, so the zero-plugins path (the overwhelming common case for a
+// bare `await minder(...)`) never touches the class reference that the
+// deferred chunk leaves unavailable, closing the crash for exactly the
+// scenario the release-blocker describes without masking anything — a
+// caller that legitimately registered plugins still gets a real, populated
+// manager wherever construction already succeeded (e.g. client-side).
+export function pluginManagerSingleton(): PluginManager {
   const s = minderStore();
   return (s.pluginManager ??= new PluginManager());
+}
+/**
+ * Read the plugin manager WITHOUT constructing one if it doesn't exist yet.
+ * Returns `undefined` when nothing has ever registered a plugin on this
+ * store — callers that only fire hooks conditionally (`if (pm && pm.size >
+ * 0)`) should prefer this over `pluginManagerSingleton()` so the zero-plugin
+ * path never has to resolve the `PluginManager` class at all (BLOCKER 1).
+ */
+export function peekPluginManager(): PluginManager | undefined {
+  return minderStore().pluginManager;
 }
 // A4 (Spec 1.3c): lazy accessor-backed binding. The store slot guarantees ONE
 // bundler-independent instance; the proxy keeps the `pluginManager.method()` API

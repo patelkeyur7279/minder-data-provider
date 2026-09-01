@@ -203,6 +203,17 @@ export interface UnifiedMinderConfig {
     cors?: { proxy?: string };
     debug?: boolean;
   }>;
+
+  /**
+   * P2 (fix-2.2.0-blockers): request transport for the provider's ApiClient.
+   * `'fetch'` forces the native `fetch()` transport — the documented escape
+   * hatch for runtimes where axios's Node-oriented HTTP adapter can't run
+   * (bare Cloudflare Workerd and similar). `'auto'` (and unset) pick native
+   * fetch only on an auto-detected edge runtime; Node and browser keep the
+   * axios default unchanged. See `core/types.ts`'s `MinderConfig.transport`
+   * for the full rationale.
+   */
+  transport?: 'auto' | 'axios' | 'fetch';
 }
 
 /**
@@ -261,6 +272,30 @@ export function configureMinder(config: UnifiedMinderConfig): MinderConfig {
 
   // Generate complete configuration with smart defaults
   const fullConfig = buildFullConfig(config, platform, isDevelopment);
+
+  // 🛡️ B4 (fix-2.2.0-blockers): a CORS helper resolved to `enabled: true`
+  // with no `proxy` route configured silently rewrites EVERY request to the
+  // default `/api/minder-proxy` route (see MinderDataProvider.tsx), which
+  // almost certainly does not exist in the consuming app — turning every
+  // call into a 404. That is not a warning-level condition: throw here, at
+  // configure-time, instead of only warning (and only in
+  // `NODE_ENV === 'development'`, so production never saw anything) once the
+  // provider mounts. Platform defaults no longer auto-enable this (WEB's
+  // default is now `{ enabled: false }`), so this only fires when the app
+  // itself explicitly opted in without wiring a proxy route.
+  const resolvedCorsConfig = fullConfig.corsHelper || fullConfig.cors;
+  if (resolvedCorsConfig?.enabled && !resolvedCorsConfig.proxy) {
+    throw new MinderConfigError(
+      'CORS helper is enabled (`corsHelper.enabled` / `cors.enabled`) but no `proxy` route was ' +
+        'configured. Every request would silently be rewritten to the default ' +
+        '"/api/minder-proxy" route, which almost certainly does not exist in your app — turning ' +
+        'every request into a 404.\n' +
+        'Fix: either set `corsHelper: { enabled: true, proxy: "/your/proxy/route" }` and create ' +
+        'that API route handler, or remove `corsHelper` / `cors` entirely if you do not need it.',
+      'corsHelper',
+      'CONFIG_CORS_PROXY_MISSING'
+    );
+  }
 
   // 🔗 Unify the two global stores so standalone usage sees ONE source of truth:
   //  - the routes-aware registry that useMinder reads for VALIDATION and that
@@ -441,8 +476,27 @@ function generateCrudRoutes(routes: Record<string, string | ApiRoute>): Record<s
       fullRoutes[`update${capitalized}`] = { method: HttpMethod.PUT, url: `${baseUrl}/:id` };
       fullRoutes[`delete${capitalized}`] = { method: HttpMethod.DELETE, url: `${baseUrl}/:id` };
     } else {
-      // Explicit ApiRoute definition
-      fullRoutes[key] = value;
+      // Explicit ApiRoute definition.
+      //
+      // CRITICAL (fix-2.2.0-blockers, adversarial re-probe): normalize a
+      // case-varied `method` HERE, at the boundary where config is accepted
+      // (`configureMinder()` -> `buildFullConfig` -> this function). Config
+      // authors write `method: 'get'`/`'Get'`/`'POST '` interchangeably —
+      // nothing in the type system enforces the `HttpMethod` enum at
+      // runtime — but every method comparison downstream (useMinder.helpers.ts's
+      // `resolveFetchRouteName`/`resolveCrudOperationRoute`, this file's own
+      // sibling-route generation above) is a strict `===`/`!==` against the
+      // canonical UPPERCASE `HttpMethod` constants. An un-normalized
+      // `method: 'get'` was silently misclassified as "not GET", skipping
+      // the create/update/delete redirect-to-sibling logic entirely and
+      // dispatching the wrong HTTP verb. (A hand-built config that bypasses
+      // `configureMinder()` entirely — see N4 — still needs the SAME
+      // defense applied again at the comparison sites themselves; that is
+      // `normalizeMethod` in useMinder.helpers.ts. Both layers exist because
+      // neither alone covers every config origin.)
+      fullRoutes[key] = typeof value.method === 'string'
+        ? { ...value, method: value.method.trim().toUpperCase() as HttpMethod }
+        : value;
     }
   });
 
@@ -483,12 +537,15 @@ function getPlatformDefaults(platform: Platform, apiUrl: string): Partial<Minder
           refetchOnWindowFocus: true,
           refetchOnReconnect: true,
         },
-        // G-05: `credentials: true` here silently re-enabled the CORS
-        // preflight tax that M0-01 opted out by default (ApiClient's
-        // `withCredentials: config.cors?.credentials === true`). `enabled`
-        // stays `true` — the CORS-error-handling/proxy machinery is still
-        // useful by default; only credentialed requests must be opt-in.
-        cors: { enabled: true, credentials: false },
+        // B4 (fix-2.2.0-blockers, BREAKING): was `{ enabled: true, credentials:
+        // false }`. Auto-enabling the CORS/proxy helper by default silently
+        // rewrote EVERY request to `/api/minder-proxy/...` (see
+        // MinderDataProvider.tsx) for any app that never asked for it — a
+        // proxy route the app almost certainly never created, turning every
+        // call into a 404. CORS handling is now opt-in only: the app must set
+        // `corsHelper: { enabled: true, proxy: '...' }` (or `cors:` for the
+        // deprecated field) itself. See CHANGELOG.md for the migration note.
+        cors: { enabled: false },
         websocket: {
           url: apiUrl.replace(/^http/, 'ws') + '/ws',
           reconnect: true,
@@ -766,6 +823,15 @@ function applyUserConfig(
       ...baseConfig.performance,
       ...userConfig.performance,
     };
+  }
+
+  // P2 (fix-2.2.0-blockers): transport passthrough. Without this,
+  // `configureMinder({ transport: 'fetch' })` / `<MinderDataProvider config=
+  // {{transport:'fetch'}}>` — the documented, realistic way almost every
+  // consumer sets provider config — silently dropped the option before it
+  // ever reached ApiClient, even though ApiClient itself fully honors it.
+  if (userConfig.transport !== undefined) {
+    baseConfig.transport = userConfig.transport;
   }
 
   // SSR configuration

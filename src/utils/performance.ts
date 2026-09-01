@@ -123,13 +123,26 @@ export class RequestDeduplicator {
       timestamp: now,
     });
 
-    // Clean up after completion
-    promise.finally(() => {
-      const current = this.pending.get(key);
-      if (current?.promise === promise) {
-        this.pending.delete(key);
-      }
-    });
+    // Clean up after completion. F5 (fix-2.2.0-blockers): `.finally()` returns
+    // a NEW promise that adopts `promise`'s eventual state — if `promise`
+    // rejects (e.g. a real network failure against a dead port), that
+    // DERIVED promise also rejects. `promise` itself is returned to and
+    // awaited by the caller (ApiClient.request -> useMinder's query/mutation
+    // path), so ITS rejection is always handled there; but this derived
+    // `.finally()` promise is never referenced by anyone, so with no handler
+    // attached Node reports it as a SECOND, genuinely unhandled rejection for
+    // the same failure — severe enough to crash a consumer's Node process
+    // outright on a transient network error. The trailing `.catch(() => {})`
+    // only silences that redundant derived promise; it does not swallow or
+    // alter `promise`'s own error, which still propagates normally.
+    promise
+      .finally(() => {
+        const current = this.pending.get(key);
+        if (current?.promise === promise) {
+          this.pending.delete(key);
+        }
+      })
+      .catch(() => { /* see comment above — `promise`'s rejection is handled by the caller */ });
 
     return promise;
   }

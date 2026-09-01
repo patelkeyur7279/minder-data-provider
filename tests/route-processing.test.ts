@@ -91,6 +91,50 @@ describe('Route Processing', () => {
         expect(result.errors).toContain('Route "invalidRoute" has invalid method "INVALID"');
       });
 
+      it('should accept a valid HTTP method regardless of case (item 7, fix-2.2.0-blockers)', () => {
+        // A hand-written route (never passed through configureMinder()'s own
+        // boundary normalization) carrying lowercase/mixed-case method: 'get'/
+        // 'Get'/'POST ' is a perfectly dispatchable route — the SAME
+        // case-sensitive HttpMethod membership check the ResolvedRequest
+        // redesign already fixed at the dispatch/comparison sites previously
+        // flagged this as invalid CONFIG too.
+        const routes = {
+          lowercaseRoute: {
+            method: 'get' as any,
+            url: '/test-lowercase'
+          },
+          mixedCaseRoute: {
+            method: 'PoSt' as any,
+            url: '/test-mixedcase'
+          },
+          untrimmedRoute: {
+            method: ' PUT ' as any,
+            url: '/test-untrimmed'
+          }
+        };
+
+        const result = validateRoutes(routes);
+
+        expect(result.errors).not.toContain('Route "lowercaseRoute" has invalid method "get"');
+        expect(result.errors).not.toContain('Route "mixedCaseRoute" has invalid method "PoSt"');
+        expect(result.errors).not.toContain('Route "untrimmedRoute" has invalid method " PUT "');
+        expect(result.isValid).toBe(true);
+      });
+
+      it('should still reject a genuinely invalid HTTP method after normalization', () => {
+        const routes = {
+          invalidRoute: {
+            method: 'invalid' as any,
+            url: '/test'
+          }
+        };
+
+        const result = validateRoutes(routes);
+
+        expect(result.isValid).toBe(false);
+        expect(result.errors).toContain('Route "invalidRoute" has invalid method "invalid"');
+      });
+
       it('should detect duplicate URLs with same method', () => {
         const routes = {
           route1: {

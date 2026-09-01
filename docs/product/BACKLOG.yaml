@@ -299,15 +299,20 @@ tasks:
   - id: R-03-BUILD
     title: Preserve 'use client'/'use server' directives through the tsup build (App Router)
     type: implementation
-    status: backlog
+    status: complete
     dependencies: [R-03]
-    notes: >-
-      tsup splitting:true does not keep 'use client' as a valid top-of-chunk prologue (R-03).
-      Fix candidate: esbuild-plugin-preserve-directives (or a client-entry sub-build without
-      splitting + a banner). HIGHER RISK — touches the published build for ALL consumers; must
-      verify every dist entry still resolves (dist-entry-exports guard), the HttpMethod enum
-      eager-export, edge-safety, and add a RUNNABLE Next.js App Router example exercised in CI
-      (overlaps the Next.js example-app gap) to upgrade RSC from Partial to Confirmed.
+    evidence: >-
+      2026-08-26: Fixed via post-build step scripts/fix-use-client-directive.mjs (wired into
+      tsup.config.ts:152 onSuccess hook) that re-hoists 'use client' to each affected chunk's
+      first statement. Verified: (1) parent scan of dist/*.mjs finds zero misplaced directives;
+      (2) regression guard tests/packaging/use-client-directive-position.test.ts fails if the
+      directive appears anywhere but first statement (passes, 7 suites / 175 tests green); (3)
+      end-to-end acceptance via fresh Next.js 15.5.24 App Router app installed from real npm pack
+      (Server Component + Route Handler importing minder/configureMinder, Client Component rendering
+      MinderDataProvider/useMinder); both next build (webpack + --turbopack) and next dev succeed
+      (HTTP 200). Negative control: stashing tsup.config.ts, rebuilding, and restoring the broken
+      build put the directive at byte 368 instead of 0, causing 'TypeError: (0, n.useState) is not
+      a function' on app load; restoring the fix removed the crash.
   - id: R-04
     title: Edge-runtime compatibility spike (require() usage in adapters)
     type: research

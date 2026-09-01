@@ -51,10 +51,24 @@ describe('CORS Helper Rename', () => {
       expect((config as any).corsHelper.credentials).toBe(true);
     });
 
-    it('should work with corsHelper boolean shorthand (true)', () => {
+    it('should throw when enabled via boolean shorthand because no proxy route is configured (B4)', () => {
+      // B4 (fix-2.2.0-blockers, ratified): enabling corsHelper without
+      // wiring a `proxy` route would silently rewrite every request to a
+      // route that almost certainly doesn't exist in the app — a 404 on
+      // every call. Boolean shorthand `true` has no way to express a proxy,
+      // so on its own it can no longer produce a working config.
+      expect(() =>
+        configureMinder({
+          apiUrl: 'https://api.example.com',
+          corsHelper: true,
+        })
+      ).toThrow(/no `proxy` route was configured/);
+    });
+
+    it('should default credentials to false for corsHelper boolean-shorthand semantics once a proxy is configured', () => {
       const config = configureMinder({
         apiUrl: 'https://api.example.com',
-        corsHelper: true,
+        corsHelper: { enabled: true, proxy: '/api/minder-proxy' },
       });
 
       expect((config as any).corsHelper).toBeDefined();
@@ -75,9 +89,12 @@ describe('CORS Helper Rename', () => {
     });
 
     it('should NOT show deprecation warning for corsHelper', () => {
+      // B4: enabling corsHelper requires a `proxy` route now (see the
+      // "throw when enabled via boolean shorthand" test above); add one so
+      // this test can observe the (absence of a) deprecation warning.
       configureMinder({
         apiUrl: 'https://api.example.com',
-        corsHelper: { enabled: true },
+        corsHelper: { enabled: true, proxy: '/api/minder-proxy' },
       });
 
       expect(consoleWarnSpy).not.toHaveBeenCalled();
@@ -104,9 +121,12 @@ describe('CORS Helper Rename', () => {
     });
 
     it('should show deprecation warning when using old cors field', () => {
+      // B4: enabling cors requires a `proxy` route now (see the boolean
+      // shorthand throw test below); add one so this test can observe the
+      // deprecation warning without configureMinder() throwing first.
       configureMinder({
         apiUrl: 'https://api.example.com',
-        cors: { enabled: true },
+        cors: { enabled: true, proxy: '/api/minder-proxy' },
       });
 
       expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
@@ -121,10 +141,24 @@ describe('CORS Helper Rename', () => {
       );
     });
 
-    it('should work with cors boolean shorthand (true)', () => {
+    it('should throw when cors is enabled via boolean shorthand because no proxy route is configured (B4)', () => {
+      // B4 (fix-2.2.0-blockers, ratified): enabling cors without wiring a
+      // `proxy` route would silently rewrite every request to a route that
+      // almost certainly doesn't exist. Boolean shorthand `true` has no way
+      // to express a proxy, so on its own it can no longer produce a
+      // working config.
+      expect(() =>
+        configureMinder({
+          apiUrl: 'https://api.example.com',
+          cors: true,
+        })
+      ).toThrow(/no `proxy` route was configured/);
+    });
+
+    it('should default credentials to false for cors boolean-shorthand semantics once a proxy is configured', () => {
       const config = configureMinder({
         apiUrl: 'https://api.example.com',
-        cors: true,
+        cors: { enabled: true, proxy: '/api/minder-proxy' },
       });
 
       expect(config.cors?.enabled).toBe(true);
@@ -254,8 +288,10 @@ describe('CORS Helper Rename', () => {
     it('should default credentials to false when enabled without an explicit opinion', () => {
       const config = configureMinder({
         apiUrl: 'https://api.example.com',
+        // B4: enabling corsHelper requires a `proxy` route now.
         corsHelper: {
           enabled: true,
+          proxy: '/api/minder-proxy',
         },
       });
 
@@ -265,8 +301,10 @@ describe('CORS Helper Rename', () => {
     it('should allow credentials to be explicitly false', () => {
       const config = configureMinder({
         apiUrl: 'https://api.example.com',
+        // B4: enabling corsHelper requires a `proxy` route now.
         corsHelper: {
           enabled: true,
+          proxy: '/api/minder-proxy',
           credentials: false,
         },
       });

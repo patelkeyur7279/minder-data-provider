@@ -69,6 +69,38 @@ jobs:
           files: ./coverage/lcov.info
           fail_ci_if_error: false
 
+  # Wire-level integration suite (FIX_PLAN.md §5 / fix-2.2.0-blockers, T1).
+  # Drives a real `node:http` server and asserts the ACTUAL method/body for
+  # every documented call pattern (useMinder().mutate(), operations.create/
+  # update/delete, minder()) against a REAL packed-and-installed tarball —
+  # never source, never a mock of axios/ApiClient. Self-contained (builds its
+  # own tarball) rather than depending on a "build" job, matching every other
+  # job in this file (app-router-example, vite-example, ... all independently
+  # "Install and build library" + "Pack library tarball" — GitHub Actions jobs
+  # don't share a filesystem, so there is no `needs: [build]` job to depend on
+  # here; this job's own build step plays that role instead). CANNOT silently
+  # skip — scripts/wire/run.mjs hard `process.exit(1)`s if dist/ is missing,
+  # if `npm pack`/the scratch install fails, or if the manifest/recorded
+  # results ever fall below the floor — see that file's header for the full
+  # "cannot silently skip" contract.
+  wire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install and build library
+        run: |
+          npm install -g npm@11.6.2  # match packageManager — npm10/11 disagree on optional-wasm lockfile subtrees
+          npm ci && npm run build
+
+      - name: Run wire-level integration suite (real HTTP, packed tarball)
+        run: npm run test:wire
+
   # Support-Matrix evidence: React 18 compatibility (Phase 7.1 matrix leg).
   # Peer range allows 18 — this proves it with the full suite, not hope.
   react-18-compat:

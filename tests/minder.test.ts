@@ -16,11 +16,23 @@ describe('minder() - Universal Data Provider', () => {
     // Reset mocks before each test
     jest.clearAllMocks();
     
-    // Reset global config
+    // Reset global config. `token` is reset explicitly (not merely omitted)
+    // — `configureMinder`/`setMinderGlobalConfig` merges a PARTIAL config
+    // onto whatever is already stored, so leaving `token` out here does NOT
+    // clear it: any earlier test in this file that set an ambient token (e.g.
+    // 'should configure global token', the Authentication describe block)
+    // would otherwise leak into every later test's global config, silently,
+    // for the rest of the file. That was harmless before fix-2.2.0-blockers
+    // (BLOCKER 1) — nothing read the leaked token differently — but the new
+    // ambient-token-vs-baseURL-override guard in minder.ts DOES read it, so
+    // this pre-existing test-isolation gap started producing real false
+    // positives (e.g. 'should override baseURL per request') the moment that
+    // guard shipped. Fixing test isolation here, not weakening the guard.
     configureMinder({
       baseURL: '',
       timeout: 30000,
       headers: { 'Content-Type': 'application/json' },
+      token: undefined,
     });
   });
 
@@ -389,6 +401,18 @@ describe('minder() - Universal Data Provider', () => {
   // ============================================================================
   
   describe('File Uploads', () => {
+    // jsdom's Blob/File implementation has no `.text()`/`.arrayBuffer()`
+    // (verified against this project's actual jest+jsdom setup) -- only
+    // FileReader can read content. Used below to prove the real bytes
+    // survive to the transport, not just size/type metadata.
+    const readBlobAsText = (b: Blob): Promise<string> =>
+      new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(b);
+      });
+
     it('should handle File upload', async () => {
       const file = new File(['content'], 'test.txt', { type: 'text/plain' });
       
@@ -401,14 +425,43 @@ describe('minder() - Universal Data Provider', () => {
       });
       
       const result = await minder('/upload', file);
-      
-      expect(mockedAxios).toHaveBeenCalledWith(
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'Content-Type': 'multipart/form-data',
-          }),
-        })
-      );
+
+      // fix-a-app-router-crash-offline-parity (stale test): a hand-set,
+      // BOUNDARY-LESS 'multipart/form-data' Content-Type is the OLD bug, not
+      // the contract -- it breaks multipart parsing on any transport that
+      // sends it verbatim (fetch does); axios recomputes a correctly-
+      // boundaried Content-Type itself regardless of what's set here (see
+      // src/core/minder.ts:583-595, and the identical removal
+      // apiClient/upload.ts's applyRequestBody already does on the provider
+      // path -- verified end-to-end against a real node:http server using
+      // the built dist: `content-type: multipart/form-data;
+      // boundary=axios-1.18.1-boundary-...`, a 213-byte body containing the
+      // real file bytes, NOT the literal '{}'). Assert the REAL contract: no
+      // boundary-less Content-Type is hand-set, and the actual File survives
+      // to the transport as a real FormData entry -- not lost/
+      // JSON.stringify'd to '{}'.
+      //
+      // Every check below compares only primitives (booleans/strings) --
+      // never passes a File/FormData object itself into `expect(...)` --
+      // because jest-matcher-utils' diff-builder recurses into jsdom's
+      // File/Blob internals without a base case and crashes the whole
+      // process (stack overflow) the moment such an assertion FAILS. Using
+      // primitives keeps a genuine regression a clean, readable test
+      // failure instead of a process crash.
+      expect(mockedAxios).toHaveBeenCalledTimes(1);
+      const sentConfig = mockedAxios.mock.calls[0][0] as {
+        headers?: Record<string, unknown>;
+        data?: unknown;
+      };
+      expect(Object.prototype.hasOwnProperty.call(sentConfig.headers ?? {}, 'Content-Type')).toBe(false);
+      expect(Object.prototype.hasOwnProperty.call(sentConfig.headers ?? {}, 'content-type')).toBe(false);
+      expect(sentConfig.data instanceof FormData).toBe(true);
+      const sentFile = (sentConfig.data as FormData).get('file');
+      // A File value survives FormData.append BY REFERENCE (unlike a bare
+      // Blob, which the spec wraps into a new File -- see the Blob-upload
+      // case below), so this is the strongest possible check: the exact
+      // same File instance, not a reconstruction.
+      expect(sentFile === file).toBe(true);
       expect(result.data).toEqual({ url: 'http://example.com/file.txt' });
     });
 
@@ -424,14 +477,35 @@ describe('minder() - Universal Data Provider', () => {
       });
       
       await minder('/upload', blob);
-      
-      expect(mockedAxios).toHaveBeenCalledWith(
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'Content-Type': 'multipart/form-data',
-          }),
-        })
-      );
+
+      // See the File-upload case above for why this asserts the REAL
+      // contract (no boundary-less Content-Type; the Blob survives as a
+      // real FormData entry) instead of the old bug it used to encode, and
+      // for why every check here is primitives-only (never passes the
+      // Blob/File/FormData object itself into `expect`).
+      //
+      // Per the WHATWG FormData spec (verified against the real runtime), a
+      // bare Blob appended to FormData is NOT kept by reference -- it is
+      // wrapped in a NEW File named "blob" -- so `.get('file') === blob`
+      // would legitimately be false even with zero data loss. Assert byte-
+      // for-byte content survival instead: same size, same MIME type, same
+      // actual bytes.
+      expect(mockedAxios).toHaveBeenCalledTimes(1);
+      const sentConfig = mockedAxios.mock.calls[0][0] as {
+        headers?: Record<string, unknown>;
+        data?: unknown;
+      };
+      expect(Object.prototype.hasOwnProperty.call(sentConfig.headers ?? {}, 'Content-Type')).toBe(false);
+      expect(Object.prototype.hasOwnProperty.call(sentConfig.headers ?? {}, 'content-type')).toBe(false);
+      expect(sentConfig.data instanceof FormData).toBe(true);
+      const sentEntry = (sentConfig.data as FormData).get('file');
+      expect(sentEntry instanceof Blob).toBe(true);
+      const sentBlob = sentEntry as Blob;
+      expect(sentBlob.size).toBe(blob.size);
+      expect(sentBlob.type).toBe(blob.type);
+      const [sentText, originalText] = await Promise.all([readBlobAsText(sentBlob), readBlobAsText(blob)]);
+      expect(sentText).toBe(originalText);
+      expect(sentText).toBe('content');
     });
 
     it('should handle FormData upload', async () => {
@@ -447,15 +521,24 @@ describe('minder() - Universal Data Provider', () => {
       });
       
       await minder('/upload', formData);
-      
-      expect(mockedAxios).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: formData,
-          headers: expect.objectContaining({
-            'Content-Type': 'multipart/form-data',
-          }),
-        })
-      );
+
+      // See the File-upload case above for why this asserts the REAL
+      // contract, and for why every check is primitives-only. A caller-
+      // supplied FormData must reach axios BYTE-FOR-BYTE as the SAME
+      // instance (not rewrapped/reconstructed), with no boundary-less
+      // Content-Type hand-set over it.
+      expect(mockedAxios).toHaveBeenCalledTimes(1);
+      const sentConfig = mockedAxios.mock.calls[0][0] as {
+        headers?: Record<string, unknown>;
+        data?: unknown;
+      };
+      expect(Object.prototype.hasOwnProperty.call(sentConfig.headers ?? {}, 'Content-Type')).toBe(false);
+      expect(Object.prototype.hasOwnProperty.call(sentConfig.headers ?? {}, 'content-type')).toBe(false);
+      expect(sentConfig.data === formData).toBe(true);
+      const sentEntry = (sentConfig.data as FormData).get('file');
+      expect(sentEntry instanceof Blob).toBe(true);
+      const sentText = await readBlobAsText(sentEntry as Blob);
+      expect(sentText).toBe('content');
     });
 
     it('should handle FileList upload', async () => {
@@ -740,8 +823,15 @@ describe('minder() - Universal Data Provider', () => {
     });
 
     it('should handle network errors', async () => {
+      // fix-a-app-router-crash-offline-parity (H1/H1b): standalone minder()
+      // now classifies a no-response failure through the SAME shared
+      // choke point (apiClient/errors.ts) the provider path uses, so this
+      // asserts the REAL, unified message/details instead of the old
+      // standalone-only text. `config` mirrors what a real axios error
+      // always carries.
       const networkError = new Error('Network Error');
       (networkError as any).request = {};
+      (networkError as any).config = { url: '/users', method: 'get' };
       mockedAxios.mockRejectedValueOnce(networkError);
 
       const result = await minder('/users');
@@ -749,7 +839,8 @@ describe('minder() - Universal Data Provider', () => {
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
       expect(result.error?.code).toBe('NETWORK_ERROR');
-      expect(result.error?.message).toBe('Network error');
+      expect(result.error?.message).toBe('Network error - please check your connection');
+      expect(result.error?.details).toEqual({ response: undefined, url: '/users', method: 'GET' });
       expect(result.data).toBeNull();
     });
   });

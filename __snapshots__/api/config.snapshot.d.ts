@@ -71,6 +71,7 @@ export interface UnifiedMinderConfig {
         };
         debug?: boolean;
     }>;
+    transport?: 'auto' | 'axios' | 'fetch';
 }
 // #endregion
 

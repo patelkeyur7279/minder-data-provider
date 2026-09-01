@@ -60,7 +60,25 @@ export class LazySseTransport implements RealtimeTransport {
     return this.loadPromise;
   }
 
-  async connect(): Promise<void> {
+  connect(): Promise<void> {
+    const connectPromise = this.doConnect();
+
+    // N3 (fix-2.2.0-blockers): identical guard to `SseTransport.connect()`
+    // and `WebSocketManager.connect()` — attach a no-op rejection handler to
+    // THIS promise so an unresolved `load()` failure (bad chunk, dynamic
+    // `import()` rejection) or the underlying `instance.connect()` rejection
+    // can never surface as an unhandled rejection. `LazySseTransport.connect()`
+    // wraps `instance.connect()`'s (already-guarded) promise in a NEW promise
+    // via `await`/`return`, so a handler on the inner promise does not, by
+    // itself, cover this outer one — each promise object is tracked for
+    // unhandled-rejection purposes independently. Does not swallow or alter
+    // the rejection for a caller that DOES attach its own `.catch()`/`await`.
+    connectPromise.catch(() => { /* see comment above */ });
+
+    return connectPromise;
+  }
+
+  private async doConnect(): Promise<void> {
     if (this.disconnectRequested) {
       // A disconnect() before the module ever loaded means "never mind" —
       // don't kick off the chunk load + fetch just to immediately tear it down.

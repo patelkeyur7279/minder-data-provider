@@ -111,7 +111,12 @@ export type { TypedRoute, ResponseOf } from './core/typedRoutes.js';
 // ============================================================================
 
 // Provider component (old architecture - RE-ENABLED for backward compatibility)
-export { MinderDataProvider, useMinderContext } from './core/MinderDataProvider.js';
+// M2 (fix-2.2.0-blockers): `useMinderContextSafe` (the non-throwing context
+// accessor, src/core/MinderContext.tsx) was already documented (llms.txt:182)
+// and already relied on internally (useMinder.ts, hooks/index.ts) but was
+// never exported from this entry point. Exported alongside the throwing
+// `useMinderContext` rather than removing the documentation.
+export { MinderDataProvider, useMinderContext, useMinderContextSafe } from './core/MinderDataProvider.js';
 // Wave I — local-first: the persistence layer behind useMinder's
 // `source: 'local' | 'local-first'`. Exported so apps can pre-seed or manage
 // offline data directly (isomorphic: web / native / expo / electron).

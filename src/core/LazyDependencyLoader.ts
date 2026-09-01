@@ -95,20 +95,24 @@ export class LazyDependencyLoader {
   }
 
   /**
-   * Load React Query DevTools only in development
+   * B5 (fix-2.2.0-blockers, BREAKING): auto-loading React Query DevTools was
+   * REMOVED. `@tanstack/react-query-devtools` is an OPTIONAL peer dependency,
+   * but the `import('@tanstack/react-query-devtools')` that used to live HERE
+   * was resolved STATICALLY by esbuild/Metro at bundle time for every
+   * consumer of this shared chunk — even those who never installed the
+   * package — causing a hard "module not found" build failure regardless of
+   * whether this method was ever called. Kept as a no-op (always resolves
+   * `null`) rather than deleted outright so the public `LazyDependencyLoader`
+   * method surface is unchanged; mount `<ReactQueryDevtools>` yourself, in
+   * your own app code, by importing '@tanstack/react-query-devtools'
+   * directly instead of relying on this loader.
    */
   async loadDevTools() {
-    if (
-      process.env.NODE_ENV !== 'development' ||
-      !this.config.debug?.devTools
-    ) {
-      return null;
-    }
-
-    return this.loadModule('react-query-devtools', async () => {
-      const devtools = await import('@tanstack/react-query-devtools');
-      return devtools;
-    });
+    this.logger.debug(
+      "loadDevTools() no longer auto-imports '@tanstack/react-query-devtools' (B5) — import it " +
+        'directly in your own app code if you want devtools mounted.'
+    );
+    return null;
   }
 
   /**

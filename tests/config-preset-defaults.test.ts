@@ -97,20 +97,41 @@ describe('G-05: configureMinder() preset defaults match the documented M0 contra
       expect(config.cors?.credentials).toBeFalsy();
     });
 
-    it('does not default credentials to true for boolean shorthand cors: true', () => {
+    // B4 (fix-2.2.0-blockers, ratified — landed after this G-05 suite was
+    // written): configureMinder() now throws when cors/corsHelper resolves
+    // `enabled: true` with no `proxy` route configured, since that used to
+    // silently rewrite every request to a proxy route that almost certainly
+    // doesn't exist. Boolean shorthand `true` has no way to express a
+    // proxy, so it can no longer produce a working config on its own —
+    // covered directly below. The credentials-default concern these tests
+    // exist for is still exercised via the object form with an explicit
+    // `proxy`.
+    it('throws for boolean shorthand cors: true because no proxy route is configured (B4)', () => {
+      expect(() =>
+        configureMinder({ apiUrl: 'https://api.example.com', cors: true })
+      ).toThrow(/no `proxy` route was configured/);
+    });
+
+    it('throws for boolean shorthand corsHelper: true because no proxy route is configured (B4)', () => {
+      expect(() =>
+        configureMinder({ apiUrl: 'https://api.example.com', corsHelper: true })
+      ).toThrow(/no `proxy` route was configured/);
+    });
+
+    it('does not default credentials to true for cors boolean-shorthand semantics once a proxy is configured', () => {
       const config = configureMinder({
         apiUrl: 'https://api.example.com',
-        cors: true,
+        cors: { enabled: true, proxy: '/api/minder-proxy' },
       });
 
       expect(config.cors?.credentials).toBeFalsy();
       expect((config as any).corsHelper?.credentials).toBeFalsy();
     });
 
-    it('does not default credentials to true for boolean shorthand corsHelper: true', () => {
+    it('does not default credentials to true for corsHelper boolean-shorthand semantics once a proxy is configured', () => {
       const config = configureMinder({
         apiUrl: 'https://api.example.com',
-        corsHelper: true,
+        corsHelper: { enabled: true, proxy: '/api/minder-proxy' },
       });
 
       expect((config as any).corsHelper?.credentials).toBeFalsy();
@@ -120,7 +141,7 @@ describe('G-05: configureMinder() preset defaults match the documented M0 contra
     it('does not default credentials to true when corsHelper is enabled without specifying credentials', () => {
       const config = configureMinder({
         apiUrl: 'https://api.example.com',
-        corsHelper: { enabled: true },
+        corsHelper: { enabled: true, proxy: '/api/minder-proxy' },
       });
 
       expect((config as any).corsHelper?.credentials).toBeFalsy();
@@ -129,7 +150,7 @@ describe('G-05: configureMinder() preset defaults match the documented M0 contra
     it('respects an explicit user credentials: true override via cors', () => {
       const config = configureMinder({
         apiUrl: 'https://api.example.com',
-        cors: { credentials: true },
+        cors: { credentials: true, proxy: '/api/minder-proxy' },
       });
 
       expect(config.cors?.credentials).toBe(true);
@@ -138,7 +159,7 @@ describe('G-05: configureMinder() preset defaults match the documented M0 contra
     it('respects an explicit user credentials: true override via corsHelper', () => {
       const config = configureMinder({
         apiUrl: 'https://api.example.com',
-        corsHelper: { enabled: true, credentials: true },
+        corsHelper: { enabled: true, credentials: true, proxy: '/api/minder-proxy' },
       });
 
       expect((config as any).corsHelper?.credentials).toBe(true);
@@ -147,19 +168,21 @@ describe('G-05: configureMinder() preset defaults match the documented M0 contra
     it('still respects explicit credentials: false', () => {
       const config = configureMinder({
         apiUrl: 'https://api.example.com',
-        cors: { credentials: false },
+        cors: { credentials: false, proxy: '/api/minder-proxy' },
       });
 
       expect(config.cors?.credentials).toBe(false);
     });
 
-    it('leaves cors.enabled untouched — only credentials/retries are in scope', () => {
+    it('defaults cors.enabled to false — B4 disabled auto-enable, a later ratified fix than this G-05 suite', () => {
       const config = configureMinder({ apiUrl: 'https://api.example.com' });
 
-      // The web platform's CORS-error-handling machinery (proxy fallback,
-      // friendly error messages) may stay enabled by default; this fix only
-      // concerns the credentials flag and the retries count.
-      expect(config.cors?.enabled).toBe(true);
+      // B4 (fix-2.2.0-blockers): the web platform's CORS/proxy helper used
+      // to auto-enable by default, silently rewriting every request to
+      // `/api/minder-proxy` for apps that never asked for it. It is now
+      // opt-in only; the app must explicitly configure `corsHelper.enabled`
+      // (or `cors.enabled`) with a `proxy` route.
+      expect(config.cors?.enabled).toBe(false);
     });
   });
 });

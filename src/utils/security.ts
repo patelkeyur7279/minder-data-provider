@@ -129,6 +129,28 @@ export class CSRFTokenManager {
 }
 
 /**
+ * H3 (ratified ADR, see FIX_PLAN.md §3): locally-widened sanitization config
+ * — adds an opt-in `fields` allowlist on top of `SecurityConfig['sanitization']`
+ * without requiring a change to that exported type. Structurally compatible:
+ * every value already typed `SecurityConfig['sanitization']` satisfies this
+ * type too, because `fields` is optional.
+ */
+export interface SanitizationOptions {
+  enabled: boolean;
+  allowedTags?: string[];
+  allowedAttributes?: Record<string, string[]>;
+  /**
+   * H3: explicit opt-in list of top-level field names to sanitize. Sanitizing
+   * every string in a request body by default silently corrupted ordinary
+   * user data — DOMPurify HTML-entity-encodes `&` and strips anything that
+   * parses as a tag, and there is no DOMPurify configuration that leaves `&`
+   * untouched. Without `fields`, `sanitize()` on an object is a no-op
+   * pass-through; XSS defence belongs at render time, not on request bodies.
+   */
+  fields?: string[];
+}
+
+/**
  * Advanced XSS sanitization using DOMPurify.
  *
  * D4: DOMPurify loads lazily (see `loadDOMPurify` above). `sanitize()` stays
@@ -137,18 +159,35 @@ export class CSRFTokenManager {
  * inline. Instead the constructor kicks the load off immediately, exposes
  * `ready()` for callers that can await it (ApiClient does, right before
  * sanitizing a request body), and `sanitize()` consults the already-resolved
- * result. FAIL CLOSED (P2 invariant): in a browser, if DOMPurify has not
- * finished loading — or failed to load — `sanitize()` THROWS rather than
- * silently falling back to the weaker regex-based `basicSanitize()`. The
- * server-side path (`typeof window === 'undefined'`) is unaffected and keeps
- * using `basicSanitize()` unconditionally, exactly as before.
+ * result.
+ *
+ * FAIL CLOSED (H2, P2 invariant): `sanitize()` on a string THROWS
+ * `SANITIZER_UNAVAILABLE` on every runtime where a usable DOMPurify instance
+ * is not present — a browser where the import hasn't resolved yet or failed
+ * to load, AND any non-browser runtime (`/node`, `/server`, Next.js SSR).
+ * `dompurify` cannot sanitize without a DOM/`window` and this library carries
+ * no jsdom dependency to fake one, so a non-browser runtime is *always*
+ * "DOMPurify absent" here — construction never even attempts the import
+ * outside a browser, matching the "unavailable" branch exactly. The
+ * previously shipped weaker regex-based `basicSanitize()` fallback has been
+ * removed: a security control that silently degrades instead of failing is
+ * strictly worse than one that is visibly absent.
+ *
+ * OPT-IN PER FIELD (H3, ratified ADR §3): `sanitize()` on an object no longer
+ * recursively walks every string field by default. Only fields named in the
+ * `fields` allowlist (see `SanitizationOptions`) are sanitized; everything
+ * else in the body passes through unchanged. `security.sanitization: true`
+ * (or an object without `fields`) constructs a working sanitizer but applies
+ * it to nothing automatically — call `sanitize()` on a specific string, or
+ * configure `fields`, to actually use it.
  */
 export class XSSSanitizer {
   private config: any;
   private domPurify?: DOMPurifyInstance;
+  private readonly fields?: string[];
   private readonly readyPromise: Promise<void>;
 
-  constructor(sanitizationConfig?: SecurityConfig['sanitization']) {
+  constructor(sanitizationConfig?: boolean | SanitizationOptions) {
     if (typeof sanitizationConfig === 'object' && sanitizationConfig.enabled) {
       this.config = {
         ALLOWED_TAGS: sanitizationConfig.allowedTags || [],
@@ -163,8 +202,13 @@ export class XSSSanitizer {
       };
     }
 
+    this.fields = typeof sanitizationConfig === 'object' ? sanitizationConfig.fields : undefined;
+
     // Only the browser path needs DOMPurify at all — don't trigger the
-    // dynamic import from a server-side construction.
+    // dynamic import from a server-side construction. `this.domPurify` stays
+    // `undefined` server-side, which is exactly what makes `sanitize()` fail
+    // closed there (see class doc above) instead of storing a non-browser
+    // DOMPurify factory that can't actually sanitize anything.
     this.readyPromise = typeof window !== 'undefined'
       ? loadDOMPurify()
           .then((mod) => {
@@ -194,33 +238,21 @@ export class XSSSanitizer {
 
   sanitize(dirty: any): any {
     if (typeof dirty === 'string') {
-      if (typeof window !== 'undefined') {
-        if (this.domPurify) {
-          return this.domPurify.sanitize(dirty, this.config);
-        }
-
-        // Fail closed: never silently fall through to basicSanitize() in a
-        // browser. Either the import hasn't resolved yet (caller didn't
-        // await `ready()`) or it rejected (e.g. blocked by a strict CSP) —
-        // both are treated the same: refuse to pass data through unsanitized.
-        throw new MinderError(
-          'XSS sanitizer unavailable: the DOMPurify dynamic import has not resolved (or failed to load). ' +
-          'Await sanitizer.ready() before sanitizing, and check for a CSP or network condition blocking ' +
-          'the import of "dompurify".',
-          'SANITIZER_UNAVAILABLE',
-          500
-        );
-      }
-
-      // Fallback: basic sanitization for Node.js environments
-      return this.basicSanitize(dirty);
+      return this.sanitizeString(dirty);
     }
 
     if (typeof dirty === 'object' && dirty !== null) {
-      const sanitized: any = Array.isArray(dirty) ? [] : {};
-      for (const key in dirty) {
-        if (Object.prototype.hasOwnProperty.call(dirty, key)) {
-          sanitized[key] = this.sanitize(dirty[key]);
+      // H3: opt-in per field, not a blanket recursive walk of every string
+      // in the body (see class doc above). No `fields` configured => pass
+      // the object through unchanged.
+      if (!this.fields || this.fields.length === 0) {
+        return dirty;
+      }
+
+      const sanitized: any = Array.isArray(dirty) ? [...dirty] : { ...dirty };
+      for (const field of this.fields) {
+        if (Object.prototype.hasOwnProperty.call(dirty, field)) {
+          sanitized[field] = this.sanitizeDeep(dirty[field]);
         }
       }
       return sanitized;
@@ -229,16 +261,49 @@ export class XSSSanitizer {
     return dirty;
   }
 
-  private basicSanitize(str: string): string {
-    return str
-      .replace(/<script[^>]*>.*?<\/script>/gi, '')
-      .replace(/<iframe[^>]*>.*?<\/iframe>/gi, '')
-      .replace(/javascript:/gi, '')
-      .replace(/on\w+\s*=/gi, '')
-      .replace(/<embed[^>]*>/gi, '')
-      .replace(/<object[^>]*>.*?<\/object>/gi, '')
-      .replace(/data:text\/html/gi, '')
-      .replace(/vbscript:/gi, '');
+  /** Recursively sanitize every string within an opted-in field's subtree. */
+  private sanitizeDeep(value: any): any {
+    if (typeof value === 'string') {
+      return this.sanitizeString(value);
+    }
+    if (typeof value === 'object' && value !== null) {
+      const result: any = Array.isArray(value) ? [] : {};
+      for (const key in value) {
+        if (Object.prototype.hasOwnProperty.call(value, key)) {
+          result[key] = this.sanitizeDeep(value[key]);
+        }
+      }
+      return result;
+    }
+    return value;
+  }
+
+  private sanitizeString(dirty: string): string {
+    if (this.domPurify) {
+      // `this.config` is untyped (`any`), so DOMPurify's overloaded
+      // `sanitize()` signature can resolve to a `TrustedHTML`-returning
+      // overload; this class's contract (and every caller) is plain string
+      // output, matching the config actually built above (no
+      // RETURN_TRUSTED_TYPE / RETURN_DOM* options are ever set).
+      return this.domPurify.sanitize(dirty, this.config) as unknown as string;
+    }
+
+    // Fail closed (H2): never silently degrade to a weaker regex sanitizer.
+    // `this.domPurify` is unset for one of three reasons, all treated the
+    // same — refuse to pass data through unsanitized:
+    //  - browser, import hasn't resolved yet (caller didn't await `ready()`)
+    //  - browser, import rejected (e.g. blocked by a strict CSP)
+    //  - non-browser runtime (`/node`, `/server`, Next.js SSR) — DOMPurify
+    //    requires a DOM/`window` this library does not fake with a jsdom
+    //    dependency, so it is never even attempted here.
+    throw new MinderError(
+      'XSS sanitizer unavailable: the DOMPurify dynamic import has not resolved, failed to load, or this ' +
+      'runtime has no DOM (dompurify requires a browser window; Node/SSR runtimes are not supported). ' +
+      'Await sanitizer.ready() before sanitizing, and check for a CSP or network condition blocking the ' +
+      'import of "dompurify" if running in a browser.',
+      'SANITIZER_UNAVAILABLE',
+      500
+    );
   }
 }
 

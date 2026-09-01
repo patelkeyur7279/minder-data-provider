@@ -1,8 +1,9 @@
-import axios, { AxiosError } from 'axios';
-import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import axios from 'axios';
+import type { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import type { MinderConfig, ApiRoute, ApiError } from './types.js';
 import type { StandardSchemaV1 } from '../types/standard-schema.js';
 import { HttpMethod, DebugLogType } from '../constants/enums.js';
+import { isEdgeRuntime } from './minder/utils.js';
 import { AuthManager } from './AuthManager.js';
 import { ProxyManager } from './ProxyManager.js';
 import { OfflineManager } from '../platform/offline/OfflineManager.js';
@@ -27,15 +28,28 @@ import { AnalyticsManager } from '../utils/analytics.js';
 import { telemetry } from '../utils/TelemetryTracker.js';
 import { TelemetryManager } from '../utils/telemetry.js';
 import type { DebugManager } from '../debug/DebugManager.js';
+// fix-a-app-router-crash-offline-parity (BLOCKER 1): `pluginManagerSingleton`
+// (a plain function, called fresh below) replaces the top-level `pluginManager`
+// Proxy binding — see the full note on it in ../plugins/PluginSystem.ts and on
+// its own use in ../core/minder.ts, which hit the same undefined-binding crash
+// under Next.js App Router's webpack.
 import {
   PluginManager,
-  pluginManager as globalPluginManager,
+  pluginManagerSingleton,
   isShortCircuitResponse,
 } from '../plugins/PluginSystem.js';
 import type { InterceptableRequest, ShortCircuitResponse, UploadLifecycleEvent } from '../plugins/PluginSystem.js';
 import { redactSecrets } from '../security/secrets.js';
 import { applyRequestBody, buildUploadFormData, createUploadProgressHandler } from './apiClient/upload.js';
+import { serializeRequestConfigForDedupKey } from './apiClient/dedupKey.js';
 import { normalizeApiError, sanitizeHeaders as sanitizeHeadersInternal } from './apiClient/errors.js';
+import { sensitiveHeaderNames as computeSensitiveHeaderNames } from './apiClient/sensitiveHeaders.js';
+import { resolveRequest, substituteUrlParams, normalizeHttpMethod } from './apiClient/resolveRequest.js';
+import type { ResolvedRequestWithKeys } from './apiClient/resolveRequest.js';
+import {
+  extractCallerRequestOptions,
+} from './apiClient/requestOptions.js';
+import type { CallerRequestOptions, ForwardableRequestOptions } from './apiClient/requestOptions.js';
 
 export class ApiClient {
   private axiosInstance: AxiosInstance;
@@ -76,11 +90,28 @@ export class ApiClient {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private failedQueue: Array<{ resolve: (token: string) => void; reject: (error: any) => void }> = [];
 
+  // P2 (fix-2.2.0-blockers): true when THIS request's transport is native
+  // `fetch()` rather than axios — either `config.transport === 'fetch'`
+  // (explicit escape hatch) or auto-detected (`'auto'`/unset) on an edge
+  // runtime (bare Cloudflare Workerd and similar), where axios's Node-oriented
+  // adapter machinery cannot reliably dispatch a request. Mirrors the SAME
+  // `transport` semantics `minder()` already exposes on its standalone path
+  // (core/minder.ts) — this is what makes that same option apply to the
+  // PROVIDER's ApiClient instead of being silently ignored. See
+  // `dispatchNativeFetch` below for the actual transport, and
+  // `applySecurityHeaders` for the auth/CSRF/rate-limit/CORS parity it shares
+  // with the axios request interceptor.
+  private useNativeFetch: boolean;
+
   constructor(config: MinderConfig, authManager: AuthManager, proxyManager?: ProxyManager, debugManager?: DebugManager) {
     this.config = config;
     this.authManager = authManager;
     this.proxyManager = proxyManager;
     this.debugManager = debugManager;
+    const transport = config.transport;
+    this.useNativeFetch =
+      transport === 'fetch' ||
+      ((transport === 'auto' || transport === undefined) && isEdgeRuntime());
 
     // Initialize security utilities
     if (config.security?.csrfProtection) {
@@ -188,7 +219,12 @@ export class ApiClient {
       // carry auth/CSRF/CORS/interceptors, and sync() emits onSync around them.
       this.offlineManager.setRequestExecutor(async (request: QueuedRequest) => {
         try {
-          const response = await this.axiosInstance.request({
+          // P2 (fix-2.2.0-blockers): native-fetch transport bypasses axios
+          // entirely, but `dispatchNativeFetch` throws through the SAME
+          // `normalizeApiError` classifier the axios response interceptor
+          // uses below, so the transformed-error assumption this catch block
+          // relies on (see the comment just below) holds for both transports.
+          const replayConfig = {
             method: request.method,
             url: request.url,
             data: request.body,
@@ -197,7 +233,10 @@ export class ApiClient {
             // by the auto-queue path in apiClient/errors.ts (which would duplicate
             // the request). The manager's own retry accounting owns replay failures.
             ...( { __minderReplay: true } as Record<string, unknown> ),
-          });
+          };
+          const response = this.useNativeFetch
+            ? await this.dispatchNativeFetch(replayConfig)
+            : await this.axiosInstance.request(replayConfig);
           return response.data;
         } catch (err) {
           // This same axiosInstance's response interceptor (setupInterceptors,
@@ -245,7 +284,7 @@ export class ApiClient {
       this.ownsPluginManager = true;
       config.plugins.forEach((p) => this.pluginManager.register(p));
     } else {
-      this.pluginManager = globalPluginManager;
+      this.pluginManager = pluginManagerSingleton();
     }
     if (this.pluginManager.size > 0) {
       // onInit is isolated per-plugin inside the manager; don't block construction.
@@ -413,6 +452,332 @@ export class ApiClient {
     this.failedQueue = [];
   }
 
+  /**
+   * Auth token injection, CSRF header, rate-limit check, and CORS headers —
+   * extracted VERBATIM from the axios request interceptor (setupInterceptors,
+   * below) so the native-fetch transport (P2, dispatchNativeFetch) gets the
+   * exact same security-header behavior as the axios path, from one place,
+   * with no drift between them. Mutates `headers` in place; throws
+   * `MinderNetworkError` on a rate-limit rejection (unchanged from the
+   * original inline behavior — that throw was always caught by the request
+   * interceptor's own rejection handler, propagating out of the request the
+   * same way it does when thrown from here).
+   */
+  private async applySecurityHeaders(
+    headers: Record<string, string>,
+    method: string,
+    url: string
+  ): Promise<void> {
+    let token = this.authManager.getToken(); // Add auth token if available
+    if (!token && this.pluginManager.size > 0) {
+      // Auth-provider plugins (Firebase/Auth0/Clerk…) can supply the token.
+      token = await this.pluginManager.collectToken();
+    }
+    if (token) {
+      const authHeader = this.config.auth?.authHeader || 'Authorization';
+      const authPrefix = this.config.auth?.authTokenPrefix !== undefined ? this.config.auth.authTokenPrefix : 'Bearer';
+      headers[authHeader] = authPrefix ? `${authPrefix} ${token}` : token;
+    }
+
+    // CSRF Protection
+    if (this.csrfManager) {
+      const csrfConfig = typeof this.config.security?.csrfProtection === 'object'
+        ? this.config.security.csrfProtection
+        : { enabled: true, headerName: 'X-CSRF-Token' };
+      const headerName = csrfConfig.headerName || 'X-CSRF-Token';
+      headers[headerName] = this.csrfManager.getToken();
+    }
+
+    // Rate limiting check
+    if (this.rateLimiter && this.config.security?.rateLimiting) {
+      const key = `${method}:${url}`;
+      const { requests, window } = this.config.security.rateLimiting;
+      if (!this.rateLimiter.check(key, requests, window)) {
+        telemetry.recordRateLimitHit();
+        throw new MinderNetworkError('Rate limit exceeded. Please try again later.', 429, undefined, 'RATE_LIMIT_EXCEEDED');
+      }
+    }
+
+    // Add CORS headers automatically
+    if (this.corsManager) {
+      const corsHeaders = this.corsManager.getCorsHeaders(method as HttpMethod, headers);
+      Object.assign(headers, corsHeaders);
+    }
+  }
+
+  /**
+   * fix-2.2.0-blockers (ALSO REQUIRED — sensitive-header coverage gap): the
+   * header NAMES axios's `sensitiveHeaders` option strips on any
+   * cross-origin redirect hop (see the doc comment at its call sites in
+   * `dispatchResolved`/`requestRaw`). Previously only a registered route's
+   * OWN declared header names were listed — that misses two things:
+   *
+   *   1. follow-redirects (axios's Node http adapter) only strips
+   *      `Authorization`/`Cookie`/`Proxy-Authorization` by its OWN built-in
+   *      default, hardcoded by literal name. A hand-configured
+   *      `config.auth.authHeader` (e.g. `'X-Auth-Token'`) is a name
+   *      follow-redirects has never heard of — that header would ride along
+   *      to a redirect target unmodified unless THIS list names it too.
+   *   2. `requestRaw`'s ad-hoc/absolute-URL dispatch previously set NO
+   *      `sensitiveHeaders` at all, even though it goes through the exact
+   *      same axios request interceptor (`applySecurityHeaders`) that
+   *      attaches the SAME bearer token.
+   *
+   * Always includes the effective auth header name (defaulting the same way
+   * `applySecurityHeaders` does) and the CSRF header name when CSRF
+   * protection is configured, plus any route-declared header names the
+   * caller supplies. Single source of truth for both dispatch paths so they
+   * can never independently drift out of sync with each other again — see
+   * `./apiClient/sensitiveHeaders.ts` for the actual implementation, also
+   * called directly by the standalone `minder()` path (fix-b-redirect-
+   * credential-leak, BLOCKER 2).
+   */
+  private sensitiveHeaderNames(routeHeaders?: Record<string, string>): string[] {
+    return computeSensitiveHeaderNames(this.config, routeHeaders);
+  }
+
+  /**
+   * P2 (fix-2.2.0-blockers): build a plain object shaped like an AxiosError
+   * (`isAxiosError: true` + either `.response` or `.request`) from a native
+   * `fetch()` outcome, so the EXISTING `normalizeApiError`/`buildApiError`
+   * classifier (core/apiClient/errors.js) — which duck-types axios errors —
+   * handles it identically to a real axios failure: same MinderNetworkError/
+   * MinderAuthError/etc mapping, same offline auto-queue integration. Never
+   * imports or constructs a real `AxiosError`, so this stays reachable even
+   * when nothing else in this dispatch touched axios.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private buildFetchAxiosLikeError(params: {
+    message: string;
+    code?: string;
+    url: string;
+    method: string;
+    response?: { status: number; data: unknown; headers: Record<string, string> };
+  }): any {
+    const { message, code, url, method, response } = params;
+    return {
+      isAxiosError: true,
+      message,
+      code,
+      config: { url, method },
+      request: response ? undefined : {},
+      response,
+    };
+  }
+
+  /**
+   * P2 (fix-2.2.0-blockers): the native-fetch transport. Used INSTEAD of
+   * `this.axiosInstance.request(...)` when `this.useNativeFetch` is true
+   * (explicit `transport:'fetch'`, or auto-detected edge runtime) — see the
+   * constructor. Never touches axios's request/response dispatch, so it
+   * works in runtimes (bare Cloudflare Workerd and similar) where axios's
+   * Node-oriented HTTP adapter machinery cannot run. Applies the SAME
+   * auth/CSRF/rate-limit/CORS headers as the axios path (applySecurityHeaders
+   * above) and normalizes failures through the SAME `normalizeApiError`
+   * classifier (via `this.handleError`), including the offline auto-queue
+   * integration, analytics/telemetry error tracking, and `config.onError`.
+   *
+   * Deliberately minimal: no retry-with-backoff and no 401 token-refresh
+   * chain (both live in the axios response interceptor and are not
+   * replicated here) — an explicit, documented trade-off of the escape hatch,
+   * matching `minder()`'s own standalone edge/fetch path, which has the same
+   * limitation.
+   */
+  private async dispatchNativeFetch(requestConfig: AxiosRequestConfig): Promise<AxiosResponse> {
+    const method = (requestConfig.method || 'GET').toString().toUpperCase();
+
+    // HIGH (transport-and-packaging fix): axios's own dispatch
+    // (axiosInstance.request(...)) automatically merges the INSTANCE's own
+    // default headers (Content-Type/Accept: 'application/json' — see the
+    // constructor) into every request before it reaches the wire. This
+    // transport bypasses axios's dispatch entirely, so it never saw that
+    // merge: a plain-object body with no explicit per-route/per-call
+    // Content-Type (the ordinary case) reached fetch with NO Content-Type at
+    // all, and fetch defaults an un-typed string body to
+    // 'text/plain;charset=UTF-8' instead of 'application/json' — a real API
+    // then rejects or mis-parses it. Confirmed divergence: the standalone
+    // minder() path bakes the SAME default straight into its own request
+    // config (minder.ts's defaultMinderUrlConfig) and never had this gap —
+    // only the provider's native-fetch transport did. Only the axios
+    // instance's STRING-valued default headers are flattened in here; the
+    // object-valued buckets (`common`/`get`/`post`/.../`query`) are axios's
+    // own internal per-method structure, never real header names, and must
+    // never be spread onto the wire as literal header keys. Per-route/
+    // per-call headers in `requestConfig.headers` are applied AFTER and win
+    // outright — including an explicit `Content-Type: undefined` (see
+    // `applyRequestBody` in apiClient/upload.ts, which deletes-then-marks-
+    // undefined for a FormData body specifically so this merge can never
+    // silently reintroduce 'application/json' under a multipart upload).
+    // `undefined`-valued entries are filtered out just below so
+    // fetch's `Headers` never receives a literal "undefined" string.
+    const axiosDefaultHeaders = this.axiosInstance.defaults.headers as Record<string, unknown> | undefined;
+    const defaultHeaders: Record<string, string> = {};
+    if (axiosDefaultHeaders) {
+      for (const [key, value] of Object.entries(axiosDefaultHeaders)) {
+        if (typeof value === 'string') {
+          defaultHeaders[key] = value;
+        }
+      }
+    }
+    const mergedHeaders: Record<string, string | undefined> = {
+      ...defaultHeaders,
+      ...(requestConfig.headers as Record<string, string | undefined> | undefined),
+    };
+    const headers: Record<string, string> = {};
+    for (const [key, value] of Object.entries(mergedHeaders)) {
+      if (value !== undefined) {
+        headers[key] = value;
+      }
+    }
+
+    // `requestConfig` (built by request()/requestRaw() above) carries the
+    // route's RELATIVE `url` only — the base URL normally lives on the axios
+    // INSTANCE's own `defaults.baseURL` (set from `config.apiBaseUrl` at
+    // construction) and axios combines the two internally on dispatch. This
+    // transport bypasses that combination step entirely, so it must resolve
+    // the base URL itself: an explicit `requestConfig.baseURL` (e.g. the
+    // proxy-rewrite / absolute-URL branches, which set it to `''`) wins;
+    // otherwise fall back to the instance default. Absolute URLs are used
+    // verbatim either way, mirroring axios's own and minder()'s behavior.
+    const routeUrl = requestConfig.url || '';
+    const isAbsoluteRouteUrl = /^https?:\/\//i.test(routeUrl);
+    const baseURL = requestConfig.baseURL !== undefined
+      ? requestConfig.baseURL
+      : (this.axiosInstance.defaults.baseURL || '');
+    let fullUrl = isAbsoluteRouteUrl ? routeUrl : `${baseURL}${routeUrl}`;
+    if (requestConfig.params && typeof requestConfig.params === 'object') {
+      const query = new URLSearchParams();
+      Object.entries(requestConfig.params as Record<string, unknown>).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          query.append(key, String(value));
+        }
+      });
+      const queryString = query.toString();
+      if (queryString) {
+        fullUrl += (fullUrl.includes('?') ? '&' : '?') + queryString;
+      }
+    }
+
+    await this.applySecurityHeaders(headers, method, fullUrl);
+
+    if (this.debugManager && this.config.debug?.networkLogs) {
+      this.debugManager.log(DebugLogType.API, `🚀 ${method} ${fullUrl}`, {
+        method,
+        url: fullUrl,
+        headers: this.sanitizeHeaders(headers),
+        data: redactSecrets(requestConfig.data),
+        params: redactSecrets(requestConfig.params),
+      });
+    }
+
+    const startTime = Date.now();
+    this.emitPluginRequest({ ...requestConfig, url: fullUrl, method, headers });
+
+    // BLOCKER 2 (transport-and-packaging fix): a FormData body (file upload —
+    // ApiClient.uploadFile -> request() -> dispatch()) previously fell into
+    // the `JSON.stringify(requestConfig.data)` branch below, which
+    // stringifies a FormData instance to the literal string '{}' (it has no
+    // enumerable own properties) — a broken, empty body reaching the server
+    // regardless of transport, the moment `transport:'fetch'` routed an
+    // upload through this method. fetch (like axios) accepts a FormData body
+    // directly and computes its own multipart boundary; pass it through
+    // untouched instead of stringifying it. Its Content-Type is never forced
+    // here either — `applyRequestBody` (apiClient/upload.ts) already deleted
+    // the hand-set, boundary-less 'multipart/form-data' header for exactly
+    // this reason (the SAME removal the axios dispatch path relies on), and
+    // the header-merge above respects that deletion, so fetch is free to set
+    // its own correctly-boundaried Content-Type.
+    const isFormDataBody = typeof FormData !== 'undefined' && requestConfig.data instanceof FormData;
+
+    // Deliberately minimal RequestInit — no `cache`, no `credentials`, no
+    // exotic fields: bare edge runtimes (workerd and similar) reject
+    // RequestInit properties they don't implement, so the safest transport
+    // is the smallest one that still works everywhere fetch works.
+    const init: RequestInit = {
+      method,
+      headers,
+      body: method !== 'GET' && method !== 'HEAD' && requestConfig.data !== undefined
+        ? (isFormDataBody || typeof requestConfig.data === 'string'
+            ? requestConfig.data
+            : JSON.stringify(requestConfig.data))
+        : undefined,
+    };
+    if (requestConfig.timeout) {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(), requestConfig.timeout);
+      init.signal = controller.signal;
+    }
+
+    let fetchResponse: Response;
+    try {
+      fetchResponse = await fetch(fullUrl, init);
+    } catch (err) {
+      const networkError = this.buildFetchAxiosLikeError({
+        message: err instanceof Error ? err.message : 'Network error',
+        code: 'ERR_NETWORK',
+        url: fullUrl,
+        method,
+      });
+      throw this.finalizeAndThrowError(networkError);
+    }
+
+    const responseHeaders: Record<string, string> = {};
+    fetchResponse.headers.forEach((value, key) => {
+      responseHeaders[key] = value;
+    });
+
+    const contentType = fetchResponse.headers.get('content-type');
+    const responseData = contentType?.includes('application/json')
+      ? await fetchResponse.json().catch(() => null)
+      : await fetchResponse.text().catch(() => '');
+
+    if (!fetchResponse.ok) {
+      const httpError = this.buildFetchAxiosLikeError({
+        message: fetchResponse.statusText || `Request failed with status code ${fetchResponse.status}`,
+        url: fullUrl,
+        method,
+        response: { status: fetchResponse.status, data: responseData, headers: responseHeaders },
+      });
+      throw this.finalizeAndThrowError(httpError);
+    }
+
+    const response = {
+      data: responseData,
+      status: fetchResponse.status,
+      statusText: fetchResponse.statusText,
+      headers: responseHeaders,
+      config: { ...requestConfig, url: fullUrl, method, headers, __minderStart: startTime } as AxiosRequestConfig,
+    } as AxiosResponse;
+
+    this.emitPluginResponse(response);
+    return response;
+  }
+
+  /**
+   * Shared terminal-error handling for a native-fetch failure: normalizes it
+   * (offline auto-queue included), fires the SAME analytics/telemetry/
+   * plugin/onError hooks the axios response interceptor fires on failure,
+   * and returns the normalized `ApiError` for the caller to `throw`. Kept as
+   * a return-not-throw helper so call sites read `throw this.finalize...()`
+   * — TypeScript then knows the call site is unreachable after it, matching
+   * the axios path's `Promise.reject(apiError)` semantics.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private finalizeAndThrowError(fetchAxiosLikeError: any): ApiError {
+    this.emitPluginError(fetchAxiosLikeError as AxiosError);
+    const apiError = this.handleError(fetchAxiosLikeError);
+    if (this.analyticsManager) {
+      this.analyticsManager.trackError(apiError, `${fetchAxiosLikeError.config?.method} ${fetchAxiosLikeError.config?.url}`);
+    }
+    if (this.telemetryManager) {
+      this.telemetryManager.trackError(apiError, 'API_REQUEST_FAILURE');
+    }
+    if (this.config.onError) {
+      this.config.onError(apiError);
+    }
+    return apiError;
+  }
+
   private setupInterceptors() {
     // Request interceptor for auth, CORS, and security
     this.axiosInstance.interceptors.request.use(
@@ -441,44 +806,11 @@ export class ApiClient {
           });
         }
 
-        let token = this.authManager.getToken(); // Add auth token if available
-        if (!token && this.pluginManager.size > 0) {
-          // Auth-provider plugins (Firebase/Auth0/Clerk…) can supply the token.
-          token = await this.pluginManager.collectToken();
-        }
-        if (token) {
-          const authHeader = this.config.auth?.authHeader || 'Authorization';
-          const authPrefix = this.config.auth?.authTokenPrefix !== undefined ? this.config.auth.authTokenPrefix : 'Bearer';
-          config.headers[authHeader] = authPrefix ? `${authPrefix} ${token}` : token;
-        }
-
-        // CSRF Protection
-        if (this.csrfManager) {
-          const csrfConfig = typeof this.config.security?.csrfProtection === 'object'
-            ? this.config.security.csrfProtection
-            : { enabled: true, headerName: 'X-CSRF-Token' };
-          const headerName = csrfConfig.headerName || 'X-CSRF-Token';
-          config.headers[headerName] = this.csrfManager.getToken();
-        }
-
-        // Rate limiting check
-        if (this.rateLimiter && this.config.security?.rateLimiting) {
-          const key = `${config.method}:${config.url}`;
-          const { requests, window } = this.config.security.rateLimiting;
-          if (!this.rateLimiter.check(key, requests, window)) {
-            telemetry.recordRateLimitHit();
-            throw new MinderNetworkError('Rate limit exceeded. Please try again later.', 429, undefined, 'RATE_LIMIT_EXCEEDED');
-          }
-        }
-
-        // Add CORS headers automatically
-        if (this.corsManager) {
-          const corsHeaders = this.corsManager.getCorsHeaders(
-            config.method as HttpMethod,
-            config.headers as Record<string, string>
-          );
-          Object.assign(config.headers, corsHeaders);
-        }
+        await this.applySecurityHeaders(
+          config.headers as Record<string, string>,
+          (config.method || 'GET').toString(),
+          config.url || ''
+        );
 
         // Stamp start time + fire plugin request hooks (non-blocking observability)
         (config as { __minderStart?: number }).__minderStart = Date.now();
@@ -732,7 +1064,9 @@ export class ApiClient {
             } else if (corsHandling.useProxy && this.proxyManager) {
               // Retry through proxy
               const proxyConfig = { ...error.config };
-              proxyConfig.url = this.proxyManager.rewriteUrl(error.config?.url || '', {} as ApiRoute);
+              // `rewriteUrl`'s second parameter is optional and unused by the
+              // implementation (see ProxyManager.ts) — no route to narrow here.
+              proxyConfig.url = this.proxyManager.rewriteUrl(error.config?.url || '');
               proxyConfig.baseURL = '';
               return this.axiosInstance.request(proxyConfig);
             } else if (corsHandling.fallbackUrl) {
@@ -793,9 +1127,19 @@ export class ApiClient {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     data?: any,
     params?: Record<string, unknown>,
-    // `rawUrl` is a Minder-only escape-hatch flag (not an axios option); it is
-    // stripped before the config reaches axios.
-    options?: AxiosRequestConfig & { rawUrl?: boolean }
+    // `rawUrl` and `urlOverride` are Minder-only escape-hatch flags (not axios
+    // options); both are stripped before the config reaches axios.
+    // `urlOverride` (HIGH, fix-2.2.0-blockers, adversarial re-probe): lets a
+    // caller that already knows `routeName` IS a registered route (e.g.
+    // useMinder's N1 Golden Path collection-form resolution) request a
+    // MODIFIED starting URL — typically the route's own URL with a trailing
+    // ':id' segment stripped — while dispatch stays THROUGH the registered
+    // route below, so `route.headers`/`route.schema`/`route.timeout`/
+    // dedup/model transform all still apply. Without this, the only way to
+    // dispatch a rewritten URL was the ad-hoc/`requestRaw` path (an
+    // unregistered raw path), which carries none of that route config —
+    // silently failing open on auth headers and response validation.
+    options?: CallerRequestOptions
   ): Promise<T> {
     // ── Ad-hoc / third-party escape hatch (mirrors useMinder's route-validation
     //    exemption and minder()'s standalone behavior) ─────────────────────────
@@ -807,8 +1151,14 @@ export class ApiClient {
       return this.requestRaw<T>(routeName, data, params, options, isAbsoluteUrl);
     }
 
-    const route = this.config.routes?.[routeName];
-    if (!route) {
+    // fix-2.2.0-blockers (REDESIGN): kept as `registeredRoute` — the DECLARED
+    // route straight off the registry — deliberately never named `route`
+    // beyond this point. `route` is reserved for the NARROWED, resolved
+    // config a few lines down (see `resolveRequest`); this raw declared
+    // value is only used to build that resolution and, further down, as the
+    // `ApiRoute` argument `proxyManager.rewriteUrl` still expects.
+    const registeredRoute = this.config.routes?.[routeName];
+    if (!registeredRoute) {
       // An ad-hoc relative PATH (leading "/") that is not a registered route
       // NAME is treated as a raw path resolved against baseURL. This lets
       // provider-mode `useMinder('/ad-hoc')` work without the hook having to
@@ -833,21 +1183,144 @@ export class ApiClient {
       throw error;
     }
 
-    let url = route.url;
-    // let url = `${ this.config.apiBaseUrl }${ route.url }`;
+    // fix-2.2.0-blockers (item 1, SINGLE CHOKE POINT): the ONE place a
+    // caller's per-call `options` bag is ever converted into anything that
+    // can reach the outgoing axios config — see requestOptions.ts'
+    // `extractCallerRequestOptions` doc comment for why this makes the
+    // fourth exfiltration channel structurally unreachable, not merely
+    // patched. `otherOptions`/raw `options` no longer exist as bindings past
+    // this line: `forwardable` (already narrowed to
+    // `ForwardableRequestOptions` — no `url`/`baseURL`/`proxy`/... member)
+    // and `schema` (the one other field genuinely needed downstream) are the
+    // ONLY things carried forward.
+    const {
+      headers: customHeaders,
+      method: optionMethod,
+      params: optionParams,
+      urlOverride,
+      schema,
+      forwardable,
+    } = extractCallerRequestOptions(options);
 
-    // Replace URL parameters
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        url = url.replace(`:${key}`, String(value));
-      });
-    }
+    // fix-2.2.0-blockers (REDESIGN — ResolvedRequest): the ONE place
+    // method/url are computed for this request. `route` from here on is the
+    // NARROWED `ResolvedRouteConfig` (headers/timeout/schema/model only) —
+    // `route.method`/`route.url` are gone; every downstream decision below
+    // (the axios/fetch dispatch config, the in-flight cache key, GET-dedup
+    // gating) reads `method`/`url` from this ONE resolution, never the
+    // DECLARED `registeredRoute.method`/`registeredRoute.url` again. That
+    // "declared vs. resolved" divergence was the actual defect: an
+    // `operations.create()` call resolves through a GET base route with an
+    // explicit POST method OVERRIDE (see resolveCrudOperationRoute), so the
+    // DISPATCHED method was always correctly POST — but the cache-key/dedup
+    // gating previously re-read `registeredRoute.method` (still 'GET') and
+    // treated a real POST as a cacheable/dedupable GET. Two concurrent
+    // `operations.create()` calls collapsed into ONE POST; a concurrent
+    // `refetch()` (a genuine GET on the same base route/url/body) produced
+    // the IDENTICAL cache key and could satisfy a concurrent create() with
+    // its own cached GET response — ZERO POSTs reaching the wire while
+    // create() still reported `success:true`. MEDIUM: `resolveRequest`
+    // substitutes every OCCURRENCE of a repeated `:id` placeholder (not just
+    // the first). C5: `consumedKeys` is what a ":id" route substituted into
+    // the URL PATH, so it is excluded from the query-string below (no
+    // redundant "?id=" alongside the path substitution).
+    // item 3 (fix-2.2.0-blockers, adversarial re-probe): PATH substitution
+    // must see params from EITHER source — the dedicated positional `params`
+    // argument OR `options.params` — never just the former. Previously only
+    // `params` reached `resolveRequest`, so a caller supplying the id via
+    // `options.params` (e.g. `{ params: { id: 7 } }`) left the route's ':id'
+    // placeholder UNRESOLVED while the redundant '?id=7' still landed on the
+    // wire (observed: `DELETE /thing/:id?id=7`). `consumedKeys` below is
+    // still computed from THIS merged set, so the query-string filter a few
+    // lines down correctly excludes a key regardless of which source it came
+    // from. Positional `params` wins on key collision (it was always the
+    // dedicated path-params channel).
+    const pathParams =
+      optionParams && typeof optionParams === 'object'
+        ? { ...(optionParams as Record<string, unknown>), ...(params || {}) }
+        : params;
 
-    // Extract headers from options to prevent overwriting during spread
-    const { headers: customHeaders, ...otherOptions } = options || {};
+    // fix-2.2.0-blockers (STRUCTURAL REDESIGN, item 1): `resolveRequest` is
+    // the LAST place this function reads `registeredRoute` — everything past
+    // this point runs in `dispatchResolved`, a SEPARATE method that receives
+    // only the narrowed `ResolvedRequestWithKeys`. `registeredRoute` (the
+    // full `ApiRoute`, carrying its own `.method`/`.url`) is therefore
+    // genuinely OUT OF LEXICAL SCOPE for all post-resolution dispatch logic —
+    // not merely unused-by-convention. A future `registeredRoute.method` or
+    // `registeredRoute.url` reintroduced anywhere in `dispatchResolved` is a
+    // TypeScript compile error (`registeredRoute` does not exist there), not
+    // a silent runtime divergence the next adversarial probe has to
+    // rediscover. See `resolveRequest.ts`'s `ResolvedRequest` doc comment for
+    // the four-round history this closes.
+    const resolved = resolveRequest(registeredRoute, pathParams, { method: optionMethod, url: urlOverride });
+    return this.dispatchResolved<T>(
+      routeName,
+      resolved,
+      data,
+      optionParams,
+      customHeaders,
+      forwardable,
+      schema as StandardSchemaV1 | undefined
+    );
+  }
+
+  /**
+   * fix-2.2.0-blockers (STRUCTURAL REDESIGN, item 1): everything `request()`
+   * does AFTER route resolution, extracted into its own method so the
+   * DECLARED `registeredRoute` (a full `ApiRoute`, with its own `.method`/
+   * `.url`) cannot be read here even by accident — it is not a parameter and
+   * there is no other binding for it in this method's scope. Every
+   * method/url decision below reads exclusively from `resolved`
+   * (`ResolvedRequestWithKeys`) — normalized method, path-substituted url,
+   * and the NARROWED `ResolvedRouteConfig` (`headers`/`timeout`/`schema`/
+   * `model` only). Verified: adding a `resolved.route.method` or
+   * `resolved.route.url` read anywhere in this method is a `tsc` compile
+   * error, since `ResolvedRouteConfig` has neither key — proven directly
+   * (inject the reader, observe the error, remove it) rather than merely
+   * asserted.
+   *
+   * fix-2.2.0-blockers (item 3, COMPILE-TIME PROOF): `forwardable` is typed
+   * `ForwardableRequestOptions` — a `Pick<AxiosRequestConfig, 'timeout' |
+   * 'signal' | 'responseType' | 'onUploadProgress' | 'onDownloadProgress' |
+   * 'withCredentials' | 'validateStatus' | 'paramsSerializer' |
+   * 'decompress'>` — not `AxiosRequestConfig`. There is no `options: ...`
+   * parameter carrying the full per-call bag anymore either (only the one
+   * OTHER genuinely-needed field, `schema`, is threaded through
+   * separately). `forwardable.url` / `forwardable.baseURL` /
+   * `forwardable.proxy` are therefore `TS2339: Property '...' does not
+   * exist on type 'ForwardableRequestOptions'` — proven directly: pasting
+   * `const leak = forwardable.url;` here fails `tsc -p tsconfig.json` with
+   * exactly that error (see the task report for the captured output).
+   * `assertNoOriginOrTransportOptions` no longer needs to run here at all —
+   * it already ran, unconditionally, inside
+   * `extractCallerRequestOptions` (the ONLY function that produces a
+   * `ForwardableRequestOptions` value), so by the time `forwardable`
+   * reaches this method the origin/transport keys have already been
+   * refused or were never present.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async dispatchResolved<T = any>(
+    routeName: string,
+    resolved: ResolvedRequestWithKeys,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data: any,
+    optionParams: Record<string, unknown> | undefined,
+    customHeaders: AxiosRequestConfig['headers'] | undefined,
+    forwardable: ForwardableRequestOptions,
+    schema: StandardSchemaV1 | undefined
+  ): Promise<T> {
+    const { method, url, route, consumedKeys } = resolved;
+
+    const queryParams =
+      optionParams && typeof optionParams === 'object' && consumedKeys.size > 0
+        ? Object.fromEntries(
+            Object.entries(optionParams as Record<string, unknown>).filter(
+              ([key]) => !consumedKeys.has(key)
+            )
+          )
+        : optionParams;
 
     const requestConfig: AxiosRequestConfig = {
-      method: route.method,
       url,
       headers: {
         ...route.headers,
@@ -855,22 +1328,54 @@ export class ApiClient {
         ...(customHeaders || {})
       },
       timeout: route.timeout || this.proxyManager?.getTimeout() || this.config.performance?.timeout,
-      ...otherOptions,
+      // fix-2.2.0-blockers (SECURITY, round 2; item 1/3 STRUCTURAL FIX):
+      // `forwardable` — never a raw options bag — see requestOptions.ts'
+      // `extractCallerRequestOptions`/`FORWARDABLE_REQUEST_OPTION_KEYS`.
+      // Only the vetted, non-origin, non-transport keys can ever reach this
+      // config from a per-call option; every origin-changing/
+      // transport-hijacking key was already refused before this method was
+      // even called, and anything else unvetted is silently dropped by the
+      // allowlist itself — "forward only what's explicitly permitted", not
+      // "block what we happened to think of".
+      ...forwardable,
+      ...(queryParams !== undefined ? { params: queryParams } : {}),
+      // Set LAST so neither the allowlisted per-call options above nor any
+      // other key can clobber the RESOLVED method — already normalized
+      // (trimmed/uppercased) by `resolveRequest`, so an untrimmed hand-built
+      // `{ method: 'POST ' }` reaches axios/fetch as a clean 'POST' instead
+      // of a raw HTTP-invalid token (previously: a bare TypeError reading
+      // `_retryCount` off `undefined`, because axios/Node's http layer threw
+      // BEFORE attaching `error.config` for that malformed method).
+      method,
     };
 
-    // Apply proxy rewriting if enabled
+    // fix-2.2.0-blockers (SECURITY, non-blocking hardening — cross-origin
+    // redirect leak): a 3xx response from the route's OWN, trusted host can
+    // redirect to ANY host via `Location`, and axios/follow-redirects
+    // (Node's http adapter) transparently follows it. follow-redirects
+    // already strips `Authorization`/`Cookie`/`Proxy-Authorization` on a
+    // cross-origin (non-subdomain) hop by default, but NOT arbitrary custom
+    // headers — a route-declared static secret header (e.g. `X-Api-Key`)
+    // would otherwise ride along to whatever host the FIRST hop's response
+    // pointed at. `sensitiveHeaders` is axios's own, built-in mechanism for
+    // exactly this (see axios's Node http adapter / follow-redirects'
+    // `_headerFilter`). Set here, unconditionally, from `route.headers` PLUS
+    // the effective auth/CSRF header names (see `sensitiveHeaderNames` —
+    // ALSO REQUIRED: a hand-configured `config.auth.authHeader` other than
+    // the default 'Authorization' is a name follow-redirects' own built-in
+    // default never covers) — NEVER from `forwardable`/a per-call option (it
+    // is deliberately absent from `FORWARDABLE_REQUEST_OPTION_KEYS`), so a
+    // caller can never widen or shrink which headers survive a redirect.
+    requestConfig.sensitiveHeaders = this.sensitiveHeaderNames(route.headers);
+
+    // Apply proxy rewriting if enabled. `route` here is the NARROWED
+    // `ResolvedRouteConfig` — `ProxyManager.rewriteUrl`'s second parameter is
+    // typed to that narrowed shape (it never reads `.method`/`.url` off it
+    // anyway; see ProxyManager.ts), so the declared `ApiRoute` never needs to
+    // flow this far even as a pass-through argument.
     if (this.proxyManager?.isEnabled()) {
       requestConfig.url = this.proxyManager.rewriteUrl(url, route);
       requestConfig.baseURL = '';
-    }
-
-    // Request deduplication for GET requests
-    const cacheKey = `${route.method}: ${url}: ${JSON.stringify(data || {})}`;
-    if (route.method === 'GET' && this.config.performance?.deduplication) {
-      const cachedRequest = this.requestCache.get(cacheKey);
-      if (cachedRequest) {
-        return cachedRequest;
-      }
     }
 
     // Handle different content types with sanitization. D4: the sanitizer
@@ -898,27 +1403,102 @@ export class ApiClient {
       return scData as T;
     }
 
+    // fix-2.2.0-blockers (dedup/cache-key STRUCTURAL fix, adversarial
+    // re-probe round 2 — "phantom success", THEN re-probed again: two
+    // wire-affecting fields (`requestConfig.params`/`requestConfig.headers`)
+    // were STILL never in the key at all): the key is now derived from
+    // `requestConfig` itself, IN FULL — the EXACT object `dispatch()` below
+    // hands to axios/fetch — computed HERE, after every mutation point that
+    // can change it: the proxy rewrite above, and any plugin
+    // `onRequestIntercept` mutation via `runRequestInterceptors` just above
+    // (which rewrites `.url`/`.method`/`.headers`/`.params`/`.data` IN PLACE
+    // — see its doc comment).
+    //
+    // Two concurrent GETs to the SAME route with DIFFERENT
+    // `{ params: { q: 'alpha' } }` / `{ q: 'beta' }` previously produced the
+    // SAME key (params was never read for it at all) — ONE wire request,
+    // BOTH callers got the 'alpha' body. Two concurrent GETs with
+    // DIFFERENT per-call `{ headers: { 'X-User': 'alice' } }` / `'bob'`
+    // collapsed the same way — cross-tenant response disclosure under
+    // per-request auth. The previous fix derived the key from `requestConfig`
+    // too, but then re-enumerated only TWO of its fields (`method`, `url`) —
+    // a list that can silently drift out of sync with what
+    // `requestConfig` actually carries the moment a THIRD wire-affecting
+    // field (`params`, `headers`, ...) is added or starts being read from
+    // it, exactly as happened here. `JSON.stringify(requestConfig)` instead
+    // reads the object itself — there is no second, hand-maintained field
+    // list to forget to update: any property `requestConfig` carries at
+    // dispatch time is automatically part of the key, and any property it
+    // DOESN'T carry (e.g. `params`/`headers` being absent) is automatically
+    // NOT part of it. Purely-local, non-wire-affecting fields (`signal` — an
+    // AbortSignal instance, whose own enumerable properties are empty, so it
+    // stringifies to `{}` regardless of identity) can never accidentally
+    // NARROW the key and defeat dedup between two calls that only differ in
+    // an abort handle. `data` no longer needs its own separate expression
+    // either — `applyRequestBody` (above) already wrote the final, sanitized
+    // body onto `requestConfig.data`, so it is already part of the same
+    // object.
+    //
+    // fix-2.2.0-blockers (SHOULD-FIX, dedup-key round 3): a bare
+    // `JSON.stringify(requestConfig)` has its OWN blind spot — it silently
+    // DROPS function-valued fields entirely (rather than merely stringifying
+    // them oddly), so it could never distinguish two calls differing only in
+    // `paramsSerializer` (added to the forwardable allowlist by the previous
+    // round, and genuinely wire-affecting: it changes the encoded query
+    // string) — or in a `URLSearchParams`/`FormData` body, which have no
+    // enumerable own properties and stringify to `{}` regardless of content.
+    // `serializeRequestConfigForDedupKey` (apiClient/dedupKey.ts) walks the
+    // SAME `requestConfig` object via `JSON.stringify`'s own replacer and
+    // repairs exactly those blind spots generically (by TYPE, not by naming
+    // `paramsSerializer` specifically) — see its own doc comment for why a
+    // named special case is exactly the mistake this class of bug keeps
+    // recurring from.
+    const dispatchedMethod = (requestConfig.method ?? method).toString().toUpperCase();
+    const cacheKey = `${dispatchedMethod}:${serializeRequestConfigForDedupKey(requestConfig)}`;
+    const isGet = dispatchedMethod === HttpMethod.GET;
+    if (isGet && this.config.performance?.deduplication) {
+      const cachedRequest = this.requestCache.get(cacheKey);
+      if (cachedRequest) {
+        return cachedRequest;
+      }
+    }
+
     // Execute request with caching for GET
     const startTime = performance.now();
 
     let requestPromise: Promise<AxiosResponse<T>>;
 
+    // P2 (fix-2.2.0-blockers): native-fetch transport bypasses axios's own
+    // dispatch entirely — see `dispatchNativeFetch` / the constructor.
+    const dispatch = (): Promise<AxiosResponse<T>> =>
+      (this.useNativeFetch
+        ? this.dispatchNativeFetch(requestConfig)
+        : this.axiosInstance.request(requestConfig)) as Promise<AxiosResponse<T>>;
+
     // Use deduplication if enabled
-    if (this.deduplicator && route.method === 'GET') {
-      requestPromise = this.deduplicator.deduplicate(cacheKey, () =>
-        this.axiosInstance.request(requestConfig)
-      );
+    if (this.deduplicator && isGet) {
+      requestPromise = this.deduplicator.deduplicate(cacheKey, dispatch);
     } else {
-      requestPromise = this.axiosInstance.request(requestConfig);
+      requestPromise = dispatch();
 
       // Simple cache logic (fallback)
-      if (route.method === 'GET' && this.config.performance?.deduplication) {
+      if (isGet && this.config.performance?.deduplication) {
         this.requestCache.set(cacheKey, requestPromise);
 
-        // Clean up cache after request completes
-        requestPromise.finally(() => {
-          setTimeout(() => this.requestCache.delete(cacheKey), 1000);
-        });
+        // Clean up cache after request completes. F5 (fix-2.2.0-blockers):
+        // `.finally()`'s return value is a NEW promise that adopts
+        // `requestPromise`'s eventual state, so a real request failure (e.g.
+        // a dead port) makes this DERIVED promise reject too. `requestPromise`
+        // itself is awaited just below and its rejection is handled by the
+        // caller — this floating derived promise had no handler at all, and
+        // an unhandled rejection can crash a consumer's Node process outright
+        // on a transient network error. `.catch(() => {})` only silences that
+        // redundant derived promise.
+        requestPromise
+          .finally(() => {
+            setTimeout(() => this.requestCache.delete(cacheKey), 1000);
+          })
+          .catch(() => { /* see comment above — requestPromise's rejection is handled by the caller */ });
       }
     }
 
@@ -939,7 +1519,7 @@ export class ApiClient {
     // validator, error class, and throw logic all live in the deferred
     // responseValidation.js chunk, so callers who never configure a schema
     // pay only the bare presence-guard here.
-    const effSchema = (options as { schema?: StandardSchemaV1 } | undefined)?.schema ?? route.schema;
+    const effSchema = schema ?? route.schema;
     if (effSchema) {
       const { validateResponseOrThrow } = await import('./responseValidation.js');
       response.data = await validateResponseOrThrow<any>(response.data, effSchema, response.status);
@@ -967,6 +1547,31 @@ export class ApiClient {
    *
    * Method resolution: an explicit `options.method` wins; otherwise a request
    * carrying a body defaults to POST and a bodyless one to GET.
+   *
+   * fix-2.2.0-blockers (item 1, THE FOURTH EXFILTRATION CHANNEL): this method
+   * used to spread the caller's ENTIRE `otherOptions` bag straight into the
+   * outgoing config (`...otherOptions`, AFTER `url:` — so `options.url` won
+   * outright; `options.baseURL`/`options.proxy`/`options.adapter`/... all
+   * reached axios untouched too) — the EXACT shape fixed ~240 lines above in
+   * `request()`'s registered-route path, reintroduced here because the two
+   * methods each built their own axios config from caller options
+   * independently. Reachable from the public API whenever a route name is
+   * path-shaped/unregistered (`request()`'s `routeName.startsWith('/')`
+   * branch) or absolute, including through `useMinder()`'s `axiosConfig`
+   * passthrough — and every request this method dispatches carries the
+   * caller's bearer token (`applySecurityHeaders`, attached by the SAME
+   * axios request interceptor `request()`'s dispatch uses), so an
+   * attacker-controlled `options.url`/`baseURL`/`proxy` here exfiltrates it
+   * exactly like the three channels already closed on the registered-route
+   * path did.
+   *
+   * Now routes through the SAME single choke point —
+   * `extractCallerRequestOptions` (requestOptions.ts) — `request()`'s
+   * registered-route path uses. `otherOptions`/a raw `AxiosRequestConfig`-
+   * shaped caller bag no longer exists as a binding in this method at all;
+   * `forwardable` is already narrowed to `ForwardableRequestOptions`, so
+   * there is no type-legal way for this method to spread `url`/`baseURL`/
+   * `proxy`/... into `requestConfig` even by accident.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async requestRaw<T = any>(
@@ -974,29 +1579,39 @@ export class ApiClient {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     data: any,
     params: Record<string, unknown> | undefined,
-    options: (AxiosRequestConfig & { rawUrl?: boolean }) | undefined,
+    options: CallerRequestOptions | undefined,
     isAbsoluteUrl: boolean
   ): Promise<T> {
-    // Strip the Minder-only `rawUrl` flag so it never leaks into axios config.
+    // `urlOverride` has no meaning here — there is no registered route to
+    // dispatch "through" on this ad-hoc path — so it is simply discarded
+    // rather than applied. `options.params` is a legitimate query-string
+    // passthrough for this path (mirrors `request()`'s registered-route
+    // handling of `optionParams`) — set explicitly below, never through the
+    // allowlist (it isn't, and doesn't need to be, an axios TRANSPORT option).
     const {
       headers: customHeaders,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      rawUrl: _rawUrl,
       method: optionMethod,
-      ...otherOptions
-    } = (options || {}) as AxiosRequestConfig & { rawUrl?: boolean };
+      params: optionParams,
+      schema,
+      forwardable,
+    } = extractCallerRequestOptions(options);
 
     // Resolve the URL: absolute is used verbatim; relative resolves against the
     // instance baseURL. Support trivial `:param` substitution for parity with
-    // registered routes.
-    let url = routeName;
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        url = url.replace(`:${key}`, String(value));
-      });
-    }
+    // registered routes — `substituteUrlParams` is the SAME single-source-of-
+    // truth substitution `request()`'s `resolveRequest` uses (MEDIUM,
+    // fix-2.2.0-blockers: every OCCURRENCE of a repeated `:key` placeholder,
+    // not just the first).
+    const { url } = substituteUrlParams(routeName, params);
 
-    const method = optionMethod || (data === null || data === undefined ? HttpMethod.GET : HttpMethod.POST);
+    // fix-2.2.0-blockers (REDESIGN): normalize an explicit `options.method`
+    // the same way `resolveRequest` does (trim + uppercase) — an untrimmed
+    // hand-built `{ method: 'POST ' }` must dispatch cleanly here too,
+    // instead of reaching axios/fetch as an HTTP-invalid token.
+    const method = normalizeHttpMethod(
+      optionMethod,
+      data === null || data === undefined ? HttpMethod.GET : HttpMethod.POST
+    );
 
     const requestConfig: AxiosRequestConfig = {
       method,
@@ -1006,7 +1621,8 @@ export class ApiClient {
         ...(customHeaders || {})
       },
       timeout: this.proxyManager?.getTimeout() || this.config.performance?.timeout,
-      ...otherOptions,
+      ...forwardable,
+      ...(optionParams !== undefined ? { params: optionParams } : {}),
     };
 
     // Absolute URLs are used verbatim: clear baseURL so the instance's
@@ -1014,6 +1630,14 @@ export class ApiClient {
     if (isAbsoluteUrl) {
       requestConfig.baseURL = '';
     }
+
+    // fix-2.2.0-blockers (ALSO REQUIRED, sensitive-header coverage gap): this
+    // ad-hoc path dispatches through the SAME axios request interceptor that
+    // attaches the caller's bearer token (applySecurityHeaders) — it needs
+    // the SAME cross-origin-redirect protection the registered-route path
+    // gets, which it never had before (no `sensitiveHeaders` was set here at
+    // all).
+    requestConfig.sensitiveHeaders = this.sensitiveHeaderNames();
 
     // Body handling with sanitization, mirroring the registered-route path.
     // D4: await ready() first — see the comment at the other call site above.
@@ -1026,13 +1650,16 @@ export class ApiClient {
       return shortCircuit.response.data as T;
     }
 
-    const response: AxiosResponse<T> = await this.axiosInstance.request(requestConfig);
+    // P2 (fix-2.2.0-blockers): same native-fetch bypass as the registered-route path.
+    const response: AxiosResponse<T> = (this.useNativeFetch
+      ? await this.dispatchNativeFetch(requestConfig)
+      : await this.axiosInstance.request(requestConfig)) as AxiosResponse<T>;
 
     // Task 3.1: opt-in runtime response validation via Standard Schema. No
     // registry route exists for this ad-hoc/raw path (absolute URL or
     // `rawUrl`/leading-slash escape hatch), so only the per-call
     // `options.schema` applies here — there is no route-def to fall back to.
-    const effSchema = (options as { schema?: StandardSchemaV1 } | undefined)?.schema;
+    const effSchema = schema as StandardSchemaV1 | undefined;
     if (effSchema) {
       const { validateResponseOrThrow } = await import('./responseValidation.js');
       return (await validateResponseOrThrow(response.data, effSchema, response.status)) as T;

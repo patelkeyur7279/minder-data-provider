@@ -3,6 +3,26 @@ import { parseJWT as decodeJwt, isJwtShaped } from '../utils/jwt.js';
 import type { DebugManager } from '../debug/DebugManager.js';
 import { StorageType, DebugLogType } from '../constants/enums.js';
 
+/**
+ * H1: true iff `value` is a token string actually worth storing/trusting.
+ *
+ * `setToken(undefined)` used to sail straight through to `setItem`, which
+ * calls e.g. `localStorage.setItem(key, undefined)` / builds
+ * `document.cookie = \`${key}=${value}\``  — both coerce the second operand
+ * to the literal string `"undefined"`. `isAuthenticated()` then read that
+ * back: non-empty, not JWT-shaped, so the presence-based opaque-token branch
+ * returned `true`. Client auth failed OPEN.
+ *
+ * Exported and reused as a write-side guard (setToken, here and in
+ * SecureAuthManager) AND a read-side rejection (isAuthenticated) — defence
+ * in depth, so a bad value already persisted in cookie/localStorage/
+ * sessionStorage before this fix (or written by another tab/process) also
+ * reads back as unauthenticated, not just newly-set ones.
+ */
+export function isUsableTokenValue(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value !== 'undefined' && value !== 'null';
+}
+
 export class AuthManager {
   private config: AuthConfig;
   private memoryStorage: Map<string, string>; // Instance-specific storage (Bug #3 fix)
@@ -89,6 +109,15 @@ export class AuthManager {
   }
 
   setToken(token: string): void {
+    if (!isUsableTokenValue(token)) {
+      throw new Error(
+        `[AuthManager] setToken() refused an invalid token value (${JSON.stringify(token)}). ` +
+        'Passing undefined/null/an empty string used to be stored as the literal string "undefined" ' +
+        'and made isAuthenticated() return true — auth failing open. Pass a real, non-empty token ' +
+        'string, or call clearAuth() to log out.'
+      );
+    }
+
     this.setItem(this.config.tokenKey, token);
 
     if (this.debugManager && this.enableLogs) {
@@ -170,7 +199,7 @@ export class AuthManager {
    */
   isAuthenticated(): boolean {
     const token = this.getToken();
-    if (!token) {
+    if (!token || !isUsableTokenValue(token)) {
       if (this.debugManager && this.enableLogs) {
         this.debugManager.log(DebugLogType.AUTH, '❌ AUTH CHECK: No token', {});
       }

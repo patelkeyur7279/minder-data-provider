@@ -75,6 +75,20 @@ export interface MinderConfig {
   onError?: (error: ApiError) => void;
   /** HTTP client instance (Axios or LightHttpClient) */
   httpClient?: any;
+  /**
+   * P2 (fix-2.2.0-blockers): request transport for the PROVIDER's `ApiClient`.
+   * Mirrors `minder()`'s own `MinderOptions.transport` (core/minder/types.ts) —
+   * see `ApiClient`'s constructor for the full rationale. `'axios'` (default
+   * behavior, same as leaving this unset outside an edge runtime) always uses
+   * axios. `'fetch'` forces the native `fetch()` transport, which never
+   * constructs or dispatches through axios — the documented escape hatch for
+   * runtimes where axios's Node-oriented HTTP adapter can't run (bare
+   * Cloudflare Workerd and similar). `'auto'` (and unset) pick native fetch
+   * ONLY when an edge runtime is detected (global `fetch`, no Node
+   * `process`, no `XMLHttpRequest`); Node and browser keep the axios default
+   * unchanged.
+   */
+  transport?: 'auto' | 'axios' | 'fetch';
 }
 
 export interface EnvironmentOverride {

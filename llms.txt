@@ -79,6 +79,10 @@ needs no prior configuration. `UseMinderOptions<TData>` extends
   success: boolean;
   refetch: () => Promise<MinderResult<TData>>;
   mutate: (data?: any, opts?: { params?: Record<string, any>, headers?: Record<string, string>, axiosConfig?: Record<string, any> }) => Promise<MinderResult<TData>>;
+  // `axiosConfig` under a provider is an ALLOWLIST: only timeout/signal/responseType/
+  // onUploadProgress/onDownloadProgress/withCredentials/validateStatus/paramsSerializer/decompress
+  // forward; url/baseURL/proxy/adapter/transformRequest/transformResponse/httpAgent/httpsAgent/
+  // socketPath/beforeRedirect throw MinderSecurityError (they'd redirect the route's own headers).
   operations?: {              // only when nested under <MinderDataProvider>
     create: (item: Partial<TData>, opts?: { params?: Record<string, any> }) => Promise<TData>;
     update: (id: string | number, item: Partial<TData>, opts?: { params?: Record<string, any> }) => Promise<TData>;
@@ -125,7 +129,11 @@ body; on success `data` is typed `InferOutput<S>`; on failure returns
 `transport?: 'auto' | 'axios' | 'fetch'`, `throwOnError?: boolean`, `params?`,
 `timeout?`, `cache?: boolean`, `cacheTTL?`, `retries?: number` (idempotent
 methods only, unless `retryNonIdempotent: true`), `baseURL?`, `token?`,
-`onSuccess?`, `onError?`.
+`onSuccess?`, `onError?`. `baseURL` is NOT a safe way to redirect an
+arbitrary call to another host — combined with a registered route's own
+headers or an ambient token (`configureMinder()`/`minder.config()`), it
+throws `MinderSecurityError` instead of carrying that credential along; see
+MIGRATION_GUIDE.md.
 
 `HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'`.
 
@@ -160,9 +168,14 @@ Record<string, string | ApiRoute>` (a plain string auto-generates
 `providers?: Record<string, unknown>` (per-provider platform config — secrets
 only via `secret('ENV_NAME')`, never a raw string), `auth?`, `cache?`,
 `corsHelper?` (does **not** bypass browser CORS — server-side headers still
-required), `websocket?`, `security?`, `debug?`, `performance?`, `ssr?`,
-`offline?`, `plugins?: MinderPlugin[]`, `environments?`. Returns the resolved
-`MinderConfig`, which you can pass straight to `<MinderDataProvider config={...}>`.
+required; defaults to `{ enabled: false }` on every platform, so it never
+auto-enables itself — `configureMinder()` throws `CONFIG_CORS_PROXY_MISSING`
+at call time if you explicitly set `enabled: true` without also setting
+`proxy`, instead of silently rewriting every request to a proxy route that
+likely doesn't exist), `websocket?`, `security?`, `debug?`, `performance?`,
+`ssr?`, `offline?`, `plugins?: MinderPlugin[]`, `environments?`. Returns the
+resolved `MinderConfig`, which you can pass straight to
+`<MinderDataProvider config={...}>`.
 
 ### `MinderDataProvider`
 
@@ -178,8 +191,17 @@ function MinderDataProvider(props: {
 Optional — `configureMinder()` alone is enough for `useMinder`/`minder()`.
 Use the provider when you need scoped `operations` (create/update/delete/fetch
 CRUD helpers on `useMinder`'s return), WebSocket/SSE realtime, or per-instance
-plugin/offline wiring. Also exports `useMinderContext()` /
-`useMinderContextSafe()`.
+plugin/offline wiring. Also exports two accessors for the provider's
+`{ apiClient, authManager, cacheManager, queryClient, ... }` context value:
+`useMinderContext()` — throws `"useMinderContext must be used within
+MinderDataProvider"` outside one; use it to reach `getAxiosInstance()` (see
+README "Escape hatches") when a provider is guaranteed to be mounted — and
+`useMinderContextSafe()` — returns `null` instead of throwing, for code that
+may run with or without a provider. Both are exported from the package root,
+`/core`, `/web`, `/native`, `/nextjs`, `/expo`, and `/electron`; `/hook`
+exports only the throwing `useMinderContext()` (a minimal legacy re-export);
+`/node` exports neither (a pure server entry with no React hooks or provider
+at all).
 
 ## Progressive levels
 
@@ -220,8 +242,22 @@ interface UseAuthReturn {
 }
 ```
 
+`useAuth()`'s return value also carries non-enumerable `setToken`/`getToken`/
+`clearAuth`/`isLoggedIn` accessors that always THROW `MinderError`
+(`USE_AUTH_LEGACY_ACCESSOR_REMOVED`) naming `useAuthToken()` — a directed
+error for code migrating from the pre-2.2.0 `useAuth` shape, not a real part
+of `UseAuthReturn`. Never destructure those four keys from `useAuth()`; they
+do not exist on this hook — use `useAuthToken()` instead.
+
 **`useAuthToken()`** — from `/auth` (and re-exported at the root). Raw
-client-side JWT/opaque-token storage + subscription. No provider required.
+client-side JWT/opaque-token storage + subscription. No provider required —
+outside `<MinderDataProvider>` it falls back to a standalone
+`globalAuthManager` (one-shot check, no change subscription); inside one, it
+uses the provider's `AuthManager` and reacts to auth-state changes. The
+sibling `useCache()`/`useCurrentUser()` hooks work the same way without a
+provider — `useCache()` falls back to its own process-local `CacheManager`
+(does not share cache state with a `<MinderDataProvider>` mounted elsewhere in
+the tree; mount one if you need a single shared cache).
 
 ```ts
 function useAuthToken(): {
@@ -311,9 +347,24 @@ useful for local dev and tests before real keys exist. Flip `mock` to `false`
   `minder-data-provider/server`.
 - `corsHelper`/`cors` config does **not** and cannot bypass browser CORS — it
   only adds diagnostics/proxy support. CORS must be solved on the API server.
-- `XSSSanitizer` (the DOMPurify-backed sanitizer) fails closed: if DOMPurify's
-  lazy import hasn't resolved yet, sanitize() throws `SANITIZER_UNAVAILABLE`
-  rather than ever passing unsanitized data through.
+- `XSSSanitizer` (the DOMPurify-backed sanitizer) fails closed **everywhere,
+  not just in a browser**: `sanitize()` throws `SANITIZER_UNAVAILABLE` on any
+  runtime where a usable DOMPurify instance isn't present — a browser where
+  the lazy import hasn't resolved yet or failed to load, AND every non-browser
+  runtime (`/node`, `/server`, Next.js SSR, `typeof window === 'undefined'`,
+  where DOMPurify is never even attempted since it needs a DOM). There is no
+  weaker fallback sanitizer anymore — it never silently passes unsanitized
+  data through. `await sanitizer.ready()` before calling `sanitize()` directly
+  (code going through `ApiClient`'s own sanitization path already does this).
+- Sanitization is **opt-in per field**, not a blanket walk of every string in
+  the body. `security.sanitization: true` (or an object without `fields`)
+  constructs a working sanitizer but applies it to nothing automatically —
+  request bodies pass through unchanged. Configure
+  `security.sanitization: { enabled: true, fields: ['comment', 'bio'] }` to
+  sanitize only those named top-level fields; everything else passes through
+  untouched, so ordinary strings like `"Tom & Jerry <3"` are never mangled.
+  Treat request-body sanitization as data hygiene for fields that render raw
+  HTML, not a general XSS control — XSS defence belongs at render time.
 
 ## Common mistakes (things a model is likely to get wrong)
 
@@ -339,6 +390,12 @@ useful for local dev and tests before real keys exist. Flip `mock` to `false`
    `undefined` — use `mutate()` instead.
 7. **`corsHelper`/`cors` config is not a CORS bypass.** Don't tell a user it
    fixes a CORS error by itself — the API server must send the right headers.
+8. **`<MinderDataProvider>` no longer auto-mounts React Query DevTools.**
+   `@tanstack/react-query-devtools` is an optional peer that is never imported
+   by this library unless your own app code imports it. To see devtools,
+   install the peer and mount `<ReactQueryDevtools>` yourself in your own
+   component tree — do not generate a `minder-data-provider/devtools-rq`
+   import or a `config.dynamic`/auto-mount option; neither exists.
 
 ## More detail
 

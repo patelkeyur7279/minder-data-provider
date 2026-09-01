@@ -28,8 +28,19 @@ import { isReplayErrorSentinel, type ReplayErrorSentinel } from './replaySentine
 // Late-cycle-safe: the plugins layer imports only from utils (Logger), never
 // from platform, so this static import forms no circular dependency. Verified
 // via `grep -rn platform src/plugins` (no hits). Emitting through the global
-// pluginManager keeps OfflineManager decoupled from any core wiring.
-import { pluginManager } from '../../plugins/PluginSystem.js';
+// plugin manager keeps OfflineManager decoupled from any core wiring.
+//
+// fix-a-app-router-crash-offline-parity (BLOCKER 1): `peekPluginManager()`
+// reads the shared manager WITHOUT constructing one when absent — both call
+// sites below already guard on `.size > 0`, so "no manager yet" and "zero
+// plugins" are the same answer, and neither needs to touch the `PluginManager`
+// class reference that a real `next build` + Route Handler/Server Component
+// reproduction showed can be unavailable under Next.js App Router's webpack.
+// See the fuller root-cause note in ../../plugins/PluginSystem.ts and
+// ../../core/minder.ts. Standalone minder() now drives this manager
+// server-side (offline auto-queue parity), so it must not carry the same
+// undefined-binding crash risk.
+import { peekPluginManager } from '../../plugins/PluginSystem.js';
 
 const logger = /*#__PURE__*/ new Logger('OfflineManager', { level: LogLevel.WARN });
 
@@ -317,8 +328,9 @@ Web: Using basic online/offline detection
 
     // Notify connectivity-capability plugins when the online/offline boolean
     // actually transitions (fire-and-forget, error-isolated per plugin).
-    if (wasConnected !== state.isConnected && pluginManager.size > 0) {
-      void pluginManager.executeConnectivityHooks(state.isConnected);
+    const connectivityPm = peekPluginManager();
+    if (wasConnected !== state.isConnected && connectivityPm && connectivityPm.size > 0) {
+      void connectivityPm.executeConnectivityHooks(state.isConnected);
     }
 
     // Auto-sync when coming back online
@@ -551,8 +563,9 @@ Web: Using basic online/offline detection
     phase: 'start' | 'success' | 'error',
     extra?: { pending?: number; processed?: number; error?: { message: string; code?: string } }
   ): void {
-    if (pluginManager.size === 0) return;
-    void pluginManager.executeSyncHooks({
+    const syncHookPm = peekPluginManager();
+    if (!syncHookPm || syncHookPm.size === 0) return;
+    void syncHookPm.executeSyncHooks({
       phase,
       queueSize: this.getQueueSize(),
       pending: extra?.pending ?? this.getQueueSize(),

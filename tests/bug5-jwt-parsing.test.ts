@@ -22,7 +22,6 @@ describe('Bug #5: JWT Parsing with Malformed Tokens', () => {
     { token: 'not-a-jwt', description: 'single string without dots' },
     { token: 'only.two', description: 'only 2 parts' },
     { token: '.', description: 'single dot' },
-    { token: '', description: 'empty string' },
     { token: 'a.b.c.d.e', description: 'too many parts (5)' },
     { token: 'header..signature', description: 'empty payload part' },
     { token: '..', description: 'only dots' },
@@ -43,11 +42,29 @@ describe('Bug #5: JWT Parsing with Malformed Tokens', () => {
 
         // ✅ FIXED: Should NOT crash
         expect(() => authManager.isAuthenticated()).not.toThrow();
-        
+
         // Should still check authentication (handles as non-JWT token)
         const isAuth = authManager.isAuthenticated();
         expect(typeof isAuth).toBe('boolean');
       });
+    });
+
+    // H1 (fix-2.2.0-blockers): an empty string is not a "malformed but
+    // present" token like the ones above — it is a token that was never
+    // usably set at all. setToken() now REJECTS it by throwing (fail
+    // CLOSED) rather than silently persisting the literal string
+    // "undefined" and letting isAuthenticated() read that back as true.
+    it('should not crash with empty string: "" (setToken rejects it — H1)', () => {
+      const authManager = new AuthManager(mockConfig);
+
+      expect(() => authManager.setToken('')).toThrow(
+        /refused an invalid token value/
+      );
+
+      // No token was ever stored, so isAuthenticated() still doesn't crash
+      // and correctly reports false.
+      expect(() => authManager.isAuthenticated()).not.toThrow();
+      expect(authManager.isAuthenticated()).toBe(false);
     });
   });
 

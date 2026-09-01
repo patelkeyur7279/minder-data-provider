@@ -1,6 +1,7 @@
 import type { MinderConfig } from './types.js';
 import type { ConfigValidationResult, ValidationOptions } from './config.types.js';
 import { validateRoutes } from '../utils/routeValidation.js';
+import { normalizeHttpMethod } from './apiClient/resolveRequest.js';
 
 /**
  * Validates configuration and provides helpful error messages
@@ -51,8 +52,14 @@ export function validateConfig(
         }
       }
 
-      // Method-specific validations
-      if (route.method === 'GET' && route.url.includes(':id')) {
+      // Method-specific validations.
+      // fix-2.2.0-blockers (ResolvedRequest migration): case-normalize
+      // before comparing — a hand-authored route declaring `method: 'get'`
+      // (lowercase) dispatches as GET everywhere else in this library
+      // (ApiClient/minder() both normalize), so this warning must not
+      // silently miss it just because the DECLARED string happened not to
+      // be canonical uppercase.
+      if (normalizeHttpMethod(route.method) === 'GET' && route.url.includes(':id')) {
         warnings.push(`Route "${key}" uses GET with ID parameter. Consider if this should be a different method or if the parameter is optional.`);
       }
 

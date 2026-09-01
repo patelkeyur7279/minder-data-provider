@@ -518,13 +518,23 @@ describe('Minder Utils', () => {
     });
 
     it('should handle network errors (has request but no response)', () => {
-      const error = { request: {}, message: 'Network timeout' };
+      // fix-a-app-router-crash-offline-parity (H1/H1b): handleError's
+      // no-response branch now delegates to the SAME classifier
+      // (apiClient/errors.ts's buildApiError/classifyNoResponseError) the
+      // provider path (ApiClient) already uses -- so this asserts the REAL,
+      // UNIFIED contract (message text + a structured `{response, url,
+      // method}` context as `details`) instead of the old standalone-only
+      // hand-rolled shape that carried nothing but the original error's raw
+      // `.message` string. `config` is included so this also proves url/
+      // method genuinely propagate through the shared choke point -- a real
+      // axios network error always carries `.config`.
+      const error = { request: {}, message: 'Network timeout', config: { url: '/api/things', method: 'get' } };
       const result = handleError(error);
-      
-      expect(result.message).toBe('Network error');
+
+      expect(result.message).toBe('Network error - please check your connection');
       expect(result.code).toBe('NETWORK_ERROR');
       expect(result.status).toBe(0);
-      expect(result.details).toBe('Network timeout');
+      expect(result.details).toEqual({ response: undefined, url: '/api/things', method: 'GET' });
       expect(result.solution).toContain('internet connection');
     });
 

@@ -15,14 +15,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { DehydratedState } from "@tanstack/react-query";
 import { HydrationBoundary } from "@tanstack/react-query";
 
-// const ReactQueryDevtools = dynamic(
-//   () =>
-//     import("@tanstack/react-query-devtools").then(
-//       (mod) => mod.ReactQueryDevtools
-//     ),
-//   { ssr: false }
-// );
-
 import type { MinderConfig } from "./types.js";
 import { ApiClient } from "./ApiClient.js";
 import { AuthManager } from "./AuthManager.js";
@@ -139,8 +131,14 @@ export function MinderDataProvider({
       // Auto-Proxy: Default to /api/minder-proxy if no proxy URL provided
       const proxyUrl = corsConfig.proxy || '/api/minder-proxy';
 
-      // Warn in development if using default proxy
-      if (!corsConfig.proxy && process.env.NODE_ENV === 'development') {
+      // B4 (fix-2.2.0-blockers): was gated to `NODE_ENV === 'development'`,
+      // so production silently misrouted every request to a proxy route that
+      // (per the config-time throw now in configureMinder(), src/config/
+      // index.ts) almost certainly does not exist. Ungated so this warns in
+      // every environment — belt-and-suspenders for a hand-built MinderConfig
+      // passed directly to <MinderDataProvider> without going through
+      // configureMinder() (which already throws on this condition).
+      if (!corsConfig.proxy) {
         console.warn(
           '[Minder] CORS Helper enabled but no proxy URL provided.\n' +
           `Defaulting to '${proxyUrl}'.\n` +
@@ -247,19 +245,6 @@ export function MinderDataProvider({
       });
     }
 
-    let ReactQueryDevtools:
-      | ComponentType<{ initialIsOpen?: boolean }>
-      | undefined;
-    if (config.dynamic && process.env.NODE_ENV !== "production") {
-      ReactQueryDevtools = config.dynamic(
-        () =>
-          import("@tanstack/react-query-devtools").then(
-            (mod) => mod.ReactQueryDevtools
-          ),
-        { ssr: false }
-      );
-    }
-
     return {
       config: finalConfig,
       apiClient,
@@ -271,7 +256,22 @@ export function MinderDataProvider({
       proxyManager,
       debugManager,
       queryClient: queryClientRef,
-      ReactQueryDevtools,
+      // B5 (fix-2.2.0-blockers, BREAKING): this branch used to call
+      // `config.dynamic(() => import("@tanstack/react-query-devtools")...,
+      // ...)` right here. `@tanstack/react-query-devtools` is an OPTIONAL
+      // peer dependency, but esbuild and Metro both resolve `import()`
+      // specifiers STATICALLY at bundle time — regardless of whether
+      // `config.dynamic` was ever set or this branch ever ran — so every
+      // entry that reaches this shared provider chunk (root, /core, /hook,
+      // /web, /nextjs, /native, /expo, /electron) hard-failed to bundle for
+      // any consumer who had not also installed the devtools package.
+      // Auto-mounting is removed entirely; mount `<ReactQueryDevtools>`
+      // yourself, in your own app code, by importing
+      // '@tanstack/react-query-devtools' directly (a genuinely separate
+      // opt-in `minder-data-provider/devtools-rq` re-export subpath was
+      // considered but needs a package.json `exports` + tsup entry change
+      // that is outside this fix's file scope — tracked separately).
+      ReactQueryDevtools: undefined as ComponentType<{ initialIsOpen?: boolean }> | undefined,
     };
   }, [config, queryClientRef]);
 

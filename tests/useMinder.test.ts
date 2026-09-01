@@ -232,17 +232,19 @@ describe('useMinder Hook', () => {
       const mutationResult = await result.current.mutate({ name: 'Created User' });
 
       expect(mutationResult.success).toBe(true);
-      // mutationResult is wrapped - data contains the full MinderResult from mocked minder
-      expect(mutationResult.data).toEqual({
-        success: true,
-        data: mockResponse,
-        error: null,
-        status: 201,
-        metadata: expect.objectContaining({
+      // C1: mutate() returns the MinderResult directly (no double-wrap) — its
+      // top-level `data`/`error`/`status` mirror the inner minder() call's
+      // result verbatim, and `data` is the raw payload, not the whole
+      // MinderResult nested a second time under `.data`.
+      expect(mutationResult.data).toEqual(mockResponse);
+      expect(mutationResult.error).toBeNull();
+      expect(mutationResult.status).toBe(201);
+      expect(mutationResult.metadata).toEqual(
+        expect.objectContaining({
           method: 'POST',
           url: '/users',
-        }),
-      });
+        })
+      );
       expect(mockedMinder).toHaveBeenCalledWith(
         '/users',
         { name: 'Created User' },

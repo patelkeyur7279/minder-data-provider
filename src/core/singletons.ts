@@ -82,16 +82,51 @@ export interface MinderSingletonStore {
  * Process-wide key. `Symbol.for` looks the symbol up in the global registry, so
  * two copies of this module (duplicated into separate chunks by a bundler) still
  * resolve to the SAME symbol and therefore the SAME store object.
+ *
+ * DELIBERATELY declared (not assigned) at module scope, and assigned lazily
+ * INSIDE `minderStore()` below — see the P1 postmortem there for why a plain
+ * top-level `const STORE_KEY = Symbol.for(...)` is unsafe under esbuild code
+ * splitting.
  */
-const STORE_KEY = Symbol.for('minder-data-provider.singletons');
+let storeKey: symbol | undefined;
 
 /**
  * The shared store, created on first access — NEVER at import. This is the whole
  * reason `sideEffects: false` is honest: importing this module runs nothing.
+ *
+ * P1 POSTMORTEM (fix-2.2.0-blockers): this used to read a MODULE-TOP-LEVEL
+ * `const STORE_KEY = Symbol.for(...)`. That is correct per ES module semantics
+ * (top-level statements run unconditionally on first evaluation), but tsup's
+ * esbuild, building this shared chunk under `splitting:true` + the package's
+ * `sideEffects:false`, hoisted that assignment into a deferred "call once"
+ * initializer in a SEPARATE exported function — and did NOT insert a call to
+ * that initializer here, inside this same source module's own `minderStore()`.
+ * The observed dist output was:
+ *
+ *   function l(){let e=globalThis;return e[o]??(e[o]={})}   // minderStore()
+ *   var o,a=b(()=>{o=Symbol.for("minder-data-provider.singletons")});
+ *   export{l as a, a as c};                                  // `c` = the deferred init
+ *
+ * `o` (STORE_KEY) stayed `undefined` — producing the literal
+ * `globalThis[undefined] = {}` crash — UNLESS some unrelated consumer chunk
+ * happened to import and call `c()` first (e.g. the provider's own module
+ * chunk did, as a side effect of evaluating `MinderContext.tsx`). That is
+ * exactly "works when a provider happened to run earlier in the module graph,
+ * crashes when it didn't" — the Next.js App Router failure mode: any RSC leaf
+ * route that reaches `useMinder()`/`useAuthToken()`/`minder()` WITHOUT ever
+ * importing `MinderDataProvider` in that request's module graph never
+ * triggered the initializer.
+ *
+ * Fix: compute (and cache) the symbol INSIDE this function instead of as a
+ * top-level module statement. `Symbol.for` is idempotent and process-wide by
+ * spec — recomputing/caching it here is always correct regardless of import
+ * order or how a bundler splits this module, and there is no longer any
+ * top-level side-effecting assignment for a bundler to defer.
  */
 export function minderStore(): MinderSingletonStore {
   const g = globalThis as unknown as Record<symbol, MinderSingletonStore>;
-  return (g[STORE_KEY] ??= {});
+  storeKey ??= Symbol.for('minder-data-provider.singletons');
+  return (g[storeKey] ??= {});
 }
 
 /**

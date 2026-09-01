@@ -1,10 +1,15 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { QueryClient } from '@tanstack/query-core';
 import { parseJWT as decodeJwt } from '../utils/jwt.js';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useMinderContext } from '../core/MinderContext.js';
+import { useMinderContext, useMinderContextSafe } from '../core/MinderContext.js';
 import type { CrudOperations, UploadProgress, MediaUploadResult } from '../core/types.js';
+import { CacheManager } from '../core/CacheManager.js';
+import type { AuthManager } from '../core/AuthManager.js';
+import { globalAuthManager } from '../auth/GlobalAuthManager.js';
+import type { GlobalAuthManager } from '../auth/GlobalAuthManager.js';
 
 // Main hook for CRUD operations
 /**
@@ -126,6 +131,23 @@ export function useOneTouchCrud<T = any>(
 }
 
 /**
+ * B3 helper: `AuthManager` (provider-backed) exposes `subscribe(listener)`;
+ * `GlobalAuthManager` (the standalone fallback) does not. Returns a bound
+ * `subscribe` function when the manager supports it, `undefined` otherwise —
+ * lets callers degrade gracefully instead of crashing on a missing method.
+ */
+function getAuthChangeSubscriber(
+  manager: AuthManager | GlobalAuthManager
+): ((listener: () => void) => () => void) | undefined {
+  const maybeSubscribable = manager as unknown as {
+    subscribe?: (listener: () => void) => () => void;
+  };
+  return typeof maybeSubscribable.subscribe === 'function'
+    ? maybeSubscribable.subscribe.bind(manager)
+    : undefined;
+}
+
+/**
  * Client-side token-storage hook (raw JWT/opaque token persistence + auth-state
  * subscription via `AuthManager`).
  *
@@ -141,15 +163,30 @@ export function useOneTouchCrud<T = any>(
  * `clearAuth`, `isAuthenticated`, `setRefreshToken`, `getRefreshToken`.
  */
 export function useAuthToken() {
-  const { authManager } = useMinderContext();
+  // B3 (fix-2.2.0-blockers): was `useMinderContext()` — the THROWING accessor —
+  // so this hook raised "useMinderContext must be used within
+  // MinderDataProvider" even though the docs (llms.txt, docs/USAGE_GUIDE.md)
+  // promise no provider is required. Swapped for the non-throwing
+  // `useMinderContextSafe()` with a `globalAuthManager` fallback, mirroring
+  // the pattern `useMinder.ts` already uses for its integrated `authMethods`
+  // (useMinder.ts ~1079-1133).
+  const context = useMinderContextSafe();
+  const authManager = context?.authManager ?? globalAuthManager;
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
     // Initial check
     setIsLoggedIn(authManager.isAuthenticated());
 
-    // Subscribe to changes
-    const unsubscribe = authManager.subscribe(() => {
+    // Subscribe to changes. Only the provider-backed `AuthManager` exposes a
+    // subscription; the standalone `globalAuthManager` fallback does not, so
+    // this degrades gracefully to a one-shot check outside a provider rather
+    // than reacting to changes made by another hook instance.
+    const subscribe = getAuthChangeSubscriber(authManager);
+    if (!subscribe) {
+      return undefined;
+    }
+    const unsubscribe = subscribe(() => {
       setIsLoggedIn(authManager.isAuthenticated());
     });
 
@@ -175,9 +212,28 @@ export function useAuthToken() {
   };
 }
 
+/**
+ * B3 fallback (fix-2.2.0-blockers): `useCache()` previously threw outside
+ * `<MinderDataProvider>` via the throwing `useMinderContext()`. Unlike auth
+ * (`globalAuthManager`), there is no cross-entry singleton `CacheManager` in
+ * this codebase to fall back to, so — created lazily on first ACTUAL use,
+ * never at import, consistent with this package's `sideEffects: false`
+ * convention (see src/core/singletons.ts) — this module constructs its OWN
+ * standalone `CacheManager` backed by a fresh `QueryClient`. It is
+ * process-local to this module and does not share cache state with a
+ * `<MinderDataProvider>` mounted elsewhere in the tree; that is an inherent
+ * property of standalone mode, not a bug — mount a provider if you need one
+ * shared cache.
+ */
+let fallbackCacheManager: CacheManager | null = null;
+function getFallbackCacheManager(): CacheManager {
+  return (fallbackCacheManager ??= new CacheManager(new QueryClient()));
+}
+
 // Cache management hook
 export function useCache() {
-  const { cacheManager } = useMinderContext();
+  const context = useMinderContextSafe();
+  const cacheManager = context?.cacheManager ?? getFallbackCacheManager();
 
   return {
     getCachedData: <T = any>(queryKey: string | string[]) => cacheManager.getCachedData<T>(queryKey),
@@ -195,7 +251,11 @@ export function useCache() {
 export function useCurrentUser() {
   const [user, setUser] = useState<any>(null);
 
-  const { authManager } = useMinderContext();
+  // B3 (fix-2.2.0-blockers): swapped the throwing `useMinderContext()` for
+  // the safe accessor + `globalAuthManager` fallback (see `useAuthToken`
+  // above for the full rationale).
+  const context = useMinderContextSafe();
+  const authManager = context?.authManager ?? globalAuthManager;
 
   useEffect(() => {
     const token = authManager.getToken();
@@ -375,7 +435,25 @@ export function useWebSocket() {
   const rt = realtimeManager ?? websocketManager;
 
   return {
-    connect: () => rt?.connect(),
+    // N3 (fix-2.2.0-blockers): `rt` is either `WebSocketManager` or an SSE
+    // transport (LazySseTransport/SseTransport) — both hand back a promise
+    // that REJECTS on a real connection failure (dead port, restarted
+    // server, network blip). A caller that fires this off without attaching
+    // its own handler (e.g. `<button onClick={connect}>`, or simply not
+    // awaiting it) used to crash a Node-hosted consumer (SSR, Electron main,
+    // /node, /electron) via an unhandled rejection, and surface as
+    // "Uncaught (in promise)" in a browser. Attaching a silent no-op `.catch`
+    // here guarantees a handler exists regardless of what the caller does
+    // with the returned promise; a caller that DOES `.catch()`/`await` it
+    // still observes the real rejection normally — every handler attached to
+    // a promise fires independently. `WebSocketManager.connect()` carries the
+    // identical safeguard so direct `useMinderContext().websocketManager
+    // .connect()` access (bypassing this hook) is covered too.
+    connect: () => {
+      const result = rt?.connect();
+      result?.catch(() => { /* see comment above */ });
+      return result;
+    },
     disconnect: () => rt?.disconnect(),
     send: (type: string, data: any) => rt?.send?.(type, data),
     subscribe: (event: string, callback: (data: any) => void) => rt?.subscribe(event, callback),

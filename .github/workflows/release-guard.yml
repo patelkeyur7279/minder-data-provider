@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: read
+  checks: read
 
 jobs:
   guard:
@@ -27,6 +28,33 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      - name: "G7 - wire job (ci.yml) is green for this commit"
+        # fix-2.2.0-blockers / FIX_PLAN.md §5: the wire suite is the gate that
+        # actually would have caught B1-B5 before they shipped — it must be
+        # required, not merely present. There is no cross-workflow `needs:`
+        # in GitHub Actions, so this queries the Checks API directly for a
+        # check-run named "wire" on the current commit SHA (ci.yml's job name)
+        # and fails the guard if it did not succeed. Warning-only when no
+        # "wire" check-run is found YET for this SHA (ci.yml may simply still
+        # be running) rather than racing it — a hard requirement belongs in
+        # branch-protection "required status checks" (a repo setting, not
+        # expressible in this file), which this step is the enforceable proxy
+        # for from inside the workflow itself.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REPO="${{ github.repository }}"
+          SHA="${{ github.sha }}"
+          RUNS=$(gh api "repos/$REPO/commits/$SHA/check-runs" --jq '.check_runs[] | select(.name=="wire") | .conclusion' || echo "")
+          if [ -z "$RUNS" ]; then
+            echo "::warning::G7 — no 'wire' check-run found yet for $SHA (ci.yml may still be running). This does not fail the guard, but 'wire' must be green before this commit is releasable — see FIX_PLAN.md §5."
+          elif echo "$RUNS" | grep -qx "success"; then
+            echo "G7 OK — the 'wire' check-run succeeded for $SHA."
+          else
+            echo "::error::G7 FAIL — the 'wire' check-run for $SHA did not succeed (conclusion(s): $RUNS). The wire-level integration suite (real HTTP method/body assertions against the packed tarball) must be green before release — see FIX_PLAN.md §5."
+            exit 1
+          fi
 
       - name: Read package version
         id: pkg

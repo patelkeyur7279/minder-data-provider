@@ -26,7 +26,7 @@
  * `HttpOnly`) rather than relying on this class's client-side cookie writes.
  */
 
-import { AuthManager } from '../core/AuthManager.js';
+import { AuthManager, isUsableTokenValue } from '../core/AuthManager.js';
 import { parseJWT as decodeJwt } from '../utils/jwt.js';
 import type { AuthConfig } from '../core/types.js';
 import type { DebugManager } from '../debug/DebugManager.js';
@@ -231,6 +231,20 @@ export class SecureAuthManager extends AuthManager {
    * Set token with security validation
    */
   override setToken(token: string): void {
+    // H1: reject invalid token values before sanitizeInput() ever touches
+    // them — sanitizeInput() assumes a string and would throw an opaque
+    // TypeError on undefined/null, and without this guard super.setToken()
+    // would still catch it, but only after this class's own HTTPS check and
+    // sanitization ran first. Fail fast with a directed error instead.
+    if (!isUsableTokenValue(token)) {
+      throw new Error(
+        `[SecureAuthManager] setToken() refused an invalid token value (${JSON.stringify(token)}). ` +
+        'Passing undefined/null/an empty string would previously be stored and made isAuthenticated() ' +
+        'return true — auth failing open (H1). Pass a real, non-empty token string, or call ' +
+        'clearAuth() to log out.'
+      );
+    }
+
     // Validate HTTPS in production (skip in test environment)
     if (this.secureConfig.enforceHttps && process.env.NODE_ENV === 'production') {
       if (typeof window !== 'undefined' && window.location) {

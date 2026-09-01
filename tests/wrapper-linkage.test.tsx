@@ -161,7 +161,34 @@ describe('useMinder Wrapper Linkage', () => {
     it('should delegate CRUD operations to ApiClient', async () => {
         mockApiClient.request.mockResolvedValue({ success: true });
 
-        const { result } = renderHook(() => useMinder('users'), {
+        // C5 (ratified, fix-2.2.0-blockers): operations.update/delete now
+        // refuse to address a single resource through a route with no ':id'
+        // placeholder — silently dropping the id would send a
+        // collection-shaped PUT/DELETE instead (see assertAddressable in
+        // src/hooks/useMinder.helpers.ts). Scoped to this test only (the
+        // auth/cache/websocket tests above intentionally keep the plain
+        // '/users' route, since introducing an unresolved ':id' there would
+        // fail route validation on mount and lose every other capability —
+        // see computeRouteValidation's "unreplaced parameters" check). This
+        // is still the exact "hand-authored single GET route reused for CRUD
+        // without siblings" shape the base-route method-override fallback
+        // (resolveCrudOperationRoute) exists for — just addressable now, and
+        // mounted with `autoFetch: false` so the initial GET (whose ':id' is
+        // never supplied at mount) doesn't fail route validation either.
+        (MinderDataProviderModule.useMinderContext as jest.Mock).mockReturnValue({
+            apiClient: mockApiClient,
+            authManager: mockAuthManager,
+            cacheManager: mockCacheManager,
+            websocketManager: mockWebSocketManager,
+            config: {
+                routes: {
+                    users: { url: '/users/:id', method: 'GET' },
+                    upload: { url: '/upload', method: 'POST' }
+                }
+            }
+        });
+
+        const { result } = renderHook(() => useMinder('users', { autoFetch: false }), {
             wrapper: createWrapper(),
         });
 
@@ -169,25 +196,54 @@ describe('useMinder Wrapper Linkage', () => {
         expect(result.current.operations).toBeDefined();
 
         if (result.current.operations) {
+            // B1 (fix-2.2.0-blockers, ratified): the route's declared HTTP
+            // method is now honoured on the wire instead of being silently
+            // overridden to GET. The mocked 'users' route only declares a
+            // base `GET` route with no `createUsers`/`updateUsers`/
+            // `deleteUsers` sibling, so resolveCrudOperationRoute forces the
+            // correct method onto the SAME route via a 4th `request()` arg
+            // (see src/hooks/useMinder.ts).
+            // N1 (fix-2.2.0-blockers, adversarial re-validation — Golden
+            // Path): create() addresses the COLLECTION, never one resource,
+            // so it must never dispatch the registered route name whose URL
+            // still carries the literal, unresolved ':id' segment (that was
+            // exactly the bug — a real request would have sent
+            // POST /users/:id verbatim). It now resolves to the collection
+            // form ('/users', ':id' stripped) and dispatches as a raw path —
+            // see resolveCrudOperationRoute/stripIdPathSegment in
+            // useMinder.helpers.ts. update()/delete() below are UNCHANGED:
+            // they still address the SAME registered route name, since they
+            // DO have a real id to substitute into ':id'.
+            // fix-2.2.0-blockers (ResolvedRequest redesign contract): dispatch
+            // stays THROUGH the registered route name ('users'), not the
+            // stripped raw path — the collection form arrives as a separate
+            // `urlOverride` option so the route's own headers/schema/timeout/
+            // dedup config is preserved instead of silently dropped (see
+            // resolveCrudOperationRoute / stripIdPathSegment in
+            // useMinder.helpers.ts). This is a legitimate consequence of that
+            // fix, not a regression — see this file's own HIGH comment above.
             await result.current.operations.create({ name: 'New' }, { params: { q: 1 } });
             expect(mockApiClient.request).toHaveBeenCalledWith(
                 'users',
                 { name: 'New' },
-                { q: 1 }
+                { q: 1 },
+                { method: 'POST', urlOverride: '/users' }
             );
 
             await result.current.operations.update(1, { name: 'Updated' }, { params: { q: 2 } });
             expect(mockApiClient.request).toHaveBeenCalledWith(
                 'users',
                 { name: 'Updated' },
-                { q: 2, id: 1 }
+                { q: 2, id: 1 },
+                { method: 'PUT' }
             );
 
             await result.current.operations.delete(1, { params: { q: 3 } });
             expect(mockApiClient.request).toHaveBeenCalledWith(
                 'users',
                 undefined,
-                { q: 3, id: 1 }
+                { q: 3, id: 1 },
+                { method: 'DELETE' }
             );
         }
     });

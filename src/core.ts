@@ -19,9 +19,12 @@
 export { minder } from './core/minder.js';
 export { useMinder } from './hooks/useMinder.js';
 export { configureMinder } from './config/index.js';
+// M2 (fix-2.2.0-blockers): export the non-throwing `useMinderContextSafe`
+// accessor alongside the throwing `useMinderContext` — see src/index.ts.
 export {
   MinderDataProvider,
   useMinderContext,
+  useMinderContextSafe,
 } from './core/MinderDataProvider.js';
 
 // Core types

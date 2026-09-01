@@ -125,15 +125,29 @@ function loadInstrumented(filePath: string, appendCode: string): Record<string, 
 // the minifier's chosen identifier names (`be`/`q`/`U` today, anything
 // tomorrow), which is exactly why this is a regex over shape, not a
 // hardcoded name.
+// esbuild's minifier draws short identifiers from the full set of legal JS
+// identifier characters — letters, digits, `_`, AND `$` — not just `\w`
+// (which is `[A-Za-z0-9_]` and excludes `$`). Which exact name lands on which
+// loader is an artifact of allocation order, not something this test can
+// pin: a prior build put `_`/`K`/`N` on these sites, this build put `$` on
+// the dompurify one (`$??($=Promise.resolve()...)`). A pattern built on `\w+`
+// therefore fails NOT because the artifact is wrong (`$` is a perfectly
+// valid, and common, minified identifier) but because the pattern's own
+// character class was too narrow — so every identifier slot below uses
+// `[\w$]+` instead of `\w+`.
+const MINIFIED_IDENTIFIER = '[\\w$]+';
+
 function memoizedLoaderPattern(pkg: string): RegExp {
   const escaped = pkg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const id = MINIFIED_IDENTIFIER;
   return new RegExp(
-    `function\\s+(\\w+)\\s*\\(\\)\\s*\\{return\\s+\\w+\\?\\?\\(\\w+=Promise\\.resolve\\(\\)\\.then\\(\\(\\)=>\\w+\\(require\\((["'])${escaped}\\2\\)\\)\\)\\),\\w+\\}`,
+    `function\\s+(${id})\\s*\\(\\)\\s*\\{return\\s+${id}\\?\\?\\(${id}=Promise\\.resolve\\(\\)\\.then\\(\\(\\)=>${id}\\(require\\((["'])${escaped}\\2\\)\\)\\)\\),${id}\\}`,
   );
 }
 
-const RESPONSE_VALIDATION_RE =
-  /Promise\.resolve\(\)\.then\(\(\)=>\w+\(require\((["'])\.\/responseValidation-[\w.-]+\1\)\)\)/;
+const RESPONSE_VALIDATION_RE = new RegExp(
+  `Promise\\.resolve\\(\\)\\.then\\(\\(\\)=>${MINIFIED_IDENTIFIER}\\(require\\((["'])\\./responseValidation-[\\w$.-]+\\1\\)\\)\\)`,
+);
 
 // Constructing this string via concatenation (rather than a literal) keeps
 // it out of any editor/CI text-search for the literal error string while

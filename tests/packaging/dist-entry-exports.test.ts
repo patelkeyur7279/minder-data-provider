@@ -22,8 +22,18 @@
  * This test loads the *built* dist entries the way real consumers do — through
  * Node's own CJS (`require`) and ESM (`import`) loaders, in a fresh child
  * process so jest's transform pipeline can't paper over the interop — and
- * asserts the enum value is present in BOTH module systems. It skips
- * gracefully when `dist/` has not been built yet.
+ * asserts the enum value is present in BOTH module systems.
+ *
+ * T1/W5 (fix-2.2.0-blockers): this file used to skip gracefully (`describe.skip`)
+ * when `dist/` had not been built yet, AND lived at `tests/dist-entry-exports.test.ts`
+ * where `npm test` (ci.yml's "Run tests" step) runs BEFORE `npm run build` — so on
+ * every clean CI checkout `dist/` was absent and this suite skipped on EVERY run it
+ * ever had; it never executed once. Fixed two ways: (1) moved into `tests/packaging/`,
+ * which only runs via `npm run test:packaging`, strictly AFTER the build step
+ * (package.json script + .github/workflows/ci.yml), matching every sibling file in
+ * this directory (see cjs-no-esm-dynamic-import.test.ts's header for the same
+ * reasoning); (2) the missing-dist case below is now a hard `throw`, not a skip —
+ * identical posture to every other tests/packaging/*.test.ts file.
  *
  * 'registerRazorpayProvider' and 'registerSentryProvider' are the
  * providers/razorpay and providers/sentry entries' public exports — added
@@ -34,7 +44,17 @@ import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
-const distDir = path.resolve(__dirname, '../dist');
+const distDir = path.resolve(__dirname, '../../dist');
+
+if (!fs.existsSync(distDir)) {
+  // Hard fail — see file header. This suite must run AFTER `npm run build`,
+  // never standalone — see the "test:packaging" wiring in package.json and
+  // .github/workflows/ci.yml.
+  throw new Error(
+    `tests/packaging expects dist/ to exist (found nothing at ${distDir}). ` +
+      'This suite must run AFTER `npm run build`, never standalone.',
+  );
+}
 
 // What a given entry is expected to export, and therefore which assertion
 // applies to it. 'HttpMethod' is the original dist-interop regression this
@@ -135,7 +155,11 @@ const entries: Array<{ name: string; cjs: string; esm: string; expect: ExpectKin
   },
 ];
 
-const distBuilt = fs.existsSync(path.join(distDir, 'index.js'));
+// The top-level `dist/` existence check above already throws (hard fail, not
+// skip) when the build hasn't run at all. `dist/index.js` specifically is
+// asserted per-entry below (`fileExists`/`esmExists`) — that's a different,
+// legitimate concern (a partial build missing ONE entry), not "did anyone
+// build at all".
 
 /**
  * Probe a built entry through a fresh Node process using the given module
@@ -229,14 +253,7 @@ function probeBundled(esmFile: string, expectKind: ExpectKind): unknown {
   }
 }
 
-const maybe = distBuilt ? describe : describe.skip;
-
-maybe('built dist entry exports (dist interop regression guard)', () => {
-  if (!distBuilt) {
-    // eslint-disable-next-line no-console
-    console.warn('[dist-entry-exports] dist/ not built — skipping. Run `npm run build` first.');
-  }
-
+describe('built dist entry exports (dist interop regression guard)', () => {
   for (const entry of entries) {
     describe(entry.name, () => {
       for (const kind of ['cjs', 'esm'] as const) {
@@ -288,8 +305,7 @@ maybe('built dist entry exports (dist interop regression guard)', () => {
  * must hold in dist artifacts, not just in source. A bundler/barrel regression
  * that leaks it would pass ts-jest source tests but fail here.
  */
-const maybeNeg = distBuilt ? describe : describe.skip;
-maybeNeg('dist boundary: resolveCredential is server-entry-only (G-08)', () => {
+describe('dist boundary: resolveCredential is server-entry-only (G-08)', () => {
   const rootCjs = path.join(distDir, 'index.js');
   const rootEsm = path.join(distDir, 'index.mjs');
   const serverCjs = path.join(distDir, 'server.js');
@@ -325,8 +341,7 @@ maybeNeg('dist boundary: resolveCredential is server-entry-only (G-08)', () => {
  * provider/hook by design, so it doesn't fit the standard HttpMethod probe.
  * Assert the enum alone here — same eager-binding regression guard.
  */
-const maybeNode = distBuilt ? describe : describe.skip;
-maybeNode('node entry HttpMethod (Wave H)', () => {
+describe('node entry HttpMethod (Wave H)', () => {
   const nodeCjs = path.join(distDir, 'platforms/node.js');
   const nodeEsm = path.join(distDir, 'platforms/node.mjs');
   const t = fs.existsSync(nodeCjs) ? it : it.skip;

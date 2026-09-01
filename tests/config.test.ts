@@ -364,15 +364,29 @@ describe('configureMinder', () => {
   });
 
   it('should configure CORS when enabled', () => {
+    // B4 (fix-2.2.0-blockers, ratified): enabling CORS/corsHelper without
+    // wiring a `proxy` route now throws at configure-time instead of
+    // silently rewriting every request to a proxy route that almost
+    // certainly doesn't exist — so a working `cors: true` config must
+    // supply one. Boolean shorthand alone has no way to express a proxy.
     const simple: UnifiedMinderConfig = {
       apiUrl: 'https://api.example.com',
-      cors: true,
+      cors: { enabled: true, proxy: '/api/minder-proxy' },
     };
 
     const config = configureMinder(simple);
 
     expect(config.cors).toBeDefined();
     expect(config.cors?.enabled).toBe(true);
+  });
+
+  it('should throw when CORS is enabled via boolean shorthand without a proxy route (B4)', () => {
+    const simple: UnifiedMinderConfig = {
+      apiUrl: 'https://api.example.com',
+      cors: true,
+    };
+
+    expect(() => configureMinder(simple)).toThrow(/no `proxy` route was configured/);
   });
 
   it('should configure WebSocket with boolean true', () => {

@@ -74,7 +74,7 @@ import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import type { UseQueryOptions, UseMutationOptions, UseInfiniteQueryOptions } from '@tanstack/react-query';
 import { minder } from '../core/minder.js';
-import type { MinderOptions, MinderResult } from '../core/minder.js';
+import type { MinderOptions, MinderResult, HttpMethod as MutationHttpMethod } from '../core/minder.js';
 import { useMinderContextSafe } from '../core/MinderContext.js';
 import { HttpMethod } from '../constants/enums.js';
 import type { RetryConfig } from '../core/types.js';
@@ -104,6 +104,9 @@ import {
   unwrapMutationVariables,
   mergeMutationRuntimeOptions,
   buildInvalidRouteResult,
+  resolveCrudOperationRoute,
+  resolveFetchRouteName,
+  assertValidResourceId,
 } from './useMinder.helpers.js';
 
 // ============================================================================
@@ -381,9 +384,9 @@ export interface UseMinderReturn<TData = any> {
   /**
    * Mutate data (create/update/delete)
    * @param data - Data to send
-   * @param options - Dynamic options (params, headers, axiosConfig)
+   * @param options - Dynamic options (params, headers, axiosConfig, method)
    */
-  mutate: (data?: any, options?: { params?: Record<string, any>, headers?: Record<string, string>, axiosConfig?: Record<string, any> }) => Promise<MinderResult<TData>>;
+  mutate: (data?: any, options?: { params?: Record<string, any>, headers?: Record<string, string>, axiosConfig?: Record<string, any>, method?: MutationHttpMethod }) => Promise<MinderResult<TData>>;
 
   /**
    * CRUD operations (available when within MinderDataProvider)
@@ -647,11 +650,53 @@ export function useMinder<TData = any>(
     [options.queryKey, route, JSON.stringify(options.params)]
   );
 
+  // C4: mounting a hook whose ROUTE declares a mutating HTTP verb (POST/PUT/
+  // PATCH/DELETE) must never fire a request just by rendering — only an
+  // explicit mutate()/operations call may. `query`/`infiniteQuery` below
+  // auto-fetch on mount by default (isQueryEnabled), and the request they
+  // dispatch resolves its ACTUAL wire method the same way ApiClient/minder()
+  // do — explicit `options.method`, else the registry's declared route
+  // method. So e.g. `useMinder('createUser')` on a route declared POST
+  // previously fired a real empty-bodied POST on mount before any mutate()
+  // call. Mirrors the "explicit option > registry entry" precedence used
+  // everywhere else in this file.
+  const resolvedRouteMethod = useMemo(() => {
+    const registeredRoute = (context?.config || globalConfig)?.routes?.[route];
+    const method = options.method || registeredRoute?.method;
+    return method ? String(method).toUpperCase() : HttpMethod.GET;
+  }, [context?.config, globalConfig, route, options.method]);
+  const isMutatingRoute = resolvedRouteMethod !== HttpMethod.GET;
+
   // Determine if query should be enabled
   const isQueryEnabled = useMemo(
-    () => options.enabled !== false && options.autoFetch !== false && routeValidation.valid,
-    [options.enabled, options.autoFetch, routeValidation.valid]
+    () =>
+      options.enabled !== false &&
+      options.autoFetch !== false &&
+      routeValidation.valid &&
+      !isMutatingRoute,
+    [options.enabled, options.autoFetch, routeValidation.valid, isMutatingRoute]
   );
+
+  // Dev-facing, once-per-mount notice so a silently-skipped auto-fetch isn't
+  // mistaken for a bug — only fires when auto-fetch would otherwise have run
+  // (i.e. the ONLY reason it didn't is the mutating-route guard above).
+  const warnedMutatingRouteRef = useRef(false);
+  useEffect(() => {
+    if (
+      isMutatingRoute &&
+      options.enabled !== false &&
+      options.autoFetch !== false &&
+      !warnedMutatingRouteRef.current
+    ) {
+      warnedMutatingRouteRef.current = true;
+      console.warn(
+        `[Minder] useMinder("${route}") declares a ${resolvedRouteMethod} route, so it will NOT ` +
+        'auto-fetch on mount — that would fire a real request with no explicit call. Use ' +
+        'mutate()/operations to invoke it, or pass { autoFetch: false } to silence this warning.'
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMutatingRoute, resolvedRouteMethod, route]);
 
 
 
@@ -708,15 +753,44 @@ export function useMinder<TData = any>(
     if (context?.apiClient) {
       // Use ApiClient for parameter replacement (when within MinderDataProvider)
       try {
+        // N1 (fix-2.2.0-blockers, Golden Path): when this route's URL carries
+        // an unresolved terminal ':id' PATH placeholder and no id is being
+        // supplied via params, resolve to the route's COLLECTION form (':id'
+        // segment stripped) instead of sending the literal, unresolved token
+        // on the wire — see resolveFetchRouteName's own docs for the full
+        // guard. This is how `operations.fetch()` (and the hook's own
+        // auto-fetch / refetch()) serve the same single registered route
+        // that update()/delete() address by id. HIGH: the collection form is
+        // now expressed as a `urlOverride` alongside the SAME route name
+        // (rather than a bare stripped-URL string standing in for the route
+        // name), so dispatch stays THROUGH the registered route — its
+        // headers/schema/timeout/dedup are never dropped.
+        const routeConfig = context?.config || globalConfig;
+        const { routeName: effectiveRouteName, urlOverride } =
+          resolveFetchRouteName(route, routeConfig?.routes, requestParams);
         const data = await context.apiClient.request(
-          route,
+          effectiveRouteName,
           undefined,
           requestParams,
           {
             params: requestParams,
             headers: options.headers,
             rawUrl: options.rawUrl,
-            method: options.method,
+            ...(urlOverride ? { urlOverride } : {}),
+            // B1b: only include `method` when explicitly set, rather than an
+            // always-present key whose `undefined` value could shadow the
+            // route's declared method through an object spread elsewhere.
+            // N1: when resolved to an unregistered raw path (N4's
+            // string-shorthand bypass — `effectiveRouteName !== route`),
+            // force an explicit GET so that dispatch never relies on
+            // ApiClient's bodyless-request inference. The `urlOverride` case
+            // dispatches THROUGH the still-registered route, whose own
+            // (already-verified-GET) `method` applies naturally.
+            ...(options.method
+              ? { method: options.method }
+              : effectiveRouteName !== route
+                ? { method: HttpMethod.GET }
+                : {}),
             ...options.axiosConfig
           } // Pass params as axios config for query string
         );
@@ -826,9 +900,15 @@ export function useMinder<TData = any>(
       // Unwrap our internal `{ __minder_wrapper }` envelope (if present) and
       // merge its per-call params/headers/axiosConfig with the hook options.
       const { data, runtimeOptions } = unwrapMutationVariables(variables);
-      const { mergedParams, mergedHeaders, mergedAxiosConfig } =
+      const { mergedParams, mergedHeaders, mergedAxiosConfig, mergedMethod } =
         mergeMutationRuntimeOptions(options, runtimeOptions);
-      const mutationMethod = options.method || HttpMethod.POST;
+      // `mutationMethod` is for RESULT METADATA only (buildMinderResult below)
+      // — it must never leak into the actual request config as an
+      // always-present key, or it silently forces every mutation to this
+      // value and defeats route-declared method resolution (B1). The request
+      // configs further down use `mergedMethod` (undefined unless the caller
+      // explicitly set one via hook options or `mutate(data, { method })`).
+      const mutationMethod = mergedMethod || HttpMethod.POST;
 
       // Check if request was cancelled
       if (cancelledRef.current) {
@@ -864,7 +944,11 @@ export function useMinder<TData = any>(
               params: mergedParams,
               headers: mergedHeaders,
               rawUrl: options.rawUrl,
-              method: options.method,
+              // B1a/B1b/B1c: only include `method` when the caller explicitly
+              // set one (hook-level `options.method` or a per-call
+              // `mutate(data, { method })`); ApiClient falls back to the
+              // route's declared method when this key is absent.
+              ...(mergedMethod ? { method: mergedMethod } : {}),
               ...mergedAxiosConfig
             }
           );
@@ -881,22 +965,53 @@ export function useMinder<TData = any>(
       } else {
         // Standalone
         try {
-          const responseData = await minder<TData>(route, validatedData, {
+          // B1d-standalone mirror: previously this always sent
+          // `method: mutationMethod` (defaulting to POST), which permanently
+          // shadowed `options.method` from `...options` above AND prevented
+          // minder()'s own registry-based verb resolution
+          // (`if (registryRoute && !options?.method) method = registryRoute.method`
+          // in src/core/minder.ts) from ever firing for declared PUT/PATCH/DELETE
+          // routes. Now `method` is included only when explicitly resolved via
+          // hook options or a per-call `mutate(data, { method })` override.
+          //
+          // C1: minder() never throws by default (throwOnError forced false
+          // below) and already returns a FULLY FORMED MinderResult — including
+          // `success:false` + `error` on a real transport failure (e.g. a dead
+          // port). This branch previously discarded that shape entirely:
+          // it always built `{ success: true, data: <the inner MinderResult> }`
+          // regardless of whether the inner call actually failed — reporting
+          // success on failure AND double-wrapping the result (`result.data`
+          // was itself a MinderResult), which also violates the shipped
+          // `mutate(): Promise<MinderResult<TData>>` contract. Propagate the
+          // inner result's own success/data/error/status instead, mirroring
+          // the already-correct standalone query path above (createQueryFn).
+          const innerResult = await minder<TData>(route, validatedData, {
             ...options,
-            method: mutationMethod,
             params: mergedParams,
             headers: mergedHeaders,
-            ...mergedAxiosConfig
+            ...(mergedMethod ? { method: mergedMethod } : {}),
+            ...mergedAxiosConfig,
+            throwOnError: false,
           });
           result = buildMinderResult<TData>({
-            data: responseData as TData, error: null, status: 200, success: true,
-            method: mutationMethod, route,
+            data: innerResult.data,
+            error: innerResult.error,
+            status: innerResult.status,
+            success: innerResult.success,
+            method: mutationMethod,
+            route,
           });
         } catch (error: any) {
           result = buildMinderResult<TData>({
             data: null, error, status: error.status || 500, success: false,
             method: mutationMethod, route,
           });
+        }
+        // Opt-in: surface the failure through TanStack's mutation error state
+        // (try/catch, onError, throwOnError consumers) instead of only the
+        // structured result — same precedence as the query path above.
+        if (options.throwOnError && !result.success && result.error) {
+          throw result.error;
         }
       }
       return result;
@@ -946,7 +1061,7 @@ export function useMinder<TData = any>(
     return result.data as MinderResult<TData>;
   }, []);
 
-  const mutateData = useCallback(async (data?: any, options?: { params?: Record<string, any>, headers?: Record<string, string>, axiosConfig?: Record<string, any> }): Promise<MinderResult<TData>> => {
+  const mutateData = useCallback(async (data?: any, options?: { params?: Record<string, any>, headers?: Record<string, string>, axiosConfig?: Record<string, any>, method?: MutationHttpMethod }): Promise<MinderResult<TData>> => {
     if (options) {
       return tanstackRef.current.mutation.mutateAsync({ __minder_wrapper: true, data, options });
     }
@@ -975,8 +1090,24 @@ export function useMinder<TData = any>(
       if (options.validate) {
         validatedItem = await options.validate(item as TData);
       }
+      // B1d: `route` resolves to the GET base route by default — redirect to
+      // the generated `create${Cap}` sibling (or force POST on the base route
+      // when no sibling exists), never touching an already-explicit non-GET
+      // route. See resolveCrudOperationRoute for the full guard. N1: `params`
+      // is threaded through too — a route whose URL still carries an
+      // unresolved terminal ':id' PATH placeholder resolves to its
+      // COLLECTION form (Golden Path) unless the caller explicitly supplied
+      // `params.id`. HIGH: that collection form now arrives as `urlOverride`
+      // — dispatch stays THROUGH the registered `routeName` (its own
+      // headers/schema/timeout/dedup intact), only the URL is swapped.
+      const { routeName, method, urlOverride } = resolveCrudOperationRoute(
+        route, 'create', (context?.config || globalConfig)?.routes, params
+      );
       // ✅ Pass params to request for dynamic URL replacement
-      return context.apiClient.request(route, validatedItem, params);
+      return context.apiClient.request(routeName, validatedItem, params, {
+        ...(method ? { method } : {}),
+        ...(urlOverride ? { urlOverride } : {}),
+      });
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
   });
@@ -987,6 +1118,13 @@ export function useMinder<TData = any>(
       item: Partial<TData>;
       params?: Record<string, any>
     }) => {
+      // C5: validate the id VALUE (not just the route shape) before anything
+      // else — before the context check, before route resolution, before any
+      // data validation — so a hostile id (empty, null, undefined, NaN,
+      // whitespace-only, or containing a path separator/traversal sequence)
+      // is refused with zero requests ever reaching the wire. See
+      // assertValidResourceId's own docs for the exact inputs this refuses.
+      assertValidResourceId('update', id);
       if (!context?.apiClient) {
         throw new MinderError('CRUD operations require MinderDataProvider context', 'CONTEXT_REQUIRED', 500);
       }
@@ -995,8 +1133,12 @@ export function useMinder<TData = any>(
       if (options.validate) {
         validatedItem = await options.validate(item as TData);
       }
+      // B1d: see createMutation above.
+      const { routeName, method } = resolveCrudOperationRoute(
+        route, 'update', (context?.config || globalConfig)?.routes
+      );
       // ✅ Merge id with params for URL replacement
-      return context.apiClient.request(route, validatedItem, { ...params, id });
+      return context.apiClient.request(routeName, validatedItem, { ...params, id }, method ? { method } : undefined);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
   });
@@ -1006,11 +1148,19 @@ export function useMinder<TData = any>(
       id: string | number;
       params?: Record<string, any>
     }) => {
+      // C5: see the identical guard in updateMutation above — validate the
+      // id VALUE first, before the context check or route resolution, so a
+      // hostile id never reaches the wire.
+      assertValidResourceId('delete', id);
       if (!context?.apiClient) {
         throw new MinderError('CRUD operations require MinderDataProvider context', 'CONTEXT_REQUIRED', 500);
       }
+      // B1d: see createMutation above.
+      const { routeName, method } = resolveCrudOperationRoute(
+        route, 'delete', (context?.config || globalConfig)?.routes
+      );
       // ✅ Merge id with params for URL replacement
-      return context.apiClient.request(route, undefined, { ...params, id });
+      return context.apiClient.request(routeName, undefined, { ...params, id }, method ? { method } : undefined);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
   });
@@ -1077,13 +1227,33 @@ export function useMinder<TData = any>(
   // =========================================================================
 
   const authMethods = useMemo(() => ({
-    setToken: async (token: string) => {
+    // N2 (fix-2.2.0-blockers, adversarial re-probe — not fully closed): this
+    // was `async (token) => { await ...setToken(token) }`. Both
+    // `context.authManager.setToken` (sync, throws synchronously on a bad
+    // token — see AuthManager.ts) and `globalAuthManager.setToken` (returns
+    // a Promise, but ALSO throws synchronously before ever constructing that
+    // promise — see GlobalAuthManager.ts's own N2 fix) validate BEFORE any
+    // async work specifically so a bad token throws for real, synchronously,
+    // into the immediate caller — README's Security Model promises
+    // `setToken()` "throws instead of storing" a bad value. Wrapping the call
+    // in `async` here defeated that: an `async` function auto-wraps EVERY
+    // throw inside its body (including one from an awaited synchronous
+    // throw) into a REJECTED PROMISE, so `try { auth.setToken(bad) } catch`
+    // (the natural, synchronous-looking call site) never saw a catchable
+    // throw — it became an unhandled rejection instead. This plain
+    // (non-`async`) function preserves the synchronous throw for both
+    // branches: `context.authManager.setToken` runs (and can throw) before
+    // any promise is ever constructed, and `globalAuthManager.setToken`'s own
+    // synchronous validation runs before it returns its promise. The valid-
+    // token path is unchanged: `Promise.resolve()` / the manager's own
+    // promise, so `await auth.setToken(good)` still works exactly as before.
+    setToken: (token: string): Promise<void> => {
       if (context?.authManager) {
-        await context.authManager.setToken(token);
-      } else {
-        // Use global auth manager as fallback
-        await globalAuthManager.setToken(token);
+        context.authManager.setToken(token);
+        return Promise.resolve();
       }
+      // Use global auth manager as fallback
+      return globalAuthManager.setToken(token);
     },
     getToken: () => {
       if (context?.authManager) {
@@ -1191,8 +1361,24 @@ export function useMinder<TData = any>(
     // the stream and the resync glue never fires (5.2 §4.6/§4.8).
     const rt = context?.realtimeManager ?? context?.websocketManager;
     return {
+      // HIGH (fix-2.2.0-blockers, adversarial re-probe — N3 not fully
+      // closed): `rt.connect()` returns a Promise that can reject (dead
+      // port, network blip, ...) and this call site discards it entirely.
+      // WebSocketManager's OWN `connect()` already self-guards its returned
+      // promise with a silent `.catch()` (see its N3 comment), so `rt` being
+      // a WebSocketManager was already safe — but `rt` can also be an
+      // SseTransport/LazySseTransport (transport:'sse'), which does not
+      // carry that same internal guard. A rejection with zero attached
+      // handlers is an unhandled promise rejection — fatal to a Node-hosted
+      // consumer and an "Uncaught (in promise)" in browsers. `.catch()` here
+      // is a silent no-op (it does not swallow anything for a caller that
+      // awaits/`.catch()`s a DIRECTLY-held reference to `rt.connect()`
+      // itself, e.g. via `useMinderContext().realtimeManager.connect()` —
+      // every handler attached to a promise fires independently); real
+      // connection failures still surface through `subscribe()`/`onError`
+      // callbacks and `isConnected()`.
       connect: () => {
-        rt?.connect();
+        rt?.connect()?.catch(() => { /* see comment above */ });
       },
       disconnect: () => {
         rt?.disconnect();

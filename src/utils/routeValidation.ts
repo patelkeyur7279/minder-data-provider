@@ -1,5 +1,6 @@
 import type { ApiRoute } from '../core/types.js';
 import { HttpMethod } from '../constants/enums.js';
+import { normalizeHttpMethod } from '../core/apiClient/resolveRequest.js';
 
 /**
  * Route validation result
@@ -50,8 +51,17 @@ export function validateRoutes(routes: Record<string, ApiRoute>): RouteValidatio
       }
     }
 
-    // Method validation
-    if (route.method && !Object.values(HttpMethod).includes(route.method)) {
+    // Method validation. fix-2.2.0-blockers (item 7, adversarial re-probe):
+    // the SAME case-sensitive `HttpMethod` membership check the ResolvedRequest
+    // redesign already fixed at the dispatch/comparison sites (resolveRequest.ts,
+    // useMinder.helpers.ts) — a hand-written route (never passed through
+    // configureMinder()'s own boundary normalization) carrying `method: 'get'`/
+    // `'Get'`/`'POST '` is a perfectly valid, dispatchable route, but a bare
+    // `Object.values(HttpMethod).includes(route.method)` flagged it as invalid
+    // config. Normalize (trim + uppercase) before comparing — mirrors
+    // `normalizeHttpMethod`'s own doc comment on exactly this human-authored-config
+    // scenario.
+    if (route.method && !Object.values(HttpMethod).includes(normalizeHttpMethod(route.method) as HttpMethod)) {
       result.errors.push(`Route "${name}" has invalid method "${route.method}"`);
       result.isValid = false;
     }

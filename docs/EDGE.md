@@ -9,6 +9,21 @@
 > fallbacks behind runtime checks, verified by bundling every entry with
 > `esbuild --platform=neutral`, but no runnable example exists yet on those runtimes.
 > Treat those three as "should work, verify for your case."
+>
+> **Fixed 2026-08-26 (tracked as P2):** everything above and below on this page documents the
+> **standalone, provider-less** `minder()` path, which always honored `transport: 'fetch'`. Until
+> this date, the documented Level-1 pattern — `configureMinder()` + `<MinderDataProvider>`, i.e.
+> going through a provider's `ApiClient` — silently IGNORED `transport: 'fetch'` and stayed
+> hard-wired to axios, so that pattern could not make a single request on bare workerd at all. If
+> you were using a `<MinderDataProvider>` on an edge runtime before this fix, `transport: 'fetch'`
+> did nothing for you. `transport` is now forwarded from `configureMinder`/`<MinderDataProvider
+> config>` through to `ApiClient`, which dispatches via native `fetch()` instead of axios when it's
+> set (explicitly, or auto-detected on an edge runtime) — verified with a real round trip through a
+> provider and a dead-port failure path. Note: the specific literal symptom originally reported for
+> this defect (workerd rejecting a `RequestInit.cache` field axios's fetch adapter sets) could not
+> be reproduced with the axios version currently installed, whose fetch adapter doesn't set
+> `cache` — the underlying "provider path ignores `transport: 'fetch'`" defect was real and is what
+> got fixed; the `cache`-field guard is additionally covered by a simulated (not real-workerd) test.
 
 Edge runtimes have Web APIs (`fetch`, `atob`/`btoa`, `crypto.subtle`, `TextEncoder`) but
 **no Node built-ins** (`Buffer`, `require`, `fs`, `process.stdout`, the Node `http` stack).
@@ -33,7 +48,7 @@ const { data } = await minder('users');
 
 | Feature | Edge-safe? | Notes |
 |---|---|---|
-| `minder()` / `useMinder()` JSON CRUD | ✅ with `transport: 'fetch'` | Uses native `fetch`; no axios, no Node HTTP |
+| `minder()` / `useMinder()` JSON CRUD, standalone or under `<MinderDataProvider>` | ✅ with `transport: 'fetch'` | Uses native `fetch`; no axios, no Node HTTP. Under a provider this requires the P2 fix (2026-08-26, above) — set it on `configureMinder({ transport: 'fetch' })` / `<MinderDataProvider config={{ transport: 'fetch' }}>`, not just on individual `minder()` calls |
 | JWT auth (presence/expiry, refresh) | ✅ | `parseJWT` decodes via `atob` first; `Buffer` only as a Node fallback |
 | Webhook HMAC verification (`minder-data-provider/server`) | ✅ | Uses `crypto.subtle` (global WebCrypto) + `TextEncoder` only; already covered by the edge-safety regression guard |
 | Server route handlers (`createMinderHandler`) | ✅ | `src/server/handlers.ts` bundles clean for `platform=neutral` |

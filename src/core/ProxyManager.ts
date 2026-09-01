@@ -1,5 +1,5 @@
 import { Logger, LogLevel } from '../utils/Logger.js';
-import type { ApiRoute } from './types.js';
+import type { ResolvedRouteConfig } from './apiClient/resolveRequest.js';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const logger = /*#__PURE__*/ new Logger('ProxyManager', { level: LogLevel.DEBUG });
@@ -29,8 +29,15 @@ export class ProxyManager {
     return this.config.enabled;
   }
 
+  // fix-2.2.0-blockers (STRUCTURAL REDESIGN, item 1): re-typed from `ApiRoute`
+  // to the narrowed `ResolvedRouteConfig` — this parameter is unused below
+  // (it always was; nothing here reads `.method`/`.url` off it), so keeping
+  // it typed as the FULL declared route was itself a latent way for a
+  // declared route's `.method`/`.url` to flow past `ApiClient.dispatchResolved`
+  // as a pass-through argument. Narrowing the type closes that even though
+  // the value is never read.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  public rewriteUrl(originalUrl: string, route?: ApiRoute): string {
+  public rewriteUrl(originalUrl: string, route?: ResolvedRouteConfig): string {
     if (!this.config.enabled) {
       return originalUrl;
     }

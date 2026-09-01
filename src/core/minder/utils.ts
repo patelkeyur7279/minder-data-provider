@@ -4,8 +4,80 @@
 
 import type { HttpMethod, MinderError, MinderOptions } from './types.js';
 import { Logger, LogLevel } from '../../utils/Logger.js';
+// fix-a-app-router-crash-offline-parity (H1/H1b): the standalone minder()
+// path's own no-response ("has request, no response") classification used to
+// be a second, independent implementation that never consulted offline
+// state at all -- see `handleError`'s network-error branch below for why
+// that is the SAME "works via <MinderDataProvider>, silently no-ops
+// standalone" defect shape as every other divergence this release has hit
+// (sanitization no-op, DELETE-body drop, six credential-exfiltration
+// channels). `buildApiError` (apiClient/errors.ts) is the ONE place that
+// decides "timeout vs. offline-and-auto-queue vs. generic network error" --
+// reusing it here (instead of writing a second copy) is the actual fix:
+// there is structurally nowhere left for the two paths to disagree.
+import { buildApiError } from '../apiClient/errors.js';
+// The SAME registry ApiClient's constructor reads (getActiveOfflineManager)
+// so a standalone-path auto-queue lands in the exact OfflineManager instance
+// `configureMinder({ offline })` wired -- not a second, disconnected one.
+import { getActiveOfflineManager } from '../../platform/offline/registry.js';
 
 const logger = /*#__PURE__*/ new Logger('Minder', { level: LogLevel.WARN });
+
+/**
+ * Build the MinderError-shaped return value `handleError` uses for any
+ * thrown value that already carries its own `code`/`status` (our own
+ * `Minder*Error` subclasses -- `MinderNetworkError`, `MinderTimeoutError`,
+ * `MinderOfflineError`, `MinderResponseValidationError`, ...). Extracted so
+ * both the duck-typed branch below AND the no-response delegation branch
+ * (which catches a THROWN `Minder*Error` from `buildApiError`) build the
+ * IDENTICAL shape from a single implementation.
+ *
+ * NOT implemented by recursing back into `handleError(thrown)`: several
+ * `Minder*Error` subclasses (e.g. `MinderNetworkError`) declare their OWN
+ * `response` constructor parameter property (unrelated to axios's
+ * `AxiosError.response` -- context metadata), so a thrown instance can carry
+ * an own `response` key (even `undefined`-valued) that would incorrectly
+ * satisfy `handleError`'s `'response' in error` axios-shaped check and route
+ * into the WRONG branch (HTTP status mapping instead of the code/status this
+ * function already carries).
+ */
+function fromMinderErrorLike(
+  error: Error & { code: string; status: number; context?: Record<string, unknown>; issues?: unknown },
+  solution: string = 'See error.issues (if present) or error.details for more information'
+): MinderError {
+  return {
+    message: error.message,
+    code: error.code,
+    status: error.status,
+    details: error.context,
+    issues: error.issues as MinderError['issues'],
+    solution,
+  };
+}
+
+/**
+ * Actionable `solution` text for the three outcomes `classifyNoResponseError`
+ * (apiClient/errors.ts) can throw, keyed by `.code`. Preserves the
+ * per-outcome guidance the OLD standalone-only branch hardcoded (`'Please
+ * check your internet connection'` for NETWORK_ERROR) instead of falling
+ * back to `fromMinderErrorLike`'s generic "see error.issues" default, which
+ * doesn't apply to a network failure (there are no `.issues`).
+ */
+const NO_RESPONSE_SOLUTIONS: Record<string, string> = {
+  TIMEOUT_ERROR: 'The request timed out. Try increasing the timeout setting or check server performance.',
+  OFFLINE_ERROR: 'Device appears to be offline. Check your internet connection and try again.',
+  NETWORK_ERROR: 'Please check your internet connection.',
+};
+
+function isMinderErrorLike(
+  value: unknown
+): value is Error & { code: string; status: number; context?: Record<string, unknown>; issues?: unknown } {
+  return (
+    value instanceof Error &&
+    typeof (value as { code?: unknown }).code === 'string' &&
+    typeof (value as { status?: unknown }).status === 'number'
+  );
+}
 
 // ============================================================================
 // SMART OPERATION DETECTION
@@ -244,16 +316,36 @@ export function handleError(error: unknown): MinderError {
   // Network error (has request but no response)
   const hasRequest = error && typeof error === 'object' && 'request' in error;
   if (hasRequest) {
-    const networkError = error as { message?: string };
-    return {
-      message: 'Network error',
-      code: 'NETWORK_ERROR',
-      status: 0,
-      details: networkError.message,
-      solution: 'Please check your internet connection',
-    };
+    // fix-a-app-router-crash-offline-parity (H1/H1b): delegate to the SAME
+    // no-response classifier the provider path (ApiClient -> normalizeApiError
+    // -> buildApiError) already uses, instead of the hand-rolled generic
+    // NETWORK_ERROR this branch used to always return regardless of offline
+    // configuration. `buildApiError` NEVER returns for this shape -- it
+    // always throws (a genuine timeout -> MinderTimeoutError, an
+    // offline/unreachable condition with an active OfflineManager -> auto-
+    // queues the mutation via `offlineManager.addToQueue` THEN throws
+    // MinderOfflineError, otherwise a generic MinderNetworkError) -- so the
+    // throw is caught immediately below and converted via the shared
+    // `fromMinderErrorLike` helper, preserving `handleError`'s own
+    // never-throws contract.
+    try {
+      buildApiError(error, getActiveOfflineManager() ?? undefined);
+    } catch (classified) {
+      if (isMinderErrorLike(classified)) {
+        return fromMinderErrorLike(classified, NO_RESPONSE_SOLUTIONS[classified.code]);
+      }
+      // Defensive fallback only -- buildApiError's no-response path always
+      // throws a Minder*Error, so this should be unreachable in practice.
+      return {
+        message: 'Network error',
+        code: 'NETWORK_ERROR',
+        status: 0,
+        details: classified instanceof Error ? classified.message : classified,
+        solution: 'Please check your internet connection',
+      };
+    }
   }
-  
+
   // Task 3.1 adaptation: a thrown MinderError-shaped value (e.g.
   // MinderResponseValidationError from schema validation) already carries its
   // own code/status/issues — preserve them instead of flattening to
@@ -265,25 +357,8 @@ export function handleError(error: unknown): MinderError {
   // Duck-typed (not `instanceof`) so this file never statically imports the
   // errors module, keeping the lazy-loaded response-validation feature's
   // synchronous bundle cost at zero for callers who never configure a schema.
-  if (
-    error instanceof Error &&
-    typeof (error as { code?: unknown }).code === 'string' &&
-    typeof (error as { status?: unknown }).status === 'number'
-  ) {
-    const minderLike = error as Error & {
-      code: string;
-      status: number;
-      context?: Record<string, unknown>;
-      issues?: unknown;
-    };
-    return {
-      message: minderLike.message,
-      code: minderLike.code,
-      status: minderLike.status,
-      details: minderLike.context,
-      issues: minderLike.issues as MinderError['issues'],
-      solution: 'See error.issues (if present) or error.details for more information',
-    };
+  if (isMinderErrorLike(error)) {
+    return fromMinderErrorLike(error);
   }
 
   // Other errors (Error instances or plain objects)

@@ -148,12 +148,21 @@ const clerkClient = getProviderClient(); // typed as `unknown` — cast to your
                                           // provider's client type as needed
 ```
 
+> **Migrating from pre-2.2.0 code?** `useAuth().setToken`/`getToken`/`clearAuth`/
+> `isLoggedIn` (the old token-storage shape) now throw a directed `MinderError`
+> (`USE_AUTH_LEGACY_ACCESSOR_REMOVED`) naming `useAuthToken()` instead of failing
+> with a generic `TypeError`. See `useAuthToken` below for the hook that shape
+> actually belongs to.
+
 ### `useAuthToken` — raw client-side token storage
 
 If you're not using a certified provider and just need to persist a raw
 JWT/opaque token client-side (with `AuthManager`-backed storage and an
 auth-state subscription), use `useAuthToken` instead. This is a different hook
-with a different shape — it does **not** model a provider session.
+with a different shape — it does **not** model a provider session. No
+`<MinderDataProvider>` is required: outside one, `useAuthToken()` falls back to
+a standalone token manager (a one-shot check on mount, no live subscription);
+mount a `<MinderDataProvider>` to get auth-state change notifications too.
 
 ```typescript
 import { minder } from 'minder-data-provider';
@@ -247,7 +256,7 @@ function Uploader() {
 Prevent API floods while typing.
 
 ```typescript
-import { useDebounce } from 'minder-data-provider/utils/performance';
+import { useDebounce } from 'minder-data-provider';
 import { useMinder } from 'minder-data-provider';
 
 function Search() {
@@ -268,12 +277,18 @@ function Search() {
 ## Bundle Optimization
 
 ### Hook-Only Import
-If you *only* need the `useMinder` hook and want to save ~20KB without importing axios/utils:
+`minder-data-provider/hook` is a legacy re-export path (`useMinder`,
+`MinderDataProvider`, `useMinderContext`) — prefer the root or `/core` entry
+for new code. `useMinder` itself does **not** require `<MinderDataProvider>`:
+like every other entry, it also works standalone once `configureMinder()` has
+registered routes.
 
 ```typescript
-// ⚠️ Only works inside <MinderDataProvider>
 import { useMinder } from 'minder-data-provider/hook';
 ```
+
+See the README "Bundle Cost" section for this entry's actual measured size
+(`npm run measure:bundles`, `hook` row) rather than a guessed figure.
 
 ### Logger Utility
 If you need the internal logger:

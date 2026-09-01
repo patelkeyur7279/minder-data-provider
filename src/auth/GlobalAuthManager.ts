@@ -1,19 +1,34 @@
 /**
  * Global Auth Manager - Works Without MinderDataProvider
- * 
+ *
  * Provides authentication functionality that works everywhere:
  * - With MinderDataProvider (enhanced features)
  * - Without MinderDataProvider (standalone mode)
- * 
+ *
  * Features:
  * - Token storage (localStorage, sessionStorage, memory)
  * - Auto token restoration on page load
  * - JWT parsing and validation
  * - Refresh token support
+ *
+ * P3 (platform storage capability): persistence used to be gated on
+ * `typeof window !== 'undefined'`, which is true on React Native (RN aliases
+ * `window = global`) even though neither `localStorage` nor `sessionStorage`
+ * exists there. That made every read/write throw a caught-and-swallowed
+ * ReferenceError, so tokens silently never persisted on native. `storage`
+ * capability is now feature-detected directly (bare `globalThis[kind]` +
+ * a functional test-write, never a bare identifier reference that can throw),
+ * and when no functional browser Storage exists, persistence falls back to
+ * the platform-appropriate adapter this package already ships
+ * (AsyncStorage on React Native, SecureStore on Expo, electron-store on
+ * Electron, memory otherwise) via {@link StorageAdapterFactory}.
  */
 
 import { parseJWT as decodeJwt, isTokenUsable } from '../utils/jwt.js';
 import { minderStore, lazySingletonProxy } from '../core/singletons.js';
+import { isUsableTokenValue } from '../core/AuthManager.js';
+import { StorageAdapterFactory } from '../platform/adapters/storage/StorageAdapterFactory.js';
+import type { StorageAdapter } from '../platform/adapters/storage/StorageAdapter.js';
 
 interface GlobalAuthConfig {
   storage?: 'localStorage' | 'sessionStorage' | 'memory';
@@ -28,6 +43,17 @@ class GlobalAuthManager {
   private storage: 'localStorage' | 'sessionStorage' | 'memory' = 'localStorage';
   private tokenKey = 'minder_auth_token';
   private refreshTokenKey = 'minder_refresh_token';
+  /** Lazily-created fallback adapter, only touched when no functional browser Storage exists. */
+  private platformAdapter?: StorageAdapter;
+  /**
+   * Resolves once initial restoration (sync browser-storage or async
+   * platform-adapter) has completed. Sync (browser Storage / memory) resolves
+   * immediately; the platform-adapter fallback has no synchronous API, so on
+   * React Native/Expo/Electron restoration finishes shortly after
+   * construction rather than during it. Callers that need to guarantee a
+   * restored token before reading (e.g. app boot on native) can `await` this.
+   */
+  public ready: Promise<void> = Promise.resolve();
 
   constructor(config?: GlobalAuthConfig) {
     if (config?.storage) {
@@ -44,24 +70,132 @@ class GlobalAuthManager {
     this.restoreFromStorage();
   }
 
-  private restoreFromStorage(): void {
-    if (typeof window === 'undefined') return;
-
+  /**
+   * Feature-detect whether the browser Storage API named by `kind` is
+   * actually present AND functional — not just "does `window` exist".
+   * React Native aliases `window = global` but defines neither
+   * `localStorage` nor `sessionStorage` at all; some browsers also disable
+   * storage (private browsing, locked-down settings) even though the global
+   * exists. Reads via bare `globalThis[kind]` so a missing global is simply
+   * `undefined`, never a ReferenceError, and confirms usability with the same
+   * functional test-write `StorageAdapterFactory` uses for its web adapter.
+   */
+  private detectBrowserStorage(kind: 'localStorage' | 'sessionStorage'): Storage | null {
     try {
-      if (this.storage === 'localStorage') {
-        this.token = localStorage.getItem(this.tokenKey);
-        this.refreshToken = localStorage.getItem(this.refreshTokenKey);
-      } else if (this.storage === 'sessionStorage') {
-        this.token = sessionStorage.getItem(this.tokenKey);
-        this.refreshToken = sessionStorage.getItem(this.refreshTokenKey);
+      const candidate = (globalThis as unknown as Record<string, Storage | undefined>)[kind];
+      if (!candidate || typeof candidate.getItem !== 'function' || typeof candidate.setItem !== 'function') {
+        return null;
       }
+      const probeKey = '__minder_gam_probe__';
+      candidate.setItem(probeKey, '1');
+      candidate.removeItem(probeKey);
+      return candidate;
+    } catch {
+      return null;
+    }
+  }
 
-      // Try to parse user from token
-      if (this.token) {
-        this.user = this.parseJWT(this.token);
+  /**
+   * Lazily create the platform-appropriate storage adapter (AsyncStorage on
+   * React Native, SecureStore on Expo, electron-store on Electron, memory
+   * otherwise) used when no functional browser Storage is available.
+   * `createWithFallback` never throws — a failed native adapter degrades to
+   * `MemoryStorageAdapter` rather than losing the token entirely.
+   */
+  private getPlatformAdapter(): StorageAdapter {
+    if (!this.platformAdapter) {
+      this.platformAdapter = StorageAdapterFactory.createWithFallback();
+    }
+    return this.platformAdapter;
+  }
+
+  private restoreFromStorage(): void {
+    if (this.storage === 'memory') return;
+
+    const webStorage = this.detectBrowserStorage(this.storage);
+    if (webStorage) {
+      try {
+        this.token = webStorage.getItem(this.tokenKey);
+        this.refreshToken = webStorage.getItem(this.refreshTokenKey);
+
+        // Try to parse user from token
+        if (this.token) {
+          this.user = this.parseJWT(this.token);
+        }
+      } catch (error) {
+        console.error('[GlobalAuthManager] Failed to restore tokens:', error);
+      }
+      return;
+    }
+
+    // No functional browser Storage (e.g. React Native) — fall back to the
+    // platform storage adapter instead of silently never persisting.
+    this.ready = this.restoreFromPlatformAdapter();
+  }
+
+  private async restoreFromPlatformAdapter(): Promise<void> {
+    try {
+      const adapter = this.getPlatformAdapter();
+      const [token, refreshToken] = await Promise.all([
+        adapter.getItem(this.tokenKey),
+        adapter.getItem(this.refreshTokenKey),
+      ]);
+
+      if (token) {
+        this.token = token;
+        this.user = this.parseJWT(token);
+      }
+      if (refreshToken) {
+        this.refreshToken = refreshToken;
       }
     } catch (error) {
-      console.error('[GlobalAuthManager] Failed to restore tokens:', error);
+      console.error('[GlobalAuthManager] Failed to restore tokens from platform storage:', error);
+    }
+  }
+
+  /**
+   * Persist `value` under `key` using whichever backing store applies:
+   * functional browser Storage when available, else the platform adapter,
+   * else a no-op (`storage: 'memory'`).
+   */
+  private async persistItem(key: string, value: string): Promise<void> {
+    if (this.storage === 'memory') return;
+
+    const webStorage = this.detectBrowserStorage(this.storage);
+    if (webStorage) {
+      try {
+        webStorage.setItem(key, value);
+      } catch (error) {
+        console.error('[GlobalAuthManager] Failed to save token:', error);
+      }
+      return;
+    }
+
+    try {
+      await this.getPlatformAdapter().setItem(key, value);
+    } catch (error) {
+      console.error('[GlobalAuthManager] Failed to save token to platform storage:', error);
+    }
+  }
+
+  /** Remove `key` from whichever backing store applies. Mirrors {@link persistItem}. */
+  private async removeStoredItem(key: string): Promise<void> {
+    if (this.storage === 'memory') return;
+
+    const webStorage = this.detectBrowserStorage(this.storage);
+    if (webStorage) {
+      try {
+        webStorage.removeItem(key);
+      } catch (error) {
+        console.error('[GlobalAuthManager] Failed to clear auth:', error);
+      }
+      return;
+    }
+
+    try {
+      await this.getPlatformAdapter().removeItem(key);
+    } catch (error) {
+      console.error('[GlobalAuthManager] Failed to clear auth from platform storage:', error);
     }
   }
 
@@ -69,21 +203,42 @@ class GlobalAuthManager {
     return decodeJwt(token);
   }
 
-  async setToken(token: string): Promise<void> {
+  /**
+   * N2 (fix-2.2.0-blockers): this method deliberately does NOT use the
+   * `async` keyword, even though it returns a `Promise<void>`. An `async`
+   * function auto-wraps every `throw` in its body into a REJECTED PROMISE —
+   * so `throw new Error(...)` below would never reach the caller as a real
+   * synchronous exception. README's Security Model promises `setToken()`
+   * "throws instead of storing" a bad value; a caller doing
+   * `try { authManager.setToken(bad) } catch { ... }` (the natural,
+   * synchronous-looking call site — see `useAuthToken()` in
+   * `src/hooks/index.ts`, which does not/cannot await this in its returned
+   * `setToken` wrapper) never ran inside a promise chain, so the rejection
+   * had no attached handler and surfaced as a process-level UNHANDLED
+   * REJECTION instead of a catchable throw — the exact contract README
+   * documents was broken. Validating BEFORE any `await`/async work, in a
+   * plain (non-`async`) function body, makes the bad-value case throw for
+   * real, synchronously, into the immediate caller — while the valid-value
+   * path is unchanged: it still returns the `persistItem()` promise so
+   * `await globalAuthManager.setToken(good)` keeps working exactly as
+   * before. `persistItem()` itself never rejects (every internal storage
+   * error is caught and logged, not re-thrown), so this returned promise on
+   * the valid path never becomes an unhandled rejection either.
+   */
+  setToken(token: string): Promise<void> {
+    if (!isUsableTokenValue(token)) {
+      throw new Error(
+        `[GlobalAuthManager] setToken() refused an invalid token value (${JSON.stringify(token)}). ` +
+        'Passing undefined/null/an empty string would previously be stored and made isAuthenticated() ' +
+        'return true — auth failing open (H1). Pass a real, non-empty token string, or call ' +
+        'clearAuth() to log out.'
+      );
+    }
+
     this.token = token;
     this.user = this.parseJWT(token);
 
-    if (typeof window !== 'undefined' && this.storage !== 'memory') {
-      try {
-        if (this.storage === 'localStorage') {
-          localStorage.setItem(this.tokenKey, token);
-        } else if (this.storage === 'sessionStorage') {
-          sessionStorage.setItem(this.tokenKey, token);
-        }
-      } catch (error) {
-        console.error('[GlobalAuthManager] Failed to save token:', error);
-      }
-    }
+    return this.persistItem(this.tokenKey, token);
   }
 
   getToken(): string | null {
@@ -93,17 +248,7 @@ class GlobalAuthManager {
   async setRefreshToken(token: string): Promise<void> {
     this.refreshToken = token;
 
-    if (typeof window !== 'undefined' && this.storage !== 'memory') {
-      try {
-        if (this.storage === 'localStorage') {
-          localStorage.setItem(this.refreshTokenKey, token);
-        } else if (this.storage === 'sessionStorage') {
-          sessionStorage.setItem(this.refreshTokenKey, token);
-        }
-      } catch (error) {
-        console.error('[GlobalAuthManager] Failed to save refresh token:', error);
-      }
-    }
+    await this.persistItem(this.refreshTokenKey, token);
   }
 
   getRefreshToken(): string | null {
@@ -115,28 +260,22 @@ class GlobalAuthManager {
     this.refreshToken = null;
     this.user = null;
 
-    if (typeof window !== 'undefined' && this.storage !== 'memory') {
-      try {
-        if (this.storage === 'localStorage') {
-          localStorage.removeItem(this.tokenKey);
-          localStorage.removeItem(this.refreshTokenKey);
-        } else if (this.storage === 'sessionStorage') {
-          sessionStorage.removeItem(this.tokenKey);
-          sessionStorage.removeItem(this.refreshTokenKey);
-        }
-      } catch (error) {
-        console.error('[GlobalAuthManager] Failed to clear auth:', error);
-      }
-    }
+    await Promise.all([
+      this.removeStoredItem(this.tokenKey),
+      this.removeStoredItem(this.refreshTokenKey),
+    ]);
   }
 
   /**
    * Same fail-closed semantics as AuthManager.isAuthenticated() (this is the
    * no-provider fallback path in useMinder). No signature verification —
-   * see isTokenUsable().
+   * see isTokenUsable(). H1 read-side rejection: `isUsableTokenValue` rejects
+   * the `"undefined"`/`"null"` JS-coercion sentinels and empty strings before
+   * `isTokenUsable` ever sees them, so a token persisted before the H1 fix
+   * (or written by another tab) also reads back as unauthenticated.
    */
   isAuthenticated(): boolean {
-    return isTokenUsable(this.token);
+    return isUsableTokenValue(this.token) && isTokenUsable(this.token);
   }
 
   getCurrentUser(): any {

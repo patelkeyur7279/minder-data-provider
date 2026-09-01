@@ -81,11 +81,22 @@ describe('canonical useAuth is the contract hook on every subpath', () => {
     expect(result.current.error?.code).toBe('NO_PROVIDER_FOR_CAPABILITY');
     expect(result.current.session).toBeNull();
 
-    // The legacy token-store shape must not leak through.
-    expect('isLoggedIn' in result.current).toBe(false);
-    expect('setToken' in result.current).toBe(false);
-    expect('getToken' in result.current).toBe(false);
-    expect('clearAuth' in result.current).toBe(false);
+    // H5 (fix-2.2.0-blockers, ratified): the legacy token-store shape must
+    // not leak through Object.keys()/spread/JSON.stringify (the accessors
+    // are defined non-enumerable — see attachLegacyTokenAccessorShim in
+    // src/hooks/contracts.ts) — but they DO still exist as own properties,
+    // because an explicit access must throw a directed error naming
+    // useAuthToken() instead of silently returning `undefined`. That means
+    // the `in` operator (which ignores enumerability) legitimately reports
+    // `true` for these keys now; assert the intended contract with
+    // Object.keys() and an explicit-access throw instead.
+    expect(Object.keys(result.current)).not.toEqual(
+      expect.arrayContaining(['isLoggedIn', 'setToken', 'getToken', 'clearAuth'])
+    );
+    expect(() => (result.current as any).isLoggedIn).toThrow(/useAuthToken/);
+    expect(() => (result.current as any).setToken).toThrow(/useAuthToken/);
+    expect(() => (result.current as any).getToken).toThrow(/useAuthToken/);
+    expect(() => (result.current as any).clearAuth).toThrow(/useAuthToken/);
   });
 
   it('signOut() rejects with the no-provider error when called with no provider registered', async () => {
@@ -140,9 +151,16 @@ describe('useAuthToken is the renamed legacy token-storage hook', () => {
     const fromNative = renderHook(() => useAuthFromNative());
     const fromWeb = renderHook(() => useAuthFromWeb());
 
+    // H5: not enumerable (doesn't leak via Object.keys()/spread), but an
+    // explicit access still throws the directed migration error rather than
+    // silently returning the legacy token-store API. See the equivalent
+    // assertion above for why `in` is not the right check post-H5.
     for (const { result } of [fromAuth, fromNative, fromWeb]) {
-      expect('setToken' in result.current).toBe(false);
-      expect('isLoggedIn' in result.current).toBe(false);
+      expect(Object.keys(result.current)).not.toEqual(
+        expect.arrayContaining(['setToken', 'isLoggedIn'])
+      );
+      expect(() => (result.current as any).setToken).toThrow(/useAuthToken/);
+      expect(() => (result.current as any).isLoggedIn).toThrow(/useAuthToken/);
     }
   });
 });

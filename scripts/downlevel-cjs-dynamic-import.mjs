@@ -82,6 +82,18 @@ for (const file of jsFiles) {
   const code = readFileSync(file, 'utf8');
   if (!code.includes('import(')) continue;
 
+  // BLOCKER 1 (fix-nextjs-appouter-build-and-redirect-header-leak) safety
+  // net: this script runs AFTER tsup's own `onSuccess` hook, which already
+  // ran scripts/fix-use-client-directive.mjs and may have hoisted a
+  // `"use client";` directive to this exact file's first statement (see
+  // that script's header — none of the files it touches currently also
+  // contain `import(`, so this branch is a defensive assertion, not a fix
+  // that runs in practice today). esbuild's minifier preserves a leading
+  // directive prologue by spec, so re-transforming should never lose it —
+  // verify that invariant explicitly and fail loudly instead of silently
+  // shipping a build where Next.js's App Router support regressed.
+  const hadLeadingUseClient = /^(["'])use client\1;/.test(code);
+
   const result = esbuild.transformSync(code, {
     format: 'cjs',
     target: TARGET,
@@ -89,6 +101,16 @@ for (const file of jsFiles) {
     legalComments: 'none',
     supported: { 'dynamic-import': false },
   });
+
+  if (hadLeadingUseClient && !/^(["'])use client\1;/.test(result.code)) {
+    console.error(
+      `downlevel-cjs-dynamic-import: ${relative(root, file)} had a leading "use client" directive ` +
+        'before this transform and lost it afterward — esbuild re-minification is expected to ' +
+        'preserve a leading directive prologue. Refusing to ship a build that silently regresses ' +
+        'the Next.js App Router "use client" fix (scripts/fix-use-client-directive.mjs).',
+    );
+    process.exit(1);
+  }
 
   const cleaned = result.code.replace(SOURCEMAP_COMMENT_RE, '');
   writeFileSync(file, cleaned);

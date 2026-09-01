@@ -1,10 +1,23 @@
 # Next.js App Router (RSC) usage
 
-> **Status (R-03 audit, 2026-07-19).** Works today with the standard "use client" provider
-> pattern below. The hooks and provider are correctly marked `"use client"` in source, but the
-> library's build does not yet *reliably* preserve those directives into the published bundle
-> (see [Known limitation](#known-limitation)) — so always reach the client parts through **your
-> own** `"use client"` boundary, which is the idiomatic App Router pattern anyway.
+> **Status (R-03 audit, 2026-07-19; directive fix 2026-08-26).** Works today with the standard "use client" provider
+> pattern below. The hooks and provider are correctly marked `"use client"` in source, and the
+> library's build now **reliably** preserves those directives into the published bundle via a
+> post-build step (`scripts/fix-use-client-directive.mjs`) and a regression guard
+> (`tests/packaging/use-client-directive-position.test.ts`). Always reach the client parts through **your
+> own** `"use client"` boundary — this is the idiomatic App Router pattern and required by Next.js
+> (rendering `<MinderDataProvider>` directly in a Server Component fails via ordinary App Router rules,
+> not a library defect).
+>
+> **Fixed 2026-08-26 (tracked as P1):** prior to this date, calling `minder()`, `useAuthToken()`,
+> or the zero-config `useMinder(url)` from a fresh App Router module graph — i.e. before anything
+> else in that route had triggered `configureMinder`/a provider mount — threw
+> `TypeError: Cannot assign to read only property 'undefined' of object '#<Object>'` from a
+> cross-entry singleton store computing `globalThis[undefined]`. This affected the Server Component
+> example in [§1](#1-fetch-data-in-a-server-component-with-minder) and any standalone use of
+> `useAuthToken()`, not just the provider pattern below. It's fixed at the root cause
+> (`src/core/singletons.ts`) and reproduced/re-verified in a genuinely fresh child `node` process
+> (empty module graph) on both a success path and a dead-port failure path.
 
 The App Router renders Server Components by default. Anything using React state, effects, or
 context (all of Minder's hooks and `<MinderDataProvider>`) must live behind a `"use client"`
@@ -70,17 +83,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 }
 ```
 
-## Known limitation
+## The `"use client"` wrapper pattern (why it's required)
 
-`src/hooks/*` and `src/core/MinderDataProvider.tsx` begin with `"use client"` in source, but the
-tsup build (`splitting: true`) currently relocates the directive during code-splitting — in some
-published chunks (e.g. the one exporting `MinderDataProvider`) it is not a valid top-of-module
-prologue. Consequence: importing a Minder **client** export *directly* into a Server Component can
-raise the React error *"you're importing a component that needs useState… only works in a Client
-Component."* The `"use client"` wrapper in step 3 avoids this entirely, so App Router apps work
-today.
+`<MinderDataProvider>` is a React Context provider, which requires a client boundary. Next.js
+enforces this rule in App Router: you cannot render a context provider directly in a Server Component.
+This is not specific to Minder — **every** React hook, state, or context consumer must live behind
+`"use client"`. The wrapper pattern in step 3 above is the standard approach for all React providers
+in App Router, not a Minder-specific workaround.
 
-The fix — preserving directives through the build (e.g. `esbuild-plugin-preserve-directives`),
-verified by a runnable App Router example in CI — is tracked as a follow-up in
-`docs/product/BACKLOG.yaml` (R-03-BUILD). Until then, the wrapper pattern above is the supported
-approach.
+The `"use client"` directives in `src/hooks/*` and `src/core/MinderDataProvider.tsx` are
+now reliably preserved through the tsup build via a post-build step (`scripts/fix-use-client-directive.mjs`)
+that re-hoists directives to their true module-first position after code-splitting. A regression
+guard (`tests/packaging/use-client-directive-position.test.ts`) ensures the directive never appears
+anywhere but a module's first statement. This was fixed on 2026-08-26 and verified end-to-end
+against a real Next.js 15 App Router app installed from `npm pack`.

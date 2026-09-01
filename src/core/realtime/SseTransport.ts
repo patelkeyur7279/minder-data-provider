@@ -78,6 +78,24 @@ export class SseTransport implements RealtimeTransport {
       this.pendingConnect = { resolve, reject };
       void this.attemptConnect();
     });
+
+    // N3 (fix-2.2.0-blockers): guarantee at least one rejection handler is
+    // attached to THIS promise, so a connect() failure (config_error, a
+    // permanent HTTP status, a platform without ReadableStream support, or
+    // exhausting reconnect attempts — see failInitial()'s call sites) can
+    // never surface as an unhandled rejection — fatal to a Node-hosted
+    // consumer (SSR, Electron main, the /node and /electron subpaths) and an
+    // "Uncaught (in promise)" in browsers. `SseTransport` is exported
+    // directly from the `./realtime` subpath (src/core/realtime/index.ts),
+    // so a consumer can construct and `.connect()` it with NO hook and NO
+    // `MinderContext` in between — `useWebSocket()`'s guard in
+    // src/hooks/index.ts never runs for that call path. Same fix shape as
+    // `WebSocketManager.connect()` (src/core/WebSocketManager.ts) — this is
+    // a silent no-op that does NOT swallow or alter the rejection for a
+    // caller that DOES attach its own `.catch()`/`await`: every handler
+    // attached to a promise fires independently when the promise settles.
+    this.connectPromise.catch(() => { /* see comment above */ });
+
     return this.connectPromise;
   }
 

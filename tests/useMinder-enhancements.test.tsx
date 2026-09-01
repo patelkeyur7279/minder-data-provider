@@ -171,6 +171,16 @@ describe("Route Validation & Suggestions", () => {
 
     expect(replaced).toBe("/users/:id"); // Unchanged
   });
+
+  it("should replace EVERY occurrence of a repeated placeholder, not just the first (item 6, fix-2.2.0-blockers)", () => {
+    // A non-global .replace() previously left the SECOND ':id' as a literal,
+    // unresolved token — this is what fed computeRouteValidation's
+    // hasUnreplacedParams check and incorrectly flagged a route the caller
+    // supplied a perfectly good id for as invalid.
+    const replaced = replaceUrlParams("/mirror/:id/vs/:id", { id: "42" });
+    expect(replaced).toBe("/mirror/42/vs/42");
+    expect(hasUnreplacedParams(replaced)).toBe(false);
+  });
 });
 
 // ============================================================================

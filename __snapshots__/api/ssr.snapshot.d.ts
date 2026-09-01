@@ -41,6 +41,7 @@ export declare function createSSRConfig(_: MinderConfig, _?: SSROptions): {
     autoDetectEnvironment?: boolean;
     onError?: (_: ApiError) => void;
     httpClient?: any;
+    transport?: "auto" | "axios" | "fetch";
 };
 export declare function getDehydratedState(_: any, _: Promise<any>[]): Promise<Record<string, any>>;
 export declare function prefetchData(_: MinderConfig, _: string[]): Promise<Record<string, unknown>>;

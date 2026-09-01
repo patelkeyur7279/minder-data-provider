@@ -550,10 +550,16 @@ describe('AuthManager', () => {
     });
 
     it('should handle empty token', () => {
-      authManager.setToken('');
-      // Empty string is falsy, so Map.get returns undefined which becomes null
-      const result = authManager.getToken();
-      expect(result === '' || result === null).toBe(true);
+      // H1 (fix-2.2.0-blockers): setToken() now REJECTS unusable token
+      // values (including an empty string) with a throw instead of storing
+      // them — the old behavior silently persisted the literal string
+      // "undefined"/"null" and made isAuthenticated() return true, i.e. auth
+      // failed OPEN. It must fail CLOSED instead.
+      expect(() => authManager.setToken('')).toThrow(
+        /refused an invalid token value/
+      );
+      // Nothing should have been persisted.
+      expect(authManager.getToken()).toBeNull();
     });
 
     it('should handle clearing when no tokens exist', () => {

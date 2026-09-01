@@ -1,6 +1,6 @@
 # API Reference
 
-Complete API documentation for Minder Data Provider v2.1.
+Complete API documentation for Minder Data Provider 2.2.0.
 
 ## Table of Contents
 
@@ -101,6 +101,9 @@ const { ready, error, session, signOut, getProviderClient } = useAuth();
 
 If you just need raw client-side token storage (no certified provider), use
 `useAuthToken` instead — see [USAGE_GUIDE.md](./USAGE_GUIDE.md#useauthtoken--raw-client-side-token-storage).
+`useAuth()`'s pre-2.2.0 `setToken`/`getToken`/`clearAuth`/`isLoggedIn` shape is not
+part of `UseAuthReturn` — those four keys now throw a directed `MinderError`
+(`USE_AUTH_LEGACY_ACCESSOR_REMOVED`) naming `useAuthToken()` if accessed.
 
 ### useCache
 
@@ -138,8 +141,15 @@ const { uploadFile, progress, isUploading } = useMediaUpload(routeName);
 
 ### minder-data-provider/hook
 
-A lightweight entry point (~25KB) that exports *only* `useMinder`.
-**Note:** This MUST be used within a `MinderDataProvider` context.
+A legacy re-export path (prefer the root or `/core` entry) — it exports
+`useMinder` (also as the default export), `MinderDataProvider`,
+`useMinderContext` (throws outside `<MinderDataProvider>` — this is the only
+subpath that re-exports the *throwing* accessor without also exporting
+`useMinderContextSafe`), and the `UseMinderOptions`/`UseMinderReturn` types.
+`useMinder` itself does **not** require `<MinderDataProvider>` — like every
+other entry, it also works standalone once `configureMinder()` has registered
+routes. See the README "Bundle Cost" section for this entry's measured size
+(`npm run measure:bundles`, `hook` row).
 
 ```typescript
 import { useMinder } from "minder-data-provider/hook";
@@ -166,7 +176,14 @@ defaultLogger.info("Category", "Message");
 
 ### Security
 - `RateLimiter` class
-- `XSSSanitizer` class
+- `XSSSanitizer` class — `sanitize()` fails closed (throws `SANITIZER_UNAVAILABLE`)
+  on any runtime without a usable DOMPurify instance, including every non-browser
+  runtime. Sanitizing an object is **opt-in per field**
+  (`security.sanitization: { enabled: true, fields: [...] }`) — with no `fields`
+  configured, request bodies pass through unchanged rather than being walked
+  recursively.
+- `createCorsMiddleware()` — rejects `credentials: true` combined with a wildcard
+  origin (`'*'`, an array containing `'*'`, or a `RegExp` that matches trivially).
 
 
 ## v2.2 — New & Updated API
@@ -190,7 +207,8 @@ Minimal surface for smaller bundles.
 | `useMinder` | React hook |
 | `configureMinder` | function |
 | `MinderDataProvider` | component |
-| `useMinderContext` | React hook |
+| `useMinderContext` | React hook — throws outside `<MinderDataProvider>` |
+| `useMinderContextSafe` | React hook — returns `null` outside `<MinderDataProvider>` instead of throwing |
 | `MinderError` | error class |
 | `MinderConfigError` | error class |
 | `MinderNetworkError` | error class |

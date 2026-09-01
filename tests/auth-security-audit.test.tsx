@@ -438,11 +438,14 @@ describe('🔒 AUTHENTICATION SECURITY AUDIT', () => {
                     storage: StorageType.MEMORY,
                 });
 
-                authManager.setToken('');
-                const token = authManager.getToken();
-
-                // Empty string is falsy, may return '' or null
-                expect(token === '' || token === null).toBe(true);
+                // H1 (fix-2.2.0-blockers): setToken() now REJECTS unusable
+                // token values (including an empty string) by throwing,
+                // instead of silently persisting them and letting
+                // isAuthenticated() fail OPEN.
+                expect(() => authManager.setToken('')).toThrow(
+                    /refused an invalid token value/
+                );
+                expect(authManager.getToken()).toBeNull();
             });
 
             it('should handle getToken when never set', () => {

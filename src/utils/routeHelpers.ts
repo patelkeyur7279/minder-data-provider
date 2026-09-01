@@ -68,10 +68,27 @@ export function getRouteSuggestions(
 
 /**
  * Replace URL parameters with values
- * 
+ *
+ * fix-2.2.0-blockers (item 6, adversarial re-probe): substitutes EVERY
+ * OCCURRENCE of a placeholder, not just the first. A plain-string,
+ * non-global `.replace()` left every occurrence after the first as a
+ * literal, unresolved token — for a route repeating the same placeholder
+ * (e.g. '/mirror/:id/vs/:id'), this function is consumed for VALIDATION by
+ * `useMinder.helpers.ts`'s `computeRouteValidation`/`validateMutationRoute`
+ * (which then checks `hasUnreplacedParams` on the result), so the leftover
+ * literal placeholder made a route with a genuinely-supplied id get flagged
+ * invalid. It is also PUBLIC API (re-exported from `src/index.ts`), so any
+ * consumer calling it directly for display/URL-building purposes hit the
+ * same truncated substitution. Mirrors the identical fix already applied to
+ * `resolveRequest.ts`'s `substituteUrlParams` (the function that actually
+ * substitutes the dispatched URL) — split/join replaces every occurrence.
+ *
  * @example
  * replaceUrlParams('/users/:id/posts/:postId', { id: 123, postId: 456 })
  * // Returns: '/users/123/posts/456'
+ * @example
+ * replaceUrlParams('/mirror/:id/vs/:id', { id: 42 })
+ * // Returns: '/mirror/42/vs/42' (both occurrences, not just the first)
  */
 export function replaceUrlParams(
   url: string,
@@ -82,7 +99,10 @@ export function replaceUrlParams(
   let finalUrl = url;
 
   Object.entries(params).forEach(([key, value]) => {
-    finalUrl = finalUrl.replace(`:${key}`, String(value));
+    const placeholder = `:${key}`;
+    if (finalUrl.includes(placeholder)) {
+      finalUrl = finalUrl.split(placeholder).join(String(value));
+    }
   });
 
   return finalUrl;

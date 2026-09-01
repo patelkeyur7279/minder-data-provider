@@ -32,11 +32,12 @@ export declare function generateConfigFromApiRoutes(_: string, _?: {
 export { _ as AnalyticsConfig, _ as ApiError, _ as AuthConfig, _ as CacheConfig, _ as CacheEntry, _ as CorsConfig, _ as CorsHelperConfig, _ as CrudOperations, _ as DebugConfig, _ as EnvironmentOverride, _ as InferInput, _ as InferOutput, _ as MediaUploadResult, _ as MinderConfig, _ as Notification, _ as PerformanceConfig, _ as QueryState, _ as RealtimeConfig, _ as RealtimeReconnectConfig, _ as RetryConfig, _ as SSRConfig, _ as SecurityConfig, _ as ServerState, _ as SessionData, _ as StandardSchemaV1, _ as TelemetryConfig, _ as UIState, _ as UploadProgress, _ as UserState, _ as WebSocketConfig } from '../types-HASH.js';
 export { _ as AuthManager } from '../AuthManager-HASH.js';
 export { _ as CacheManager } from '../CacheManager-HASH.js';
-export { _ as configureMinder, _ as minder } from '../minder-HASH.js';
+export { configureMinder } from '../config/index.js';
 export { _ as DebugManager } from '../DebugManager-HASH.js';
 export { _ as FeatureFlags, _ as FeatureLoader, _ as PlatformCapabilities, _ as PlatformCapabilityDetector, _ as createFeatureLoader } from '../FeatureLoader-HASH.js';
 export { HydrationBoundary, QueryClient, QueryClientProvider, dehydrate } from '@tanstack/react-query';
 export { _ as MemoryStorageAdapter, _ as StorageAdapterFactory } from '../MemoryStorageAdapter-HASH.js';
+export { _ as minder } from '../minder-HASH.js';
 export { _ as MinderError } from '../MinderError-HASH.js';
 export { _ as MinderOptions, _ as MinderResult } from '../types-HASH.js';
 export { _ as Platform } from '../enums-HASH.js';

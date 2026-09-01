@@ -625,7 +625,7 @@ export function MultiFileUploader() {
 
 ```typescript
 import { useState, useEffect } from 'react';
-import { useDebounce } from 'minder-data-provider/utils/performance';
+import { useDebounce } from 'minder-data-provider';
 import { useOneTouchCrud } from 'minder-data-provider/crud';
 
 export function DebouncedSearch() {
@@ -663,7 +663,7 @@ export function DebouncedSearch() {
 ### Lazy Loading
 
 ```typescript
-import { useLazyLoad } from 'minder-data-provider/utils/performance';
+import { useLazyLoad } from 'minder-data-provider';
 import { useRef } from 'react';
 
 export function InfiniteScroll() {
@@ -698,7 +698,7 @@ export function InfiniteScroll() {
 ### Performance Monitoring
 
 ```typescript
-import { usePerformanceMonitor } from 'minder-data-provider/utils/performance';
+import { usePerformanceMonitor } from 'minder-data-provider';
 import { useEffect } from 'react';
 
 export function PerformanceDashboard() {
@@ -761,11 +761,16 @@ export function PerformanceDashboard() {
 
 ### XSS Protection
 
-```typescript
-import { XSSSanitizer } from 'minder-data-provider/utils/security';
-import { useOneTouchCrud } from 'minder-data-provider/crud';
+`XSSSanitizer` (the class `security.sanitization` uses internally to sanitize
+opt-in REQUEST-BODY fields before they're sent) is not part of the public API —
+there is no `minder-data-provider/utils/security` subpath. Per the security
+model, request-body sanitization is data hygiene for outgoing fields, not a
+render-time XSS control — XSS defence belongs where you render untrusted data,
+using the actual trust boundary:
 
-const sanitizer = new XSSSanitizer();
+```typescript
+import DOMPurify from 'dompurify'; // already a runtime dependency of minder-data-provider
+import { useOneTouchCrud } from 'minder-data-provider/crud';
 
 export function SafeCommentsList() {
   const { data: comments } = useOneTouchCrud('comments');
@@ -774,11 +779,13 @@ export function SafeCommentsList() {
     <div>
       {comments.map(comment => (
         <div key={comment.id}>
-          <strong>{sanitizer.sanitize(comment.author)}</strong>
-          <div 
-            dangerouslySetInnerHTML={{ 
-              __html: sanitizer.sanitize(comment.text) 
-            }} 
+          {/* Plain text: JSX already escapes this — no sanitizer call needed. */}
+          <strong>{comment.author}</strong>
+          {/* Raw HTML: sanitize right here, at the point it's rendered. */}
+          <div
+            dangerouslySetInnerHTML={{
+              __html: DOMPurify.sanitize(comment.text)
+            }}
           />
         </div>
       ))}
@@ -787,15 +794,46 @@ export function SafeCommentsList() {
 }
 ```
 
-### Rate Limiting
+If you also want to sanitize a specific field on the way OUT (e.g. before it's
+sent to your API), opt in per field. `fields` isn't yet part of the published
+`SecurityConfig` TypeScript type, so build the config as its own variable
+(structural assignment allows the extra property; an inline object literal
+does not) and pass it directly to `<MinderDataProvider config={...}>` rather
+than through `configureMinder()`, which only types `sanitization` as a plain
+boolean:
 
 ```typescript
-import { RateLimiter } from 'minder-data-provider/utils/security';
+import type { MinderConfig } from 'minder-data-provider';
+
+const sanitization = { enabled: true, fields: ['bio', 'comment'] }; // only these fields
+
+const config: MinderConfig = {
+  apiBaseUrl: 'https://api.example.com',
+  routes: { comments: { url: '/comments', method: 'GET' } },
+  security: { sanitization },
+};
+// <MinderDataProvider config={config}>...</MinderDataProvider>
+```
+
+Fields not listed pass through unchanged — ordinary strings like `"Tom & Jerry
+<3"` are never corrupted.
+
+### Rate Limiting
+
+`RateLimiter` is exported from the package **root**, not from a
+`minder-data-provider/utils/security` subpath (that path doesn't exist).
+`check()` is `async`, and its `keyGenerator` receives whatever object you pass
+it (it looks for `req.ip` / `req.headers` by default, for server middleware
+use — pass your own `keyGenerator` for a client-side key like a user ID):
+
+```typescript
+import { RateLimiter } from 'minder-data-provider';
 import { useState } from 'react';
 
 const limiter = new RateLimiter({
-  requests: 5,
-  window: 60000  // 5 requests per minute
+  max: 5,
+  windowMs: 60000, // 5 requests per minute
+  keyGenerator: (req: { userId: string }) => req.userId,
 });
 
 export function RateLimitedForm() {
@@ -805,8 +843,9 @@ export function RateLimitedForm() {
     e.preventDefault();
 
     const userId = 'current-user-id';
-    
-    if (!limiter.isAllowed(userId)) {
+
+    const { allowed } = await limiter.check({ userId });
+    if (!allowed) {
       alert('Too many requests. Please wait before trying again.');
       return;
     }
@@ -922,7 +961,7 @@ export default function PostPage({ initialData }) {
 ```typescript
 import { useOneTouchCrud } from 'minder-data-provider/crud';
 import { useCache } from 'minder-data-provider/cache';
-import { useDebounce } from 'minder-data-provider/utils/performance';
+import { useDebounce } from 'minder-data-provider';
 import { useState } from 'react';
 
 export function ProductList() {

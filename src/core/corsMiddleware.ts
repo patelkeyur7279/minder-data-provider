@@ -5,10 +5,37 @@ export interface CorsMiddlewareOptions {
   allowedHeaders?: string[];
   /**
    * Send `Access-Control-Allow-Credentials`. Requires an explicit `origin`
-   * allowlist — combining it with the wildcard is the canonical unsafe CORS
+   * allowlist — combining it with a wildcard is the canonical unsafe CORS
    * configuration and is rejected (mirrors CorsManager.validateConfig()).
+   * "Wildcard" here means the literal string `'*'`, an `origin` array that
+   * contains `'*'`, or a `RegExp` that matches any origin (M4) — a
+   * string-only `origin === '*'` check let a trivially-matching RegExp slip
+   * through and reflect any Origin header with credentials enabled.
    */
   credentials?: boolean;
+}
+
+/**
+ * M4: a `RegExp` that matches an arbitrary, unpredictable probe origin
+ * cannot be a real allowlist entry — it matches everything (e.g. a
+ * match-all-input pattern, or a caret-only anchor). Used to reject
+ * `credentials: true` combined with such a regex, the same way the literal
+ * `'*'` string is rejected.
+ */
+function isTriviallyMatchingRegex(re: RegExp): boolean {
+  const probe = `https://minder-cors-guard-probe-${Math.random().toString(36).slice(2)}.invalid`;
+  return re.test(probe);
+}
+
+function isWildcardEquivalent(origin: CorsMiddlewareOptions['origin']): boolean {
+  if (origin === '*') return true;
+  if (origin instanceof RegExp) return isTriviallyMatchingRegex(origin);
+  if (Array.isArray(origin)) {
+    return origin.some((entry) =>
+      entry === '*' || (entry instanceof RegExp && isTriviallyMatchingRegex(entry))
+    );
+  }
+  return false;
 }
 
 /**
@@ -24,18 +51,21 @@ export function createCorsMiddleware(options: CorsMiddlewareOptions = {}) {
     credentials = false,
   } = options;
 
-  if (credentials && origin === '*') {
+  if (credentials && isWildcardEquivalent(origin)) {
     throw new Error(
       '[minder-data-provider] Refusing to create CORS middleware with credentials enabled ' +
-        'and a wildcard origin. Pass an explicit origin allowlist when using credentials.'
+        "and a wildcard-equivalent origin ('*', an origin array containing '*', or a RegExp that " +
+        'matches any origin). Pass an explicit origin allowlist when using credentials.'
     );
   }
 
   const resolveAllowedOrigin = (requestOrigin: string | undefined): string | null => {
-    if (origin === '*') return '*';
+    // M4: '*' inside an array is a wildcard too, not just the bare string.
+    if (origin === '*' || (Array.isArray(origin) && origin.includes('*'))) return '*';
     if (!requestOrigin) return null;
     const allowlist = Array.isArray(origin) ? origin : [origin];
     for (const allowed of allowlist) {
+      if (allowed === '*') continue; // handled above; credentials+'*' already rejected at construction
       if (typeof allowed === 'string' ? allowed === requestOrigin : allowed.test(requestOrigin)) {
         return requestOrigin;
       }

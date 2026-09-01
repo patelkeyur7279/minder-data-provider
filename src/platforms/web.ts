@@ -5,7 +5,13 @@
  */
 
 // Core functionality
-export { minder, configureMinder } from '../core/minder.js';
+// M3 (fix-2.2.0-blockers, BREAKING): `configureMinder` was sourced from
+// `../core/minder.js`, the `@deprecated` baseURL/headers-only configurator
+// (src/core/minder.ts:163) that does NOT register routes and whose own
+// deprecation warning tells the user to import the very thing they already
+// imported. The real implementation lives in `../config/index.js`.
+export { minder } from '../core/minder.js';
+export { configureMinder } from '../config/index.js';
 export { useMinder } from '../hooks/useMinder.js';
 
 // Capability contract hooks (provider foundation, task F-03) + the registration function apps
@@ -55,7 +61,9 @@ export * from '../plugins/index.js';
 export * from '../query/index.js';
 
 // Legacy support
-export { MinderDataProvider, useMinderContext } from '../core/MinderDataProvider.js';
+// M2 (fix-2.2.0-blockers): export the non-throwing `useMinderContextSafe`
+// accessor alongside the throwing `useMinderContext` — see src/index.ts.
+export { MinderDataProvider, useMinderContext, useMinderContextSafe } from '../core/MinderDataProvider.js';
 export * from '../core/types.js';
 
 // Types

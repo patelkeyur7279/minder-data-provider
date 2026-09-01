@@ -156,8 +156,15 @@ export declare class GlobalAuthManager {
     private storage;
     private tokenKey;
     private refreshTokenKey;
+    private platformAdapter?;
+    ready: Promise<void>;
     constructor(_?: GlobalAuthConfig);
+    private detectBrowserStorage;
+    private getPlatformAdapter;
     private restoreFromStorage;
+    private restoreFromPlatformAdapter;
+    private persistItem;
+    private removeStoredItem;
     private parseJWT;
     setToken(_: string): Promise<void>;
     getToken(): string | null;
@@ -394,7 +401,7 @@ export { _ as CredentialInput, _ as ExposedSecret, _ as SecretRef, _ as assertNo
 export { _ as CSRFToken, _ as JWTPayload, _ as SecureAuthConfig, _ as SecureAuthManager, _ as TokenRefreshConfig, _ as TokenRefreshManager, _ as UseAuthReturn, _ as UseCheckoutReturn, _ as UseLiveReturn, _ as UseStorageReturn, _ as createSecureAuthManager, _ as createTokenRefreshManager, _ as useAuth, _ as useCheckout, _ as useLive, _ as useStorage } from './index-HASH.js';
 export { _ as DebugManager } from './DebugManager-HASH.js';
 export { _ as DevTools, _ as DevToolsConfig, _ as DevToolsEvents, _ as PlatformDetector } from './DevTools-HASH.js';
-export { _ as EnvironmentManager, _ as MinderDataProvider, _ as useMinder, _ as useMinderContext } from './index-HASH.js';
+export { _ as EnvironmentManager, _ as MinderDataProvider, _ as useMinder, _ as useMinderContext, _ as useMinderContextSafe } from './index-HASH.js';
 export { _ as FeatureFlags, _ as FeatureLoader, _ as FeatureLoaderOptions, _ as FeatureModules, _ as PlatformCapabilities, _ as PlatformCapabilityDetector, _ as createFeatureLoader } from './FeatureLoader-HASH.js';
 export { _ as FilterOption, _ as PaginationHelper, _ as PaginationOptions, _ as PaginationResult, _ as PaginationState, _ as QueryBuilder, _ as QueryParams, _ as SortOption, _ as query, _ as usePagination, _ as useQueryBuilder } from './QueryBuilder-HASH.js';
 export { HydrationBoundary, QueryClient, QueryClientProvider, dehydrate } from '@tanstack/react-query';

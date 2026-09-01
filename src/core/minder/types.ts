@@ -66,8 +66,27 @@ export interface MinderOptions<TModel = any> {
   headers?: Record<string, string>;
 
   /**
-   * Custom Axios configuration
-   * Allows passing any axios config options (e.g. responseType, transformRequest)
+   * Custom per-call Axios configuration (e.g. `responseType`, `timeout`,
+   * `withCredentials`, `validateStatus`, `paramsSerializer`, `decompress`,
+   * `signal`, `onUploadProgress`, `onDownloadProgress`).
+   *
+   * fix-2.2.0-blockers (SECURITY, BREAKING — see CHANGELOG.md): when used
+   * inside a `<MinderDataProvider>` (i.e. `useMinder()`'s provider-mode
+   * path, which dispatches through `ApiClient`), this is merged into the
+   * SAME per-call option bag `ApiClient.request()` allowlists — only the
+   * keys above ever reach the outgoing request; `url`, `baseURL`, `proxy`,
+   * `adapter`, `transformRequest`, `transformResponse`, `httpAgent`,
+   * `httpsAgent`, `socketPath`, and `beforeRedirect` are refused with a
+   * `MinderSecurityError` (they control WHERE a request goes or HOW it is
+   * physically transported, and the route's own headers — including any
+   * static auth/API-key header — would otherwise travel wherever they
+   * pointed). Standalone `minder()` calls (no provider) never reached these
+   * fields to begin with.
+   *
+   * fix-2.2.0-blockers (BLOCKER 2, SECURITY — see CHANGELOG.md /
+   * docs/MIGRATION_GUIDE.md): do NOT use the top-level `baseURL` field below
+   * as a general way to point a call at a different host — see its own doc
+   * comment for what it actually does and does not protect.
    */
   axiosConfig?: Record<string, any>;
 
@@ -147,8 +166,27 @@ export interface MinderOptions<TModel = any> {
   retryNonIdempotent?: boolean;
 
   /**
-   * Base URL override
-   * If not provided, uses global config
+   * Base URL override for this one call. If not provided, uses the baseURL
+   * set via `configureMinder()` / `minder.config()`.
+   *
+   * fix-2.2.0-blockers (BLOCKER 2, SECURITY, BREAKING — see CHANGELOG.md /
+   * docs/MIGRATION_GUIDE.md): this is NOT a safe general-purpose way to send
+   * a request to a different host. `minder()` throws `MinderSecurityError`
+   * (`code: 'UNSAFE_REQUEST_OPTION_OVERRIDE'`) if `baseURL` is combined with
+   * EITHER a registered route that declares its own `headers` (e.g. a static
+   * `X-Api-Key`) OR an ambient bearer token set via `configureMinder()` /
+   * `minder.config()` — in both cases the credential is attached by the
+   * library, not this call, and must not silently follow a caller-chosen
+   * destination. It is safe to use `baseURL` for a route/call that carries
+   * NO such credential (e.g. an unregistered path with no ambient token —
+   * this is what the existing "override baseURL per request" tests cover).
+   *
+   * `baseURL` does NOT protect against every credential path, though: it only
+   * ever changes the AXIOS-level prefix. Passing an ABSOLUTE URL as the
+   * `route` argument itself bypasses `baseURL` (and this guard) entirely and
+   * STILL attaches an ambient token/headers to whatever host you name — a
+   * documented escape hatch, not a defect, but use it deliberately, only for
+   * destinations you trust with that credential.
    */
   baseURL?: string;
 

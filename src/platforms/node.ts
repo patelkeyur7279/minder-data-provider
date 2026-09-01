@@ -5,7 +5,13 @@
  */
 
 // Core functionality (no React hooks)
-export { minder, configureMinder } from '../core/minder.js';
+// M3 (fix-2.2.0-blockers, BREAKING): `configureMinder` was sourced from
+// `../core/minder.js`, the `@deprecated` baseURL/headers-only configurator
+// (src/core/minder.ts:163) that does NOT register routes and whose own
+// deprecation warning tells the user to import the very thing they already
+// imported. The real implementation lives in `../config/index.js`.
+export { minder } from '../core/minder.js';
+export { configureMinder } from '../config/index.js';
 
 // Platform detection
 export { PlatformDetector } from '../platform/PlatformDetector.js';

@@ -780,3 +780,35 @@ const { data } = await minder('createPaymentIntent', { amount: 1999 });
 | Stripe `sk_`, AWS key, DB password, PEM key | `secret()` + server route | No — server only |
 
 Publishable keys and base URLs use `env()`. Real secrets use `secret()` plus a server route and `resolveSecret`. The `assertNoExposedSecrets` guard is your safety net — but the discipline is the same one line: **never put a raw secret in client config.**
+
+## 🎯 Per-call destination overrides and ambient credentials (v2.2)
+
+Both request paths — `useMinder()`/`apiClient.request()` (inside a
+`<MinderDataProvider>`) and standalone `minder()` — attach credentials the
+library itself holds (a registered route's own declared `headers`, e.g. a
+static `X-Api-Key`, and/or your configured bearer token) to every request for
+that route/config, automatically. A per-call option that changes **where**
+the request is sent must never let those ambient credentials silently follow
+it to a caller- or attacker-controlled host. Two rules follow from that:
+
+1. **Per-call axios options are an allowlist, not a passthrough.** `url`,
+   `baseURL`, `proxy`, `adapter`, `transformRequest`/`transformResponse`,
+   `httpAgent`/`httpsAgent`, `socketPath`, and `beforeRedirect` all throw
+   `MinderSecurityError` (`code: 'UNSAFE_REQUEST_OPTION_OVERRIDE'`) when passed
+   through `axiosConfig`/per-call `options` on the provider path, or as
+   standalone `minder()`'s own `baseURL` field when it would carry a
+   registered route's declared headers or an ambient token. See
+   [MIGRATION_GUIDE.md](./MIGRATION_GUIDE.md#per-call-axios-options-are-now-an-allowlist)
+   and
+   [MIGRATION_GUIDE.md](./MIGRATION_GUIDE.md#minders-per-call-baseurl-now-refuses-to-redirect-credentials).
+
+2. **An absolute URL is a deliberate, documented escape hatch — not a "safe"
+   alternative.** Calling `apiClient.request('https://third-party.example/x', ...)`
+   or standalone `minder('https://third-party.example/x', ...)` bypasses the
+   route registry (and `baseURL`) entirely and dispatches to exactly the host
+   you named — but it **still attaches your configured bearer token** to that
+   host, by design (this is what lets an app call a third-party API through
+   the same client). Only pass an absolute URL you actually trust with your
+   credential; never build one from unvalidated user input. If you need to
+   call a host that should **not** receive your token, use a plain
+   fetch/axios call outside `minder-data-provider` instead.

@@ -6,7 +6,7 @@ What `minder-data-provider` supports, and how to know if your project meets the 
 > `react`, `react-dom`, and `@tanstack/react-query` meet the minimums below, with an exact
 > `npm install …` fix for anything too old.
 
-## Requirements (current: `minder-data-provider@2.2.0-beta.0`)
+## Requirements (current: `minder-data-provider@2.2.0`)
 
 | Dependency | Supported range | Notes |
 |---|---|---|
@@ -18,16 +18,28 @@ What `minder-data-provider` supports, and how to know if your project meets the 
 | **@tanstack/query-core** | ≥ 5.90.6 | Pulled in with react-query. |
 | **TypeScript** | 5.x | Optional; `.d.ts`/`.d.mts` shipped for `moduleResolution: bundler`/`node16`. |
 
-### Frameworks (see [SUPPORT_MATRIX.md](./product/SUPPORT_MATRIX.md) for evidence levels)
+### Frameworks
+
+> **This table was stale relative to [SUPPORT_MATRIX.md](./product/SUPPORT_MATRIX.md)** (it
+> previously said "Experimental"/"Inferred-works" for rows the Support Matrix had already promoted
+> to "Confirmed" with runnable CI examples). SUPPORT_MATRIX.md is the source of truth — this table
+> is kept only as a quick summary; if the two ever disagree again, trust SUPPORT_MATRIX.md.
+> "Confirmed" there means a runnable example boots and completes real round trips in CI, **not**
+> that every capability was independently wire-verified on that specific framework — see the
+> Support Matrix's own "Rule" note for what is and isn't covered.
 
 | Framework | Status |
 |---|---|
 | React 19 (web) | Confirmed |
-| Next.js Pages Router | Experimental (`./nextjs` entry, CI example) |
-| Next.js App Router / RSC | Partial — works via the `"use client"` wrapper pattern ([NEXTJS_APP_ROUTER.md](./NEXTJS_APP_ROUTER.md)) |
-| Vite + React | Inferred-works (pure ESM) |
-| React Native / Expo, Electron, Node | Experimental (entries built + unit-tested; no on-device CI yet) |
-| Edge (Workers/Vercel Edge/Deno/Bun) | Inferred-works for the `transport: 'fetch'` core path ([EDGE.md](./EDGE.md)) |
+| Next.js Pages Router | Confirmed (`examples/nextjs-app`, CI job `pages-router-example`) |
+| Next.js App Router / RSC | Confirmed via the `"use client"` provider-wrapper pattern ([NEXTJS_APP_ROUTER.md](./NEXTJS_APP_ROUTER.md)); the standalone-singleton crash that used to break zero-config `useMinder`/server-side `minder()`/standalone `useAuthToken()` outside that pattern is fixed (2026-08-26) |
+| Vite + React | Confirmed (`examples/web/e-commerce`, CI job `vite-example`) |
+| Remix / React Router 7, Astro + React islands | Confirmed (CI jobs `remix-example`, `astro-example`) |
+| Node (server) | Confirmed (CI job `node-server-example`) |
+| React Native / Expo | Confirmed at the bundle + jest-expo-suite level (CI job `expo-bundle-evidence`) — no simulator/device run yet |
+| Electron | Confirmed at the headless-runtime level (xvfb on Linux CI, plain on macOS) — headed-GUI interaction beyond window-boot is unexercised |
+| Edge (Cloudflare Workers/workerd) | Confirmed (CI job `edge-worker-example`), including the provider path (`transport: 'fetch'` under `<MinderDataProvider>`, fixed 2026-08-26 — see SUPPORT_MATRIX.md "P2") |
+| Edge (Vercel Edge/Deno/Bun) | Inferred-works only — no runnable example on these three yet |
 
 ### Optional provider SDKs (only needed if you use that provider)
 

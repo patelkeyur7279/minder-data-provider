@@ -1,5 +1,16 @@
 # Release-Readiness Report — minder-data-provider
 
+> ## Correction — 2026-08-26 (`fix-2.2.0-blockers` matrix)
+> The "1 high" bullet directly below this line ("`onSync`/`onConnectivityChange` now fire for REAL
+> auto-queued failed requests") is **false** for the case that matters most: a mutation that fails
+> with a genuine, unmocked network error (real dead port) through a provider's `ApiClient` is still
+> never auto-queued at all — `onSync` has nothing to fire for, because `addToQueue()` is never
+> called on that path. The unit-test evidence this bullet was based on mocked the error rather than
+> causing a real one, which is exactly how it passed CI while staying broken. Tracked as C3; full
+> root-cause + evidence trail in [SUPPORT_MATRIX.md → Offline](./SUPPORT_MATRIX.md) and
+> [docs/FEATURES.md → Offline](../FEATURES.md). This report's other findings are unaffected and this
+> note does not retract them — only the offline-auto-queue claim below.
+
 > ## Update — 2026-07-20 (post-review fix program, branch `fix/mdpd-workspace-findings`)
 > A follow-up review of 18 subsequent commits found and FIXED (all parent-verified, committed
 > locally `cec62b2` + `8b1a9bb`):

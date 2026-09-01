@@ -573,12 +573,17 @@ describe('🧪 COMPREHENSIVE FRAMEWORK TESTING', () => {
 
             const { result } = renderHook(() => useAuthToken(), { wrapper });
 
-            await act(async () => {
-                result.current.setToken('');
-            });
+            // H1 (fix-2.2.0-blockers): setToken() now REJECTS unusable token
+            // values (including an empty string) by throwing, rather than
+            // silently persisting them and letting isAuthenticated() fail
+            // OPEN.
+            await expect(
+                act(async () => {
+                    result.current.setToken('');
+                })
+            ).rejects.toThrow(/refused an invalid token value/);
 
-            const token = result.current.getToken();
-            expect(token === '' || token === null).toBe(true);
+            expect(result.current.getToken()).toBeNull();
         });
     });
 

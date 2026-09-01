@@ -32,13 +32,16 @@ needed" tells you whether your code has to change.
 | 4 | `detectMethod`: only ID-shaped final route segments (numeric/UUID/24-hex) auto-detect `PUT`; slug/word segments now default to `POST` | Only if a slug route relied on auto-`PUT` — pass `options.method` or an `id`/`_id` field | [detectMethod re-contract](#v2x--v30--detectmethod-only-auto-detects-put-on-id-shaped-segments-breaking) |
 | 5 | `detectMethod` no longer infers `DELETE` from a `delete` key in the payload | Only if you relied on `{ delete: true }` issuing `DELETE` — pass `{ method: 'DELETE' }` explicitly | [delete-key inference removed](#detectmethod-no-longer-turns-a-delete-key-into-an-http-delete) |
 | 6 | `minder()` retries are idempotent-only by default (GET/HEAD/OPTIONS/PUT/DELETE); POST/PATCH no longer auto-retry | Pass `retryNonIdempotent: true` if you relied on POST/PATCH retrying | [Idempotent-only retries](#v2x--v30--minder-retries-are-idempotent-only-by-default-breaking) |
-| 7 | One canonical `useAuth` everywhere (capability-contract hook); the old token-storage hook is renamed `useAuthToken` | Rename `useAuth` → `useAuthToken` at any import from `/auth`, `/native`, or `/expo` using `setToken`/`getToken`/`clearAuth`/`isLoggedIn` | [useAuth / useAuthToken split](#useauth-is-one-hook-everywhere-the-token-store-is-now-useauthtoken) |
-| 8 | `XSSSanitizer.sanitize()` throws `SANITIZER_UNAVAILABLE` instead of silently degrading if DOMPurify hasn't loaded yet | Only if you call `XSSSanitizer` directly (not through `ApiClient`) — catch the error or `await sanitizer.ready()` first | [XSSSanitizer fails closed](#xsssanitizersanitize-now-fails-closed) |
+| 7 | `useAuth()` is now the capability-contract hook on **every** import path (root, `/web`, `/nextjs`, `/electron`, `/auth`, `/native`, `/expo`) — on 2.1.4 it was the token-storage hook on all of them, with no split. The old token-storage shape is preserved and renamed `useAuthToken()`, also exported from every import path | **This affects root/`/web`/`/nextjs`/`/electron` imports too, not only `/auth`/`/native`/`/expo`.** If any call site does `setToken`/`getToken`/`clearAuth`/`isLoggedIn`/`isAuthenticated`/`setRefreshToken`/`getRefreshToken` on the result of `useAuth()`, switch that call to `useAuthToken()` — same shape, same import path. Root importers: this does **not** fail to compile or fail at import time; it throws only when a legacy accessor is actually called, so `tsc`/import checks won't catch it | [useAuth / useAuthToken split](#useauth-is-one-hook-everywhere-the-token-store-is-now-useauthtoken) |
+| 8 | `security.sanitization` sanitizes nothing by default now (opt-in per field via `fields`); `sanitize()` throws `SANITIZER_UNAVAILABLE` instead of silently degrading, on every non-browser runtime too | If you relied on the old blanket recursive sanitization of every request-body string — add an explicit `fields` allowlist | [XSSSanitizer fails closed / opt-in fields](#xsssanitizersanitize-now-fails-closed-everywhere-and-sanitization-is-opt-in-per-field) |
 | 9 | `isAuthenticated()` fails closed on a corrupt/expired JWT-shaped token (was previously treated as valid) | Only if you intentionally stored JWT-shaped-but-invalid strings — use `getToken() !== null` instead | [Fail-closed isAuthenticated](#1-fail-closed-isauthenticated) |
 | 10 | CORS defaults no longer combine a wildcard origin with credentials (`credentials: false` by default) | Only if you relied on credentialed wildcard CORS — set an explicit origin allowlist | [CORS defaults](#2-cors-defaults) |
 | 11 | No forced CORS preflight: default request headers are just `Content-Type`/`Accept`; `withCredentials` defaults to `false` | Only if you relied on cookies being sent by default, or on security-response headers being attached to requests | [No forced CORS preflight](#3-no-forced-cors-preflight) |
 | 12 | Default query retry is 1, not 3; explicit `retries: 0` / `retryDelay: 0` now actually disable retries | Set `performance.retries: 3` to restore the old default | [Default retry changed](#4-default-retry-changed) |
 | 13 | `@tanstack/react-query`, `@tanstack/query-core`, and the optional Redux/devtools packages moved from `dependencies` to `peerDependencies` | Make sure `@tanstack/react-query` is in your own `package.json` (you almost certainly already have it) | [peerDependencies move](#5-peerdependencies-move) |
+| 14 | `@tanstack/react-query-devtools` is never auto-imported by any main entry; mounting it is now an explicit opt-in via `minder-data-provider/devtools-rq` | Only if you relied on devtools auto-mounting — import `ReactQueryDevtools` from the new entry and mount it yourself | [DevTools moved to an opt-in entry](#5b-devtools-moved-to-an-opt-in-entry) |
+| 15 | Standalone `minder()`'s per-call `baseURL` is now refused (resolves `{ success: false, error: { code: 'UNSAFE_REQUEST_OPTION_OVERRIDE' } }` — it does **not** throw by default) when combined with a registered route's own declared headers or an ambient bearer token | Only if you passed a per-call `baseURL` alongside a registered route/token that carries a credential — reconfigure the destination via `configureMinder()` instead, or supply your own `options.token`/`options.headers` explicitly. Check `result.success`/`result.error.code`, not a `try/catch`, unless you also pass `options.throwOnError: true` | [minder()'s per-call baseURL now refuses to redirect credentials](#minders-per-call-baseurl-now-refuses-to-redirect-credentials) |
+| 16 | Standalone `minder()`'s `options.params` values substituted into a registered route's `:param` URL segment are now validated (resolves `{ success: false, error: { code: 'UNSAFE_ROUTE_PARAM_VALUE' } }` — it does **not** throw by default) — `null`/`undefined`, non-string/number/bigint values, non-finite numbers, an empty/whitespace-only string, or a value containing `..`, `/`, `\`, `?`, `#`, or a control character (raw or percent-encoded) is refused before dispatch instead of being spliced into the URL unencoded | Only if you passed an unvalidated, externally-sourced value (e.g. straight from a URL/query string) as a route param without checking it first — validate/whitelist the value yourself before calling `minder()`, or catch `result.error.code === 'UNSAFE_ROUTE_PARAM_VALUE'`. Legitimate ids (numbers, leading-zero strings, UUIDs, nested-route ids) are unaffected | [minder()'s route params are now validated before URL substitution](#minders-route-params-are-now-validated-before-url-substitution) |
 
 None of this requires a code change if you weren't using the specific behavior
 listed — but items 4–8 are silent-until-runtime (no type error, no test failure
@@ -70,74 +73,329 @@ the wrong verb and the new behavior is the fix.
 
 ### `useAuth` is one hook everywhere; the token store is now `useAuthToken`
 
-**What changed.** `useAuth` resolved to two different hooks depending on which
-subpath you imported from. It is now always the capability-contract hook.
+**What changed, verified against the published 2.1.4 package (not assumed).**
+We installed `minder-data-provider@2.1.4` from the npm registry into a scratch
+directory and inspected the built `dist/index.js`, `dist/platforms/{web,nextjs,
+electron,native,expo}.js`, and `dist/auth/index.js` directly. On 2.1.4,
+**every one of these seven import paths exported the exact same function** for
+`useAuth` — the token-storage hook (`{ isLoggedIn, setToken, getToken,
+clearAuth, isAuthenticated, setRefreshToken, getRefreshToken }`, backed by
+`AuthManager`). There was no split and no "contract hook" concept at all in
+2.1.4 — it was introduced during the 2.2.0 beta line. An earlier draft of this
+guide incorrectly stated that root/`/web`/`/nextjs`/`/electron` already had the
+contract hook and were "unchanged" from 2.1.4 — that was false and dangerous:
+those are exactly the import paths the README's Quick Start tells new users to
+use, so this is the highest-traffic path through this breaking change, not a
+niche one.
 
-| Import | Before | After |
-|---|---|---|
-| `from 'minder-data-provider'` / `/web` / `/nextjs` / `/electron` | contract hook | unchanged |
-| `from 'minder-data-provider/auth'` / `/native` / `/expo` | token store | **contract hook** |
+As of 2.2.0, `useAuth` is always the capability-contract hook, **on every one
+of the seven import paths** — root, `/web`, `/nextjs`, `/electron`, `/auth`,
+`/native`, `/expo`. The old token-storage shape didn't go away: it's preserved
+verbatim and renamed `useAuthToken`, and — unlike in some interim beta
+snapshots — `useAuthToken` is exported from **all seven** of those same import
+paths, not only `/auth`/`/native`/`/expo`.
 
-| Old (`useAuth` from `/auth`) | New |
+| Import (any of the seven paths above) | 2.1.4 `useAuth()` | 2.2.0 `useAuth()` | 2.2.0 `useAuthToken()` |
+|---|---|---|---|
+| root `minder-data-provider` / `/web` / `/nextjs` / `/electron` | token store | **capability-contract hook (BREAKING)** | token store — same shape as 2.1.4's `useAuth`; newly available here |
+| `/auth` / `/native` / `/expo` | token store (identical function to the row above) | **capability-contract hook (BREAKING)** | token store — same shape |
+
+| Old (`useAuth`, any 2.1.4 import path) | New |
 |---|---|
 | `const { isLoggedIn, setToken, getToken, clearAuth } = useAuth()` | `const { isLoggedIn, setToken, getToken, clearAuth } = useAuthToken()` |
 | `isAuthenticated()` | `useAuthToken().isAuthenticated()` |
 | session-based checks | `const { ready, session, signOut } = useAuth()` — requires a registered capability provider |
 
-**Migration.** In every file importing `useAuth` from `/auth`, `/native`, or
-`/expo`: if you use `setToken`/`getToken`/`clearAuth`/`isLoggedIn`, rename the
-import to `useAuthToken` — the shape is unchanged. If you want session state from
-a certified provider (Clerk, Supabase, Auth0, Cognito, Auth.js), keep `useAuth`
+**Migration.** In every file calling `useAuth()` and then reading
+`setToken`/`getToken`/`clearAuth`/`isLoggedIn`/`isAuthenticated`/
+`setRefreshToken`/`getRefreshToken` off the result — **regardless of which of
+the seven paths it's imported from, including plain `import { useAuth } from
+"minder-data-provider"`** — switch that call to `useAuthToken()` instead; the
+shape is unchanged, only the name changes. If you want session state from a
+certified provider (Clerk, Supabase, Auth0, Cognito, Auth.js), keep `useAuth`
 and register the provider; it now returns `{ ready, error, session, signOut,
 getProviderClient }`. There is no deprecated alias: the two shapes share no
-properties, so a compatible alias was not possible.
+properties, so a compatible alias was not possible. Because this compiles and
+imports cleanly either way, `tsc` and a passing test suite will not catch a
+missed call site — grep your codebase for `useAuth()` and check what it's
+destructured into.
 
 **Note.** Earlier docs showed `const { login, logout, isAuthenticated } = useAuth()`
 from `/auth`. No shipped `useAuth` ever returned that shape and those examples threw
 at runtime. `docs/USAGE_GUIDE.md` is corrected in this release.
 
-### `XSSSanitizer.sanitize()` now fails closed
+### `XSSSanitizer.sanitize()` now fails closed everywhere, and sanitization is opt-in per field
 
-**What changed.** DOMPurify is lazy-loaded (a dynamic `import('dompurify')`) so it
-no longer sits in the static import graph of minimal entries like `core`/`hook`.
-Previously, if that dynamic import hadn't resolved yet — or had failed — a
-browser-side `sanitize()` call silently fell back to a weaker regex-based
-sanitizer (`basicSanitize()`), passing unsanitized-by-DOMPurify data through
-without any error. It now **throws** a `MinderError` with code
-`SANITIZER_UNAVAILABLE` (500) instead of ever doing that.
+**What changed — fail-closed.** DOMPurify is lazy-loaded (a dynamic
+`import('dompurify')`) so it no longer sits in the static import graph of
+minimal entries like `core`/`hook`. Previously, if that dynamic import hadn't
+resolved yet, had failed, or the code was running outside a browser at all, a
+`sanitize()` call silently fell back to a weaker regex-based sanitizer
+(`basicSanitize()`), passing data through without a real DOMPurify pass and
+without any error. **`basicSanitize()` has been deleted entirely.**
+`sanitize()` now **throws** a `MinderError` with code `SANITIZER_UNAVAILABLE`
+(500) on every runtime without a usable DOMPurify instance — a browser where
+the dynamic import hasn't resolved yet or failed, **and every non-browser
+runtime** (`/node`, `/server`, Next.js SSR — DOMPurify needs a DOM this
+library does not fake, so construction never even attempts the import there).
+A security control that silently degrades is strictly worse than one that's
+visibly absent.
 
-**This can trigger** when the dynamic `import()` for `dompurify` is blocked in a
-browser — a strict CSP without `script-src` coverage for the chunk, an
-offline/flaky-network window, or a bundler that fails to code-split the chunk
-correctly — or when `sanitize()` is called before the sanitizer's `ready()`
-promise has settled.
+**What changed — opt-in per field.** Sanitizing an object (a request body) is
+no longer a blanket recursive walk of every string field. `security.sanitization:
+true` (or an object with no `fields`) constructs a working sanitizer but
+applies it to **nothing** automatically — the body passes through unchanged.
+Only fields named in an explicit `fields` allowlist get sanitized; everything
+else is untouched, so ordinary strings like `"Tom & Jerry <3"` are never
+HTML-entity-mangled. **Sanitizing request bodies was never a real XSS
+control** — DOMPurify operates on data going *out* to your API, not on data
+your UI renders — and it stays that way; XSS defence belongs at the point you
+render untrusted data (see docs/EXAMPLES.md "XSS Protection" for the
+render-time pattern with `dangerouslySetInnerHTML`).
 
-**Migration.** `ApiClient`'s own sanitization path already `await`s `ready()`
-internally, so this only affects code that imports and calls `XSSSanitizer`
-directly from `minder-data-provider/utils/security`:
+**This can trigger** the fail-closed throw when the dynamic `import()` for
+`dompurify` is blocked in a browser — a strict CSP without `script-src`
+coverage for the chunk, an offline/flaky-network window, a bundler that fails
+to code-split the chunk correctly, or `sanitize()` called before the
+sanitizer's `ready()` promise has settled — or unconditionally on any
+non-browser runtime.
+
+**Migration.** `XSSSanitizer` is not part of the public API — there is no
+`minder-data-provider/utils/security` subpath (that import path never
+resolved; `ApiClient`'s and `minder()`'s own internal sanitization paths
+already `await ready()` before calling it, so most consumers see none of
+this directly). What IS public is the `security.sanitization` config:
 
 ```typescript
-import { sanitizer } from "minder-data-provider/utils/security";
+// Before (pre-2.2.0): every string in the body was recursively sanitized —
+// this could silently corrupt ordinary fields ("Tom & Jerry <3" → mangled):
+configureMinder({
+  apiUrl: "https://api.example.com",
+  routes: { comments: "/comments" },
+  security: { sanitization: true },
+});
 
-// Before: sanitize() could silently degrade to a weaker sanitizer
-const clean = sanitizer.sanitize(untrusted);
+// After: `security.sanitization: true` alone is now a no-op pass-through —
+// opt in per field. `fields` isn't yet in the published `SecurityConfig`
+// TypeScript type, so declare the config as its own variable (structural
+// assignment allows the extra property; an inline object literal does not)
+// and pass a hand-built `MinderConfig` straight to `<MinderDataProvider>`
+// instead of through `configureMinder()`, which only types `sanitization`
+// as a boolean:
+import type { MinderConfig } from "minder-data-provider";
 
-// After: either catch the fail-closed error and decide how your app degrades...
-try {
-  const clean = sanitizer.sanitize(untrusted);
-} catch (err) {
-  if (err.code === "SANITIZER_UNAVAILABLE") {
-    /* show a fallback, retry, or surface an error to the user */
-  }
-}
+const sanitization = { enabled: true, fields: ["bio", "comment"] };
 
-// ...or await readiness before your first call:
-await sanitizer.ready();
-const clean = sanitizer.sanitize(untrusted);
+const config: MinderConfig = {
+  apiBaseUrl: "https://api.example.com",
+  routes: { comments: { url: "/comments", method: "GET" } },
+  security: { sanitization },
+};
+// <MinderDataProvider config={config}>...</MinderDataProvider>
 ```
 
-Server-side sanitization (`typeof window === 'undefined'`) is unaffected — it
-keeps using `basicSanitize()` unconditionally, exactly as before.
+If you only need the on/off toggle (no field list), `configureMinder({
+security: { sanitization: true } })` keeps working — just remember it now
+sanitizes nothing without a `fields` allowlist supplied the way shown above.
+
+### Per-call axios options are now an allowlist
+
+**What changed.** `apiClient.request(route, data, params, options)` — and every
+path that funnels a per-call `options`/`axiosConfig` bag into it (`useMinder()`'s
+`mutate(data, { axiosConfig })`, its own query-time `axiosConfig`, and the
+`operations.*` helpers) — used to forward the caller's per-call options
+**verbatim** into the outgoing axios request config. Adversarial testing found
+that this let a per-call option override **where the request goes or how it is
+physically transported** (`url`, `baseURL`, `proxy`, `adapter`,
+`transformRequest`/`transformResponse`, `httpAgent`/`httpsAgent`, `socketPath`) —
+carrying a route's own declared secret header, or the caller's bearer token, to
+whatever host/transport the option supplied. This is now a `MinderSecurityError`
+(`code: 'UNSAFE_REQUEST_OPTION_OVERRIDE'`), thrown before any part of the
+outgoing request is assembled.
+
+Only the following per-call keys still reach the outgoing request — everything
+else is silently ignored, not merely undocumented:
+
+| Forwarded (safe — never changes destination/transport) | Refused (throws `UNSAFE_REQUEST_OPTION_OVERRIDE`) |
+|---|---|
+| `timeout`, `signal`, `responseType`, `onUploadProgress`, `onDownloadProgress` | `url`, `baseURL`, `proxy`, `adapter` |
+| `withCredentials`, `validateStatus`, `paramsSerializer`, `decompress` | `transformRequest`, `transformResponse`, `httpAgent`, `httpsAgent`, `socketPath`, `beforeRedirect` |
+
+```typescript
+// Before: a per-call axiosConfig could (accidentally or via untrusted input)
+// redirect a registered route's request entirely — the route's own headers
+// (e.g. a static X-Api-Key) went wherever `baseURL` pointed, with no throw:
+await context.apiClient.request("thing", undefined, { id: "1" }, {
+  axiosConfig: { baseURL: "https://not-your-api.example" },
+});
+
+// After: the same call throws MinderSecurityError before dispatch. To point a
+// registered route at a different, same-origin PATH, use the route registry
+// (or the internal urlOverride escape hatch) — never a per-call option:
+await context.apiClient.request("thing", undefined, { id: "1" }, {
+  axiosConfig: { timeout: 5000 }, // fine — timeout is allowlisted
+});
+```
+
+**Migration.** Search your codebase for `axiosConfig`/per-call `options` values
+containing any of `url`, `baseURL`, `proxy`, `adapter`, `transformRequest`,
+`transformResponse`, `httpAgent`, `httpsAgent`, `socketPath`, or `beforeRedirect`
+passed to `useMinder()`/`apiClient.request()`/`operations.*`. None of these were
+ever meant to be caller-influenced per-request; use `configureMinder()`'s route
+registry (`apiUrl`, `routes.<name>.url`) to control where a request goes. If you
+were relying on some OTHER axios option not in the forwarded list above (it was
+never documented as forwarded, but may have worked by accident via the old raw
+spread), it is now silently dropped — open an issue if you have a legitimate
+need for a specific option and it will be evaluated for the allowlist.
+
+### `minder()`'s per-call `baseURL` now refuses to redirect credentials
+
+**What changed.** The `ApiClient`/`useMinder()` allowlist fix above (per-call
+axios options) only ever covered calls dispatched through a `<MinderDataProvider>`.
+The standalone `minder(route, data, options)` function builds its outgoing
+request differently — by hand-picking named fields off `options`, not spreading
+an axios-config bag — and adversarial testing found the SAME class of defect in
+that different shape: `options.baseURL` was honored unconditionally, so
+
+```typescript
+// Before: silently leaked BOTH the registered route's own declared header
+// AND the ambient bearer token to the caller-supplied host, no throw:
+configureMinder({ apiUrl: "https://api.example.com", routes: {
+  thing: { method: "GET", url: "/things/:id", headers: { "X-Api-Key": "SECRET" } },
+}});
+minder.config({ token: "AMBIENT-TOKEN" });
+await minder("thing", undefined, { baseURL: "https://not-your-api.example" });
+// -> GET https://not-your-api.example/things/1
+//    Authorization: Bearer AMBIENT-TOKEN
+//    X-Api-Key: SECRET
+```
+
+is now refused, before any part of the request is assembled, whenever the
+redirected call would carry either (a) a registered route's own declared
+`headers`, or (b) an ambient bearer token set via `configureMinder()`/
+`minder.config()` — the credential is attached by the library, not that call,
+and must not silently follow a caller-chosen destination.
+
+**How the refusal surfaces — this does NOT throw by default.** `minder()` has
+always documented a "never throws by default" contract, and this guard does
+not change that. Internally the guard raises a `MinderSecurityError` (`code:
+'UNSAFE_REQUEST_OPTION_OVERRIDE'`), but `minder()`'s existing top-level error
+handling catches it like any other failure and resolves normally:
+
+```typescript
+const result = await minder("thing", undefined, { baseURL: "https://not-your-api.example" });
+// result.success === false
+// result.error.code === 'UNSAFE_REQUEST_OPTION_OVERRIDE'
+// No request reached either host — but this LINE does not throw, so a
+// try/catch around it will never fire. Check result.success / result.error.
+
+// Only if you opt in does it become a real throw, same as any other minder() error:
+await minder("thing", undefined, {
+  baseURL: "https://not-your-api.example",
+  throwOnError: true, // now the call throws instead of resolving
+});
+```
+
+**What still works, unchanged.** A per-call `baseURL` override on a route/call
+that carries **no** such ambient credential (e.g. an unregistered path, no
+token configured) still dispatches exactly as before — this was already
+covered by existing passing tests and remains supported. If you need your own
+credential to travel to a different host, pass it explicitly for that one
+call (`options.token` / `options.headers`) rather than relying on the ambient
+one.
+
+**Not covered by this guard, deliberately (a pre-existing, documented escape
+hatch, unchanged by this fix):** passing an ABSOLUTE URL as the `route`
+argument itself (e.g. `minder("https://other-api.example.com/x", ...)`) always
+bypasses `baseURL` — and, like before, still attaches the ambient bearer
+token/headers to whatever host you name there. Use it only for destinations
+you trust with that credential; it is not a "safe" alternative to the
+`baseURL` case above.
+
+**Migration.** Search for standalone `minder(...)` calls that pass a per-call
+`baseURL` alongside either a registered route name or a configured
+`token`/`minder.config({ token })`. If the intent was genuinely "run this
+exact route against a different host with its credentials," reconfigure that
+destination as the route's own `apiUrl`/`baseURL` via `configureMinder()`
+instead of overriding it per call. If the intent was "hit an unrelated
+third-party endpoint," pass your own credentials explicitly via
+`options.token`/`options.headers` (or omit them if none are needed) instead of
+relying on the ambient ones.
+
+### `minder()`'s route params are now validated before URL substitution
+
+**What changed.** Standalone `minder(route, data, options)` resolves a
+registered route's `:param` placeholders from `options.params` — but the
+value substituted into the URL was never checked for anything that could
+escape the URL PATH SEGMENT the placeholder was meant to fill:
+
+```typescript
+// Before: '..' walks the path past the route root, no throw, no refusal:
+configureMinder({ apiUrl, routes: { updateUser: { url: "/users/:id", method: "PUT" } } });
+await minder("updateUser", { name: "attacker-controlled body" }, { params: { id: ".." } });
+// -> PUT / (the SITE ROOT), carrying the full body, result.success === true.
+```
+
+Also live-wire-verified against a real `node:http` server: `{ id: "5#" }`
+truncated the path at the raw fragment delimiter and additionally leaked the
+value back as a redundant `?id=...` query param (a **different** resource
+than intended); `{ id: "5?a=1" }` injected `a=1` as a **live,
+attacker-controlled query param** on the real request; `{ id: "" }` hit the
+**collection** (`/users/`) instead of a single resource. None of these threw
+or were refused — a real API with anything mounted at `/`, or any resource
+at the truncated/collection path, would execute the write.
+
+This is now refused, before any part of the URL is assembled, whenever a
+route-param value could escape its URL segment.
+
+**How the refusal surfaces — this does NOT throw by default,** the same
+"never throws" contract as every other `minder()` guard:
+
+```typescript
+const result = await minder("updateUser", body, { params: { id: ".." } });
+// result.success === false
+// result.error.code === 'UNSAFE_ROUTE_PARAM_VALUE'
+// Zero requests reached the server — but this LINE does not throw. Check
+// result.success / result.error, or pass options.throwOnError: true.
+```
+
+**What's refused:** `null`/`undefined`, any value that isn't a
+string/number/bigint, a non-finite number (`NaN`/`Infinity`/`-Infinity`), an
+empty or whitespace-only string, a value whose percent-escapes can't be
+decoded, and any value containing `..`, a `/` or `\`, a `?` or `#`, or a raw
+control character — checked both raw and percent-decoded (single- or
+double-encoded), so `%2e%2e%2f` is refused exactly like a literal `../`.
+
+**What still works, unchanged:** legitimate params — `{ id: 0 }`, a
+leading-zero string like `{ id: "007" }`, a UUID, a 24-hex ObjectId, and
+nested routes such as `/t/:id/comments` — dispatch exactly as before, with no
+extra `?id=...` appended alongside the path substitution.
+
+**Also fixed in the same change:** a route param used to fill `:id` in the
+URL PATH was previously *also* forwarded as a redundant query-string value
+(`options.params` was attached to the outgoing request verbatim). Any key
+actually substituted into the path is now excluded from the query string,
+matching how `<MinderDataProvider>`/`ApiClient` already behaved.
+
+**This is a regression against 2.1.4, not new-in-2.2.0 behavior.** On
+published 2.1.4, the identical call produced a literal, inert, broken
+`/updateUser?id=..` request that never escaped `/updateUser` — 2.2.0's
+route-template resolution fix (naive string substitution, with no encoding
+or validation) is what unlocked the escape. If you upgraded straight from
+2.1.4, this is a brand-new attack surface you were never exposed to before,
+not a tightening of an existing check.
+
+**Migration.** This only affects you if a route param value can come from
+outside your own code (user input, an untrusted upstream response, etc.)
+without your own validation in front of it. Search for `minder(...)` calls
+whose `options.params` values are not already validated/whitelisted, and
+either validate them yourself before the call or handle
+`result.error.code === 'UNSAFE_ROUTE_PARAM_VALUE'` the same way you'd handle
+any other refused request. `operations.update`/`operations.delete` (the
+`useMinder()` CRUD helpers) already validated their `id` argument this way
+before this release — this brings the standalone `minder()` path to parity,
+it does not introduce a NEW restriction beyond what CRUD operations already
+enforced.
 
 ## v2.x → v3.0 — Redux integration removed (BREAKING)
 
@@ -412,12 +670,22 @@ const proxy = new ProxyManager({
 proxy.generateNextJSProxy(); // throws if origin is '*' and credentials is true
 ```
 
-> **`createCorsMiddleware`:** the CHANGELOG documents a new `createCorsMiddleware(options)`
-> factory with this same safe-by-default behavior. As of this writing it lives at
-> `src/core/corsMiddleware.ts` but is **not re-exported from any published entry point**
-> (`minder-data-provider`, `/server`, `/core`, or any platform subpath) —
-> `import { createCorsMiddleware } from "minder-data-provider"` will fail today. The
-> `ProxyManager` snippet above is the reachable equivalent for Next.js proxy generation.
+> **`createCorsMiddleware`:** a dependency-free, safe-by-default CORS middleware
+> factory, exported from **`minder-data-provider/server`** (server-only — the root
+> entry deliberately does not re-export it):
+> ```typescript
+> import { createCorsMiddleware } from "minder-data-provider/server";
+>
+> const cors = createCorsMiddleware({
+>   origin: ["https://app.example.com"],
+>   credentials: true,
+> }); // throws if `origin` is '*' (or a wildcard-equivalent array/RegExp) with credentials: true
+>
+> // Express/Connect-style: (req, res, next) => { await cors(req, res); next(); }
+> ```
+> `import { createCorsMiddleware } from "minder-data-provider"` (the root entry)
+> still fails — use the `/server` subpath. The `ProxyManager` snippet above remains
+> the reachable equivalent for Next.js proxy-route generation specifically.
 
 > **`configureMinder()` history note:** earlier 2.2.0-beta.1 development builds had a
 > preset bug that undermined this change for `configureMinder()` users — the
@@ -429,6 +697,37 @@ proxy.generateNextJSProxy(); // throws if origin is '*' and credentials is true
 > key is deprecated in favor of `corsHelper` — it logs a runtime deprecation warning and
 > is slated for removal in v3.0, and its `configureMinder()` type only accepts
 > `enabled`/`proxy` (no `credentials` field).
+
+> **CORS is disabled by default everywhere (B4, fix-2.2.0-blockers).**
+> `configureMinder()`'s presets now set `cors.enabled: false` / `corsHelper.enabled:
+> false` on every platform. If you explicitly set `enabled: true` without also setting
+> `proxy`, `configureMinder()` **throws a `MinderConfigError`** (code
+> `CONFIG_CORS_PROXY_MISSING`) at call time instead of silently rewriting every
+> request to `/api/minder-proxy/*` — there is no longer a production-silent
+> auto-enable path.
+>
+> ```typescript
+> import { configureMinder } from "minder-data-provider";
+>
+> // Before (pre-fix): web silently defaulted cors.enabled to true with no proxy —
+> // every request got rewritten to /api/minder-proxy/*, 404ing in production with
+> // no warning outside NODE_ENV === 'development'.
+>
+> // After — enabling the helper without a proxy throws immediately at configure-time:
+> configureMinder({
+>   apiUrl: "https://api.example.com",
+>   routes: { users: "/users" },
+>   corsHelper: { enabled: true }, // throws CONFIG_CORS_PROXY_MISSING — no `proxy` set
+> });
+>
+> // Fix: supply the proxy route (and create that API route handler), or omit
+> // corsHelper/cors entirely if you don't need the Next.js proxy:
+> configureMinder({
+>   apiUrl: "https://api.example.com",
+>   routes: { users: "/users" },
+>   corsHelper: { enabled: true, proxy: "/api/minder-proxy" },
+> });
+> ```
 
 ### 3. No forced CORS preflight
 
@@ -555,6 +854,71 @@ npm install @reduxjs/toolkit react-redux
 No code changes — this is purely an installation-time change. A peer-dependency warning
 after upgrading is telling you exactly this.
 
+> **`@tanstack/react-query-devtools` is no longer imported by any main entry (B5,
+> fix-2.2.0-blockers).** The root, `/hook`, `/core`, `/web`, `/nextjs`, `/native`,
+> `/expo`, and `/electron` entries no longer reach an `import("@tanstack/react-query-devtools")`
+> at all — that auto-wiring was removed. Mounting the devtools is now an explicit,
+> separate opt-in: import from the dedicated `minder-data-provider/devtools-rq` entry,
+> which is the only place in the package that references the peer. See "DevTools moved
+> to an opt-in entry" below for the migration.
+
+### 5b. DevTools moved to an opt-in entry
+
+**Old behavior:** `<MinderDataProvider>` could reach a static
+`import("@tanstack/react-query-devtools")` from inside its own shared chunk —
+reachable from the root, `/hook`, `/core`, `/web`, `/nextjs`, `/native`,
+`/expo`, and `/electron` entries — even though the package was only an
+**optional** peer. A real install that correctly omitted
+`@tanstack/react-query-devtools` failed module resolution under Metro and
+esbuild on every one of those entries, whether or not the app ever rendered
+devtools.
+
+**New behavior:** no main entry references `@tanstack/react-query-devtools`
+at all. A dedicated **`minder-data-provider/devtools-rq`** subpath is the only
+place in the package that imports it — mounting devtools is now an explicit
+opt-in, and a consumer who never imports this subpath never needs the peer
+installed.
+
+**Why:** an *optional* peer that's still statically reachable from every main
+entry isn't actually optional — it breaks any consumer's build the moment
+they correctly follow `package.json` and skip installing it.
+
+**Migration:**
+
+```tsx
+// Before (pre-2.2.0) — devtools mounted themselves; you never imported them:
+import { MinderDataProvider } from "minder-data-provider";
+
+function App() {
+  return (
+    <MinderDataProvider config={config}>
+      <YourApp />
+    </MinderDataProvider>
+  );
+}
+
+// After — install the peer, then opt in explicitly from the new entry:
+// npm install -D @tanstack/react-query-devtools
+import { MinderDataProvider } from "minder-data-provider";
+import { ReactQueryDevtools } from "minder-data-provider/devtools-rq";
+
+function App() {
+  return (
+    <MinderDataProvider config={config}>
+      <YourApp />
+      {process.env.NODE_ENV !== "production" && (
+        <ReactQueryDevtools initialIsOpen={false} />
+      )}
+    </MinderDataProvider>
+  );
+}
+```
+
+The entry also exports `ReactQueryDevtoolsPanel` and an async
+`loadReactQueryDevtools()` (resolves the `ReactQueryDevtools` component via a
+dynamic `import()`, for code that wants to defer the load itself rather than
+relying on your bundler's own code-splitting of the static import above).
+
 ### 6. `useAuth` root-entry shadowing
 
 **Old behavior:** `import { useAuth } from "minder-data-provider"` resolved to the
@@ -590,6 +954,30 @@ const isLoggedIn = auth.isAuthenticated();
 import { useAuth } from "minder-data-provider";
 const { session, ready, signOut } = useAuth();
 ```
+
+**H5 (fix-2.2.0-blockers):** untouched pre-2.2.0 code that still destructures
+`{ setToken, getToken, clearAuth, isLoggedIn }` from the root `useAuth()` no
+longer silently gets `undefined` for all four (which used to fail with a
+generic `TypeError` only at the first real call). Those four keys now throw a
+directed `MinderError` (code `USE_AUTH_LEGACY_ACCESSOR_REMOVED`) naming
+`useAuthToken()`, at the exact access site:
+
+```typescript
+import { useAuth } from "minder-data-provider";
+
+const { setToken } = useAuth(); // does not throw here — the shim is a getter
+setToken("some-token");          // throws USE_AUTH_LEGACY_ACCESSOR_REMOVED here
+
+// Fix: use useAuthToken() for the four legacy accessors instead
+import { useAuthToken } from "minder-data-provider";
+const { setToken } = useAuthToken();
+setToken("some-token"); // works
+```
+
+The four shimmed keys are non-enumerable, so `{ ...useAuth() }`,
+`JSON.stringify(useAuth())`, and `Object.keys(useAuth())` are unaffected —
+only an explicit `.setToken` / `.getToken` / `.clearAuth` / `.isLoggedIn`
+property access triggers the throw.
 
 ### 7. `rawUrl` and config unification
 
@@ -727,9 +1115,9 @@ const config = {
 **v2.0:**
 
 ```typescript
-import { createMinderConfig } from "minder-data-provider/config";
+import { configureMinder } from "minder-data-provider/config";
 
-const config = createMinderConfig({
+const config = configureMinder({
   apiUrl: "https://api.example.com", // Changed from apiBaseUrl
   routes: {
     users: "/users", // Auto-generates full CRUD
@@ -835,7 +1223,7 @@ auth: {
 New in v2.0:
 
 ```typescript
-import { usePerformanceMonitor } from "minder-data-provider/utils/performance";
+import { usePerformanceMonitor } from "minder-data-provider";
 
 function Component() {
   const monitor = usePerformanceMonitor();
@@ -882,9 +1270,9 @@ Create a new configuration file using the simplified API:
 
 ```typescript
 // config/minder.config.ts (v2.0)
-import { createMinderConfig } from "minder-data-provider/config";
+import { configureMinder } from "minder-data-provider/config";
 
-export const config = createMinderConfig({
+export const config = configureMinder({
   // Change apiBaseUrl → apiUrl
   apiUrl: process.env.NEXT_PUBLIC_API_URL || "https://api.example.com",
 
@@ -1209,10 +1597,10 @@ Error: MinderConfig not found
 **Solution:**
 
 ```typescript
-// Make sure to use createMinderConfig
-import { createMinderConfig } from "minder-data-provider/config";
+// Make sure to use configureMinder
+import { configureMinder } from "minder-data-provider/config";
 
-const config = createMinderConfig({
+const config = configureMinder({
   /* ... */
 });
 ```
@@ -1305,7 +1693,7 @@ After migration:
 ## Summary Checklist
 
 - [ ] Update package to v2.0
-- [ ] Update configuration using `createMinderConfig`
+- [ ] Update configuration using `configureMinder`
 - [ ] Change `apiBaseUrl` to `apiUrl`
 - [ ] Simplify routes (use auto-generated CRUD)
 - [ ] Update imports (use modular imports for smaller bundles)

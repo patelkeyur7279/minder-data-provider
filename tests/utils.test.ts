@@ -348,6 +348,15 @@ describe('Security Utilities', () => {
     });
 
     it('should use Web Crypto API in browser environment', () => {
+      // Bug fix: this test used to `delete (global as any).window` at the
+      // end instead of restoring the real jsdom `window` it replaced. That
+      // permanently removed `window` for the rest of this file's test run
+      // (Jest shares one environment/global object across all tests in a
+      // file), silently breaking every later `typeof window !== 'undefined'`
+      // check — including XSSSanitizer's browser detection below, which
+      // depends on a real `window` being present in this jsdom environment.
+      const originalWindow = global.window;
+
       const mockGetRandomValues = vi.fn((arr: Uint8Array) => {
         for (let i = 0; i < arr.length; i++) {
           arr[i] = Math.floor(Math.random() * 256);
@@ -361,11 +370,13 @@ describe('Security Utilities', () => {
         },
       } as any;
 
-      const token = generateSecureCSRFToken(16);
-      expect(mockGetRandomValues).toHaveBeenCalled();
-      expect(token).toBeDefined();
-
-      delete (global as any).window;
+      try {
+        const token = generateSecureCSRFToken(16);
+        expect(mockGetRandomValues).toHaveBeenCalled();
+        expect(token).toBeDefined();
+      } finally {
+        global.window = originalWindow;
+      }
     });
   });
 
@@ -422,16 +433,28 @@ describe('Security Utilities', () => {
     });
 
     it('should work with cookie configuration', () => {
+      // Bug fix: this test used to `delete (global as any).document` at the
+      // end instead of restoring the real jsdom `document` it replaced. In
+      // Jest's jsdom environment `window === global`, so `document` is a
+      // single shared property, not something nested under a separate
+      // `window` object — deleting it here permanently removed `document`
+      // (and therefore broke `typeof window !== 'undefined'` consumers that
+      // also need `window.document`, like DOMPurify below) for the rest of
+      // this file's test run.
+      const originalDocument = global.document;
       const mockDocument = {
         cookie: '',
       };
       global.document = mockDocument as any;
 
-      const cookieManager = new CSRFTokenManager('csrf_token');
-      const token = cookieManager.getToken();
-      
-      expect(token).toBeDefined();
-      delete (global as any).document;
+      try {
+        const cookieManager = new CSRFTokenManager('csrf_token');
+        const token = cookieManager.getToken();
+
+        expect(token).toBeDefined();
+      } finally {
+        global.document = originalDocument;
+      }
     });
   });
 
@@ -478,25 +501,47 @@ describe('Security Utilities', () => {
       expect(clean).not.toContain('onclick=');
     });
 
-    it('should sanitize objects recursively', async () => {
-      const sanitizer = new XSSSanitizer();
+    it('should sanitize object fields opted into via the `fields` allowlist (H3: opt-in)', async () => {
+      // H3 (ratified ADR): sanitize() on an object is opt-in per field —
+      // blanket recursive sanitization of every string in a body silently
+      // corrupted ordinary user data, so it was removed.
+      const sanitizer = new XSSSanitizer({ enabled: true, fields: ['name', 'bio', 'nested'] });
       await sanitizer.ready();
       const dirty = {
         name: '<script>alert("XSS")</script>John',
         bio: '<iframe src="evil.com"></iframe>Bio',
         nested: {
-          value: 'javascript:alert(1)',
+          // DOMPurify only strips a `javascript:` URL when it appears as an
+          // attribute value on real markup (matching the passing
+          // "should sanitize javascript: protocol" case above) — a bare
+          // string with no HTML around it isn't something DOMPurify (an
+          // HTML sanitizer) has any markup to act on.
+          value: '<a href="javascript:alert(1)">Click</a>',
         },
       };
 
       const clean = sanitizer.sanitize(dirty);
-      
+
       expect(clean.name).not.toContain('<script>');
       expect(clean.bio).not.toContain('<iframe>');
       expect(clean.nested.value).not.toContain('javascript:');
     });
 
-    it('should sanitize arrays', async () => {
+    it('should pass objects through unchanged when no `fields` allowlist is configured (H3: opt-in)', async () => {
+      const sanitizer = new XSSSanitizer();
+      await sanitizer.ready();
+      const dirty = {
+        name: '<script>alert("XSS")</script>John',
+      };
+
+      const clean = sanitizer.sanitize(dirty);
+
+      // H3: no `fields` configured => pass-through, not a no-op that
+      // silently strips/encodes the caller's data.
+      expect(clean).toEqual(dirty);
+    });
+
+    it('should pass arrays through unchanged when no `fields` allowlist is configured (H3: opt-in)', async () => {
       const sanitizer = new XSSSanitizer();
       await sanitizer.ready();
       const dirty = [
@@ -506,7 +551,24 @@ describe('Security Utilities', () => {
       ];
 
       const clean = sanitizer.sanitize(dirty);
-      
+
+      // H3: arrays/objects are a pass-through unless `fields` is configured
+      // — there is no top-level "field name" for an array element to opt in
+      // via, so a bare array is never recursively sanitized automatically.
+      expect(clean).toEqual(dirty);
+    });
+
+    it('should still sanitize each array element when sanitize() is called on it directly', async () => {
+      const sanitizer = new XSSSanitizer();
+      await sanitizer.ready();
+      const dirty = [
+        '<script>alert(1)</script>',
+        'Safe content',
+        '<iframe src="evil.com"></iframe>',
+      ];
+
+      const clean = dirty.map((item) => sanitizer.sanitize(item));
+
       expect(clean[0]).not.toContain('<script>');
       expect(clean[1]).toBe('Safe content');
       expect(clean[2]).not.toContain('<iframe>');

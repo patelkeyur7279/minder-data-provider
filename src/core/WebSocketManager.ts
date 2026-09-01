@@ -29,7 +29,7 @@ export class WebSocketManager {
   }
 
   connect(): Promise<void> {
-    return new Promise((resolve, reject) => {
+    const connectPromise = new Promise<void>((resolve, reject) => {
       try {
         if (!this.config.url) {
           reject(new Error('WebSocket URL is required'));
@@ -123,6 +123,26 @@ export class WebSocketManager {
         reject(error);
       }
     });
+
+    // N3 (fix-2.2.0-blockers): guarantee at least one rejection handler is
+    // attached to THIS promise, so a connect() failure (dead port, restarted
+    // server, network blip, missing URL, adapter error, ...) can never
+    // surface as an unhandled rejection — fatal to a Node-hosted consumer
+    // (SSR, Electron main, the /node and /electron subpaths) and an
+    // "Uncaught (in promise)" in browsers. Reproduced two ways: the public
+    // `useWebSocket().connect()` (src/hooks/index.ts) previously discarded
+    // this promise entirely, and the `onClose` reconnect path just below
+    // (`setTimeout(() => this.connect(), ...)`) does the identical discard
+    // internally on every automatic reconnect attempt. Same bug class as F5
+    // (src/utils/performance.ts's RequestDeduplicator, src/core/ApiClient.ts's
+    // GET auto-fetch path). This handler is a silent no-op — it does NOT
+    // swallow or alter the rejection for a caller that DOES attach its own
+    // `.catch()`/`await`: every handler attached to a promise fires
+    // independently when the promise settles, so `connect().catch(...)` at
+    // the call site still observes the real error.
+    connectPromise.catch(() => { /* see comment above */ });
+
+    return connectPromise;
   }
 
   disconnect(): void {

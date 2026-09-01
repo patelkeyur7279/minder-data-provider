@@ -1,5 +1,7 @@
 import { Logger, LogLevel } from '../utils/Logger.js';
 import type { MinderConfig } from '../core/types.js';
+import { normalizeHttpMethod } from '../core/apiClient/resolveRequest.js';
+import { hasUnreplacedParams } from '../utils/routeHelpers.js';
 
 const logger = /*#__PURE__*/ new Logger('SSR', { level: LogLevel.WARN });
 
@@ -26,14 +28,34 @@ export async function prefetchData(config: MinderConfig, routes: string[]) {
 
   for (const routeName of routes) {
     const route = config.routes[routeName];
-    if (route && route.method === 'GET') {
-      try {
-        const url = `${config.apiBaseUrl}${route.url}`;
-        const response = await fetch(url);
-        data[routeName] = await response.json();
-      } catch (error) {
-        logger.warn(`Failed to prefetch ${routeName}:`, error);
-      }
+    if (!route) continue;
+
+    // fix-2.2.0-blockers (ResolvedRequest migration): this is a genuine
+    // dispatch path (a real `fetch()` below) that used to read the DECLARED
+    // `route.method`/`route.url` straight off the registry with no
+    // normalization or placeholder check — the same defect class fixed
+    // throughout ApiClient/minder(). `normalizeHttpMethod` closes the
+    // case-sensitivity gap (a hand-authored route can declare
+    // `method: 'get'`). `prefetchData` has no mechanism to supply per-route
+    // params, so a route whose URL still carries an unresolved ':param'
+    // placeholder can never be safely prefetched here — REFUSE (skip + warn)
+    // rather than fetch the literal, unresolved URL (which would either
+    // 404 or, worse, silently hit whatever resource happens to live at that
+    // literal path).
+    if (normalizeHttpMethod(route.method) !== 'GET') continue;
+    if (hasUnreplacedParams(route.url)) {
+      logger.warn(
+        `Skipping prefetch for "${routeName}": route URL "${route.url}" has an unresolved parameter and prefetchData() has no way to supply it.`
+      );
+      continue;
+    }
+
+    try {
+      const url = `${config.apiBaseUrl}${route.url}`;
+      const response = await fetch(url, { method: 'GET' });
+      data[routeName] = await response.json();
+    } catch (error) {
+      logger.warn(`Failed to prefetch ${routeName}:`, error);
     }
   }
 

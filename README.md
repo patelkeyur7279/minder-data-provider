@@ -223,7 +223,12 @@ any secret-shaped string elsewhere in browser-reachable config — throws at
 
 - `error.raw` — the original underlying error (e.g. the `AxiosError`) on every error
   surface, result-mode or `throwOnError`.
-- `getAxiosInstance()` — the live axios instance behind `ApiClient`.
+- `useMinderContext().apiClient.getAxiosInstance()` — the live axios instance behind
+  `ApiClient`, for when you need to reach past Minder (a one-off interceptor, a header
+  set outside `configureMinder`, etc.). Requires `<MinderDataProvider>` — `useMinderContext()`
+  throws outside one; `useMinderContextSafe()` returns `null` instead, so guard against
+  that if you're not certain a provider is mounted. `ApiClient` itself is intentionally
+  not exported from the package; this is the supported way to reach it.
 - `getProviderClient()` — the raw SDK client behind any capability provider.
 - `throwOnError: true` — opt into throwing (try/catch, error boundaries) instead of the
   default never-throws result object.
@@ -299,11 +304,22 @@ routes as raw OpenAPI paths; `keep` prepends the path portion of the spec's firs
 | Node (server) | Confirmed |
 | Edge runtimes (Workers, Vercel Edge) | Confirmed (Workers) |
 
-**Confirmed** = runnable example app + CI tests. **Experimental** = built and working,
-without that evidence bar yet. **Unknown** = no evidence either way. **Inferred-works**
-= should work on general principle, unverified. **Planned** = roadmap only, no code.
-Per-capability detail (auth, WebSocket, offline, uploads, …):
-[**Support Matrix**](./docs/product/SUPPORT_MATRIX.md).
+**Confirmed** means a runnable example app boots and completes real round trips in CI —
+it does **not** by itself mean every feature/capability on this page was independently
+wire-verified (method, URL, body) on that specific framework. Core request-construction
+behavior (mutations, DELETE bodies, CRUD id-handling, offline queuing, …) is verified
+once, framework-agnostically, against a real HTTP server and the packed tarball
+(`tests/wire/*.mjs`, CI job `wire`) — see the [**Support Matrix**](./docs/product/SUPPORT_MATRIX.md)
+for exactly what is and isn't covered per feature. The offline auto-queue now fires on a
+genuine network failure (a real dead port/`ECONNREFUSED` through a provider's `ApiClient`
+enqueues the failed mutation — `getOfflineManager().getQueueSize()` goes 0→1, the call
+reports `success:false` with `OFFLINE_ERROR`, and the queued item replays and drains the
+queue on reconnect; see `tests/wire/offline-contract.mjs`, acceptance C3). Only
+*mutations* are auto-queued — a `GET`/`HEAD`/`OPTIONS` request that fails the same way is
+re-issued, never queued, by design (also covered in that suite). **Experimental** = built
+and working, without the evidence bar above yet.
+**Unknown** = no evidence either way. **Inferred-works** = should work on general
+principle, unverified. **Planned** = roadmap only, no code.
 
 ## Bundle Cost — measured, budgeted, enforced
 
@@ -321,20 +337,40 @@ axios/dompurify external. A PR that regresses these fails CI:
 - Feature subpaths (`/crud`, `/cache`, `/websocket`, `/upload`, `/auth`): **17–23 KB** each
 - Certified providers: **5–7.5 KB** each · `/ssr` 1.4 KB · `/logger` &lt;1 KB
 
-**What you actually ship** (measured against the built `dist/`, min+gzip, entry plus
-every statically-imported chunk, peers external, axios/dompurify **bundled**):
+**What you actually ship** (measured against this build's real `dist/`, min+gzip, entry
+plus every statically-imported chunk, via `npm run measure:bundles`). `measure:bundles`
+externalizes every bare-specifier import (`packages: 'external'`) — same as the CI
+library budgets above — so these numbers are the library's own eager code weight,
+peers *and* axios/dompurify excluded; a real bundler adds axios's own cost (a
+`dependencies` entry, not a peer) wherever it actually resolves. Run
+**`npx minder doctor --bundle`** in your own app for a number that reflects your
+bundler's real resolution:
 
 - `import { useMinder } from 'minder-data-provider/hook'` alone — no `MinderDataProvider`
   (e.g. routes registered via the global `configureMinder()`, which `useMinder` supports
-  standalone): **~16.5 KB**. axios is lazy-loaded on the first real request, so it costs
-  nothing here.
-- `import { minder } from 'minder-data-provider/core'` (the standalone function, same
-  lazy-axios path): **~12.8 KB**.
-- `import { MinderDataProvider, useMinder }` (the realistic full-provider import):
-  **~55 KB**. `MinderDataProvider` constructs an `ApiClient`, which still creates its
-  axios instance eagerly — that eager path is tracked separately and not yet lazy, so
-  this import pays axios's full weight (~17 KB). dompurify itself now lazy-loads
-  correctly in all three cases above (well under 1 KB either way — see CHANGELOG).
+  standalone): **~48.0 KB** (`hook` row).
+- `import { minder } from 'minder-data-provider/core'` (the standalone function):
+  **~52.9 KB** (`core` row).
+- `import { MinderDataProvider, useMinder }` from the package root (the realistic
+  full-provider import): **~83.0 KB** (`. (main)` row) — importing anything from the
+  root pays the closure of every statically-reachable chunk on that entry, not just
+  the two names you asked for. A bundler that tree-shakes named ESM imports aggressively
+  (esbuild, Rollup, most modern setups) can bring the *effective* cost of importing only
+  `{ MinderDataProvider, useMinder }` down substantially below this number in practice —
+  but `. (main)` is the one number every consumer can reproduce identically by running
+  the command above, so it's the one published here.
+
+**Methodology, so you can check these yourself:** every figure above was measured by
+running `npm run measure:bundles` (`scripts/measure-bundles.mjs`) against this exact
+build's `dist/` output, on esbuild `0.25.12` (the version pinned in `package-lock.json`
+at time of measurement) — never copied from a prior release or from a third-party
+report. `measure:bundles` bundles each entry with esbuild code-splitting on and metafile
+introspection, then sums the entry chunk plus the transitive closure of chunks reached
+by *static* `import` edges only; a chunk reachable solely through a dynamic `import()`
+is excluded, since a real consumer doesn't download it until that path is used. If you
+see a different number after checking out this repo yourself, run the same command —
+`node scripts/measure-bundles.mjs` — against your own `npm run build` output; these
+numbers move with every release and are never hand-maintained.
 
 Run **`npx minder doctor --bundle`** in your own app to see exactly which subpaths you
 import and what each costs. Pipeline overhead is benchmarked in CI too: `minder()` adds
@@ -401,14 +437,42 @@ lazy-loaded only when a `schema` is actually configured.
   decoded is rejected — including in the no-provider `useMinder` fallback
   (`GlobalAuthManager`), which previously only checked presence (even an expired token
   used to pass). Opaque non-JWT bearer tokens keep presence-based semantics.
+- **Auth can't fail open on a bad token value.** `setToken()` rejects non-string,
+  empty, `"undefined"`, and `"null"` values at write time (throws instead of storing
+  them); `isAuthenticated()` also rejects those same values if they were already
+  persisted, so a stale bad write can't read back as "logged in."
+- **`XSSSanitizer` fails closed everywhere, not just in the browser.** `sanitize()`
+  throws `SANITIZER_UNAVAILABLE` on any runtime without a usable DOMPurify instance —
+  a browser where the import hasn't resolved yet, and every non-browser runtime
+  (`/node`, `/server`, Next.js SSR) — instead of silently degrading to a weaker
+  fallback. Sanitization is **opt-in per field** (`security.sanitization: { enabled:
+  true, fields: [...] }`); with no `fields`, request bodies pass through unchanged —
+  ordinary strings like `"Tom & Jerry <3"` are never corrupted. Sanitizing a request
+  body is data hygiene for fields you render as raw HTML, not a general XSS control —
+  XSS defence belongs at render time.
+- **CORS is never auto-enabled.** `corsHelper`/`cors` defaults to `{ enabled: false }`
+  on every platform; `configureMinder()` throws at call time if you set `enabled: true`
+  without also setting `proxy`, instead of silently rewriting every request to a proxy
+  route that likely doesn't exist.
 - **No forced CORS preflight.** The default axios instance sends only
   `Content-Type`/`Accept` — response-security headers (CSP, X-Frame-Options, …) never
   ride along on requests, where their mere presence would force a preflight `OPTIONS`
   round-trip on every cross-origin call.
 - **Credentialed CORS requires an explicit origin allowlist.** The library's own
-  CORS-emitting code (`ProxyManager.generateNextJSProxy()`) refuses to combine
-  `Access-Control-Allow-Credentials` with a wildcard origin.
+  CORS-emitting code (`ProxyManager.generateNextJSProxy()`, `createCorsMiddleware()`)
+  refuses to combine `Access-Control-Allow-Credentials` with a wildcard origin —
+  including a `RegExp` origin that matches unpredictably, or `'*'` inside an origin
+  array (which is now treated as a wildcard, not a literal that never matches).
 - **Secrets never enter the client bundle.** See Level 3 above.
+- **React Query DevTools are never auto-mounted.** `@tanstack/react-query-devtools`
+  is an optional peer that `<MinderDataProvider>` never imports itself — mount
+  `<ReactQueryDevtools>` in your own app code if you want it, so a consumer who
+  omits the peer never hits an unresolved-module error at build time.
+- **`useAuth()`'s legacy token-storage keys throw, they don't silently return
+  `undefined`.** `useAuth().setToken`/`getToken`/`clearAuth`/`isLoggedIn` (the
+  pre-2.2.0 shape) throw a directed error naming `useAuthToken()` — the hook that
+  actually owns raw client-side token storage — instead of failing with a generic
+  `TypeError` at first use.
 
 See the [Migration Guide](./docs/MIGRATION_GUIDE.md) for every behavior change — including the
 **breaking v2.x → v3.0 change (Redux integration removed)** and the 2.2.0-beta.1 changes, with

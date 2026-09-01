@@ -57,6 +57,9 @@ import {
   handleError,
   isEdgeRuntime
 } from './minder/utils.js';
+import { normalizeHttpMethod, substituteUrlParams } from './apiClient/resolveRequest.js';
+import { sensitiveHeaderNames } from './apiClient/sensitiveHeaders.js';
+import { MinderSecurityError } from '../errors/index.js';
 
 // Re-export types for backward compatibility
 export type { 
@@ -173,8 +176,29 @@ export function configureMinder(config: Partial<MinderConfig>): void {
 }
 
 import { StreamClient, type StreamOptions } from './StreamClient.js';
-import { pluginManager, isShortCircuitResponse } from '../plugins/PluginSystem.js';
+// fix-a-app-router-crash-offline-parity (BLOCKER 1): `peekPluginManager()`
+// reads the shared plugin manager WITHOUT constructing one when it doesn't
+// exist yet (the common case for a bare `await minder(...)` with no plugins
+// registered) — every hook site below already guards on `pm.size > 0`, so
+// "nothing registered yet" and "no manager constructed yet" are the same
+// answer. This matters because the top-level `pluginManager` Proxy export
+// (and even a plain `pluginManagerSingleton()` accessor calling `new
+// PluginManager()`) both depend on a tsup cross-entry deferred chunk
+// initializer that a real `next build` + Route Handler/Server Component
+// reproduction showed Next.js App Router's webpack does not reliably
+// trigger — throwing directly out of `minder()` (violates the documented
+// never-throws contract) either on the Proxy access or on `new
+// PluginManager()` itself. See the fuller root-cause note in
+// ../plugins/PluginSystem.ts.
+import { peekPluginManager, isShortCircuitResponse } from '../plugins/PluginSystem.js';
 import type { InterceptableRequest } from '../plugins/PluginSystem.js';
+// B2: standalone minder() previously performed ZERO sanitization even when
+// `security.sanitization` was configured on the global registry — a silent
+// no-op returning `{success:true}` while shipping raw input. Reuse the exact
+// sanitizer class and the shared body-sanitizing helper ApiClient already
+// uses, rather than a second implementation.
+import { XSSSanitizer } from '../utils/security.js';
+import { sanitizeRequestData } from './apiClient/upload.js';
 
 // ============================================================================
 // RETRY SUPPORT (MDPD-23)
@@ -212,6 +236,40 @@ export function __setRetrySleepForTesting(
  */
 function isRetryableFailure(status: number): boolean {
   return status === 0 || status === 429 || status >= 500;
+}
+
+/**
+ * fix-a-app-router-crash-offline-parity (H1/H1b): a SIDE-EFFECT-FREE peek at
+ * the HTTP status a failed transport attempt would classify to — used ONLY
+ * to decide retry eligibility inside the retry loop below. Deliberately does
+ * NOT call `handleError`/`buildApiError`: those now auto-queue a mutation
+ * into the OfflineManager as a side effect of classifying a no-response
+ * failure (the actual H1 fix), and the retry loop can invoke this check
+ * multiple times for the SAME logical `minder()` call — calling the real
+ * classifier here would auto-queue once per ATTEMPT instead of once per
+ * logical call, over-queueing a single failed mutation on every retry.
+ * `handleError` itself still runs exactly once, in the terminal `catch`
+ * below, after the retry loop has genuinely given up (retries exhausted,
+ * non-retryable status, or a non-idempotent method) — so the auto-queue
+ * side effect fires exactly once per logical call regardless of how many
+ * transport attempts it took.
+ *
+ * Mirrors (without invoking) buildApiError's own status determination: an
+ * axios-shaped `.response.status` when present, 408 for a genuine timeout
+ * (matching `MinderTimeoutError`'s statusCode), otherwise 0 (every other
+ * no-response failure — matching every other `Minder*Error` this module's
+ * classifier can throw).
+ */
+function peekRetryStatus(error: unknown): number {
+  if (error && typeof error === 'object') {
+    if ('response' in error) {
+      return (error as { response?: { status?: number } }).response?.status ?? 0;
+    }
+    if ((error as { code?: unknown }).code === 'ECONNABORTED') {
+      return 408;
+    }
+  }
+  return 0;
 }
 
 /**
@@ -414,23 +472,111 @@ export async function minder<TData = any>(
     const registryRoute = registry?.routes?.[route];
 
     let url = route;
+    // fix-a-hostile-route-params (RELEASE BLOCKER): the keys `substituteUrlParams`
+    // actually consumed for PATH substitution — excluded from the query-string
+    // below (see step 2) so a ':id' route never also appends a redundant/
+    // hostile-remainder '?id=...'. Mirrors ApiClient.dispatchResolved's own
+    // `consumedKeys` filtering (ApiClient.ts) for the SAME reason.
+    let consumedParamKeys: Set<string> = new Set();
     if (registryRoute) {
-      url = registryRoute.url;
-      if (options?.params) {
-        Object.entries(options.params).forEach(([key, value]) => {
-          url = url.replace(`:${key}`, String(value));
-        });
-      }
+      // fix-2.2.0-blockers (ResolvedRequest migration): substitute through
+      // the SAME single-source-of-truth helper `ApiClient`'s `resolveRequest`
+      // uses — a plain-string `.replace()` only replaces the FIRST
+      // occurrence, leaving every subsequent one as a literal, unresolved
+      // ':key' token on the wire for a route that repeats the same
+      // placeholder (e.g. '/mirror/:id/vs/:id').
+      //
+      // fix-a-hostile-route-params (RELEASE BLOCKER): `substituteUrlParams`
+      // now validates every value it substitutes into a ':param' path
+      // segment (routeParamSafety.ts's `validateRouteParamValue`) and THROWS
+      // a `MinderSecurityError` (code `UNSAFE_ROUTE_PARAM_VALUE`) before
+      // returning anything if a value could escape that segment — e.g.
+      // `{ id: '..' }` walking the path past the route root, `{ id: '5#' }`
+      // truncating it at a raw fragment delimiter, `{ id: '5?a=1' }`
+      // injecting a caller-controlled query string, or `{ id: '' }` silently
+      // falling through to the collection. That throw is caught by this
+      // function's own try/catch below and returned as a structured
+      // `{ success: false, error }` result — `minder()`'s documented
+      // "never throws by default" contract — so zero requests reach the wire.
+      const substituted = substituteUrlParams(registryRoute.url, options?.params);
+      url = substituted.url;
+      consumedParamKeys = substituted.consumedKeys;
     }
 
     // 1. Detect HTTP method (explicit option > registry entry > auto-detect)
     let method = detectMethod(route, data, options);
     if (registryRoute && !options?.method) {
-      method = registryRoute.method as unknown as HttpMethod;
+      // fix-2.2.0-blockers (ResolvedRequest migration): normalize the SAME
+      // way ApiClient's resolveRequest does — a hand-authored registry entry
+      // can declare `method: 'get'`/`'POST '` (mixed case / stray
+      // whitespace; nothing enforces the HttpMethod enum at runtime), and an
+      // un-trimmed method reaching the transport can throw a raw,
+      // unhelpful error instead of dispatching. Falls back to the already
+      // auto-detected `method` (not a hardcoded default) if the registry
+      // entry's own method is somehow empty/non-string.
+      method = normalizeHttpMethod(registryRoute.method, method) as unknown as HttpMethod;
     }
 
     // 2. Build request config
+    //
+    // fix-2.2.0-blockers (item 1, PROBED — not the same shape): unlike the
+    // ApiClient.requestRaw defect this round fixed, `config` here is built by
+    // hand-picking SPECIFIC named fields off `options` (baseURL/url/method/
+    // timeout/headers/params below) rather than an unconstrained
+    // `...options`/`...otherOptions` spread — `proxy`/`adapter`/
+    // `transformRequest`/`transformResponse`/`httpAgent`/`httpsAgent`/
+    // `socketPath`/`beforeRedirect` are simply never read from `options` and
+    // have no path to this config at all. `options.baseURL` IS a real,
+    // pre-existing, top-level `MinderOptions` field (documented: "Base URL
+    // override") — a deliberate, visible escape hatch for pointing a
+    // standalone call at a different API, analogous to passing an absolute
+    // URL as `route` itself, not a quiet side-channel override buried in a
+    // generic options bag. fix-2.2.0-blockers (BLOCKER 1, resolved): that
+    // escape hatch was ALSO an exfiltration channel — a registered route's own
+    // declared headers and the ambient bearer token were attached
+    // unconditionally, regardless of `baseURL`, so redirecting the
+    // destination redirected the credentials with it. See the guard
+    // immediately below, which refuses `options.baseURL` whenever it would
+    // carry either along.
     const urlConfig = minderUrlConfig();
+
+    // fix-2.2.0-blockers (BLOCKER 1, SECURITY, standalone minder() path):
+    // `options.baseURL` changes WHERE this request is sent. Applying the SAME
+    // reasoning the ApiClient choke point (apiClient/requestOptions.ts)
+    // applies to its own per-call option bag: a caller-supplied option that
+    // redirects the destination must never silently travel with credentials
+    // the LIBRARY attached — not the caller, for THIS specific call — namely
+    // a registered route's own declared headers (e.g. a static `X-Api-Key`)
+    // or the ambient bearer token configured via `minder.config()`/
+    // `configureMinder()`. Before this fix, `minder('registeredRoute',
+    // undefined, { baseURL: 'http://attacker' })` sent BOTH to whatever host
+    // the caller named, with no throw and `success:true`.
+    //
+    // A caller's OWN explicit `options.token`/`options.headers` for THIS call
+    // is left alone — that is the caller deliberately directing their own
+    // credential, the documented (if still worth a warning) escape hatch for
+    // pointing a call at a different host, not an ambient leak; see
+    // docs/MIGRATION_GUIDE.md.
+    const routeDeclaresCredentials = Boolean(
+      registryRoute?.headers && Object.keys(registryRoute.headers).length > 0
+    );
+    const hasAmbientToken = Boolean(!options?.token && urlConfig.token);
+    if (options?.baseURL && (routeDeclaresCredentials || hasAmbientToken)) {
+      const credentialSources: string[] = [];
+      if (routeDeclaresCredentials) credentialSources.push("this route's own declared headers");
+      if (hasAmbientToken) credentialSources.push("the ambient bearer token set via configureMinder()/minder.config()");
+      throw new MinderSecurityError(
+        `Refused to dispatch "${route}" to the per-call "baseURL" override ("${options.baseURL}") — ` +
+        `${credentialSources.join(' and ')} would otherwise be attached to that destination, and a ` +
+        `caller-supplied option that redirects a request must never silently carry credentials the ` +
+        `library attached. Configure this destination as the route's own baseURL instead ` +
+        `(configureMinder() / the route registry), or supply your own credentials explicitly for ` +
+        `this call via options.token / options.headers if you intend to send them to a different host.`,
+        'UNSAFE_REQUEST_OPTION_OVERRIDE',
+        { route, baseURL: options.baseURL }
+      );
+    }
+
     const config: AxiosRequestConfig = {
       baseURL:
         options?.baseURL ||
@@ -445,7 +591,21 @@ export async function minder<TData = any>(
         ...registryRoute?.headers,
         ...options?.headers,
       },
-      params: options?.params,
+      // fix-a-hostile-route-params (RELEASE BLOCKER): a key already
+      // substituted into the URL PATH (`consumedParamKeys`, from step 0
+      // above) must never ALSO ride along as a query-string param — mirrors
+      // ApiClient.dispatchResolved's identical `consumedKeys` filtering
+      // (ApiClient.ts). Previously `options.params` was forwarded here
+      // verbatim regardless of what step 0 already substituted, so a
+      // ':id' route's own id (or, before the substitution guard above, a
+      // hostile query-string fragment split off of it) was appended a
+      // SECOND time as a redundant/leaking '?id=...'.
+      params:
+        options?.params && consumedParamKeys.size > 0
+          ? Object.fromEntries(
+              Object.entries(options.params).filter(([key]) => !consumedParamKeys.has(key))
+            )
+          : options?.params,
     };
 
     // 3. Add authentication token
@@ -453,11 +613,37 @@ export async function minder<TData = any>(
     if (token) {
       config.headers!.Authorization = `Bearer ${token}`;
     }
-    
+
+    // fix-b-redirect-credential-leak (BLOCKER 2): a 3xx response from the
+    // route's OWN, trusted host can redirect to ANY host via `Location`, and
+    // axios/follow-redirects transparently follows it. The provider
+    // (ApiClient) path already sets axios's `sensitiveHeaders` from the
+    // route's own declared header names plus the effective auth/CSRF header
+    // names so those never survive a cross-origin redirect hop — this
+    // standalone path dispatches through the SAME axios instance shape but
+    // previously set no `sensitiveHeaders` at all, so a route's own static
+    // secret header (e.g. `x-api-key`) rode along to whatever host the
+    // FIRST hop's response happened to point at. Shared choke point with
+    // ApiClient (`./apiClient/sensitiveHeaders.js`) so the two paths cannot
+    // independently drift out of sync again.
+    config.sensitiveHeaders = sensitiveHeaderNames(registry, registryRoute?.headers);
+
     // 4. Handle file upload
     if (isFileUpload(data)) {
-      config.headers!['Content-Type'] = 'multipart/form-data';
-      
+      // BLOCKER 2 (transport-and-packaging fix): a hand-set, boundary-less
+      // 'multipart/form-data' Content-Type breaks multipart parsing on any
+      // transport that actually sends it verbatim — fetch does (see the
+      // native-fetch dispatch below); axios does not, because its own
+      // FormData serialization recomputes and overrides this header with a
+      // correctly-boundaried value regardless of what is set here (verified
+      // empirically against axios's Node http adapter, including the global
+      // WHATWG FormData this branch produces). Deleting it instead of
+      // setting it is therefore safe for BOTH transports, and mirrors the
+      // identical Content-Type removal `applyRequestBody`
+      // (apiClient/upload.ts) already does for the provider/ApiClient path.
+      delete config.headers!['Content-Type'];
+      delete config.headers!['content-type'];
+
       // Convert to FormData if needed
       if (!(data instanceof FormData)) {
         const formData = new FormData();
@@ -490,10 +676,30 @@ export async function minder<TData = any>(
       }
     }
     // 5. Handle regular data
-    else if (method !== 'GET' && method !== 'DELETE') {
+    // C2: DELETE must be able to carry a body — the ApiClient/provider path
+    // (applyRequestBody in ./apiClient/upload.js) already sends a body for
+    // ANY method (its only guard is `if (!data) return`), so excluding
+    // DELETE here as well as GET made the two paths disagree: a
+    // `minder('users/8', { reason }, { method: 'DELETE' })` call silently
+    // dropped `{ reason }` and sent an empty body with content-type still
+    // declared as application/json. Only GET is excluded now (a GET body is
+    // not meaningful and was never sent by either path).
+    else if (method !== 'GET') {
       // Encode with model if provided
       const encodedData = encodeWithModel(data, options?.model);
-      config.data = encodedData;
+
+      // B2: honour `security.sanitization` on the standalone path exactly as
+      // ApiClient.request does — construct the sanitizer, await ready() so a
+      // browser call never races the lazy DOMPurify import into the
+      // fail-closed SANITIZER_UNAVAILABLE throw (H2), then route the body
+      // through the shared sanitizeRequestData helper (H3: opt-in per field,
+      // not a blanket walk — a pass-through when no `fields` are configured).
+      let sanitizer: XSSSanitizer | undefined;
+      if (registry?.security?.sanitization) {
+        sanitizer = new XSSSanitizer(registry.security.sanitization);
+        await sanitizer.ready();
+      }
+      config.data = sanitizeRequestData(encodedData, sanitizer);
     }
     
     // 6. Execute request
@@ -533,8 +739,9 @@ export async function minder<TData = any>(
         };
         // MDPD-5: notify cache-observability plugins of the hit (fire-and-forget,
         // error-isolated per plugin). Zero-overhead when no plugin is registered.
-        if (pluginManager.size > 0) {
-          void pluginManager.executeCacheHitHooks({
+        const cacheHitPm = peekPluginManager();
+        if (cacheHitPm && cacheHitPm.size > 0) {
+          void cacheHitPm.executeCacheHitHooks({
             key: cacheKey,
             value: cached.data,
             age: Date.now() - entry.storedAt,
@@ -552,8 +759,9 @@ export async function minder<TData = any>(
       }
       // MDPD-5: a cache-enabled GET with no fresh entry is a miss (first-ever or
       // expired) — notify observability plugins before we touch the transport.
-      if (pluginManager.size > 0) {
-        void pluginManager.executeCacheMissHooks(cacheKey);
+      const cacheMissPm = peekPluginManager();
+      if (cacheMissPm && cacheMissPm.size > 0) {
+        void cacheMissPm.executeCacheMissHooks(cacheKey);
       }
     }
 
@@ -561,7 +769,8 @@ export async function minder<TData = any>(
     // config or short-circuit the request with a synthetic response. Runs after
     // the config is fully assembled and before the transport dispatch. Guarded
     // so there is zero overhead when no plugin implements the hook.
-    if (pluginManager.size > 0 && pluginManager.hasRequestInterceptors()) {
+    const interceptPm = peekPluginManager();
+    if (interceptPm && interceptPm.size > 0 && interceptPm.hasRequestInterceptors()) {
       const interceptable: InterceptableRequest = {
         url: config.url || route,
         method,
@@ -570,7 +779,7 @@ export async function minder<TData = any>(
         data: config.data,
         routeName: registryRoute ? route : undefined,
       };
-      const intercepted = await pluginManager.executeRequestInterceptors(interceptable);
+      const intercepted = await interceptPm.executeRequestInterceptors(interceptable);
       if (isShortCircuitResponse(intercepted)) {
         responseData = intercepted.response.data;
         responseStatus = intercepted.response.status;
@@ -587,8 +796,9 @@ export async function minder<TData = any>(
     }
 
     // Fire plugin request hooks (global plugins; non-blocking observability)
-    if (pluginManager.size > 0) {
-      void pluginManager.executeRequestHooks({
+    const requestHookPm = peekPluginManager();
+    if (requestHookPm && requestHookPm.size > 0) {
+      void requestHookPm.executeRequestHooks({
         method,
         url: route,
         headers: config.headers as Record<string, string> | undefined,
@@ -598,8 +808,26 @@ export async function minder<TData = any>(
     }
 
     // Transport selection:
-    // - Complex requests (file uploads / progress) always use axios.
-    // - `transport: 'fetch'` forces the native-fetch fast-path; `'axios'` forces axios.
+    // - An EXPLICIT `transport: 'fetch'` always wins, INCLUDING for complex
+    //   requests (file uploads / progress) — BLOCKER 2 (transport-and-
+    //   packaging fix): this used to be unconditionally forced onto axios
+    //   regardless of the caller's explicit choice, which is exactly why
+    //   axios's own internal transport-selection fallback (used wherever its
+    //   Node HTTP adapter is unavailable — bare Cloudflare Workerd and
+    //   similar) still ran and could set RequestInit fields the runtime
+    //   doesn't implement, even though the caller had explicitly asked to
+    //   bypass axios entirely via `transport:'fetch'`. Mirrors the SAME rule
+    //   the provider's ApiClient already applies uniformly to EVERY request
+    //   including uploads (`useNativeFetch`, ApiClient.ts) — see the FormData
+    //   handling in the fetch branch below for the corresponding body fix.
+    //   Upload progress has no fetch equivalent, so `onProgress` silently
+    //   does not fire under an explicit `transport:'fetch'` — a documented
+    //   trade-off, matching ApiClient.dispatchNativeFetch's own "no
+    //   onUploadProgress equivalent" limitation.
+    // - Without an explicit 'fetch', complex requests still prefer axios (its
+    //   onUploadProgress support has no fetch equivalent) — unchanged default
+    //   semantics for existing Node/browser callers.
+    // - `'axios'` forces axios.
     // - `'auto'` (and unset) pick fetch ONLY in an edge runtime (isEdgeRuntime),
     //   where axios's Node HTTP adapter is unavailable and would otherwise fail.
     //   Node and browser keep the axios default unchanged — so this can never
@@ -607,10 +835,11 @@ export async function minder<TData = any>(
     //   only makes edge (previously broken with the default) transparently work.
     const isComplexRequest = isFileUpload(data) || options?.onProgress || config.onUploadProgress;
     const transport = options?.transport;
+    const explicitFetch = transport === 'fetch';
     const wantsFetch =
-      transport === 'fetch' ||
+      explicitFetch ||
       ((transport === 'auto' || transport === undefined) && isEdgeRuntime());
-    const useFetch = wantsFetch && !isComplexRequest;
+    const useFetch = explicitFetch || (wantsFetch && !isComplexRequest);
 
     // MDPD-23: explicit retry for the standalone minder() path. minder() never
     // rejects, so TanStack's retry can't help here — retryable transport
@@ -659,11 +888,25 @@ export async function minder<TData = any>(
             }
           }
 
+          // BLOCKER 2 (transport-and-packaging fix): a FormData body (file
+          // upload, now reachable here whenever the caller sets an explicit
+          // `transport:'fetch'` — see the transport-selection comment above)
+          // previously fell into the `JSON.stringify(config.data)` branch
+          // below, which stringifies a FormData instance to the literal
+          // string '{}' (it has no enumerable own properties) — a broken,
+          // empty body reaching the server. fetch accepts a FormData body
+          // directly and computes its own multipart boundary; pass it
+          // through untouched instead of stringifying it. Its Content-Type
+          // is never forced here — step 4 above already deleted the
+          // hand-set, boundary-less 'multipart/form-data' header for exactly
+          // this reason, so fetch is free to set its own correctly-
+          // boundaried Content-Type.
+          const isFormDataBody = typeof FormData !== 'undefined' && config.data instanceof FormData;
           const fetchOptions: RequestInit = {
             method: config.method,
             headers: config.headers as Record<string, string>,
-            body: (config.method !== 'GET' && config.method !== 'HEAD' && config.data) 
-              ? (typeof config.data === 'string' ? config.data : JSON.stringify(config.data)) 
+            body: (config.method !== 'GET' && config.method !== 'HEAD' && config.data)
+              ? (isFormDataBody || typeof config.data === 'string' ? config.data : JSON.stringify(config.data))
               : undefined,
           };
       
@@ -697,12 +940,16 @@ export async function minder<TData = any>(
         // Transport succeeded — leave the retry loop.
         break;
       } catch (transportError: unknown) {
-        const failure = handleError(transportError);
+        // fix-a-app-router-crash-offline-parity (H1/H1b): use the
+        // side-effect-free `peekRetryStatus` here, NOT `handleError` — see
+        // its doc comment for why calling the real (auto-queueing)
+        // classifier on every retry attempt would over-queue a single
+        // logical failed mutation once per attempt instead of once per call.
         if (
           !shortCircuited &&
           maxRetries > 0 &&
           retryAttempt < maxRetries &&
-          isRetryableFailure(failure.status) &&
+          isRetryableFailure(peekRetryStatus(transportError)) &&
           // Never resubmit non-idempotent methods (POST/PATCH) unless the caller
           // explicitly accepts the duplicate-write risk via retryNonIdempotent.
           // Judge config.method — request-intercept plugins may have rewritten
@@ -746,8 +993,9 @@ export async function minder<TData = any>(
     const duration = Date.now() - startTime;
 
     // Fire plugin response hooks (non-blocking)
-    if (pluginManager.size > 0) {
-      void pluginManager.executeResponseHooks({
+    const responseHookPm = peekPluginManager();
+    if (responseHookPm && responseHookPm.size > 0) {
+      void responseHookPm.executeResponseHooks({
         status: responseStatus,
         data: responseData,
         headers: responseHeaders,
@@ -802,8 +1050,9 @@ export async function minder<TData = any>(
     (minderError as { raw?: unknown }).raw = error;
 
     // Fire plugin error hooks (non-blocking)
-    if (pluginManager.size > 0) {
-      void pluginManager.executeErrorHooks({
+    const errorHookPm = peekPluginManager();
+    if (errorHookPm && errorHookPm.size > 0) {
+      void errorHookPm.executeErrorHooks({
         message: minderError.message,
         code: minderError.code,
         timestamp: Date.now(),

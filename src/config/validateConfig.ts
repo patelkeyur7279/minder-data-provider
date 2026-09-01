@@ -62,6 +62,9 @@ export const KNOWN_TOP_LEVEL_KEYS = [
   'offline',
   'environments',
   'providers',
+  // P2 (fix-2.2.0-blockers): request transport passthrough — see
+  // config/index.ts's UnifiedMinderConfig.transport.
+  'transport',
 ] as const;
 
 /**

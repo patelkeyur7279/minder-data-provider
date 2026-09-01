@@ -9,7 +9,7 @@ export type HttpMethod = HttpMethod$1;
 export { _ as AnalyticsConfig, _ as AnalyticsPlugin, _ as ApiError, _ as ApiRoute, _ as AuthConfig, _ as CacheConfig, _ as CacheEntry, _ as CacheHitEvent, _ as CacheWarmupPlugin, _ as CorsConfig, _ as CorsHelperConfig, _ as CrudOperations, _ as DebugConfig, _ as EnvironmentOverride, _ as InferInput, _ as InferOutput, _ as LoggerPlugin, _ as MediaUploadResult, _ as MinderConfig, _ as MinderPlugin, _ as Notification, _ as PerformanceConfig, _ as PerformanceMonitorPlugin, _ as PluginError, _ as PluginManager, _ as PluginRequest, _ as PluginResponse, _ as QueryState, _ as RealtimeConfig, _ as RealtimeReconnectConfig, _ as RetryConfig, _ as RetryPlugin, _ as SSRConfig, _ as SecurityConfig, _ as ServerState, _ as SessionData, _ as StandardSchemaV1, _ as TelemetryConfig, _ as UIState, _ as UploadProgress, _ as UserState, _ as WebSocketConfig, _ as createPlugin, _ as pluginManager, _ as registerPlugins } from '../types-HASH.js';
 export { _ as AuthManager } from '../AuthManager-HASH.js';
 export { _ as CacheManager } from '../CacheManager-HASH.js';
-export { _ as configureMinder, _ as minder } from '../minder-HASH.js';
+export { configureMinder } from '../config/index.js';
 export { _ as CSRFToken, _ as JWTPayload, _ as SecureAuthConfig, _ as SecureAuthManager, _ as TokenRefreshConfig, _ as TokenRefreshManager, _ as UseAuthReturn, _ as createSecureAuthManager, _ as createTokenRefreshManager, _ as useAuth, _ as useCheckout, _ as useLive, _ as useStorage } from '../index-HASH.js';
 export { _ as DebugManager } from '../DebugManager-HASH.js';
 export { _ as DevTools, _ as DevToolsConfig, _ as DevToolsEvents, _ as PlatformDetector } from '../DevTools-HASH.js';
@@ -19,7 +19,8 @@ export { _ as getProviderConfig, _ as registerCapabilityProvider, _ as registerC
 export { HydrationBoundary, QueryClient, QueryClientProvider, dehydrate } from '@tanstack/react-query';
 export { MediaUploadManager, UploadOptions, UploadProgressDetails, createUploadManager } from '../upload/index.js';
 export { _ as MemoryStorageAdapter, _ as StorageAdapterFactory } from '../MemoryStorageAdapter-HASH.js';
-export { _ as MinderDataProvider, _ as useMinder, _ as useMinderContext } from '../index-HASH.js';
+export { _ as minder } from '../minder-HASH.js';
+export { _ as MinderDataProvider, _ as useMinder, _ as useMinderContext, _ as useMinderContextSafe } from '../index-HASH.js';
 export { _ as MinderError } from '../MinderError-HASH.js';
 export { _ as MinderOptions, _ as MinderResult } from '../types-HASH.js';
 export { _ as Platform } from '../enums-HASH.js';

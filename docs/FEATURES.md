@@ -17,7 +17,7 @@ real-time, offline, file upload, a plugin/integration system, and secret-key saf
 | Auth | token lifecycle + `provideToken()` plugins (Firebase/Auth0/Clerk) | `/auth` |
 | Caching | TanStack-backed query cache, TTL, invalidation, hydration | `/cache` |
 | Real-time | WebSocket subscriptions + SSE stream | `/websocket` |
-| Offline | unified offline manager, auto-queue of failed requests, opt-in persistence, sync events | `/config`, plugins |
+| Offline | unified offline manager, **manual** queue (`addToQueue`) + replay, opt-in persistence, sync events — auto-queue-on-real-network-failure is a known open defect, see below | `/config`, plugins |
 | File upload | media upload manager + progress + upload lifecycle plugin hook | `/upload` |
 | CRUD | `operations.create/read/update/delete` on the hook | `/crud` |
 | Plugins | request/response/error/auth/upload/sync hooks, isolation guarantee | full surface |
@@ -117,6 +117,22 @@ type MinderOptions = {
   throwOnError?: boolean;                  // default false
 };
 ```
+
+> **`axiosConfig` is an allowlist, not "any axios config option."** When used inside a
+> `<MinderDataProvider>` (i.e. `useMinder()`'s provider-mode path, dispatching through `ApiClient`),
+> only `timeout`, `signal`, `responseType`, `onUploadProgress`, `onDownloadProgress`,
+> `withCredentials`, `validateStatus`, `paramsSerializer`, and `decompress` are forwarded to the
+> outgoing request. Keys that control the destination or transport — `url`, `baseURL`, `proxy`,
+> `adapter`, `transformRequest`, `transformResponse`, `httpAgent`, `httpsAgent`, `socketPath`,
+> `beforeRedirect` — throw a `MinderSecurityError` instead, so a route's own headers (or your
+> bearer token) can never be redirected to an unintended host via a per-call option. See
+> [MIGRATION_GUIDE.md](./MIGRATION_GUIDE.md#per-call-axios-options-are-now-an-allowlist).
+>
+> **The top-level `baseURL` above (standalone `minder()` only) is not a general-purpose
+> host-switching escape hatch either.** It throws the same `MinderSecurityError` if the call
+> would carry a registered route's own declared headers or an ambient bearer token
+> (`configureMinder()`/`minder.config()`) to the overridden host. See
+> [MIGRATION_GUIDE.md](./MIGRATION_GUIDE.md#minders-per-call-baseurl-now-refuses-to-redirect-credentials).
 
 ### Transport
 
@@ -459,12 +475,26 @@ useEffect(() => {
 
 ## Offline
 
+> **Known open defect (2026-08-26, tracked as C3) — read before relying on auto-queue.**
+> Auto-queuing a request that fails with a **genuine** network error (a real dead port /
+> `ECONNREFUSED`, not a mock) through a provider's `ApiClient` currently does **not** work:
+> `getOfflineManager().getQueueSize()` stays `0` and the failed mutation is simply lost, on every
+> platform. Root cause: `src/core/apiClient/errors.ts`'s error classifier treats every axios error
+> (axios sets `isAxiosError: true` even on connection failures) as an HTTP-response error first,
+> so the code path that would call `addToQueue()` is never reached for a real failure. Manual
+> queuing — `getOfflineManager().addToQueue(method, url, { body, headers })` — and replay of
+> already-queued items both work correctly; only the *automatic* enqueue-on-real-failure step is
+> broken. If you need offline resilience today, call `addToQueue()` yourself from your own
+> error-handling code (e.g. in `onError`) rather than relying on it happening for you. See
+> [Support Matrix → Offline](./product/SUPPORT_MATRIX.md#capabilities-todays-built-ins) for the
+> full evidence trail.
+
 - A single **unified** offline manager queues work and syncs when connectivity returns.
-- **Requests that fail with a network error are auto-queued into this SAME manager**, and are
-  replayed through the ApiClient's own axios instance on reconnect (so auth/CSRF/CORS/interceptors
-  all still apply). Because there is now one manager, `onSync` / `onConnectivityChange` fire for
-  these genuinely-failed auto-queued requests — not only for items pushed manually via
-  `getOfflineManager().addToQueue(...)`.
+- Requests pushed via `getOfflineManager().addToQueue(...)` are replayed through the ApiClient's
+  own axios instance on reconnect (so auth/CSRF/CORS/interceptors all still apply), and `onSync` /
+  `onConnectivityChange` fire correctly for those manually-queued items. **Automatic** queuing of a
+  mutation that fails with a real network error does not currently happen — see the defect note
+  above.
 - **Persistence is opt-in.** Without a `storage` adapter (`offline: { storage }`) the queue is
   **in-memory only and is lost on reload/restart**. Provide a `StorageAdapter` to persist it.
 - The offline manager **removes its window listeners on destroy** (no leaks); exactly one

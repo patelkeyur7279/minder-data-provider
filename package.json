@@ -13,6 +13,7 @@
     "dist/**/*.mjs",
     "dist/**/*.d.ts",
     "dist/**/*.d.mts",
+    "dist/**/*.json",
     "!dist/**/*.map",
     "README.md",
     "LICENSE",
@@ -128,6 +129,11 @@
       "import": "./dist/testing.mjs",
       "require": "./dist/testing.js"
     },
+    "./devtools-rq": {
+      "types": "./dist/devtools-rq.d.ts",
+      "import": "./dist/devtools-rq.mjs",
+      "require": "./dist/devtools-rq.js"
+    },
     "./providers/supabase": {
       "types": "./dist/providers/supabase.d.ts",
       "import": "./dist/providers/supabase.mjs",
@@ -181,12 +187,14 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:packaging": "jest tests/packaging --ci --testPathIgnorePatterns=/node_modules/",
+    "test:wire": "node scripts/wire/run.mjs",
     "lint": "eslint src --ext .ts,.tsx --fix",
     "lint:check": "eslint src --ext .ts,.tsx",
     "type-check": "tsc --noEmit",
     "clean": "rm -rf dist",
     "postinstall": "node scripts/check-peer-deps.js || true",
-    "prepublishOnly": "npm run clean && npm run build && npm run generate:bundle-sizes && npm run test && npm run verify-build && npm run verify:treeshake",
+    "prepack": "npm run generate:bundle-sizes",
+    "prepublishOnly": "npm run clean && npm run build && npm run generate:bundle-sizes && npm run test && npm run verify-build && npm run test:wire && npm run verify:treeshake",
     "verify-build": "node scripts/verify-build.js",
     "verify-lazy-loading": "node scripts/verify-lazy-loading.js",
     "security-audit": "npm audit --audit-level moderate",
@@ -195,7 +203,7 @@
     "check-versions": "node scripts/check-peer-deps.js",
     "fix-versions": "node scripts/fix-peer-deps.js",
     "certify:provider": "node scripts/certify-provider.js",
-    "release:check": "npm run clean && npm run build && npm run test && npm run test:packaging && npm run verify-build && npm pack --dry-run && npm run verify:treeshake",
+    "release:check": "npm run clean && npm run build && npm run test && npm run test:packaging && npm run verify-build && npm run test:wire && npm pack --dry-run && npm run verify:treeshake",
     "release:preflight": "node scripts/release-preflight.js",
     "release:verify": "node scripts/release-preflight.js --verify",
     "verify:treeshake": "node scripts/verify-consumer-treeshake.mjs",
@@ -205,7 +213,7 @@
     "budgets:check": "node scripts/measure-bundles.mjs --check",
     "budgets:update": "node scripts/measure-bundles.mjs --write-budgets",
     "bench": "node benchmarks/run-benchmarks.mjs",
-    "generate:bundle-sizes": "node scripts/measure-bundles.mjs --json > dist/bundle-sizes.json"
+    "generate:bundle-sizes": "test -d dist || (echo 'generate:bundle-sizes: dist/ does not exist — run npm run build first (H4: this used to write nothing and exit 0)' >&2 && exit 1) && node scripts/measure-bundles.mjs --json > dist/bundle-sizes.json"
   },
   "keywords": [
     "react",
@@ -326,7 +334,8 @@
       "/node_modules/",
       "/dist/",
       "/examples/",
-      "/tests/packaging/"
+      "/tests/packaging/",
+      "/tests/wire/"
     ],
     "preset": "ts-jest",
     "moduleNameMapper": {
