@@ -26,6 +26,14 @@ export {
 // Feature loader
 export { FeatureLoader, createFeatureLoader } from '../core/FeatureLoader.js';
 
+// Route processing (Node.js only). Imported as a local binding (rather than
+// only re-exported) so generateConfigFromApiRoutes below can use the same
+// module-scope reference instead of a bundle-internal require()/dynamic
+// import fallback — see tsup.config.ts for why that require() previously
+// forced esbuild's __esm lazy-init wrapping across the library.
+import { RouteProcessor } from '../utils/routeProcessor.js';
+export { RouteProcessor };
+
 // Server-compatible features (no hooks)
 export { AuthManager } from '../auth/index.js';
 export { CacheManager } from '../cache/index.js';
@@ -36,9 +44,6 @@ export * from '../ssr/index.js';
 // Debug
 export { DebugManager } from '../debug/index.js';
 
-// Route processing (Node.js only)
-export { RouteProcessor } from '../utils/routeProcessor.js';
-
 // Generate configuration from Next.js API routes
 export async function generateConfigFromApiRoutes(
   apiDir: string,
@@ -48,17 +53,6 @@ export async function generateConfigFromApiRoutes(
     includeDynamic?: boolean;
   }
 ): Promise<any> {
-  // Dynamic import to avoid circular dependencies
-  let RouteProcessor: any;
-  try {
-    RouteProcessor = (await import('../utils/routeProcessor.js')).RouteProcessor;
-  } catch (error) {
-    // In test environments that don't support dynamic imports, try static import
-     
-    const routeProcessorModule = require('../utils/routeProcessor.js');
-    RouteProcessor = routeProcessorModule.RouteProcessor;
-  }
-
   const scanOptions = {
     baseDir: apiDir,
     framework: options?.framework || 'nextjs',

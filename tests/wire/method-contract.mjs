@@ -1610,6 +1610,331 @@ export async function run(ctx) {
   }
 
   /**
+   * fix-percall-header-redirect-leak (defect 1, CONFIRMED DEFECT — the
+   * headline bug this task exists to close). `securityCrossOriginRedirect
+   * StripsRouteHeaderCase` above only ever proved ROUTE-DECLARED headers are
+   * stripped — the redirect-strip set was derived from `route.headers` +
+   * the effective auth/CSRF header names, and NEVER from `options.headers`
+   * (a per-call header, e.g. a bearer token or API key). That gap survived
+   * the ENTIRE previous fix (`fix-b-redirect-credential-leak`) because this
+   * exact case never existed. Same real-cross-origin-302 shape as the case
+   * above, but the secret rides in `apiClient.request(..., { headers })`
+   * instead of the route's own declared headers. Also doubles as POSITIVE
+   * CONTROL (b): a genuinely benign header (`Accept`) supplied the SAME way
+   * must still reach the redirect target — the fix must not become a
+   * "strip everything" over-block.
+   */
+  async function securityPerCallHeaderCrossOriginRedirectStripsCase(mdp) {
+    const routeName = 'secThingPerCallHeaderRedirect';
+    recorder.clear();
+    const attacker = await ctx.startRecordingServer();
+    const redirectRecords = [];
+    const redirectServer = http.createServer((req, res) => {
+      redirectRecords.push({ method: req.method ?? '', url: req.url ?? '', headers: { ...req.headers } });
+      res.writeHead(302, { Location: `${attacker.baseUrl}/landed` });
+      res.end();
+    });
+    const legit = await new Promise((resolve, reject) => {
+      redirectServer.on('error', reject);
+      redirectServer.listen(0, '127.0.0.1', () => {
+        const address = redirectServer.address();
+        resolve({ baseUrl: `http://127.0.0.1:${address.port}` });
+      });
+    });
+    const { box, unmount } = await mountProviderContext(mdp, {
+      apiUrl: legit.baseUrl,
+      routes: { [routeName]: { method: 'GET', url: '/things/:id' } },
+    });
+    try {
+      const apiClient = box.current.apiClient;
+      let threw = false;
+      let errMessage = '';
+      try {
+        await apiClient.request(routeName, undefined, { id: '1' }, {
+          headers: { 'X-Custom-Secret-Token': 'PER-CALL-SECRET-VALUE', Accept: 'application/json' },
+        });
+      } catch (e) {
+        threw = true;
+        errMessage = e?.message ?? String(e);
+      }
+      const firstHopGotSecret = redirectRecords.some((r) => r.headers['x-custom-secret-token'] === 'PER-CALL-SECRET-VALUE');
+      const attackerGotRequest = attacker.records.length > 0;
+      const attackerGotSecret = attacker.records.some((r) => r.headers['x-custom-secret-token'] === 'PER-CALL-SECRET-VALUE');
+      const attackerGotBenign = attacker.records.some((r) => r.headers['accept'] === 'application/json');
+      const pass = !threw && firstHopGotSecret && attackerGotRequest && !attackerGotSecret && attackerGotBenign;
+      results.push({
+        id: 'sec-percall-header-cross-origin-redirect-strips',
+        pass,
+        message: pass
+          ? `apiClient.request() with a PER-CALL secret header (options.headers) followed a real cross-origin 302 successfully; the FIRST hop received it normally, the redirect target NEVER did, and a benign per-call header (Accept) still reached the redirect target`
+          : `SECURITY FAILURE (per-call header redirect leak): threw=${threw} ("${errMessage}"), first-hop got secret=${firstHopGotSecret}, attacker got request=${attackerGotRequest}, attacker got secret=${attackerGotSecret}, attacker got benign header=${attackerGotBenign}`,
+      });
+    } finally {
+      unmount();
+      await new Promise((r) => redirectServer.close(() => r(undefined)));
+      await attacker.close();
+    }
+  }
+
+  /**
+   * fix-percall-header-redirect-leak (defect 1, requestRaw dispatch path).
+   * Same per-call-header-over-redirect shape as the case immediately above,
+   * but dispatched through `requestRaw` (an UNREGISTERED, leading-slash
+   * path) — the THIRD of the three confirmed-leaking dispatch paths. This
+   * path previously called `this.sensitiveHeaderNames()` with NO route
+   * headers argument at all, so it depended entirely on the auth/CSRF names
+   * — a per-call header was never covered here either.
+   */
+  async function securityRequestRawPerCallHeaderCrossOriginRedirectStripsCase(mdp) {
+    recorder.clear();
+    const attacker = await ctx.startRecordingServer();
+    const redirectRecords = [];
+    const redirectServer = http.createServer((req, res) => {
+      redirectRecords.push({ method: req.method ?? '', url: req.url ?? '', headers: { ...req.headers } });
+      res.writeHead(302, { Location: `${attacker.baseUrl}/landed` });
+      res.end();
+    });
+    const legit = await new Promise((resolve, reject) => {
+      redirectServer.on('error', reject);
+      redirectServer.listen(0, '127.0.0.1', () => {
+        const address = redirectServer.address();
+        resolve({ baseUrl: `http://127.0.0.1:${address.port}` });
+      });
+    });
+    const { box, unmount } = await mountProviderContext(mdp, { apiUrl: legit.baseUrl, routes: {} });
+    try {
+      const apiClient = box.current.apiClient;
+      let threw = false;
+      let errMessage = '';
+      try {
+        // Leading-slash, unregistered path -> requestRaw (ApiClient.ts's
+        // `routeName.startsWith('/')` branch).
+        await apiClient.request('/ad-hoc-raw-redirect', undefined, undefined, {
+          headers: { 'X-Custom-Secret-Token': 'RAW-PATH-SECRET-VALUE' },
+        });
+      } catch (e) {
+        threw = true;
+        errMessage = e?.message ?? String(e);
+      }
+      const firstHopGotSecret = redirectRecords.some((r) => r.headers['x-custom-secret-token'] === 'RAW-PATH-SECRET-VALUE');
+      const attackerGotRequest = attacker.records.length > 0;
+      const attackerGotSecret = attacker.records.some((r) => r.headers['x-custom-secret-token'] === 'RAW-PATH-SECRET-VALUE');
+      const pass = !threw && firstHopGotSecret && attackerGotRequest && !attackerGotSecret;
+      results.push({
+        id: 'sec-requestraw-percall-header-cross-origin-redirect-strips',
+        pass,
+        message: pass
+          ? `apiClient.request('/ad-hoc-raw-redirect', ..., { headers }) — requestRaw's dispatch path — followed a real cross-origin 302 successfully; the FIRST hop received the per-call secret normally, the redirect target NEVER did`
+          : `SECURITY FAILURE (requestRaw per-call header redirect leak): threw=${threw} ("${errMessage}"), first-hop got secret=${firstHopGotSecret}, attacker got request=${attackerGotRequest}, attacker got secret=${attackerGotSecret}`,
+      });
+    } finally {
+      unmount();
+      await new Promise((r) => redirectServer.close(() => r(undefined)));
+      await attacker.close();
+    }
+  }
+
+  /**
+   * fix-percall-header-redirect-leak — HIGHEST-RISK implementation detail
+   * (per the architect design's own risk list): the seal must run AFTER
+   * plugin `onRequestIntercept` middleware, not at config-assembly time. A
+   * plugin that injects a header (e.g. an auth-provider adapter adding its
+   * own bearer token) must have THAT header stripped on a cross-origin
+   * redirect too — proving the seal reads the FINAL header map, not an
+   * enumerated list of "known" sources computed before the plugin ran.
+   */
+  async function securityPluginInjectedHeaderCrossOriginRedirectStripsCase(mdp) {
+    const routeName = 'secThingPluginHeaderRedirect';
+    recorder.clear();
+    const attacker = await ctx.startRecordingServer();
+    const redirectRecords = [];
+    const redirectServer = http.createServer((req, res) => {
+      redirectRecords.push({ method: req.method ?? '', url: req.url ?? '', headers: { ...req.headers } });
+      res.writeHead(302, { Location: `${attacker.baseUrl}/landed` });
+      res.end();
+    });
+    const legit = await new Promise((resolve, reject) => {
+      redirectServer.on('error', reject);
+      redirectServer.listen(0, '127.0.0.1', () => {
+        const address = redirectServer.address();
+        resolve({ baseUrl: `http://127.0.0.1:${address.port}` });
+      });
+    });
+    const { box, unmount } = await mountProviderContext(mdp, {
+      apiUrl: legit.baseUrl,
+      routes: { [routeName]: { method: 'GET', url: '/things/:id' } },
+      plugins: [
+        {
+          name: 'header-injector-plugin',
+          onRequestIntercept: (req) => ({
+            ...req,
+            headers: { ...req.headers, 'X-Plugin-Injected-Secret': 'PLUGIN-INJECTED-SECRET-VALUE' },
+          }),
+        },
+      ],
+    });
+    try {
+      const apiClient = box.current.apiClient;
+      let threw = false;
+      let errMessage = '';
+      try {
+        await apiClient.request(routeName, undefined, { id: '1' });
+      } catch (e) {
+        threw = true;
+        errMessage = e?.message ?? String(e);
+      }
+      const firstHopGotSecret = redirectRecords.some((r) => r.headers['x-plugin-injected-secret'] === 'PLUGIN-INJECTED-SECRET-VALUE');
+      const attackerGotRequest = attacker.records.length > 0;
+      const attackerGotSecret = attacker.records.some((r) => r.headers['x-plugin-injected-secret'] === 'PLUGIN-INJECTED-SECRET-VALUE');
+      const pass = !threw && firstHopGotSecret && attackerGotRequest && !attackerGotSecret;
+      results.push({
+        id: 'sec-plugin-injected-header-cross-origin-redirect-strips',
+        pass,
+        message: pass
+          ? `a plugin onRequestIntercept-injected header survived the FIRST hop (proving the plugin ran) but was stripped on the cross-origin redirect — the seal reads headers AFTER plugin interception, not before`
+          : `SECURITY FAILURE (plugin-injected header redirect leak): threw=${threw} ("${errMessage}"), first-hop got secret=${firstHopGotSecret}, attacker got request=${attackerGotRequest}, attacker got secret=${attackerGotSecret}`,
+      });
+    } finally {
+      unmount();
+      await new Promise((r) => redirectServer.close(() => r(undefined)));
+      await attacker.close();
+    }
+  }
+
+  /**
+   * POSITIVE CONTROL (c): a SAME-origin redirect (the route's own host
+   * redirecting to a DIFFERENT path on itself, not a different host) must
+   * still forward a per-call secret header normally — the fix must not
+   * become "strip on every redirect", only cross-origin ones. axios/
+   * follow-redirects' own `isSameOriginRedirect` check (protocol+host+port)
+   * is what `sensitiveHeaders` stripping is gated on; this proves the strip
+   * set being NON-EMPTY (a real secret name IS in it) does not, by itself,
+   * strip anything when the hop never crosses an origin boundary.
+   */
+  async function securitySameOriginRedirectKeepsHeaderCase(mdp) {
+    const routeName = 'secThingSameOriginRedirect';
+    recorder.clear();
+    const landedRecords = [];
+    const server = http.createServer((req, res) => {
+      if ((req.url ?? '').startsWith('/landed')) {
+        landedRecords.push({ method: req.method ?? '', url: req.url ?? '', headers: { ...req.headers } });
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+        return;
+      }
+      res.writeHead(302, { Location: '/landed' });
+      res.end();
+    });
+    const legit = await new Promise((resolve, reject) => {
+      server.on('error', reject);
+      server.listen(0, '127.0.0.1', () => {
+        const address = server.address();
+        resolve({ baseUrl: `http://127.0.0.1:${address.port}` });
+      });
+    });
+    const { box, unmount } = await mountProviderContext(mdp, {
+      apiUrl: legit.baseUrl,
+      routes: { [routeName]: { method: 'GET', url: '/things/:id' } },
+    });
+    try {
+      const apiClient = box.current.apiClient;
+      let threw = false;
+      let errMessage = '';
+      try {
+        await apiClient.request(routeName, undefined, { id: '1' }, {
+          headers: { 'X-Custom-Secret-Token': 'SAME-ORIGIN-SECRET-VALUE' },
+        });
+      } catch (e) {
+        threw = true;
+        errMessage = e?.message ?? String(e);
+      }
+      const landedGotSecret = landedRecords.some((r) => r.headers['x-custom-secret-token'] === 'SAME-ORIGIN-SECRET-VALUE');
+      const pass = !threw && landedRecords.length > 0 && landedGotSecret;
+      results.push({
+        id: 'sec-same-origin-redirect-keeps-header-positive-control',
+        pass,
+        message: pass
+          ? `POSITIVE CONTROL: a SAME-origin redirect (route's own host -> a different path on itself) still carried the per-call secret header to the landed request — the fix strips on cross-origin hops only`
+          : `POSITIVE CONTROL FAILURE (over-broad strip): threw=${threw} ("${errMessage}"), landed got request=${landedRecords.length > 0}, landed got secret=${landedGotSecret}`,
+      });
+    } finally {
+      unmount();
+      await new Promise((r) => server.close(() => r(undefined)));
+    }
+  }
+
+  /**
+   * POSITIVE CONTROL (d): a 307 (Temporary Redirect — the one redirect
+   * status that must preserve the original method AND body, unlike 301/302/
+   * 303 which browsers/axios may downgrade to GET) across a cross-origin
+   * hop must still strip the sensitive header AND still carry the POST body
+   * to the redirect target. Proves the fix does not accidentally interfere
+   * with body-preserving redirect semantics.
+   */
+  async function security307CrossOriginPostBodySurvivesHeaderStripCase(mdp) {
+    const routeName = 'secThing307Redirect';
+    recorder.clear();
+    const attacker = await ctx.startRecordingServer();
+    const redirectRecords = [];
+    const redirectServer = http.createServer((req, res) => {
+      const chunks = [];
+      req.on('data', (c) => chunks.push(c));
+      req.on('end', () => {
+        redirectRecords.push({
+          method: req.method ?? '',
+          url: req.url ?? '',
+          headers: { ...req.headers },
+          rawBody: Buffer.concat(chunks).toString('utf8'),
+        });
+        res.writeHead(307, { Location: `${attacker.baseUrl}/landed` });
+        res.end();
+      });
+    });
+    const legit = await new Promise((resolve, reject) => {
+      redirectServer.on('error', reject);
+      redirectServer.listen(0, '127.0.0.1', () => {
+        const address = redirectServer.address();
+        resolve({ baseUrl: `http://127.0.0.1:${address.port}` });
+      });
+    });
+    const { box, unmount } = await mountProviderContext(mdp, {
+      apiUrl: legit.baseUrl,
+      routes: { [routeName]: { method: 'POST', url: '/things' } },
+    });
+    try {
+      const apiClient = box.current.apiClient;
+      let threw = false;
+      let errMessage = '';
+      try {
+        await apiClient.request(routeName, { note: 'hello' }, undefined, {
+          headers: { 'X-Custom-Secret-Token': '307-SECRET-VALUE' },
+        });
+      } catch (e) {
+        threw = true;
+        errMessage = e?.message ?? String(e);
+      }
+      const firstHopRec = redirectRecords[0];
+      const attackerRec = attacker.records[attacker.records.length - 1];
+      const firstHopGotSecret = firstHopRec?.headers['x-custom-secret-token'] === '307-SECRET-VALUE';
+      const attackerGotSecret = attacker.records.some((r) => r.headers['x-custom-secret-token'] === '307-SECRET-VALUE');
+      const attackerKeptMethod = attackerRec?.method === 'POST';
+      const attackerKeptBody = !!attackerRec && attackerRec.rawBody.includes('hello');
+      const pass = !threw && firstHopGotSecret && !attackerGotSecret && attackerKeptMethod && attackerKeptBody;
+      results.push({
+        id: 'sec-307-cross-origin-post-body-survives-header-strip',
+        pass,
+        message: pass
+          ? `POSITIVE CONTROL: a 307 cross-origin redirect still carried the POST method + body to the redirect target while the per-call secret header was stripped`
+          : `307 POSITIVE CONTROL FAILURE: threw=${threw} ("${errMessage}"), first-hop got secret=${firstHopGotSecret}, attacker got secret=${attackerGotSecret}, attacker method=${attackerRec?.method}, attacker kept body=${attackerKeptBody}`,
+      });
+    } finally {
+      unmount();
+      await new Promise((r) => redirectServer.close(() => r(undefined)));
+      await attacker.close();
+    }
+  }
+
+  /**
    * fix-2.2.0-blockers, THE FOURTH EXFILTRATION CHANNEL (item 1). Every case
    * below dispatches through `requestRaw` — an UNREGISTERED, leading-slash
    * path (ApiClient.ts's `routeName.startsWith('/')` branch) that a bare
@@ -2884,6 +3209,63 @@ export async function run(ctx) {
     if (!results.some((r) => r.id === 'sec-cross-origin-redirect-strips-route-header')) {
       results.push({
         id: 'sec-cross-origin-redirect-strips-route-header',
+        pass: false,
+        message: `driver threw before this case ran: ${err?.message ?? err}`,
+      });
+    }
+  }
+
+  // --- fix-percall-header-redirect-leak (defect 1 + risk-list items) ---
+  try {
+    await securityPerCallHeaderCrossOriginRedirectStripsCase(mdpEsm);
+  } catch (err) {
+    if (!results.some((r) => r.id === 'sec-percall-header-cross-origin-redirect-strips')) {
+      results.push({
+        id: 'sec-percall-header-cross-origin-redirect-strips',
+        pass: false,
+        message: `driver threw before this case ran: ${err?.message ?? err}`,
+      });
+    }
+  }
+  try {
+    await securityRequestRawPerCallHeaderCrossOriginRedirectStripsCase(mdpCjs);
+  } catch (err) {
+    if (!results.some((r) => r.id === 'sec-requestraw-percall-header-cross-origin-redirect-strips')) {
+      results.push({
+        id: 'sec-requestraw-percall-header-cross-origin-redirect-strips',
+        pass: false,
+        message: `driver threw before this case ran: ${err?.message ?? err}`,
+      });
+    }
+  }
+  try {
+    await securityPluginInjectedHeaderCrossOriginRedirectStripsCase(mdpEsm);
+  } catch (err) {
+    if (!results.some((r) => r.id === 'sec-plugin-injected-header-cross-origin-redirect-strips')) {
+      results.push({
+        id: 'sec-plugin-injected-header-cross-origin-redirect-strips',
+        pass: false,
+        message: `driver threw before this case ran: ${err?.message ?? err}`,
+      });
+    }
+  }
+  try {
+    await securitySameOriginRedirectKeepsHeaderCase(mdpCjs);
+  } catch (err) {
+    if (!results.some((r) => r.id === 'sec-same-origin-redirect-keeps-header-positive-control')) {
+      results.push({
+        id: 'sec-same-origin-redirect-keeps-header-positive-control',
+        pass: false,
+        message: `driver threw before this case ran: ${err?.message ?? err}`,
+      });
+    }
+  }
+  try {
+    await security307CrossOriginPostBodySurvivesHeaderStripCase(mdpEsm);
+  } catch (err) {
+    if (!results.some((r) => r.id === 'sec-307-cross-origin-post-body-survives-header-strip')) {
+      results.push({
+        id: 'sec-307-cross-origin-post-body-survives-header-strip',
         pass: false,
         message: `driver threw before this case ran: ${err?.message ?? err}`,
       });

@@ -106,6 +106,19 @@ export interface UnifiedMinderConfig {
     storage?: StorageType;
     tokenKey?: string;
     refreshUrl?: string;
+    /**
+     * p-a1-custom-auth-header-prefix (fix): custom header name (default:
+     * 'Authorization') — mirrors `AuthConfig.authHeader` (core/types.ts),
+     * which `configureMinder()` previously accepted at the TYPE level (via
+     * an implicit `any`-ish widen) but silently dropped at RUNTIME when
+     * building `baseConfig.auth`. Declared explicitly here so it survives
+     * the unified config's normalization into `MinderConfig.auth` and
+     * reaches both `<MinderDataProvider>`'s ApiClient AND standalone
+     * minder(), which both read `registry.auth.authHeader`.
+     */
+    authHeader?: string;
+    /** Custom token prefix (default: 'Bearer') — see `authHeader` above. */
+    authTokenPrefix?: string;
   };
 
   /** Caching configuration */
@@ -186,6 +199,15 @@ export interface UnifiedMinderConfig {
     logLevel?: LogLevel;
     performance?: boolean;
     devTools?: boolean;
+    /**
+     * fix-percall-header-redirect-leak (defect 3): previously accepted here
+     * but silently dropped by the object-form passthrough below — see the
+     * fix at `baseConfig.debug = {...}` for why restoring them is now safe.
+     */
+    networkLogs?: boolean;
+    authLogs?: boolean;
+    cacheLogs?: boolean;
+    websocketLogs?: boolean;
   };
 
   /** Performance configuration */
@@ -724,6 +746,18 @@ function applyUserConfig(
         tokenKey: userConfig.auth.tokenKey || 'token',
         storage: userConfig.auth.storage || baseConfig.auth?.storage || StorageType.COOKIE,
         refreshUrl: userConfig.auth.refreshUrl,
+        // p-a1-custom-auth-header-prefix (fix): this normalization step used
+        // to silently DROP `authHeader`/`authTokenPrefix` — real,
+        // pre-existing `AuthConfig` fields (types.ts) — even though a caller
+        // passed them here. `configureMinder()` is the documented, unified
+        // single source of truth for BOTH `<MinderDataProvider>` and
+        // standalone `minder()`; the standalone side reads exactly this
+        // object (via `getGlobalMinderConfig().auth`), so dropping these two
+        // fields made a custom auth header/prefix unreachable through the
+        // primary config API regardless of any downstream fix that reads
+        // them correctly.
+        authHeader: userConfig.auth.authHeader,
+        authTokenPrefix: userConfig.auth.authTokenPrefix,
       };
     }
   }
@@ -850,11 +884,29 @@ function applyUserConfig(
     } else if (userConfig.debug === false) {
       baseConfig.debug = { enabled: false };
     } else {
+      // fix-percall-header-redirect-leak (defect 3): `networkLogs`/
+      // `authLogs`/`cacheLogs` were silently dropped on the object-form
+      // passthrough — `configureMinder({ debug: { networkLogs: true } } })`
+      // never actually turned network logging on, even though the option is
+      // documented (docs/FEATURES.md, llms.txt) and `ApiClient` reads it
+      // (`this.config.debug?.networkLogs`). Sequenced AFTER the debug-log
+      // redaction fix (ADR-B, `redactHeadersForLog`'s allowlist inversion) —
+      // that fix is what makes actually turning this passthrough on safe;
+      // landing it first would have converted the (already-live, via
+      // `<MinderDataProvider config={...}>`) header-redaction gap from
+      // latent to live on the `configureMinder()` path too.
       baseConfig.debug = {
         enabled: userConfig.debug.enabled ?? true,
         logLevel: userConfig.debug.logLevel ?? LogLevel.INFO,
         performance: userConfig.debug.performance ?? false,
         devTools: userConfig.debug.devTools ?? false,
+        networkLogs: userConfig.debug.networkLogs ?? false,
+        authLogs: userConfig.debug.authLogs ?? false,
+        cacheLogs: userConfig.debug.cacheLogs ?? false,
+        // Same field-omission class as the three above (not separately
+        // named in the task, but identical bug, identical block, identical
+        // fix — see the "recurring pattern" note on fixing the CLASS).
+        websocketLogs: userConfig.debug.websocketLogs ?? false,
       };
     }
   }

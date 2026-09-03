@@ -35,6 +35,55 @@ export function applyRequestBody(
 ): void {
   if (!data) return;
 
+  // p-m3-untrimmed-method-whitespace (fix follow-on): a GET never carries a
+  // body — this module's own doc comment already claimed "a GET body is not
+  // meaningful and was never sent by either path" (core/minder.ts's C2
+  // comment), but that was only true for minder()'s `method !== 'GET'`
+  // guard; this function had NO equivalent guard at all (only `if (!data)
+  // return`), so the provider path silently sent a GET body whenever a
+  // caller supplied one. Exposed by the p-m3 fix (normalizing minder()'s
+  // method BEFORE its own GET-body-exclusion check made a
+  // previously-case-sensitivity-masked divergence, p-gb1-get-with-body,
+  // visible on the wire suite) rather than caused by it — the underlying gap
+  // predates that fix. `requestConfig.method` is already normalized
+  // (trimmed/uppercased) by both call sites (resolveRequest / requestRaw's
+  // own `normalizeHttpMethod`) before this function runs; `.toUpperCase()`
+  // here is defensive, not load-bearing.
+  if ((requestConfig.method || '').toString().toUpperCase() === 'GET') return;
+
+  // p-b6-blob-body-encoding (fix): a bare File/Blob/FileList body must be
+  // wrapped into multipart FormData here too — mirroring `minder()`'s OWN,
+  // already-tested `isFileUpload()` + FormData-wrap behavior
+  // (core/minder.ts, core/minder/utils.ts) — instead of falling through to
+  // the generic `else` branch below, which sent it as a RAW (non-multipart)
+  // axios body. Checked BEFORE sanitization (binary/opaque payload types are
+  // never sanitized — `sanitizeRequestData` already skips them) and BEFORE
+  // the `FormData`-instance check just below, since a caller-built FormData
+  // must still pass through untouched (this branch never matches a FormData
+  // instance itself — only File/Blob/FileList).
+  const isBareFileLike =
+    (typeof File !== 'undefined' && data instanceof File) ||
+    (typeof Blob !== 'undefined' && data instanceof Blob) ||
+    (typeof FileList !== 'undefined' && data instanceof FileList);
+  if (isBareFileLike) {
+    const formData = new FormData();
+    if (typeof FileList !== 'undefined' && data instanceof FileList) {
+      Array.from(data).forEach((file, index) => {
+        formData.append(`file${index}`, file);
+      });
+    } else {
+      formData.append('file', data as Blob);
+    }
+    requestConfig.data = formData;
+    if (requestConfig.headers) {
+      delete requestConfig.headers['Content-Type'];
+      delete requestConfig.headers['content-type'];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (requestConfig.headers as any)['Content-Type'] = undefined;
+    }
+    return;
+  }
+
   const sanitizedData = sanitizeRequestData(data, sanitizer);
 
   if (typeof FormData !== 'undefined' && sanitizedData instanceof FormData) {

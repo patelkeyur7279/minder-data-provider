@@ -267,7 +267,15 @@ const repoRoot = join(__dirname, '..', '..');
 // adapter instances sharing only the durable backing store; one proves a
 // caller-supplied namespace/key with OTHER unsafe characters (space, `@`,
 // `/`) is sanitized too, not just the default `:` separator.
-const MIN_WIRE_CASES = 232;
+// fix-percall-header-redirect-leak: raised from 232 to 238 — 6 new real
+// cases close the per-call-header cross-origin-redirect leak (defect 1) on
+// the apiClient.request AND requestRaw dispatch paths, prove the seal runs
+// AFTER plugin onRequestIntercept middleware (not at config-assembly time —
+// the highest-risk implementation detail in the architect design), and add
+// three positive controls (same-origin redirect keeps the header, a benign
+// header still forwards, a 307 cross-origin POST still carries its body)
+// plus the standalone minder() mirror of the per-call-header case.
+const MIN_WIRE_CASES = 238;
 
 const DRIVER_FILES = {
   'method-contract': join(repoRoot, 'tests/wire/method-contract.mjs'),

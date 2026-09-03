@@ -13,25 +13,6 @@ import type { OfflineManager } from '../../platform/offline/OfflineManager.js';
 import type { QueuedRequest } from '../../platform/offline/types.js';
 
 /**
- * Redact sensitive header values before they reach debug logs.
- *
- * Extracted from `ApiClient.sanitizeHeaders` verbatim.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function sanitizeHeaders(headers: any): any {
-  if (!headers) return headers;
-  const sanitized = { ...headers };
-  const sensitiveHeaders = ['Authorization', 'Cookie', 'Set-Cookie', 'X-CSRF-Token', 'x-csrf-token'];
-
-  Object.keys(sanitized).forEach(key => {
-    if (sensitiveHeaders.some(h => h.toLowerCase() === key.toLowerCase())) {
-      sanitized[key] = '[REDACTED]';
-    }
-  });
-  return sanitized;
-}
-
-/**
  * Shape shared by every "request went out, no HTTP response ever came back"
  * error this module classifies: axios's own `AxiosError` (ECONNREFUSED,
  * ENOTFOUND, ECONNRESET, ERR_NETWORK, a genuine timeout, ...) AND the legacy

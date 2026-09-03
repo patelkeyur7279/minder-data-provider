@@ -1058,6 +1058,46 @@
       "description": "NON-BLOCKING HARDENING (cross-origin redirect header leak): a real 302 from the route's own trusted host to a SECOND, independent server must still dispatch successfully, but axios's sensitiveHeaders (set from the route's own declared header names) must strip the route's static X-Api-Key header on the cross-origin redirect hop \u2014 the first hop receives it normally, the redirect target never does"
     },
     {
+      "id": "sec-percall-header-cross-origin-redirect-strips",
+      "acceptance": "fix-percall-header-redirect-leak (defect 1)",
+      "driver": "method-contract",
+      "pattern": "apiClient.request(routeName, data, params, { headers }) against a route whose OWN host responds with a real cross-origin 302",
+      "module": "esm",
+      "description": "CONFIRMED DEFECT 1 (provider apiClient.request path): the redirect-strip set was derived from route.headers + the effective auth/CSRF header names only, and NEVER options.headers -- a per-call secret header (bearer token/API key shape) rode along to whatever host the redirect pointed at. Now sealed via sealOutgoingRequest (src/core/apiClient/outgoingHeaders.ts) from the FINAL assembled header map immediately before dispatch. First hop receives the per-call secret normally; the redirect target never does; a benign per-call header (Accept) still reaches the redirect target (positive control b)"
+    },
+    {
+      "id": "sec-requestraw-percall-header-cross-origin-redirect-strips",
+      "acceptance": "fix-percall-header-redirect-leak (defect 1)",
+      "driver": "method-contract",
+      "pattern": "apiClient.request('/ad-hoc-raw-redirect', undefined, undefined, { headers }) -- an UNREGISTERED path reaching requestRaw -- against a host responding with a real cross-origin 302",
+      "module": "cjs",
+      "description": "CONFIRMED DEFECT 1 (requestRaw dispatch path -- the THIRD of three confirmed-leaking paths): requestRaw called sensitiveHeaderNames() with no route-headers argument at all, so a per-call header was never covered here either. Now sealed immediately before dispatch from the FINAL header map. First hop receives the per-call secret normally; the redirect target never does"
+    },
+    {
+      "id": "sec-plugin-injected-header-cross-origin-redirect-strips",
+      "acceptance": "fix-percall-header-redirect-leak (architect risk list, highest-risk item)",
+      "driver": "method-contract",
+      "pattern": "apiClient.request(routeName, data, params) with a registered plugin.onRequestIntercept injecting a header, against a host responding with a real cross-origin 302",
+      "module": "esm",
+      "description": "proves the seal runs AFTER plugin onRequestIntercept middleware, not at config-assembly time (the highest-risk implementation detail the architect design called out): a header a plugin injects at runtime must still be stripped on a cross-origin redirect -- placing the seal earlier would look correct, pass the simpler per-call-header cases, and still leak plugin-injected headers. First hop receives the plugin-injected header normally (proving the plugin ran); the redirect target never does"
+    },
+    {
+      "id": "sec-same-origin-redirect-keeps-header-positive-control",
+      "acceptance": "fix-percall-header-redirect-leak (POSITIVE CONTROL c)",
+      "driver": "method-contract",
+      "pattern": "apiClient.request(routeName, data, params, { headers }) against a route whose OWN host responds with a SAME-origin 302 (a different path on itself)",
+      "module": "cjs",
+      "description": "POSITIVE CONTROL: a SAME-origin redirect (axios/follow-redirects' own isSameOriginRedirect check: same protocol+host+port) must still forward a per-call secret header normally -- the fix strips on CROSS-origin hops only, not on every redirect. Proves a non-empty sensitiveHeaders strip-set does not, by itself, strip anything when the hop never crosses an origin boundary"
+    },
+    {
+      "id": "sec-307-cross-origin-post-body-survives-header-strip",
+      "acceptance": "fix-percall-header-redirect-leak (POSITIVE CONTROL d)",
+      "driver": "method-contract",
+      "pattern": "apiClient.request(routeName, data, undefined, { headers }) on a POST route whose OWN host responds with a real cross-origin 307",
+      "module": "esm",
+      "description": "POSITIVE CONTROL: a 307 (Temporary Redirect -- must preserve method + body, unlike 301/302/303) across a cross-origin hop still strips the per-call secret header AND still carries the POST method + body to the redirect target -- the fix does not interfere with body-preserving redirect semantics"
+    },
+    {
       "id": "item3-options-params-only-resolves-path-no-redundant-query",
       "acceptance": "ITEM-3",
       "driver": "method-contract",
@@ -1424,6 +1464,14 @@
       "pattern": "standalone minder(routeName, undefined, { params }) against a route whose OWN host responds with a real cross-origin 302",
       "module": "esm",
       "description": "SECURITY (redirect header leak, standalone path): a real 302 from the route's own trusted host to a SECOND, independent server must still dispatch successfully, but axios's sensitiveHeaders (now set from the route's own declared header names via the shared choke point src/core/apiClient/sensitiveHeaders.ts) must strip the route's static X-Api-Key header on the cross-origin redirect hop -- the first hop receives it normally, the redirect target never does"
+    },
+    {
+      "id": "sec-standalone-percall-header-cross-origin-redirect-strips",
+      "acceptance": "fix-percall-header-redirect-leak (defect 1)",
+      "driver": "standalone-redirect-header-leak",
+      "pattern": "standalone minder(routeName, undefined, { params, headers }) against a route whose OWN host responds with a real cross-origin 302",
+      "module": "esm",
+      "description": "CONFIRMED DEFECT 1 (standalone path): config.sensitiveHeaders was derived from registryRoute.headers only, at config-assembly time, before options.headers ever merged into config.headers -- a PER-CALL secret header rode along to the redirect target unmodified. Now sealed via sealOutgoingRequest immediately before dispatch. First hop receives the secret normally; the redirect target never does; a benign per-call header (Accept) still reaches the redirect target (positive control)"
     },
     {
       "id": "p-m1-registered-put-method-resolution",

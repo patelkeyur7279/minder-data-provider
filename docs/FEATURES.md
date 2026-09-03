@@ -17,7 +17,7 @@ real-time, offline, file upload, a plugin/integration system, and secret-key saf
 | Auth | token lifecycle + `provideToken()` plugins (Firebase/Auth0/Clerk) | `/auth` |
 | Caching | TanStack-backed query cache, TTL, invalidation, hydration | `/cache` |
 | Real-time | WebSocket subscriptions + SSE stream | `/websocket` |
-| Offline | unified offline manager, **manual** queue (`addToQueue`) + replay, opt-in persistence, sync events — auto-queue-on-real-network-failure is a known open defect, see below | `/config`, plugins |
+| Offline | unified offline manager, auto-queue on real network failure + **manual** queue (`addToQueue`) + replay, opt-in persistence, sync events | `/config`, plugins |
 | File upload | media upload manager + progress + upload lifecycle plugin hook | `/upload` |
 | CRUD | `operations.create/read/update/delete` on the hook | `/crud` |
 | Plugins | request/response/error/auth/upload/sync hooks, isolation guarantee | full surface |
@@ -475,26 +475,19 @@ useEffect(() => {
 
 ## Offline
 
-> **Known open defect (2026-08-26, tracked as C3) — read before relying on auto-queue.**
-> Auto-queuing a request that fails with a **genuine** network error (a real dead port /
-> `ECONNREFUSED`, not a mock) through a provider's `ApiClient` currently does **not** work:
-> `getOfflineManager().getQueueSize()` stays `0` and the failed mutation is simply lost, on every
-> platform. Root cause: `src/core/apiClient/errors.ts`'s error classifier treats every axios error
-> (axios sets `isAxiosError: true` even on connection failures) as an HTTP-response error first,
-> so the code path that would call `addToQueue()` is never reached for a real failure. Manual
-> queuing — `getOfflineManager().addToQueue(method, url, { body, headers })` — and replay of
-> already-queued items both work correctly; only the *automatic* enqueue-on-real-failure step is
-> broken. If you need offline resilience today, call `addToQueue()` yourself from your own
-> error-handling code (e.g. in `onError`) rather than relying on it happening for you. See
-> [Support Matrix → Offline](./product/SUPPORT_MATRIX.md#capabilities-todays-built-ins) for the
-> full evidence trail.
+**Auto-queue on real network failure WORKS:** a mutation that fails with a genuine network error
+(real dead port / `ECONNREFUSED` through a provider's `ApiClient`) auto-enqueues — `getOfflineManager().getQueueSize()`
+goes 0→1 and the failed mutation replays on reconnect. Wire-verified against a real dead port by four test
+cases in `tests/wire/offline-contract.mjs`: `c3-provider-mutate-dead-port-reports-failure-and-enqueues`,
+`c3-queued-request-replays-on-sync-against-real-server`, `c3-no-offline-config-dead-port-stays-plain-network-error`
+(control), and `c3-get-request-dead-port-is-not-auto-queued` (control — GETs are never queued by design).
 
 - A single **unified** offline manager queues work and syncs when connectivity returns.
 - Requests pushed via `getOfflineManager().addToQueue(...)` are replayed through the ApiClient's
   own axios instance on reconnect (so auth/CSRF/CORS/interceptors all still apply), and `onSync` /
-  `onConnectivityChange` fire correctly for those manually-queued items. **Automatic** queuing of a
-  mutation that fails with a real network error does not currently happen — see the defect note
-  above.
+  `onConnectivityChange` fire correctly for those items. **Mutations** (POST/PUT/PATCH/DELETE) that fail
+  with a genuine network error are automatically enqueued; **GET/HEAD/OPTIONS** requests are re-issued
+  instead, never queued, by design.
 - **Persistence is opt-in.** Without a `storage` adapter (`offline: { storage }`) the queue is
   **in-memory only and is lost on reload/restart**. Provide a `StorageAdapter` to persist it.
 - The offline manager **removes its window listeners on destroy** (no leaks); exactly one

@@ -80,5 +80,57 @@ export async function run(ctx) {
     await new Promise((resolve) => legitServer.close(() => resolve(undefined)));
   }
 
+  // fix-percall-header-redirect-leak (defect 1, standalone minder() path —
+  // the THIRD of the three confirmed-leaking dispatch paths). The case
+  // above only ever proved ROUTE-DECLARED headers are stripped; this proves
+  // a PER-CALL header (`minder(route, data, { headers })`) is stripped too
+  // — `config.sensitiveHeaders` used to be set from `registryRoute?.headers`
+  // only, at config-assembly time, before `options.headers` even merged
+  // into `config.headers`. Same real-cross-origin-302 shape, own pair of
+  // servers so the two cases stay fully isolated.
+  const evil2 = await ctx.startRecordingServer();
+  const legit2Records = [];
+  const legit2Server = http.createServer((req, res) => {
+    legit2Records.push({ method: req.method ?? '', url: req.url ?? '', headers: { ...req.headers } });
+    res.writeHead(302, { Location: `${evil2.baseUrl}/landed` });
+    res.end();
+  });
+  const legit2 = await new Promise((resolve, reject) => {
+    legit2Server.on('error', reject);
+    legit2Server.listen(0, '127.0.0.1', () => {
+      const address = legit2Server.address();
+      resolve({ baseUrl: `http://127.0.0.1:${address.port}` });
+    });
+  });
+
+  try {
+    const routeName2 = 'standaloneSecThingPerCallHeaderRedirect';
+    mdpEsm.configureMinder({
+      apiUrl: legit2.baseUrl,
+      routes: { [routeName2]: { method: 'GET', url: '/things/:id' } },
+    });
+
+    const result2 = await mdpEsm.minder(routeName2, undefined, {
+      params: { id: '1' },
+      headers: { 'X-Custom-Secret-Token': 'STANDALONE-PER-CALL-SECRET', Accept: 'application/json' },
+    });
+
+    const firstHopGotSecret = legit2Records.some((r) => r.headers['x-custom-secret-token'] === 'STANDALONE-PER-CALL-SECRET');
+    const evilGotRequest = evil2.records.length > 0;
+    const evilGotSecret = evil2.records.some((r) => r.headers['x-custom-secret-token'] === 'STANDALONE-PER-CALL-SECRET');
+    const evilGotBenign = evil2.records.some((r) => r.headers['accept'] === 'application/json');
+    const pass2 = result2?.success === true && firstHopGotSecret && evilGotRequest && !evilGotSecret && evilGotBenign;
+
+    results.push({
+      id: 'sec-standalone-percall-header-cross-origin-redirect-strips',
+      pass: pass2,
+      message: pass2
+        ? `standalone minder() with a PER-CALL secret header (options.headers) followed a real cross-origin 302 successfully; the FIRST hop received it normally, the redirect target NEVER did, and a benign per-call header (Accept) still reached the redirect target`
+        : `SECURITY FAILURE (standalone per-call header redirect leak): success=${result2?.success}, first-hop got secret=${firstHopGotSecret}, evil got request=${evilGotRequest}, evil got secret=${evilGotSecret}, evil got benign header=${evilGotBenign}, result=${JSON.stringify(result2)}`,
+    });
+  } finally {
+    await new Promise((resolve) => legit2Server.close(() => resolve(undefined)));
+  }
+
   return results;
 }

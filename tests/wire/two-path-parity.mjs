@@ -69,21 +69,6 @@ const IGNORE_HEADERS = new Set(['user-agent', 'accept-encoding', 'content-length
  * entry points — that is the suite's actual regression coverage.
  */
 const ALLOWLIST = [
-  { id: 'p-a1-custom-auth-header-prefix', probe: 'A1', reason: "minder() hardcodes 'Authorization: Bearer <token>'; only the provider's applySecurityHeaders honours auth.authHeader/auth.authTokenPrefix (HIGH, standalone-only)." },
-  { id: 'p-a3-percall-authorization-override', probe: 'A3', reason: "applySecurityHeaders overwrites a caller-supplied Authorization header with the AuthManager token AFTER the per-call header merge on the provider path; minder() honours the per-call override (HIGH, provider-only)." },
-  { id: 'p-c1-csrf-token-header', probe: 'C1', reason: "security.csrfProtection is enforced by the provider's ApiClient only; minder() reads the same unified config and silently no-ops it (HIGH, standalone-only)." },
-  { id: 'p-rl1-rate-limiting', probe: 'RL1', reason: "security.rateLimiting is enforced by the provider's ApiClient only; both standalone calls dispatch regardless of the configured limit (MEDIUM, standalone-only)." },
-  { id: 'p-px2-cors-proxy-rewrite', probe: 'PX2', reason: "corsHelper.proxy URL rewriting only exists in the provider's ProxyManager; minder() contains no proxy code at all and always goes straight to the real origin (HIGH, standalone-only)." },
-  { id: 'p-m2-adhoc-path-id-field-method', probe: 'M2', reason: "minder()'s detectMethod heuristic sends PUT for a body containing an 'id' field; ApiClient.requestRaw sends POST for the identical call — same consumer code, different HTTP verb (HIGH, divergent-for-identical-input)." },
-  { id: 'p-m3-untrimmed-method-whitespace', probe: 'M3', reason: "detectMethod returns options.method verbatim on the standalone path (untrimmed '  post  ' is refused); the registered-route provider path trims+uppercases before dispatch (MEDIUM, standalone-only)." },
-  { id: 'p-u3u4-positional-params-unregistered-path', probe: 'U3/U4', reason: "the provider's positional request(path, data, {id}) form substitutes ':id' on an unregistered path; minder() has no positional params channel at all, so an unregistered path can never have params substituted from minder() (HIGH, standalone has no channel)." },
-  { id: 'p-u5-unknown-route-name-typo', probe: 'U5', reason: "minder() falls back to treating an unknown bare route name as a literal path segment and dispatches a real request; the provider's registry lookup refuses with ROUTE_NOT_FOUND before anything reaches the wire (HIGH, standalone-only)." },
-  { id: 'p-b4-xml-string-body', probe: 'B4', reason: "ApiClient.applyRequestBody has a dedicated '<?xml' string branch (Content-Type: application/xml, raw passthrough); minder() has no equivalent so axios JSON-encodes the string, altering the body (MEDIUM, standalone-only)." },
-  { id: 'p-b6-blob-body-encoding', probe: 'B6', reason: "ApiClient.isFileUpload() treats a Blob as an upload and wraps it in FormData (multipart); minder()'s applyRequestBody passes the Blob through raw (text/plain) — same call, two incompatible wire encodings (MEDIUM)." },
-  { id: 'p-r1-retry-post-500-idempotency', probe: 'R1', reason: "minder()'s IDEMPOTENT_METHODS/retryNonIdempotent guard excludes POST from retries by default (n=1 on a persistent 500); the provider's axios response interceptor retries any 5xx regardless of method (n=3) — a 500 after a real write becomes three writes (HIGH, data-integrity)." },
-  { id: 'p-r3-retry-under-fetch-transport', probe: 'R3', reason: "minder()'s retry loop wraps both transports (n=3 under transport:'fetch'); the provider's retry logic lives only in the axios response interceptor, so retries silently stop applying once transport:'fetch' is selected (n=1) (MEDIUM, provider-only)." },
-  { id: 'p-d1-inflight-deduplication', probe: 'D1', reason: "performance.deduplication is honoured by the provider's ApiClient (n=1 for two concurrent identical GETs) and is a silent no-op for the identical configureMinder() config on the standalone path (n=2) (LOW, standalone-only)." },
-  { id: 'p-t1-percall-transport-fetch-fingerprint', probe: 'T1', reason: "transport:'fetch' is a documented per-call MinderOptions field; minder() honours it (dispatches via undici/fetch), useMinder()/ApiClient never forwards it (config.transport is read but the per-call option is not in the forwardable allowlist), so it is silently dropped rather than applied or refused (MEDIUM, provider-only). User-Agent is normally ignored by this comparator; it is the deliberate signal for THIS case only — see the case body." },
   // p-ab1-abort-cancellation-timing REMOVED (fix-b-transport-storage-websocket,
   // HIGH 6): minder() now reads `options.axiosConfig` through the same
   // allowlist choke point the provider path uses (src/core/minder.ts +
@@ -91,6 +76,51 @@ const ALLOWLIST = [
   // standalone path now aborts in-flight work exactly like the provider
   // path. The case below now ASSERTS convergence (both settle promptly)
   // instead of merely documenting the divergence — see its body.
+  //
+  // p-a1/p-a3/p-c1/p-rl1/p-px2/p-m2/p-m3/p-u3u4/p-u5/p-b4/p-b6/p-r1/p-r3/
+  // p-d1/p-t1 REMOVED (two-path-parity adversarial-validation defect sweep):
+  // all 15 rows this comment used to list are now CLOSED —
+  //   - A1: minder() reads auth.authHeader/auth.authTokenPrefix off the same
+  //     unified registry applySecurityHeaders already honours.
+  //   - A3: applySecurityHeaders now only sets the auth header when the
+  //     caller has not already supplied one (case-insensitive) for this call.
+  //   - C1/RL1: minder() now constructs the SAME CSRFTokenManager/RateLimiter
+  //     primitives (core/minder.ts) applySecurityHeaders already applies.
+  //   - PX2: minder() now builds a ProxyManager from corsHelper/cors.enabled
+  //     and rewrites the URL + injects proxy headers, mirroring
+  //     ApiClient.dispatchResolved.
+  //   - M2: ApiClient.requestRaw now applies the SAME id-in-data ->
+  //     PUT heuristic detectMethod already applies on the standalone path.
+  //   - M3: minder() now normalizes (trim+uppercase) the final resolved
+  //     method unconditionally, not only for a registered route.
+  //   - U3/U4: minder()'s path substitution (options.params) is no longer
+  //     gated on `registryRoute`; ApiClient.requestRaw now merges positional
+  //     + option params for substitution too (kept both sides convergent —
+  //     see p-u3u4-shared-defect-literal-placeholder-unregistered's note).
+  //   - U5: minder() now throws a directed ROUTE_NOT_FOUND MinderConfigError
+  //     for a bare, unregistered, non-path/non-absolute route name, exactly
+  //     like ApiClient.request.
+  //   - B4: minder() now has the identical '<?xml' string-body branch
+  //     ApiClient.applyRequestBody has.
+  //   - B6: ApiClient.applyRequestBody now wraps a bare File/Blob/FileList
+  //     into multipart FormData too, converging on minder()'s own
+  //     already-tested isFileUpload()+FormData-wrap contract (the allowlist
+  //     entry's own reason text had the attribution backwards — see the
+  //     adversarial-validation report for the correction).
+  //   - R1: STALE even before this sweep — isIdempotentHttpMethod already
+  //     gates the axios retry interceptor (apiClient/idempotency.ts,
+  //     shipped in commit e029240); this case now asserts real convergence.
+  //   - R3: ApiClient.dispatchNativeFetch now implements the identical
+  //     retry-with-backoff (gated by the same isIdempotentHttpMethod) the
+  //     axios response interceptor already had.
+  //   - D1: minder() now has an in-flight promise map for GETs under
+  //     performance.deduplication, mirroring ApiClient's own gate.
+  //   - T1: an explicit per-call `transport` option is now threaded through
+  //     ApiClient.dispatchResolved/requestRaw (extractCallerRequestOptions),
+  //     choosing dispatchNativeFetch vs axios at call time instead of only
+  //     at construction time.
+  // Every case id below now runs through the STRICT (non-allowlisted)
+  // comparator — see each case body for what "convergence" means for it.
 ];
 const ALLOWLIST_IDS = new Set(ALLOWLIST.map((a) => a.id));
 console.log(`[two-path-parity] allowlist size: ${ALLOWLIST.length} known-divergent case(s) — shrinking this list is the measure of convergence toward one shared dispatch pipeline`);
@@ -174,6 +204,28 @@ function normalizeMultipart(rec) {
   return { ...rec, headers, rawBody };
 }
 
+/**
+ * p-c1-csrf-token-header (fix): an `x-csrf-token` VALUE is a per-session,
+ * randomly-generated secret by design (CSRFTokenManager.getToken(),
+ * src/utils/security.ts) — standalone minder() and the provider's ApiClient
+ * each own an INDEPENDENT CSRFTokenManager instance (this suite's own
+ * `setupDom()` does not expose a `globalThis.sessionStorage`/cookie shared
+ * between the two, so there is no source either side could converge a VALUE
+ * from). Real convergence here is "both sides send the SAME HEADER NAME with
+ * SOME non-empty token", not "the same random bytes" — exactly the same
+ * class of non-determinism `normalizeMultipart` above already normalizes
+ * away for multipart boundaries. Any other header is left untouched.
+ */
+function normalizeCsrfToken(rec) {
+  if (!rec) return rec;
+  const tokenKey = Object.keys(rec.headers || {}).find((k) => k.toLowerCase() === 'x-csrf-token');
+  if (!tokenKey) return rec;
+  const value = rec.headers[tokenKey];
+  if (!value) return rec;
+  const headers = { ...rec.headers, [tokenKey]: 'CSRF-TOKEN' };
+  return { ...rec, headers };
+}
+
 function headersEqual(a, b) {
   const fa = filterHeaders(a);
   const fb = filterHeaders(b);
@@ -213,8 +265,8 @@ function compareRecordArrays(aArr, bArr) {
 
 /** The generic comparator used by the majority of cases. */
 function standardCompare({ id, probe, standRecords, provRecords, note }) {
-  const sArr = toArr(standRecords).map(normalizeMultipart);
-  const pArr = toArr(provRecords).map(normalizeMultipart);
+  const sArr = toArr(standRecords).map(normalizeMultipart).map(normalizeCsrfToken);
+  const pArr = toArr(provRecords).map(normalizeMultipart).map(normalizeCsrfToken);
   const cmp = compareRecordArrays(sArr, pArr);
   const standSummary = sArr.length ? sArr.map(summarize).join('  ||  ') : 'NO-REQUEST';
   const provSummary = pArr.length ? pArr.map(summarize).join('  ||  ') : 'NO-REQUEST';
@@ -484,7 +536,7 @@ export async function run(ctx) {
       probe: 'U3/U4',
       standRecords: s,
       provRecords: p,
-      note: 'documents a SHARED defect (both leave the literal :id placeholder on the wire) — not a standalone-vs-provider divergence, hence not allowlisted',
+      note: "p-u3u4-positional-params-unregistered-path's fix (minder()'s unconditional options.params substitution) also required ApiClient.requestRaw to merge positional+option params for substitution, so this case's OWN options.params-only calling convention now converges too (both sides substitute ':id' -> '7') instead of the two sides merely agreeing on the SAME literal-placeholder bug",
     }));
   }
 
@@ -744,11 +796,17 @@ export async function run(ctx) {
     const pProxy = proxyTarget.records.length;
     pxP.unmount();
     await proxyTarget.close();
-    const entry = ALLOWLIST.find((a) => a.id === 'p-px2-cors-proxy-rewrite');
+    // p-px2-cors-proxy-rewrite (STRICT, probe PX2): minder() now ports
+    // ApiClient's ProxyManager URL-rewrite into its own config-assembly
+    // step (core/minder.ts) — both entry points must now avoid the real
+    // origin entirely and route the SAME single request through the proxy.
+    const pass = sMain === 0 && sProxy === 1 && pMain === 0 && pProxy === 1;
     results.push({
       id: 'p-px2-cors-proxy-rewrite',
-      pass: true,
-      message: `[ALLOWLISTED probe ${entry.probe}: ${entry.reason}] standalone hit real-origin=${sMain} proxy=${sProxy}; provider hit real-origin=${pMain} proxy=${pProxy}`,
+      pass,
+      message: pass
+        ? `PARITY HOLDS (probe PX2): standalone hit real-origin=${sMain} proxy=${sProxy}; provider hit real-origin=${pMain} proxy=${pProxy}`
+        : `WIRE DIVERGENCE, NOT ALLOWLISTED (probe PX2): standalone hit real-origin=${sMain} proxy=${sProxy}; provider hit real-origin=${pMain} proxy=${pProxy} (expected 0/1 on both sides)`,
     });
   }
 
@@ -872,7 +930,7 @@ export async function run(ctx) {
     const p = [...main.records];
     retryP.unmount();
     mode = { kind: 'ok' };
-    results.push(standardCompare({ id: 'p-r1-retry-post-500-idempotency', probe: 'R1', standRecords: s, provRecords: p, note: 'a persistent 500 with retries=2: standalone excludes POST from retries, provider retries any 5xx regardless of method' }));
+    results.push(standardCompare({ id: 'p-r1-retry-post-500-idempotency', probe: 'R1', standRecords: s, provRecords: p, note: 'a persistent 500 with retries=2: isIdempotentHttpMethod (apiClient/idempotency.ts) now gates the axios retry interceptor exactly like minder()\'s own IDEMPOTENT_METHODS guard, so BOTH sides exclude POST from automatic retries (n=1/n=1)' }));
   }
 
   {
@@ -887,12 +945,19 @@ export async function run(ctx) {
     const p = [...main.records];
     retryFetchP.unmount();
     mode = { kind: 'ok' };
-    results.push(standardCompare({ id: 'p-r3-retry-under-fetch-transport', probe: 'R3', standRecords: s, provRecords: p, note: 'retries under transport:"fetch": standalone retry loop wraps both transports, provider retry lives only in the axios response interceptor' }));
+    results.push(standardCompare({ id: 'p-r3-retry-under-fetch-transport', probe: 'R3', standRecords: s, provRecords: p, note: 'retries under transport:"fetch": ApiClient.dispatchNativeFetch now implements its own retry-with-backoff (gated by isIdempotentHttpMethod), so BOTH transports retry a retryable GET failure identically (n=3/n=3 for retries:2)' }));
   }
 
   {
     main.clear();
-    confS();
+    // p-d1-inflight-deduplication (fix): the standalone side previously
+    // configured NO `performance.deduplication` at all (a pre-existing test
+    // bug — `confS()` needs the SAME config the provider side gets a few
+    // lines below to actually exercise the feature under test, per this
+    // case's own `note`). Without it, minder()'s dedup gate (now
+    // implemented) never activates for this call regardless of the source
+    // fix, since the gate itself reads `registry.performance?.deduplication`.
+    confS({ performance: { deduplication: true } });
     const [sFirst] = await Promise.all([mdp.minder('users'), mdp.minder('users')]);
     const s = [...main.records];
     main.clear();
@@ -920,11 +985,20 @@ export async function run(ctx) {
     await plainApi.request('post', { a: 1 }, undefined, { transport: 'fetch' });
     const pUA = main.records.at(-1)?.headers['user-agent'] || '(none)';
     const looksLikeAxios = (ua) => /^axios\//i.test(ua);
-    const entry = ALLOWLIST.find((a) => a.id === 'p-t1-percall-transport-fetch-fingerprint');
+    // p-t1-percall-transport-fetch-fingerprint (STRICT, probe T1): an
+    // explicit per-call `transport:'fetch'` is now threaded through
+    // ApiClient.dispatchResolved (extractCallerRequestOptions +
+    // `useFetchForThisCall`), so `plainApi` (constructed WITHOUT
+    // `transport:'fetch'` at instance level) must now ALSO dispatch this
+    // one call via fetch — i.e. a non-axios-shaped User-Agent, exactly like
+    // the standalone path already produced.
+    const pass = !looksLikeAxios(sUA) && !looksLikeAxios(pUA);
     results.push({
       id: 'p-t1-percall-transport-fetch-fingerprint',
-      pass: true,
-      message: `[ALLOWLISTED probe ${entry.probe}: ${entry.reason}] standalone User-Agent="${sUA}" (axios-shaped=${looksLikeAxios(sUA)}) provider User-Agent="${pUA}" (axios-shaped=${looksLikeAxios(pUA)}) — provider staying axios-shaped under an explicit transport:'fetch' request is exactly the drop the audit found`,
+      pass,
+      message: pass
+        ? `PARITY HOLDS (probe T1): standalone User-Agent="${sUA}" (axios-shaped=${looksLikeAxios(sUA)}) provider User-Agent="${pUA}" (axios-shaped=${looksLikeAxios(pUA)}) — both honour the per-call transport:'fetch' override`
+        : `WIRE DIVERGENCE, NOT ALLOWLISTED (probe T1): standalone User-Agent="${sUA}" (axios-shaped=${looksLikeAxios(sUA)}) provider User-Agent="${pUA}" (axios-shaped=${looksLikeAxios(pUA)}) — provider staying axios-shaped under an explicit transport:'fetch' request means the per-call override was dropped`,
     });
   }
 

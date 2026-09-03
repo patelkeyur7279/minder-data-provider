@@ -97,3 +97,54 @@ that re-hoists directives to their true module-first position after code-splitti
 guard (`tests/packaging/use-client-directive-position.test.ts`) ensures the directive never appears
 anywhere but a module's first statement. This was fixed on 2026-08-26 and verified end-to-end
 against a real Next.js 15 App Router app installed from `npm pack`.
+
+## Rollup- and Vite-based RSC frameworks: keep the package external
+
+**Limitation, and it cannot be fixed in this package.** Rollup deletes every module-level
+directive other than `"use strict"` from any module it bundles, and warns:
+
+```
+(!) node_modules/minder-data-provider/dist/chunk-XXXXXXXX.mjs (1:0):
+    Module level directives cause errors when bundled, "use client" in "..." was ignored.
+```
+
+This is unconditional Rollup behaviour, not something this package's build causes or can work
+around. Verified against rollup 4.62.2:
+
+- it happens with a **single** module and nothing to merge with;
+- it happens with `output.preserveModules: true` (one output file per input module);
+- it happens identically to **your own** `"use client"` source files, not only to files in
+  `node_modules` — the rule is applied when Rollup parses a module, before chunking.
+
+Nothing an npm package can publish survives it: anything that *would* survive is, by definition,
+no longer a directive prologue, so no RSC compiler would recognise it either.
+
+**This does not affect Next.js.** Next.js (Turbopack and webpack) reads the directive from module
+source and is verified end-to-end against this package. It also should not affect the RSC plugins
+used by Vite-based frameworks (Waku, `@vitejs/plugin-rsc`), which detect `"use client"` in a
+`transform` hook while reading module source — the four client chunks this package ships each
+carry the directive as their literal first byte, which such a detector reads correctly. We have
+no runnable Waku / Vite-RSC example, so that last point is reasoned, not measured.
+
+It **does** matter if you re-bundle this package with plain Rollup — a library build, or a Vite
+`build.rollupOptions` that inlines dependencies — and then hand the result to an RSC framework.
+The client boundary is gone from the bundle you produced.
+
+**Fix: do not inline this package.** Mark it external so Rollup never parses it:
+
+```js
+// rollup.config.mjs, or vite.config.js -> build.rollupOptions
+export default {
+  external: (id) => id === 'minder-data-provider' || id.startsWith('minder-data-provider/'),
+};
+```
+
+Verified: zero `MODULE_LEVEL_DIRECTIVE` warnings, and `import ... from 'minder-data-provider'`
+survives verbatim in the output, so the framework resolves the client chunks itself and reads
+their directives intact.
+
+If you must inline it, add `rollup-plugin-preserve-directives` (or an equivalent
+`transform` + `renderChunk` plugin) to re-emit the directive on each output chunk. Note the
+trade-off Rollup's own warning refers to: such a plugin marks the **whole** output chunk
+`"use client"`, so any of your server-only modules that Rollup happened to place in the same
+chunk become client modules too. Keeping the package external avoids that entirely.

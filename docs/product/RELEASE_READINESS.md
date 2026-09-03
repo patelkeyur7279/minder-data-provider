@@ -134,12 +134,11 @@ tree-shaking survival is guarded by `tests/dist-entry-exports.test.ts` (now pass
 ## 7. Remaining blockers & owner decisions (NOT code defects)
 
 **Publish blockers (owner-gated):**
-1. **Version must bump to `3.0.0`** before publish — a breaking change (Redux removal) is merged, but the
-   in-repo version is still `2.2.0-beta.0`. **I did not change it** (per instruction). Recommended: **3.0.0**, dist-tag `latest` (or `next`/`beta` for a pre-release first).
+1. **Version is now `2.2.0`** — the package carries the entire v3.0 feature set (including breaking changes, notably Redux removal) in this minor by explicit owner decision. The in-repo version has been updated to `2.2.0`. Recommended: ship as **2.2.0**, dist-tag `latest` (or `next`/`beta` for a pre-release first).
 2. **`dev` is unpushed** (owner GitHub secret-scanning unblock pending) — the audit fixes are local only;
    publishing cannot happen until push is unblocked.
 
-**Release-process risks (owner decision recommended before 3.0):**
+**Release-process risks (owner decision recommended before release):**
 3. ~~**`publish.yml` auto-publishes**...~~ **Superseded (2026-08-17):** `publish.yml` has been removed.
    npm publishing is now a manual, owner-run step with no CI token involved; `release-guard.yml` runs
    read-only version/CHANGELOG consistency checks on push/PR to `main` but never publishes. See
@@ -168,9 +167,8 @@ tree-shaking survival is guarded by `tests/dist-entry-exports.test.ts` (now pass
 | Docs/support claims match verified reality | ✅ (corrected) |
 | No unresolved high-severity/release-blocking **code** issue | ✅ (axios/dompurify fixed) |
 | Release process documented & reproducible | ✅ `release:check` green; ⚠️ CI gate divergence + publish auto-gate are owner items |
-| **Version bumped + publishable** | ❌ **owner action** (3.0.0) + unblock/push `dev` |
+| **Version bumped + publishable** | ✅ (2.2.0 with breaking changes by owner decision) + unblock/push `dev` |
 
-**Final recommendation: READY AFTER BLOCKERS** — ship-worthy the moment the owner (a) bumps to 3.0.0,
-(b) decides the publish-workflow gate, and (c) unblocks/pushes `dev`. Recommended version **3.0.0**, dist-tag
-**`latest`** (consider a `next`/`beta` pre-release first). This is a recommendation only — no version or
-dist-tag was changed.
+**Final recommendation: READY AFTER BLOCKERS** — ship-worthy the moment the owner (a) confirms the version is 2.2.0 (carrying breaking changes by explicit decision),
+(b) decides the publish-workflow gate, and (c) unblocks/pushes `dev`. Recommended version **2.2.0**, dist-tag
+**`latest`** (this minor deliberately carries v3.0 breaking changes). This is a recommendation only — no publish action was taken.

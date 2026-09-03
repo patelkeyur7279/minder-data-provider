@@ -11,11 +11,49 @@
  * *mutates* an object at import time — a module side effect that a consumer
  * bundler treating the package as `sideEffects: false` will DROP from a shared
  * chunk, leaving `HttpMethod` undefined in production (dabd92d / MDPD-17). An
- * `as const` object has no import-time mutation: it is a plain value retained by
- * reference wherever it is used, so `sideEffects: false` is honest. This is a
- * BREAKING change only for TS consumers doing `enum`-only operations (e.g. using
- * the name in a `namespace`-merge or relying on nominal `enum` identity); see
+ * `as const` object removes that MUTATION — there is no more member-assignment
+ * IIFE for a bundler to drop as "just a side effect." This is a BREAKING change
+ * only for TS consumers doing `enum`-only operations (e.g. using the name in a
+ * `namespace`-merge or relying on nominal `enum` identity); see
  * docs/MIGRATION_GUIDE.md (v2.x → v3.0).
+ *
+ * CORRECTION (defect 6 investigation, 2026-09): this file previously claimed an
+ * `as const` object "has no import-time mutation... so `sideEffects: false` is
+ * honest." That is false of the BUILT ARTIFACT and has been removed. tsup/esbuild's
+ * code-split output CAN still construct this object inside a lazy `__esm` thunk
+ * shared across chunks (e.g. `dist/chunk-*.mjs`: `c = b(() => { p = { GET: "GET",
+ * ... } })`) — `as const` did not remove import-time INITIALIZATION, only the
+ * mutation.
+ *
+ * CORRECTION 2 (A9/A10 tree-shake fix, 2026-09): the paragraph above (as
+ * originally written) misidentified the CAUSE as "tsup/esbuild's code-split
+ * output" in general, and prescribed the wrong fix. The actual, confirmed
+ * trigger is narrower and more mechanical: a bundle-INTERNAL `require('../x')`
+ * call anywhere in the library (there were 10 — src/core/FeatureLoader.ts's
+ * lazy-feature-loading fallback and src/platforms/node.ts's RouteProcessor
+ * fallback) forces esbuild to wrap that module, and everything it statically
+ * depends on, in a deferred `__esm` thunk, because a synchronous `require()`
+ * must return a fully-initialized module. With those `require()` calls
+ * removed (A9/A10), splitting no longer produces `__esm` wrapping at all —
+ * this object initializes eagerly like any other module-scope value, and no
+ * per-entry workaround is needed.
+ *
+ * The "exporting entry forces a local, concrete-value binding" pattern this
+ * paragraph used to recommend (e.g. `export const HttpMethod = _HttpMethod`,
+ * still present on a few platform entries as a historical artifact — see
+ * src/platforms/web.ts / node.ts) is NOT a fix for the underlying defect: it
+ * is a masking workaround that anchors exactly the one bound export while
+ * leaving every OTHER named import from the same wrapped chunk undefined for
+ * a real single-named-import consumer, and it defeats tree-shaking for
+ * whoever imports the anchored export (measured: importing one anchored
+ * export pulled in the entire chunk's init graph). Do not extend that
+ * pattern to new exports. The guard-worthy invariant is "zero bundle-internal
+ * `require('../...')` in src/**" — see tests/packaging/no-esm-lazy-wrapper.test.ts
+ * and tsup.config.ts's own INVARIANT comment — not "every export has a
+ * binding". This is verified per export (single named import, not a
+ * namespace probe), per platform entry, by the differential execution probe
+ * in `scripts/verify-consumer-treeshake.mjs` — do not remove or weaken that
+ * guard.
  */
 
 /* eslint-disable @typescript-eslint/no-redeclare --

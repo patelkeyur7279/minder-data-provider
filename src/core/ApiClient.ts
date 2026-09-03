@@ -42,8 +42,9 @@ import type { InterceptableRequest, ShortCircuitResponse, UploadLifecycleEvent }
 import { redactSecrets } from '../security/secrets.js';
 import { applyRequestBody, buildUploadFormData, createUploadProgressHandler } from './apiClient/upload.js';
 import { serializeRequestConfigForDedupKey } from './apiClient/dedupKey.js';
-import { normalizeApiError, sanitizeHeaders as sanitizeHeadersInternal } from './apiClient/errors.js';
-import { sensitiveHeaderNames as computeSensitiveHeaderNames } from './apiClient/sensitiveHeaders.js';
+import { normalizeApiError } from './apiClient/errors.js';
+import { sealOutgoingRequest, redactHeadersForLog } from './apiClient/outgoingHeaders.js';
+import type { SealedRequestConfig } from './apiClient/outgoingHeaders.js';
 import { resolveRequest, substituteUrlParams, normalizeHttpMethod } from './apiClient/resolveRequest.js';
 import type { ResolvedRequestWithKeys } from './apiClient/resolveRequest.js';
 import { isIdempotentHttpMethod } from './apiClient/idempotency.js';
@@ -235,9 +236,15 @@ export class ApiClient {
             // the request). The manager's own retry accounting owns replay failures.
             ...( { __minderReplay: true } as Record<string, unknown> ),
           };
+          // fix-percall-header-redirect-leak: this dispatch path previously set
+          // NO `sensitiveHeaders` at all — a persisted `QueuedRequest`'s full
+          // header map (which can carry a bearer token / API key) rode along to
+          // any cross-origin redirect target unmodified. Seal immediately before
+          // dispatch, the same as every other transport seam.
+          const sealedReplayConfig = sealOutgoingRequest(replayConfig, this.config);
           const response = this.useNativeFetch
-            ? await this.dispatchNativeFetch(replayConfig)
-            : await this.axiosInstance.request(replayConfig);
+            ? await this.dispatchNativeFetch(sealedReplayConfig)
+            : await this.dispatchSealed(sealedReplayConfig);
           return response.data;
         } catch (err) {
           // This same axiosInstance's response interceptor (setupInterceptors,
@@ -477,7 +484,20 @@ export class ApiClient {
     if (token) {
       const authHeader = this.config.auth?.authHeader || 'Authorization';
       const authPrefix = this.config.auth?.authTokenPrefix !== undefined ? this.config.auth.authTokenPrefix : 'Bearer';
-      headers[authHeader] = authPrefix ? `${authPrefix} ${token}` : token;
+      // p-a3-percall-authorization-override (fix): only set the auth header
+      // when the caller has not ALREADY supplied one for this call (checked
+      // case-insensitively — HTTP header names are case-insensitive, and the
+      // per-call header merge upstream can land the key in any case). Before
+      // this guard, an explicit per-call `Authorization`/custom-auth-header
+      // override was silently clobbered by the AuthManager token on every
+      // request — the standalone `minder()` path already honours a per-call
+      // override (it merges `options.headers` AFTER the ambient token), so
+      // this closes the divergence rather than opening a new one: a caller
+      // who deliberately sets their own credential for THIS call keeps it.
+      const alreadySet = Object.keys(headers).some((k) => k.toLowerCase() === authHeader.toLowerCase());
+      if (!alreadySet) {
+        headers[authHeader] = authPrefix ? `${authPrefix} ${token}` : token;
+      }
     }
 
     // CSRF Protection
@@ -504,37 +524,6 @@ export class ApiClient {
       const corsHeaders = this.corsManager.getCorsHeaders(method as HttpMethod, headers);
       Object.assign(headers, corsHeaders);
     }
-  }
-
-  /**
-   * fix-2.2.0-blockers (ALSO REQUIRED — sensitive-header coverage gap): the
-   * header NAMES axios's `sensitiveHeaders` option strips on any
-   * cross-origin redirect hop (see the doc comment at its call sites in
-   * `dispatchResolved`/`requestRaw`). Previously only a registered route's
-   * OWN declared header names were listed — that misses two things:
-   *
-   *   1. follow-redirects (axios's Node http adapter) only strips
-   *      `Authorization`/`Cookie`/`Proxy-Authorization` by its OWN built-in
-   *      default, hardcoded by literal name. A hand-configured
-   *      `config.auth.authHeader` (e.g. `'X-Auth-Token'`) is a name
-   *      follow-redirects has never heard of — that header would ride along
-   *      to a redirect target unmodified unless THIS list names it too.
-   *   2. `requestRaw`'s ad-hoc/absolute-URL dispatch previously set NO
-   *      `sensitiveHeaders` at all, even though it goes through the exact
-   *      same axios request interceptor (`applySecurityHeaders`) that
-   *      attaches the SAME bearer token.
-   *
-   * Always includes the effective auth header name (defaulting the same way
-   * `applySecurityHeaders` does) and the CSRF header name when CSRF
-   * protection is configured, plus any route-declared header names the
-   * caller supplies. Single source of truth for both dispatch paths so they
-   * can never independently drift out of sync with each other again — see
-   * `./apiClient/sensitiveHeaders.ts` for the actual implementation, also
-   * called directly by the standalone `minder()` path (fix-b-redirect-
-   * credential-leak, BLOCKER 2).
-   */
-  private sensitiveHeaderNames(routeHeaders?: Record<string, string>): string[] {
-    return computeSensitiveHeaderNames(this.config, routeHeaders);
   }
 
   /**
@@ -583,8 +572,22 @@ export class ApiClient {
    * replicated here) — an explicit, documented trade-off of the escape hatch,
    * matching `minder()`'s own standalone edge/fetch path, which has the same
    * limitation.
+   *
+   * KNOWN GAP (fix-percall-header-redirect-leak, deliberately out of scope):
+   * unlike the axios transport, this method never reads `requestConfig.
+   * sensitiveHeaders` at all — `fetch()` follows redirects itself, and
+   * neither `redirect:'manual'` (yields an unreadable opaqueredirect in
+   * browsers) nor `redirect:'error'` (breaks legitimate redirects) is a safe
+   * uniform substitute across browser/edge runtimes. undici/browsers strip
+   * `authorization`/`cookie`/`host`/`proxy-authorization` on a cross-origin
+   * redirect per spec, so the residual exposure is a CUSTOM sensitive header
+   * (e.g. `x-api-key`) surviving a cross-origin redirect under
+   * `transport:'fetch'`. The parameter is still typed `SealedRequestConfig`
+   * so the strip-set is present at this seam (and a caller here always
+   * sealed first) — this is a named, tracked follow-up, not silently
+   * unaddressed.
    */
-  private async dispatchNativeFetch(requestConfig: AxiosRequestConfig): Promise<AxiosResponse> {
+  private async dispatchNativeFetch(requestConfig: SealedRequestConfig): Promise<AxiosResponse> {
     const method = (requestConfig.method || 'GET').toString().toUpperCase();
 
     // HIGH (transport-and-packaging fix): axios's own dispatch
@@ -709,49 +712,119 @@ export class ApiClient {
       init.signal = controller.signal;
     }
 
-    let fetchResponse: Response;
-    try {
-      fetchResponse = await fetch(fullUrl, init);
-    } catch (err) {
-      const networkError = this.buildFetchAxiosLikeError({
-        message: err instanceof Error ? err.message : 'Network error',
-        code: 'ERR_NETWORK',
-        url: fullUrl,
-        method,
-      });
-      throw this.finalizeAndThrowError(networkError);
-    }
+    // p-r3-retry-under-fetch-transport (fix): retry-with-backoff for the
+    // native-fetch transport, mirroring the axios response interceptor's OWN
+    // "Exponential Backoff Retry Logic" (setupInterceptors, below) — reusing
+    // the SAME `performance.retries`/`retryDelay`/`retryConfig` config and
+    // the SAME `isIdempotentHttpMethod` gate so a POST/PATCH is never
+    // silently resubmitted here either. Previously this transport had NO
+    // retry logic at all: `transport:'fetch'` silently dropped
+    // `performance.retries` the instant it was selected, because this
+    // method's dispatch never runs through the axios instance whose
+    // interceptor implements retrying. `attempt` counts RETRIES (not total
+    // tries), matching the axios interceptor's own `currentRetryCount`
+    // semantics — `retries: 2` means up to 2 retries (3 total attempts).
+    const retries = this.config.performance?.retries ?? 0;
+    const baseDelay = this.config.performance?.retryDelay ?? 1000;
+    const factor = this.config.performance?.retryConfig?.factor ?? 2;
+    const maxDelay = this.config.performance?.retryConfig?.maxDelay ?? 30000;
+    const customShouldRetry = this.config.performance?.retryConfig?.shouldRetry;
+    const methodMayRetry = isIdempotentHttpMethod(method);
 
-    const responseHeaders: Record<string, string> = {};
-    fetchResponse.headers.forEach((value, key) => {
-      responseHeaders[key] = value;
-    });
+    const retryBackoff = async (attempt: number): Promise<void> => {
+      const exponentialDelay = Math.min(baseDelay * Math.pow(factor, attempt - 1), maxDelay);
+      const jitter = Math.random() * 200;
+      await new Promise((resolve) => setTimeout(resolve, exponentialDelay + jitter));
+    };
 
-    const contentType = fetchResponse.headers.get('content-type');
-    const responseData = contentType?.includes('application/json')
-      ? await fetchResponse.json().catch(() => null)
-      : await fetchResponse.text().catch(() => '');
+    // Definite-assignment (`!`): TypeScript's flow analysis cannot see that
+    // `networkErr === undefined` (checked below) implies the `try` above
+    // completed and assigned these — the two are correlated through a THIRD
+    // variable, not a direct assignment it can trace.
+    let fetchResponse!: Response;
+    let responseHeaders!: Record<string, string>;
+    let responseData: unknown = undefined;
+    let attempt = 0;
 
-    if (!fetchResponse.ok) {
-      const httpError = this.buildFetchAxiosLikeError({
-        message: fetchResponse.statusText || `Request failed with status code ${fetchResponse.status}`,
-        url: fullUrl,
-        method,
-        response: { status: fetchResponse.status, data: responseData, headers: responseHeaders },
-      });
-      throw this.finalizeAndThrowError(httpError);
+    while (true) {
+      let networkErr: unknown = undefined;
+      try {
+        fetchResponse = await fetch(fullUrl, init);
+        responseHeaders = {};
+        fetchResponse.headers.forEach((value, key) => {
+          responseHeaders[key] = value;
+        });
+        const contentType = fetchResponse.headers.get('content-type');
+        responseData = contentType?.includes('application/json')
+          ? await fetchResponse.json().catch(() => null)
+          : await fetchResponse.text().catch(() => '');
+      } catch (err) {
+        networkErr = err;
+      }
+
+      if (networkErr !== undefined) {
+        const networkError = this.buildFetchAxiosLikeError({
+          message: networkErr instanceof Error ? networkErr.message : 'Network error',
+          code: 'ERR_NETWORK',
+          url: fullUrl,
+          method,
+        });
+        const shouldRetry = customShouldRetry ? customShouldRetry(networkError, attempt) : true;
+        if (shouldRetry && attempt < retries && methodMayRetry) {
+          attempt++;
+          await retryBackoff(attempt);
+          continue;
+        }
+        throw this.finalizeAndThrowError(networkError);
+      }
+
+      if (!fetchResponse!.ok) {
+        const httpError = this.buildFetchAxiosLikeError({
+          message: fetchResponse!.statusText || `Request failed with status code ${fetchResponse!.status}`,
+          url: fullUrl,
+          method,
+          response: { status: fetchResponse!.status, data: responseData, headers: responseHeaders! },
+        });
+        const isRetryableStatus = fetchResponse!.status >= 500 || fetchResponse!.status === 429;
+        const shouldRetry = customShouldRetry ? customShouldRetry(httpError, attempt) : isRetryableStatus;
+        if (shouldRetry && attempt < retries && methodMayRetry) {
+          attempt++;
+          await retryBackoff(attempt);
+          continue;
+        }
+        throw this.finalizeAndThrowError(httpError);
+      }
+
+      break;
     }
 
     const response = {
       data: responseData,
-      status: fetchResponse.status,
-      statusText: fetchResponse.statusText,
-      headers: responseHeaders,
+      status: fetchResponse!.status,
+      statusText: fetchResponse!.statusText,
+      headers: responseHeaders!,
       config: { ...requestConfig, url: fullUrl, method, headers, __minderStart: startTime } as AxiosRequestConfig,
     } as AxiosResponse;
 
     this.emitPluginResponse(response);
     return response;
+  }
+
+  /**
+   * fix-percall-header-redirect-leak (ADR-B): THE only occurrence of
+   * `this.axiosInstance.request(` in this file — every axios dispatch,
+   * including every retry/refresh/CORS replay below, goes through here.
+   * Seals `cfg` (deriving the cross-origin-redirect strip-set from its
+   * headers AS THEY ARE RIGHT NOW) immediately before handing it to axios,
+   * so a header added by a plugin interceptor, a proxy, or a retry/refresh's
+   * own Authorization update is NEVER dispatched unsealed. Idempotent —
+   * safe to call with an already-sealed config (the primary dispatch closure
+   * below does, since `dispatchNativeFetch` also requires a sealed config on
+   * its own branch).
+   */
+  private dispatchSealed(cfg: AxiosRequestConfig): Promise<AxiosResponse> {
+    const sealed = sealOutgoingRequest(cfg, this.config);
+    return this.axiosInstance.request(sealed);
   }
 
   /**
@@ -909,7 +982,7 @@ export class ApiClient {
           }
           
           await new Promise(resolve => setTimeout(resolve, delay));
-          return this.axiosInstance.request(originalRequest);
+          return this.dispatchSealed(originalRequest);
         }
         // --- End Retry Logic ---
 
@@ -928,7 +1001,7 @@ export class ApiClient {
                   const authHeader = this.config.auth?.authHeader || 'Authorization';
                   const authPrefix = this.config.auth?.authTokenPrefix !== undefined ? this.config.auth.authTokenPrefix : 'Bearer';
                   originalRequest.headers[authHeader] = authPrefix ? `${authPrefix} ${token}` : token;
-                  return this.axiosInstance.request(originalRequest);
+                  return this.dispatchSealed(originalRequest);
                 })
                 .catch((err) => {
                   return Promise.reject(err);
@@ -982,18 +1055,29 @@ export class ApiClient {
                 });
               }
 
-              const response = await axios.post(
-                fullRefreshUrl,
-                this.config.auth?.getRefreshRequestBody
-                  ? this.config.auth.getRefreshRequestBody(refreshToken)
-                  : (refreshToken ? { refreshToken } : {}),
+              // fix-percall-header-redirect-leak: this call bypasses
+              // `this.axiosInstance` entirely (a fresh, unrelated axios
+              // dispatch — see "Use axios directly to avoid interceptors
+              // loop" above) and carries the expired token under a possibly
+              // custom `authHeader` name. Seal it too so a cross-origin
+              // redirect from the refresh endpoint can't exfiltrate that
+              // token the same way the main dispatch paths could.
+              const refreshRequestConfig = sealOutgoingRequest(
                 {
                   // Follow the same opt-in flag as the main axios instance —
                   // defaulting to true here would silently send credentials
                   // cross-origin even when the app never asked for it.
                   withCredentials: this.config.cors?.credentials === true,
-                  headers
-                }
+                  headers,
+                },
+                this.config
+              );
+              const response = await axios.post(
+                fullRefreshUrl,
+                this.config.auth?.getRefreshRequestBody
+                  ? this.config.auth.getRefreshRequestBody(refreshToken)
+                  : (refreshToken ? { refreshToken } : {}),
+                refreshRequestConfig
               );
 
               // Flexible token extraction
@@ -1031,7 +1115,7 @@ export class ApiClient {
                 const authHeader = this.config.auth?.authHeader || 'Authorization';
                 const authPrefix = this.config.auth?.authTokenPrefix !== undefined ? this.config.auth.authTokenPrefix : 'Bearer';
                 originalRequest.headers[authHeader] = authPrefix ? `${authPrefix} ${token}` : token;
-                return this.axiosInstance.request(originalRequest);
+                return this.dispatchSealed(originalRequest);
               } else {
                 throw new Error(`No token returned from refresh endpoint. Response keys: ${Object.keys(responseData || {}).join(', ')}. Data: ${JSON.stringify(responseData)}`);
               }
@@ -1077,8 +1161,10 @@ export class ApiClient {
 
           if (corsHandling.shouldRetry) {
             if (corsHandling.modifiedRequest) {
-              // Retry with modified request
-              return this.axiosInstance.request({
+              // Retry with modified request. Sealing is idempotent and
+              // re-derives the strip-set AFTER `corsHandling.modifiedRequest`
+              // adds/changes headers, so nothing it adds is missed.
+              return this.dispatchSealed({
                 ...error.config,
                 ...corsHandling.modifiedRequest
               });
@@ -1089,10 +1175,10 @@ export class ApiClient {
               // implementation (see ProxyManager.ts) — no route to narrow here.
               proxyConfig.url = this.proxyManager.rewriteUrl(error.config?.url || '');
               proxyConfig.baseURL = '';
-              return this.axiosInstance.request(proxyConfig);
+              return this.dispatchSealed(proxyConfig);
             } else if (corsHandling.fallbackUrl) {
               // Retry with fallback URL
-              return this.axiosInstance.request({
+              return this.dispatchSealed({
                 ...error.config,
                 url: corsHandling.fallbackUrl
               });
@@ -1139,7 +1225,7 @@ export class ApiClient {
   }
 
   private sanitizeHeaders(headers: any): any {
-    return sanitizeHeadersInternal(headers);
+    return redactHeadersForLog(headers);
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1254,6 +1340,7 @@ export class ApiClient {
       params: optionParams,
       urlOverride,
       schema,
+      transport: optionTransport,
       forwardable,
     } = extractCallerRequestOptions(options);
 
@@ -1315,7 +1402,8 @@ export class ApiClient {
       optionParams,
       customHeaders,
       forwardable,
-      schema as StandardSchemaV1 | undefined
+      schema as StandardSchemaV1 | undefined,
+      optionTransport
     );
   }
 
@@ -1362,7 +1450,13 @@ export class ApiClient {
     optionParams: Record<string, unknown> | undefined,
     customHeaders: AxiosRequestConfig['headers'] | undefined,
     forwardable: ForwardableRequestOptions,
-    schema: StandardSchemaV1 | undefined
+    schema: StandardSchemaV1 | undefined,
+    // p-t1-percall-transport-fetch-fingerprint (fix): an explicit per-call
+    // transport override — see requestOptions.ts' `CallerRequestOptions.transport`
+    // doc comment. `undefined`/`'auto'` fall back to `this.useNativeFetch`
+    // (the instance's construction-time default); `'fetch'`/`'axios'` force
+    // that transport for THIS call only.
+    optionTransport?: 'auto' | 'axios' | 'fetch'
   ): Promise<T> {
     const { method, url, route, consumedKeys } = resolved;
 
@@ -1404,25 +1498,18 @@ export class ApiClient {
       method,
     };
 
-    // fix-2.2.0-blockers (SECURITY, non-blocking hardening — cross-origin
-    // redirect leak): a 3xx response from the route's OWN, trusted host can
-    // redirect to ANY host via `Location`, and axios/follow-redirects
-    // (Node's http adapter) transparently follows it. follow-redirects
-    // already strips `Authorization`/`Cookie`/`Proxy-Authorization` on a
-    // cross-origin (non-subdomain) hop by default, but NOT arbitrary custom
-    // headers — a route-declared static secret header (e.g. `X-Api-Key`)
-    // would otherwise ride along to whatever host the FIRST hop's response
-    // pointed at. `sensitiveHeaders` is axios's own, built-in mechanism for
-    // exactly this (see axios's Node http adapter / follow-redirects'
-    // `_headerFilter`). Set here, unconditionally, from `route.headers` PLUS
-    // the effective auth/CSRF header names (see `sensitiveHeaderNames` —
-    // ALSO REQUIRED: a hand-configured `config.auth.authHeader` other than
-    // the default 'Authorization' is a name follow-redirects' own built-in
-    // default never covers) — NEVER from `forwardable`/a per-call option (it
-    // is deliberately absent from `FORWARDABLE_REQUEST_OPTION_KEYS`), so a
-    // caller can never widen or shrink which headers survive a redirect.
-    requestConfig.sensitiveHeaders = this.sensitiveHeaderNames(route.headers);
-
+    // fix-percall-header-redirect-leak (ADR-B): `sensitiveHeaders` — axios's
+    // own, built-in mechanism for stripping header NAMES on a cross-origin
+    // redirect hop — is no longer set HERE. Setting it this early missed
+    // every header a plugin `onRequestIntercept` adds below (`
+    // runRequestInterceptors`, which mutates `requestConfig.headers` AFTER
+    // this point) and any per-call `options.headers` merged above would only
+    // be covered if this were the FULL, final header map. `dispatch()`
+    // (below) seals immediately before handing the config to the transport —
+    // after every mutation this config still undergoes — deriving the
+    // strip-set from the headers AS THEY ARE AT THAT POINT instead of an
+    // enumerated list of known sources. See `./apiClient/outgoingHeaders.ts`.
+    //
     // Apply proxy rewriting if enabled. `route` here is the NARROWED
     // `ResolvedRouteConfig` — `ProxyManager.rewriteUrl`'s second parameter is
     // typed to that narrowed shape (it never reads `.method`/`.url` off it
@@ -1525,10 +1612,24 @@ export class ApiClient {
 
     // P2 (fix-2.2.0-blockers): native-fetch transport bypasses axios's own
     // dispatch entirely — see `dispatchNativeFetch` / the constructor.
-    const dispatch = (): Promise<AxiosResponse<T>> =>
-      (this.useNativeFetch
-        ? this.dispatchNativeFetch(requestConfig)
-        : this.axiosInstance.request(requestConfig)) as Promise<AxiosResponse<T>>;
+    //
+    // fix-percall-header-redirect-leak: seal HERE — after proxy rewriting,
+    // body sanitization, and any plugin `onRequestIntercept` mutation (via
+    // `runRequestInterceptors` above) have all already run — so the
+    // strip-set covers per-call headers, proxy-injected headers, and
+    // plugin-injected headers alike, not just the route's own declared
+    // names.
+    // p-t1-percall-transport-fetch-fingerprint (fix): `optionTransport`
+    // (explicit 'fetch'/'axios') wins over the instance default for THIS
+    // call only; `undefined`/'auto' falls back to `this.useNativeFetch`.
+    const useFetchForThisCall =
+      optionTransport === 'fetch' ? true : optionTransport === 'axios' ? false : this.useNativeFetch;
+    const dispatch = (): Promise<AxiosResponse<T>> => {
+      const sealed = sealOutgoingRequest(requestConfig, this.config);
+      return (useFetchForThisCall
+        ? this.dispatchNativeFetch(sealed)
+        : this.dispatchSealed(sealed)) as Promise<AxiosResponse<T>>;
+    };
 
     // Use deduplication if enabled
     if (this.deduplicator && isGet) {
@@ -1648,8 +1749,20 @@ export class ApiClient {
       method: optionMethod,
       params: optionParams,
       schema,
+      transport: optionTransport,
       forwardable,
     } = extractCallerRequestOptions(options);
+
+    // p-u3u4-positional-params-unregistered-path (fix): PATH substitution
+    // must see params from EITHER source — the dedicated positional `params`
+    // argument OR `options.params` — mirroring `request()`'s identical merge
+    // for the registered-route path (`pathParams`, above). Positional
+    // `params` wins on key collision (it was always the dedicated
+    // path-params channel for this ad-hoc entry point too).
+    const pathParams =
+      optionParams && typeof optionParams === 'object'
+        ? { ...(optionParams as Record<string, unknown>), ...(params || {}) }
+        : params;
 
     // Resolve the URL: absolute is used verbatim; relative resolves against the
     // instance baseURL. Support trivial `:param` substitution for parity with
@@ -1657,16 +1770,45 @@ export class ApiClient {
     // truth substitution `request()`'s `resolveRequest` uses (MEDIUM,
     // fix-2.2.0-blockers: every OCCURRENCE of a repeated `:key` placeholder,
     // not just the first).
-    const { url } = substituteUrlParams(routeName, params);
+    const { url, consumedKeys } = substituteUrlParams(routeName, pathParams);
+
+    // p-u3u4: a key already substituted into the URL PATH must never ALSO
+    // ride along as a redundant query-string param — mirrors the identical
+    // `queryParams` filtering `dispatchResolved` applies for the
+    // registered-route path.
+    const queryParams =
+      optionParams && typeof optionParams === 'object' && consumedKeys.size > 0
+        ? Object.fromEntries(
+            Object.entries(optionParams as Record<string, unknown>).filter(([key]) => !consumedKeys.has(key))
+          )
+        : optionParams;
+
+    // p-m2-adhoc-path-id-field-method (fix): mirror `detectMethod`'s
+    // (core/minder/utils.ts) id-in-data heuristic — a body object carrying a
+    // truthy `id`/`_id` field defaults to PUT (an update), not POST (a
+    // create). Previously this ad-hoc path always defaulted a body-carrying
+    // call to POST regardless of an `id` field, so identical consumer code
+    // (`minder('/things', {id:5,n:1})` vs `apiClient.request('/things',
+    // {id:5,n:1})`) dispatched a DIFFERENT verb for the SAME input. An
+    // explicit `options.method` still wins outright (normalizeHttpMethod's
+    // first argument), matching every other resolution order in this file.
+    const hasIdInData =
+      data !== null &&
+      typeof data === 'object' &&
+      (('id' in data && (data as Record<string, unknown>).id) ||
+        ('_id' in data && (data as Record<string, unknown>)._id));
+    const fallbackMethod =
+      data === null || data === undefined
+        ? HttpMethod.GET
+        : hasIdInData
+          ? HttpMethod.PUT
+          : HttpMethod.POST;
 
     // fix-2.2.0-blockers (REDESIGN): normalize an explicit `options.method`
     // the same way `resolveRequest` does (trim + uppercase) — an untrimmed
     // hand-built `{ method: 'POST ' }` must dispatch cleanly here too,
     // instead of reaching axios/fetch as an HTTP-invalid token.
-    const method = normalizeHttpMethod(
-      optionMethod,
-      data === null || data === undefined ? HttpMethod.GET : HttpMethod.POST
-    );
+    const method = normalizeHttpMethod(optionMethod, fallbackMethod);
 
     const requestConfig: AxiosRequestConfig = {
       method,
@@ -1677,7 +1819,7 @@ export class ApiClient {
       },
       timeout: this.proxyManager?.getTimeout() || this.config.performance?.timeout,
       ...forwardable,
-      ...(optionParams !== undefined ? { params: optionParams } : {}),
+      ...(queryParams !== undefined ? { params: queryParams } : {}),
     };
 
     // Absolute URLs are used verbatim: clear baseURL so the instance's
@@ -1685,14 +1827,6 @@ export class ApiClient {
     if (isAbsoluteUrl) {
       requestConfig.baseURL = '';
     }
-
-    // fix-2.2.0-blockers (ALSO REQUIRED, sensitive-header coverage gap): this
-    // ad-hoc path dispatches through the SAME axios request interceptor that
-    // attaches the caller's bearer token (applySecurityHeaders) — it needs
-    // the SAME cross-origin-redirect protection the registered-route path
-    // gets, which it never had before (no `sensitiveHeaders` was set here at
-    // all).
-    requestConfig.sensitiveHeaders = this.sensitiveHeaderNames();
 
     // Body handling with sanitization, mirroring the registered-route path.
     // D4: await ready() first — see the comment at the other call site above.
@@ -1705,10 +1839,24 @@ export class ApiClient {
       return shortCircuit.response.data as T;
     }
 
+    // fix-percall-header-redirect-leak (ADR-B): this ad-hoc path dispatches
+    // through the SAME axios request interceptor that attaches the caller's
+    // bearer token (applySecurityHeaders) — it needs the SAME cross-origin-
+    // redirect protection the registered-route path gets. Sealed HERE, after
+    // the plugin interceptor above may have mutated `requestConfig.headers`,
+    // deriving the strip-set from the FINAL header map rather than an
+    // enumerated list of known sources (which never covered per-call
+    // `options.headers`/proxy headers/plugin-injected headers here at all).
+    const sealed = sealOutgoingRequest(requestConfig, this.config);
+
     // P2 (fix-2.2.0-blockers): same native-fetch bypass as the registered-route path.
-    const response: AxiosResponse<T> = (this.useNativeFetch
-      ? await this.dispatchNativeFetch(requestConfig)
-      : await this.axiosInstance.request(requestConfig)) as AxiosResponse<T>;
+    // p-t1-percall-transport-fetch-fingerprint (fix): same per-call override
+    // as `dispatchResolved` — see its `useFetchForThisCall` comment.
+    const useFetchForThisCall =
+      optionTransport === 'fetch' ? true : optionTransport === 'axios' ? false : this.useNativeFetch;
+    const response: AxiosResponse<T> = (useFetchForThisCall
+      ? await this.dispatchNativeFetch(sealed)
+      : await this.dispatchSealed(sealed)) as AxiosResponse<T>;
 
     // Task 3.1: opt-in runtime response validation via Standard Schema. No
     // registry route exists for this ad-hoc/raw path (absolute URL or

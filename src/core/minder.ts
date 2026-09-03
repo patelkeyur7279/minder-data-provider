@@ -58,12 +58,20 @@ import {
   isEdgeRuntime
 } from './minder/utils.js';
 import { normalizeHttpMethod, substituteUrlParams } from './apiClient/resolveRequest.js';
-import { sensitiveHeaderNames } from './apiClient/sensitiveHeaders.js';
+import { sealOutgoingRequest } from './apiClient/outgoingHeaders.js';
 import {
   assertNoOriginOrTransportOptions,
   pickForwardableRequestOptions,
 } from './apiClient/requestOptions.js';
-import { MinderSecurityError } from '../errors/index.js';
+import { MinderSecurityError, MinderConfigError, MinderNetworkError } from '../errors/index.js';
+// PX2 (fix): reuse the SAME ProxyManager class the provider path
+// (MinderDataProvider.tsx / ApiClient.dispatchResolved) builds from
+// `corsHelper`/`cors.enabled` — see the standalone proxy-rewrite step below.
+import { ProxyManager } from './ProxyManager.js';
+// R1/RL1 (fix): reuse the SAME CSRF/rate-limit primitives
+// ApiClient.applySecurityHeaders already applies, instead of a second,
+// independently-maintained implementation.
+import { telemetry } from '../utils/TelemetryTracker.js';
 
 // Re-export types for backward compatibility
 export type { 
@@ -201,7 +209,10 @@ import type { InterceptableRequest } from '../plugins/PluginSystem.js';
 // no-op returning `{success:true}` while shipping raw input. Reuse the exact
 // sanitizer class and the shared body-sanitizing helper ApiClient already
 // uses, rather than a second implementation.
-import { XSSSanitizer } from '../utils/security.js';
+// C1/RL1 (fix): reuse the SAME CSRF/rate-limit primitives
+// ApiClient.applySecurityHeaders already applies, instead of a second,
+// independently-maintained implementation.
+import { XSSSanitizer, CSRFTokenManager, RateLimiter } from '../utils/security.js';
 import { sanitizeRequestData } from './apiClient/upload.js';
 
 // ============================================================================
@@ -331,6 +342,51 @@ function responseCache(): Map<string, CacheEntry> {
 
 /** Hard cap on cached entries; oldest (insertion order) evicted on overflow. */
 const MAX_RESPONSE_CACHE_ENTRIES = 200;
+
+/**
+ * p-c1-csrf-token-header (fix): standalone minder()'s CSRF token manager —
+ * ONE process-wide instance, lazily created on first use (matches
+ * `responseCache()`/`retrySleep()` above). Persistence matters here: the
+ * manager itself caches the generated/retrieved token in an instance field
+ * (`CSRFTokenManager.getToken()`), mirroring how ApiClient's own
+ * `csrfManager` is constructed once per instance and reused for its
+ * lifetime — a fresh manager per call would still usually agree (it falls
+ * through to shared cookie/sessionStorage), but would generate a NEW random
+ * token every call in an environment with neither available (SSR/Node).
+ * @internal
+ */
+function csrfManager(cookieName?: string): CSRFTokenManager {
+  const s = minderStore();
+  return (s.minderCsrfManager ??= new CSRFTokenManager(cookieName));
+}
+
+/**
+ * p-rl1-rate-limiting (fix): standalone minder()'s rate limiter — ONE
+ * process-wide instance (its in-memory request-timestamp store IS the
+ * rate-limit state, so it MUST persist across calls; a fresh instance per
+ * call would never actually limit anything). Mirrors ApiClient's own
+ * per-instance `rateLimiter`.
+ * @internal
+ */
+function rateLimiter(): RateLimiter {
+  const s = minderStore();
+  return (s.minderRateLimiter ??= new RateLimiter());
+}
+
+/**
+ * p-d1-inflight-deduplication (fix): standalone minder()'s in-flight
+ * request map — mirrors ApiClient's own gate
+ * (`isGet && config.performance?.deduplication`, ApiClient.ts
+ * dispatchResolved). Keyed by method+resolved-url+params; a concurrent
+ * identical GET AWAITS the SAME promise instead of dispatching its own
+ * transport call. Entries are removed once their promise settles (see the
+ * dedup gate in minder() below).
+ * @internal
+ */
+function inFlightDedupMap(): Map<string, Promise<MinderResult<unknown>>> {
+  const s = minderStore();
+  return (s.minderInFlightDedup ??= new Map<string, Promise<MinderResult<unknown>>>());
+}
 
 /**
  * djb2 hash, hex-encoded — a tiny non-cryptographic fingerprint used ONLY to
@@ -475,37 +531,77 @@ export async function minder<TData = any>(
     const registry = getGlobalMinderConfig();
     const registryRoute = registry?.routes?.[route];
 
+    // p-u5-unknown-route-name-typo (fix): mirror ApiClient.request's
+    // ROUTE_NOT_FOUND guard (ApiClient.ts) — a bare NAME (no leading '/' and
+    // no scheme) that is absent from the SAME shared registry
+    // (`getGlobalMinderConfig`) is almost certainly a typo, not an
+    // intentional literal path/hostname. Before this check, `registryRoute`
+    // was simply `undefined` and the typo'd NAME itself became the
+    // dispatched path — a silent, real request to whatever that string
+    // resolves to. A leading-'/' path (an explicit ad-hoc-path convention,
+    // matching ApiClient's own `routeName.startsWith('/')` exemption) or an
+    // absolute `scheme://` URL is NEVER treated as a typo — both remain
+    // valid, unregistered escape hatches exactly as before. Thrown here so
+    // it is caught by this function's own try/catch below and surfaces as
+    // the documented `{ success: false, error }` result, never an uncaught
+    // throw — the "never throws by default" contract is preserved.
+    const looksLikeAbsoluteUrl = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(route);
+    if (!registryRoute && !route.startsWith('/') && !looksLikeAbsoluteUrl) {
+      const availableRoutes = Object.keys(registry?.routes || {});
+      const notFoundError = new MinderConfigError(
+        `Route '${route}' not found in configuration`,
+        `routes.${route}`,
+        'ROUTE_NOT_FOUND',
+        { requestedRoute: route, availableRoutes }
+      );
+      notFoundError.addSuggestion({
+        message: `Available routes: ${availableRoutes.join(', ') || 'none configured'}`,
+        action: 'Add this route to your configuration or check for typos',
+        link: 'https://github.com/patelkeyur7279/minder-data-provider/blob/main/docs/CONFIG_GUIDE.md#routes'
+      });
+      throw notFoundError;
+    }
+
     let url = route;
     // fix-a-hostile-route-params (RELEASE BLOCKER): the keys `substituteUrlParams`
     // actually consumed for PATH substitution — excluded from the query-string
     // below (see step 2) so a ':id' route never also appends a redundant/
     // hostile-remainder '?id=...'. Mirrors ApiClient.dispatchResolved's own
     // `consumedKeys` filtering (ApiClient.ts) for the SAME reason.
-    let consumedParamKeys: Set<string> = new Set();
-    if (registryRoute) {
-      // fix-2.2.0-blockers (ResolvedRequest migration): substitute through
-      // the SAME single-source-of-truth helper `ApiClient`'s `resolveRequest`
-      // uses — a plain-string `.replace()` only replaces the FIRST
-      // occurrence, leaving every subsequent one as a literal, unresolved
-      // ':key' token on the wire for a route that repeats the same
-      // placeholder (e.g. '/mirror/:id/vs/:id').
-      //
-      // fix-a-hostile-route-params (RELEASE BLOCKER): `substituteUrlParams`
-      // now validates every value it substitutes into a ':param' path
-      // segment (routeParamSafety.ts's `validateRouteParamValue`) and THROWS
-      // a `MinderSecurityError` (code `UNSAFE_ROUTE_PARAM_VALUE`) before
-      // returning anything if a value could escape that segment — e.g.
-      // `{ id: '..' }` walking the path past the route root, `{ id: '5#' }`
-      // truncating it at a raw fragment delimiter, `{ id: '5?a=1' }`
-      // injecting a caller-controlled query string, or `{ id: '' }` silently
-      // falling through to the collection. That throw is caught by this
-      // function's own try/catch below and returned as a structured
-      // `{ success: false, error }` result — `minder()`'s documented
-      // "never throws by default" contract — so zero requests reach the wire.
-      const substituted = substituteUrlParams(registryRoute.url, options?.params);
-      url = substituted.url;
-      consumedParamKeys = substituted.consumedKeys;
-    }
+    //
+    // p-u3u4-positional-params-unregistered-path (fix): substitution now runs
+    // UNCONDITIONALLY (not only `if (registryRoute)`) — minder() has no
+    // positional-params calling convention, so `options.params` is its ONLY
+    // channel for path substitution; gating it on registration meant an
+    // unregistered path (e.g. `/thing/:id`) could NEVER have `:id`
+    // substituted from minder(), even though the identical
+    // `options.params`-shaped call substitutes correctly for a REGISTERED
+    // route. The starting URL is the route's own declared URL when
+    // registered, otherwise `route` itself (unchanged fallback) — the
+    // UNSAFE_ROUTE_PARAM_VALUE/consumed-key logic inside `substituteUrlParams`
+    // is already registration-agnostic.
+    // fix-2.2.0-blockers (ResolvedRequest migration): substitute through
+    // the SAME single-source-of-truth helper `ApiClient`'s `resolveRequest`
+    // uses — a plain-string `.replace()` only replaces the FIRST
+    // occurrence, leaving every subsequent one as a literal, unresolved
+    // ':key' token on the wire for a route that repeats the same
+    // placeholder (e.g. '/mirror/:id/vs/:id').
+    //
+    // fix-a-hostile-route-params (RELEASE BLOCKER): `substituteUrlParams`
+    // now validates every value it substitutes into a ':param' path
+    // segment (routeParamSafety.ts's `validateRouteParamValue`) and THROWS
+    // a `MinderSecurityError` (code `UNSAFE_ROUTE_PARAM_VALUE`) before
+    // returning anything if a value could escape that segment — e.g.
+    // `{ id: '..' }` walking the path past the route root, `{ id: '5#' }`
+    // truncating it at a raw fragment delimiter, `{ id: '5?a=1' }`
+    // injecting a caller-controlled query string, or `{ id: '' }` silently
+    // falling through to the collection. That throw is caught by this
+    // function's own try/catch below and returned as a structured
+    // `{ success: false, error }` result — `minder()`'s documented
+    // "never throws by default" contract — so zero requests reach the wire.
+    const substituted = substituteUrlParams(registryRoute ? registryRoute.url : url, options?.params);
+    url = substituted.url;
+    const consumedParamKeys: Set<string> = substituted.consumedKeys;
 
     // 1. Detect HTTP method (explicit option > registry entry > auto-detect)
     let method = detectMethod(route, data, options);
@@ -520,6 +616,16 @@ export async function minder<TData = any>(
       // entry's own method is somehow empty/non-string.
       method = normalizeHttpMethod(registryRoute.method, method) as unknown as HttpMethod;
     }
+    // p-m3-untrimmed-method-whitespace (fix): normalize the FINAL resolved
+    // method (trim + uppercase) UNCONDITIONALLY — previously this only ran
+    // for the registry-declared branch above; an explicit `options.method`
+    // (or the auto-detected result) reached the wire completely
+    // unnormalized, so a caller-supplied `'  post  '` (untrimmed) was
+    // refused by axios/Node's raw HTTP layer (ERR_INVALID_HTTP_TOKEN)
+    // instead of dispatching as a clean 'POST' — exactly like the identical
+    // call already does on the provider path (ApiClient.requestRaw /
+    // resolveRequest, both of which normalize via this SAME function).
+    method = normalizeHttpMethod(method, method) as unknown as HttpMethod;
 
     // 2. Build request config
     //
@@ -543,6 +649,25 @@ export async function minder<TData = any>(
     // immediately below, which refuses `options.baseURL` whenever it would
     // carry either along.
     const urlConfig = minderUrlConfig();
+
+    // p-px2-cors-proxy-rewrite (fix): port ApiClient's ProxyManager
+    // URL-rewrite + header injection into the standalone path — it already
+    // has access to the SAME unified registry (`registry.corsHelper`/the
+    // deprecated `registry.cors` alias). Mirrors MinderDataProvider.tsx's
+    // OWN construction of a `ProxyManager` from the identical config shape.
+    // Previously minder() contained no proxy code at all, so a
+    // `corsHelper.proxy`-configured backend was simply unreachable from the
+    // standalone path in a real browser (CORS would block the direct
+    // request) — a capability gap, not a stylistic difference.
+    const corsConfig = registry?.corsHelper || registry?.cors;
+    const proxyManager = corsConfig?.enabled
+      ? new ProxyManager({
+          enabled: true,
+          baseUrl: corsConfig.proxy || '/api/minder-proxy',
+          headers: { 'X-Target-URL': registry?.apiBaseUrl || '' },
+          timeout: 30000,
+        })
+      : undefined;
 
     // fix-2.2.0-blockers (BLOCKER 1, SECURITY, standalone minder() path):
     // `options.baseURL` changes WHERE this request is sent. Applying the SAME
@@ -593,6 +718,12 @@ export async function minder<TData = any>(
       headers: {
         ...urlConfig.headers,
         ...registryRoute?.headers,
+        // p-px2-cors-proxy-rewrite (fix): proxy headers sit BETWEEN the
+        // route's own declared headers and the caller's per-call headers —
+        // mirrors ApiClient.dispatchResolved's identical ordering
+        // (`route.headers`, then `proxyManager.getProxyHeaders()`, then
+        // `customHeaders`) — so an explicit per-call header still wins.
+        ...(proxyManager?.getProxyHeaders() || {}),
         ...options?.headers,
       },
       // fix-a-hostile-route-params (RELEASE BLOCKER): a key already
@@ -611,6 +742,20 @@ export async function minder<TData = any>(
             )
           : options?.params,
     };
+
+    // p-px2-cors-proxy-rewrite (fix): rewrite the outgoing URL through the
+    // proxy and clear `baseURL` (the rewritten URL is already absolute) —
+    // mirrors ApiClient.dispatchResolved's identical
+    // `proxyManager.rewriteUrl(url, route); requestConfig.baseURL = '';`
+    // step. Placed AFTER `config` is fully built (so it overrides the
+    // hand-computed `baseURL`/`url` above) and BEFORE `options.axiosConfig`
+    // is applied (whose forwardable allowlist has no `url`/`baseURL` member
+    // anyway, so ordering here doesn't matter for that step — this is simply
+    // the earliest point after `config.url` exists).
+    if (proxyManager?.isEnabled()) {
+      config.url = proxyManager.rewriteUrl(config.url || url);
+      config.baseURL = '';
+    }
 
     // fix-b-transport-storage-websocket (HIGH 6 + HIGH 7): `options.axiosConfig`
     // is documented (minder/types.ts) as the standalone path's escape hatch
@@ -643,24 +788,68 @@ export async function minder<TData = any>(
     }
 
     // 3. Add authentication token
+    // p-a1-custom-auth-header-prefix (fix): read `auth.authHeader`/
+    // `auth.authTokenPrefix` off the SAME unified registry
+    // ApiClient.applySecurityHeaders already honours (ApiClient.ts), instead
+    // of hardcoding the header name/prefix. A caller who sets
+    // `auth.authHeader:'X-Auth-Token'` via `configureMinder()` now gets that
+    // header on standalone calls too, not a plain `Authorization: Bearer`
+    // the target API may not expect. An empty-string `authTokenPrefix` sends
+    // the raw token with no prefix (falsy-prefix branch), matching
+    // applySecurityHeaders' own ternary exactly.
     const token = options?.token || urlConfig.token;
     if (token) {
-      config.headers!.Authorization = `Bearer ${token}`;
+      const authHeader = registry?.auth?.authHeader || 'Authorization';
+      const authPrefix =
+        registry?.auth?.authTokenPrefix !== undefined ? registry.auth.authTokenPrefix : 'Bearer';
+      config.headers![authHeader] = authPrefix ? `${authPrefix} ${token}` : token;
     }
 
-    // fix-b-redirect-credential-leak (BLOCKER 2): a 3xx response from the
-    // route's OWN, trusted host can redirect to ANY host via `Location`, and
-    // axios/follow-redirects transparently follows it. The provider
-    // (ApiClient) path already sets axios's `sensitiveHeaders` from the
-    // route's own declared header names plus the effective auth/CSRF header
-    // names so those never survive a cross-origin redirect hop — this
-    // standalone path dispatches through the SAME axios instance shape but
-    // previously set no `sensitiveHeaders` at all, so a route's own static
-    // secret header (e.g. `x-api-key`) rode along to whatever host the
-    // FIRST hop's response happened to point at. Shared choke point with
-    // ApiClient (`./apiClient/sensitiveHeaders.js`) so the two paths cannot
+    // p-c1-csrf-token-header / p-rl1-rate-limiting (fix): honour
+    // `security.csrfProtection`/`security.rateLimiting` on the standalone
+    // path exactly as ApiClient.applySecurityHeaders does for the provider
+    // path — both read the SAME unified `configureMinder()` config, and were
+    // previously a silent no-op here (CSRF: every standalone mutation went
+    // out unprotected against a CSRF-enforcing API; rate limiting: standalone
+    // calls always dispatched regardless of the configured limit). Ordered
+    // immediately after the auth token, mirroring applySecurityHeaders'
+    // (token -> CSRF -> rate limit) sequence.
+    if (registry?.security?.csrfProtection) {
+      const csrfConfig =
+        typeof registry.security.csrfProtection === 'object'
+          ? registry.security.csrfProtection
+          : { enabled: true, headerName: 'X-CSRF-Token' };
+      const headerName = csrfConfig.headerName || 'X-CSRF-Token';
+      config.headers![headerName] = csrfManager(csrfConfig.cookieName).getToken();
+    }
+
+    if (registry?.security?.rateLimiting) {
+      const rateLimitKey = `${method}:${config.url ?? url}`;
+      const { requests, window: rateLimitWindow } = registry.security.rateLimiting;
+      if (!rateLimiter().check(rateLimitKey, requests, rateLimitWindow)) {
+        telemetry.recordRateLimitHit();
+        throw new MinderNetworkError(
+          'Rate limit exceeded. Please try again later.',
+          429,
+          undefined,
+          undefined,
+          undefined,
+          'RATE_LIMIT_EXCEEDED'
+        );
+      }
+    }
+
+    // fix-percall-header-redirect-leak (ADR-B): `sensitiveHeaders` is no
+    // longer set HERE. This early in assembly it can only ever see the
+    // route's OWN declared headers plus whatever `urlConfig`/`options.headers`
+    // already merged above (line ~593) — it can never see a header the
+    // plugin `onRequestIntercept` middleware injects further down (~line
+    // 826), which is exactly the ordering gap that left plugin- and
+    // ambient-token-shaped headers unprotected. Sealed instead immediately
+    // before dispatch (see below, after the plugin interceptor block and
+    // the Authorization injection above) via the SAME choke point ApiClient
+    // uses — `./apiClient/outgoingHeaders.js` — so the two paths cannot
     // independently drift out of sync again.
-    config.sensitiveHeaders = sensitiveHeaderNames(registry, registryRoute?.headers);
 
     // 4. Handle file upload
     if (isFileUpload(data)) {
@@ -733,7 +922,20 @@ export async function minder<TData = any>(
         sanitizer = new XSSSanitizer(registry.security.sanitization);
         await sanitizer.ready();
       }
-      config.data = sanitizeRequestData(encodedData, sanitizer);
+      const sanitizedData = sanitizeRequestData(encodedData, sanitizer);
+
+      // p-b4-xml-string-body (fix): mirror ApiClient's dedicated '<?xml'
+      // string branch (apiClient/upload.ts's applyRequestBody) — without it,
+      // an XML string body fell through to axios's default JSON transform,
+      // which wraps it in quotes and escapes internal quotes/slashes,
+      // altering the BODY CONTENT (not just the Content-Type) for any
+      // XML-speaking backend on the standalone path.
+      if (typeof sanitizedData === 'string' && sanitizedData.startsWith('<?xml')) {
+        config.data = sanitizedData;
+        config.headers!['Content-Type'] = 'application/xml';
+      } else {
+        config.data = sanitizedData;
+      }
     }
     
     // 6. Execute request
@@ -799,6 +1001,36 @@ export async function minder<TData = any>(
       }
     }
 
+    // p-d1-inflight-deduplication (fix): in-flight deduplication for
+    // standalone GETs, mirroring ApiClient's own gate
+    // (`isGet && config.performance?.deduplication`, ApiClient.ts
+    // dispatchResolved) — previously `performance.deduplication` was
+    // honoured only by the provider path; the SAME unified config was a
+    // silent no-op here, so two concurrent identical minder() GETs always
+    // dispatched twice. Computed AFTER the cache-hit fast path above (a
+    // cache hit never reaches here) and BEFORE any of the plugin-intercept/
+    // seal/transport logic below runs: a deduped "follower" call does NONE
+    // of that work itself — it purely awaits the SAME promise the "leader"
+    // call already registered. Everything from here through the success
+    // result below is wrapped in `dispatchPromise` so it can be shared
+    // between concurrent callers; wrapping (rather than restructuring
+    // control flow) keeps this a purely ADDITIVE change when dedup is not
+    // enabled — `dispatchPromise` still runs exactly once, immediately.
+    const dedupEnabled = method === 'GET' && registry?.performance?.deduplication === true;
+    let dedupKey: string | null = null;
+    if (dedupEnabled) {
+      const requestUrlForDedupKey = config.url || '';
+      const resolvedUrlForDedup = ABSOLUTE_URL_RE.test(requestUrlForDedupKey)
+        ? requestUrlForDedupKey
+        : (config.baseURL || '') + requestUrlForDedupKey;
+      dedupKey = `DEDUP ${method} ${resolvedUrlForDedup} ${JSON.stringify(config.params ?? null)}`;
+      const existingInFlight = inFlightDedupMap().get(dedupKey);
+      if (existingInFlight) {
+        return (await existingInFlight) as unknown as MinderResult<TData>;
+      }
+    }
+
+    const dispatchPromise: Promise<MinderResult<TData>> = (async (): Promise<MinderResult<TData>> => {
     // Mutating request middleware: registered plugins may rewrite the outgoing
     // config or short-circuit the request with a synthetic response. Runs after
     // the config is fully assembled and before the transport dispatch. Guarded
@@ -840,6 +1072,29 @@ export async function minder<TData = any>(
         timestamp: startTime,
       });
     }
+
+    // fix-percall-header-redirect-leak (ADR-B): seal immediately before
+    // dispatch — AFTER the plugin `onRequestIntercept` middleware above may
+    // have replaced `config.headers` entirely, and AFTER the Authorization
+    // injection (step 3, above). `sealOutgoingRequest` derives the
+    // cross-origin-redirect strip-set from `config.headers` as they stand
+    // right now, so a per-call `options.header`, an ambient token, or a
+    // plugin-injected header is covered by construction, plus the effective
+    // auth/CSRF header names by name (the axios request interceptor sets the
+    // ACTUAL Authorization value later, inside `axios(config)`'s own
+    // dispatch, but the NAME is already known from config here). The retry
+    // loop below reuses this SAME `config` object on every attempt — no
+    // plugin re-interception happens on retry — so sealing once, here, is
+    // correct for every attempt.
+    //
+    // KNOWN GAP (both native-fetch transports, deliberately out of scope —
+    // see the identical note on ApiClient.dispatchNativeFetch): the fetch
+    // branch below (`useFetch`) never reads `config.sensitiveHeaders` at
+    // all — `fetch()` follows redirects itself. undici/browsers strip
+    // authorization/cookie/host/proxy-authorization on a cross-origin
+    // redirect per spec; the residual exposure is a CUSTOM sensitive header
+    // surviving a cross-origin redirect under `transport:'fetch'`.
+    sealOutgoingRequest(config, registry);
 
     // Transport selection:
     // - An EXPLICIT `transport: 'fetch'` always wins, INCLUDING for complex
@@ -1072,6 +1327,27 @@ export async function minder<TData = any>(
     }
 
     return successResult;
+    })();
+
+    // p-d1-inflight-deduplication (fix): register the leader's promise so
+    // concurrent identical GETs share it, and clean up once it settles
+    // (success OR failure — a failed leader must not permanently poison the
+    // key for later, independent calls). The `.catch(() => {})` below only
+    // silences THIS derived/floating promise from the cleanup chain; the
+    // real rejection is still delivered to whoever awaits `dispatchPromise`
+    // itself (the `return await dispatchPromise;` below, and any deduped
+    // follower's `return await existingInFlight;` above).
+    if (dedupEnabled && dedupKey) {
+      const keyForCleanup = dedupKey;
+      inFlightDedupMap().set(keyForCleanup, dispatchPromise as unknown as Promise<MinderResult<unknown>>);
+      dispatchPromise
+        .finally(() => {
+          inFlightDedupMap().delete(keyForCleanup);
+        })
+        .catch(() => { /* real rejection handled by the awaited caller below */ });
+    }
+
+    return await dispatchPromise;
 
   } catch (error: unknown) {
     // Handle error - NEVER throw

@@ -24,21 +24,29 @@ describe('minder() throwOnError (Phase 4)', () => {
     configureMinder({ baseURL: '', timeout: 30000, headers: {} });
   });
 
+  // p-u5-unknown-route-name-typo (fix): minder() now throws ROUTE_NOT_FOUND
+  // for a bare, unregistered route NAME (no leading '/', no scheme) — this
+  // describe block's own point is throwOnError/error-status propagation
+  // over a MOCKED transport, not route registration, so it uses the
+  // leading-'/' ad-hoc-path convention (exempt from that check, exactly
+  // like ApiClient's own `routeName.startsWith('/')` exemption) instead of
+  // a bare name that was never actually registered in this file (only the
+  // deprecated, routes-less `configureMinder({ baseURL, ... })` runs here).
   it('returns a structured error by default (never throws)', async () => {
     mockedAxios.mockRejectedValueOnce(axiosError(500));
-    const res = await minder('users');
+    const res = await minder('/users');
     expect(res.success).toBe(false);
     expect(res.error).toBeTruthy();
   });
 
   it('throws when throwOnError is set', async () => {
     mockedAxios.mockRejectedValueOnce(axiosError(500));
-    await expect(minder('users', undefined, { throwOnError: true })).rejects.toThrow();
+    await expect(minder('/users', undefined, { throwOnError: true })).rejects.toThrow();
   });
 
   it('attaches code/status to the thrown error', async () => {
     mockedAxios.mockRejectedValueOnce(axiosError(404));
-    await expect(minder('users', undefined, { throwOnError: true })).rejects.toMatchObject({
+    await expect(minder('/users', undefined, { throwOnError: true })).rejects.toMatchObject({
       status: 404,
     });
   });

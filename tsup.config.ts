@@ -63,27 +63,49 @@ export default defineConfig({
   dts: true,
   sourcemap: process.env.NODE_ENV !== 'production', // Only in development
   clean: true,
-  // INVARIANT: splitting:true + "sideEffects": true. Splitting moves shared
-  // state (React context creation, class/enum definitions) into cross-entry
-  // chunks initialized by lazy __esm thunks; a consumer bundler that believes
-  // the package is side-effect-free drops the imports that run those thunks and
-  // every useMinder() call throws in PRODUCTION builds only ("reading
-  // '_currentValue'" / "HttpMethod is undefined"). Verified across bundlers
-  // (MDPD-17; dabd92d).
+  // INVARIANT (revised — the enum/"non-const-enum" framing below was WRONG
+  // and is what let this ship broken; see the tree-shake defect fix,
+  // A9/A10): splitting:true + "sideEffects": false is safe ONLY while no
+  // module reachable from a build entry contains a BUNDLE-INTERNAL
+  // `require('../something')` call. Such a `require()` forces esbuild to
+  // wrap the required module — and, transitively, everything it statically
+  // depends on — in a deferred `__esm(() => {...})` lazy-init thunk, because
+  // `require()` must return a fully-initialized module synchronously. Inside
+  // that thunk, only function DECLARATIONS stay hoisted; every `const`/
+  // `class`/object value (enums, singletons, whole classes) becomes a bare
+  // `var X;` whose initializer runs only when the thunk is invoked. tsup
+  // entries then become pure re-export forwarders around the shared chunk
+  // that owns the thunk; a bundler resolves the re-export straight to the
+  // defining chunk and, believing the package side-effect-free, drops the
+  // forwarder module (and the init call it carried) — leaving the `var`
+  // permanently `undefined` for any consumer bundling a single named import.
+  // This is NOT specific to `enum` vs `as const`, NOT specific to classes vs
+  // objects, and NOT specific to one export group — it is the SAME mechanism
+  // for every non-function-declaration value inside the wrapper.
   //
-  // Spec 1.3c (2026-07-21) made the CONTEXT side effect safe under
-  // "sideEffects": false — createContext is now behind a lazy getter with
-  // globalThis identity (src/core/singletons.ts + MinderContext.tsx), proven
-  // across all export entries × {Rollup, Rspack} by verify:treeshake. The flip
-  // to false is STILL BLOCKED, however, by the non-const TypeScript `enum`s
-  // (src/constants/enums.ts): under false, HttpMethod's runtime init is dropped
-  // for the /crud entry (useMinder.ts uses HttpMethod.GET/.POST as values) — the
-  // dabd92d class. The complete fix is the enum -> `as const` reshape, which is
-  // v3.0-gated (Spec 1.3c §3/Phase C). Until then "sideEffects": true stays.
-  // Guarded by scripts/verify-consumer-treeshake.mjs (differential, dual-engine,
-  // fail-on-broken) — run `npm run verify:treeshake` after any packaging change.
+  // The fix (A9/A10, 2026-09): remove every bundle-internal `require()` —
+  // src/core/FeatureLoader.ts's lazy-loading `require()` fallback and
+  // src/platforms/node.ts's dynamic-import/require fallback for
+  // RouteProcessor — so esbuild never has a reason to emit `__esm` wrapping
+  // in the first place. Do NOT "fix" a future recurrence with a local
+  // concrete-value binding (e.g. `export const X = _X` re-export) at the
+  // consumer-facing entry: that pattern (see the pre-fix HttpMethod
+  // re-export this file used to point to) masks the automated guard by
+  // anchoring ONE export while leaving every OTHER named import broken, and
+  // it defeats tree-shaking for whoever imports the anchored export
+  // (measured: 98KB instead of 128B for a single-export import). The
+  // guard-worthy invariant is "zero `require('../...')` in src/**", not
+  // "every export has a binding" — see
+  // tests/packaging/no-esm-lazy-wrapper.test.ts and the differential,
+  // per-export-named-import signal in scripts/verify-consumer-treeshake.mjs
+  // (`npm run verify:treeshake`), which must be re-run after any packaging
+  // change.
   splitting: true,
   treeshake: true,
+  metafile: true, // required by scripts/fix-use-client-directive.mjs, which
+  // reads dist/metafile-{esm,cjs}.json to know which built output each
+  // "use client" source module ended up in; deleted after use (see that
+  // script) so it never ships in the published tarball.
   minify: true, // Enable minification to reduce bundle size
   
   // Target modern environments for better tree-shaking  
@@ -139,15 +161,16 @@ export default defineConfig({
   //
   // BLOCKER 1 (fix-nextjs-appouter-build-and-redirect-header-leak):
   // `splitting:true` (required, see above) merges every source module that
-  // starts with a real `"use client";` directive into a SHARED chunk whose
-  // top-level code esbuild wraps in a deferred lazy initializer — which
-  // demotes that directive from a module-level directive into an inert
-  // string expression buried inside a function body, so Next.js's build
-  // never recognizes the chunk as client-marked and any App Router import of
-  // `minder`/`configureMinder` fails `next build`/`next dev` outright.
-  // scripts/fix-use-client-directive.mjs re-hoists it to the file's true
-  // first statement post-build — see its own header comment for the full
-  // mechanism and why it is chained here (same "inseparable part of tsup's
-  // own build step" rationale as preserve-webpack-ignore.mjs above).
+  // starts with a real `"use client";` directive into a SHARED chunk. esbuild
+  // treats a directive that isn't literally a module's first statement as
+  // invalid and DROPS it outright (with a "Module level directives ... was
+  // ignored" warning) — there is nothing left in the emitted output for a
+  // post-build script to find and hoist. scripts/fix-use-client-directive.mjs
+  // instead INJECTS the directive, driven by this config's `metafile: true`
+  // output: it reads dist/metafile-{esm,cjs}.json to find which built output
+  // each "use client"-declaring source file ended up in, and prepends exactly
+  // one directive to each such output — see its own header comment for the
+  // full mechanism and why it is chained here (same "inseparable part of
+  // tsup's own build step" rationale as preserve-webpack-ignore.mjs above).
   onSuccess: 'node scripts/preserve-webpack-ignore.mjs && node scripts/fix-use-client-directive.mjs',
 });

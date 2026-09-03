@@ -40,6 +40,7 @@ What `minder-data-provider` supports, and how to know if your project meets the 
 | Electron | Confirmed at the headless-runtime level (xvfb on Linux CI, plain on macOS) — headed-GUI interaction beyond window-boot is unexercised |
 | Edge (Cloudflare Workers/workerd) | Confirmed (CI job `edge-worker-example`), including the provider path (`transport: 'fetch'` under `<MinderDataProvider>`, fixed 2026-08-26 — see SUPPORT_MATRIX.md "P2") |
 | Edge (Vercel Edge/Deno/Bun) | Inferred-works only — no runnable example on these three yet |
+| Rollup/Vite-based RSC (Waku, Vite RSC) | Unknown — keep the package `external`; Rollup strips `"use client"` from anything it inlines (see NEXTJS_APP_ROUTER.md) |
 
 ### Optional provider SDKs (only needed if you use that provider)
 

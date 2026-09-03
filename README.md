@@ -145,7 +145,7 @@ and zero provider account, then flip `mock: false` when you're ready to go live.
 | Stripe | payments |
 | Supabase | auth, database, storage |
 
-All eight are **Certified** (10-point checklist, mock-mode example, CI-tested).
+All nine are **Certified** (10-point checklist, mock-mode example, CI-tested).
 Seven ship for React, Next.js, and Vite on web, Node, and edge runtimes; Auth.js
 ships for Next.js only (its REST session contract is shared by other `@auth/*`
 framework adapters, but only Next.js is tested here — see the catalog). Full
@@ -348,11 +348,11 @@ bundler's real resolution:
 
 - `import { useMinder } from 'minder-data-provider/hook'` alone — no `MinderDataProvider`
   (e.g. routes registered via the global `configureMinder()`, which `useMinder` supports
-  standalone): **~48.0 KB** (`hook` row).
+  standalone): **~48.7 KB** (`hook` row).
 - `import { minder } from 'minder-data-provider/core'` (the standalone function):
-  **~52.9 KB** (`core` row).
+  **~53.8 KB** (`core` row).
 - `import { MinderDataProvider, useMinder }` from the package root (the realistic
-  full-provider import): **~83.0 KB** (`. (main)` row) — importing anything from the
+  full-provider import): **~84.2 KB** (`. (main)` row) — importing anything from the
   root pays the closure of every statically-reachable chunk on that entry, not just
   the two names you asked for. A bundler that tree-shakes named ESM imports aggressively
   (esbuild, Rollup, most modern setups) can bring the *effective* cost of importing only

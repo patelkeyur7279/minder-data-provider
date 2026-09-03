@@ -743,7 +743,14 @@ describe('minder() honors the detectMethod contract over a mocked transport', ()
       config: {},
     } as any);
 
-    await minder('permissions', { delete: true });
+    // p-u5-unknown-route-name-typo (fix): minder() now throws ROUTE_NOT_FOUND
+    // for a bare, unregistered route NAME (no leading '/', no scheme) — this
+    // test's own point is the detectMethod POST-not-DELETE contract, not
+    // route registration, so it uses the leading-'/' ad-hoc-path convention
+    // (exempt from that check, exactly like ApiClient's own
+    // `routeName.startsWith('/')` exemption) instead of a bare name that was
+    // never actually registered here.
+    await minder('/permissions', { delete: true });
 
     expect(mockedAxios).toHaveBeenCalledTimes(1);
     const observedConfig = mockedAxios.mock.calls[0][0] as any;

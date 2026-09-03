@@ -74,9 +74,15 @@ describe('Standalone minder() fires global plugin hooks (Phase 5C)', () => {
     pluginManager.unregister('minder-recorder');
   });
 
+  // p-u5-unknown-route-name-typo (fix): minder() now throws ROUTE_NOT_FOUND
+  // for a bare, unregistered route NAME — this describe block's own point is
+  // plugin-hook firing over a MOCKED transport, not route registration
+  // (no configureMinder/route registry runs in this file at all), so it
+  // uses the leading-'/' ad-hoc-path convention (exempt from that check)
+  // instead of a bare name that was never actually registered.
   it('fires onRequest + onResponse on success', async () => {
     mockedAxios.mockResolvedValueOnce({ data: { ok: true }, status: 200, headers: {} } as any);
-    const res = await minder('users');
+    const res = await minder('/users');
     await flush();
     expect(res.success).toBe(true);
     expect(events).toContain('request');
@@ -87,7 +93,7 @@ describe('Standalone minder() fires global plugin hooks (Phase 5C)', () => {
     mockedAxios.mockRejectedValueOnce(
       Object.assign(new Error('fail'), { isAxiosError: true, response: { status: 500 } })
     );
-    const res = await minder('users');
+    const res = await minder('/users');
     await flush();
     expect(res.success).toBe(false);
     expect(events).toContain('error');

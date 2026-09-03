@@ -13,6 +13,8 @@ export interface UnifiedMinderConfig {
         storage?: StorageType;
         tokenKey?: string;
         refreshUrl?: string;
+        authHeader?: string;
+        authTokenPrefix?: string;
     };
     cache?: boolean | {
         staleTime?: number;
@@ -53,6 +55,10 @@ export interface UnifiedMinderConfig {
         logLevel?: LogLevel;
         performance?: boolean;
         devTools?: boolean;
+        networkLogs?: boolean;
+        authLogs?: boolean;
+        cacheLogs?: boolean;
+        websocketLogs?: boolean;
     };
     performance?: {
         deduplication?: boolean;

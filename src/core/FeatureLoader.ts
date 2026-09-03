@@ -252,6 +252,54 @@ export class FeatureLoader {
   }
 
   /**
+   * Dynamically import the raw namespace for a feature. This is the single
+   * source of dynamic `import()` specifiers used by both the lazy path
+   * (loadFeatureModule) and the non-lazy path (loadFeatureSync). Keeping a
+   * single set of specifiers here (instead of a duplicated bundle-internal
+   * `require()` set) is required to avoid esbuild's `__esm` lazy-init
+   * wrapping — see tsup.config.ts for the invariant this preserves.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private importFeatureNamespace(feature: string): Promise<any> {
+    switch (feature) {
+      case 'auth':
+        return import('../auth/index.js');
+
+      case 'cache':
+        return import('../cache/index.js');
+
+      case 'websocket':
+        return import('../websocket/index.js');
+
+      case 'upload':
+        return import('../upload/index.js');
+
+      case 'plugins':
+        return import('../plugins/index.js');
+
+      case 'devtools':
+        return import('../devtools/index.js');
+
+      case 'ssr':
+        return import('../ssr/index.js');
+
+      case 'offline':
+        // Will be implemented in Phase 5
+        throw new Error('Offline support not yet implemented');
+
+      case 'storage':
+        return import('../platform/adapters/storage/index.js');
+
+      case 'logger':
+      case 'performance':
+        return import('../debug/index.js');
+
+      default:
+        throw new MinderConfigError(`Unknown feature: ${feature}`, 'UNKNOWN_FEATURE');
+    }
+  }
+
+  /**
    * Dynamically import feature module
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -263,85 +311,60 @@ export class FeatureLoader {
 
     switch (feature) {
       case 'auth':
-        return import('../auth/index.js').then(m => m.AuthManager || m);
-      
+        return this.importFeatureNamespace(feature).then(m => m.AuthManager || m);
+
       case 'cache':
-        return import('../cache/index.js').then(m => m.CacheManager || m);
-      
+        return this.importFeatureNamespace(feature).then(m => m.CacheManager || m);
+
       case 'websocket':
-        return import('../websocket/index.js').then(m => m.useWebSocket || m);
-      
+        return this.importFeatureNamespace(feature).then(m => m.useWebSocket || m);
+
       case 'upload':
-        return import('../upload/index.js').then(m => m.useMediaUpload || m);
-      
+        return this.importFeatureNamespace(feature).then(m => m.useMediaUpload || m);
+
       case 'plugins':
-        return import('../plugins/index.js').then(m => m.PluginManager || m);
-      
+        return this.importFeatureNamespace(feature).then(m => m.PluginManager || m);
+
       case 'devtools':
-        return import('../devtools/index.js').then(m => m.DevTools || m);
-      
+        return this.importFeatureNamespace(feature).then(m => m.DevTools || m);
+
       case 'ssr':
-        return import('../ssr/index.js').then(m => m.createSSRConfig || m);
-      
-      case 'offline':
-        // Will be implemented in Phase 5
-        throw new Error('Offline support not yet implemented');
-      
+        return this.importFeatureNamespace(feature).then(m => m.createSSRConfig || m);
+
       case 'storage':
-        return import('../platform/adapters/storage/index.js').then(m => m.StorageAdapterFactory || m);
-      
+        return this.importFeatureNamespace(feature).then(m => m.StorageAdapterFactory || m);
+
       case 'logger':
-        return import('../debug/index.js').then(m => m.DebugManager || m);
-      
+        return this.importFeatureNamespace(feature).then(m => m.DebugManager || m);
+
       case 'performance':
         // Performance monitoring can use debug manager for now
-        return import('../debug/index.js').then(m => m.DebugManager || m);
-      
+        return this.importFeatureNamespace(feature).then(m => m.DebugManager || m);
+
       default:
-        throw new MinderConfigError(`Unknown feature: ${feature}`, 'UNKNOWN_FEATURE');
+        return this.importFeatureNamespace(feature);
     }
   }
 
   /**
    * Synchronous feature loading (when lazy loading is disabled)
+   *
+   * Note: despite the name, this is `async` — it has exactly one caller
+   * (loadFeatureModule, itself `private async` and always awaited by
+   * loadFeature), so its synchronicity was never observable. It now
+   * shares importFeatureNamespace's dynamic `import()` specifiers instead
+   * of bundle-internal `require()` calls, which used to force esbuild to
+   * wrap almost the entire library in `__esm` lazy-init thunks (see
+   * tsup.config.ts). It intentionally returns the RAW namespace (unlike
+   * the lazy path, which unwraps to a named member) to preserve existing
+   * behaviour for lazy:false consumers such as FeatureLoader.createFull().
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private loadFeatureSync(feature: string): any {
+  private async loadFeatureSync(feature: string): Promise<any> {
     // Note: This requires all features to be bundled
     // Used for testing or when bundle size is not a concern
     try {
-      switch (feature) {
-        case 'auth':
-           
-          return require('../auth');
-        case 'cache':
-           
-          return require('../cache');
-        case 'websocket':
-           
-          return require('../websocket');
-        case 'upload':
-           
-          return require('../upload');
-        case 'plugins':
-           
-          return require('../plugins');
-        case 'devtools':
-           
-          return require('../devtools');
-        case 'ssr':
-           
-          return require('../ssr');
-        case 'storage':
-           
-          return require('../platform/adapters/storage');
-        case 'logger':
-        case 'performance':
-           
-          return require('../debug');
-        default:
-          throw new MinderConfigError(`Unknown feature: ${feature}`, 'UNKNOWN_FEATURE');
-      }
+      return await this.importFeatureNamespace(feature);
     } catch (error) {
       throw new MinderConfigError(`Failed to load feature ${feature}: ${error}`, 'FEATURE_LOAD_FAILED');
     }

@@ -39,6 +39,8 @@ import type { MinderConfig as MinderUrlBagConfig } from './minder/types.js';
 import type { Capability, CapabilityProvider } from '../contracts/registry.js';
 import type { PluginManager } from '../plugins/PluginSystem.js';
 import type { GlobalAuthManager } from '../auth/GlobalAuthManager.js';
+import type { CSRFTokenManager, RateLimiter } from '../utils/security.js';
+import type { MinderResult } from './minder/types.js';
 
 /**
  * Every cross-entry singleton slot. Each field is optional and created lazily by
@@ -72,6 +74,32 @@ export interface MinderSingletonStore {
   minderRetrySleep?: (ms: number) => Promise<void>;
   /** minder()'s opt-in response cache (C3). Value type owned by minder.ts. */
   minderResponseCache?: Map<string, unknown>;
+  /**
+   * p-c1-csrf-token-header (fix): standalone minder()'s CSRF token manager —
+   * mirrors ApiClient's own per-instance `csrfManager` (constructed once,
+   * reused for the instance's lifetime) so `security.csrfProtection` on the
+   * SAME unified config is honoured by standalone calls too, instead of
+   * being a silent no-op. One process-wide instance (like every other
+   * lazy singleton on this store), not recreated per call.
+   */
+  minderCsrfManager?: CSRFTokenManager;
+  /**
+   * p-rl1-rate-limiting (fix): standalone minder()'s rate limiter — mirrors
+   * ApiClient's own per-instance `rateLimiter`. Must persist across calls
+   * (its in-memory request-timestamp store IS the rate-limit state), so this
+   * is a lazily-created, process-wide singleton like `minderCsrfManager`
+   * above — a fresh instance per call would never actually limit anything.
+   */
+  minderRateLimiter?: RateLimiter;
+  /**
+   * p-d1-inflight-deduplication (fix): standalone minder()'s in-flight
+   * request map — mirrors ApiClient's own dedup gate
+   * (`isGet && config.performance?.deduplication`). Keyed by
+   * method+resolved-url+params; value is the SHARED promise concurrent
+   * identical GETs await instead of each dispatching their own transport
+   * call. Entries are removed once their promise settles (see minder.ts).
+   */
+  minderInFlightDedup?: Map<string, Promise<MinderResult<unknown>>>;
   /** Global plugin manager (A4). */
   pluginManager?: PluginManager;
   /** Global auth manager (A5). */

@@ -169,6 +169,21 @@ export type CallerRequestOptions = AxiosRequestConfig & {
   rawUrl?: boolean;
   urlOverride?: string;
   schema?: unknown;
+  /**
+   * p-t1-percall-transport-fetch-fingerprint (fix): a per-call transport
+   * override — mirrors `minder()`'s own `MinderOptions.transport` (documented,
+   * per-call). Previously this fell into `otherOptions` along with every
+   * other unknown key, survived `assertNoOriginOrTransportOptions` (it isn't
+   * an origin/transport-hijack axios field), then was silently DROPPED by
+   * `pickForwardableRequestOptions` because it isn't a real `AxiosRequestConfig`
+   * member and was never added to {@link FORWARDABLE_REQUEST_OPTION_KEYS} —
+   * so `apiClient.request(name, data, params, { transport: 'fetch' })` had
+   * zero effect and silently fell back to the instance's construction-time
+   * transport. Destructured out here (like `rawUrl`/`urlOverride`/`schema`)
+   * so callers threading it through `dispatchResolved`/`requestRaw` can
+   * choose the transport PER CALL instead of only at construction time.
+   */
+  transport?: 'auto' | 'axios' | 'fetch';
 };
 
 /**
@@ -204,6 +219,7 @@ export function extractCallerRequestOptions(options: CallerRequestOptions | unde
   rawUrl: boolean | undefined;
   urlOverride: string | undefined;
   schema: unknown;
+  transport: 'auto' | 'axios' | 'fetch' | undefined;
   forwardable: ForwardableRequestOptions;
 } {
   const {
@@ -213,6 +229,7 @@ export function extractCallerRequestOptions(options: CallerRequestOptions | unde
     rawUrl,
     urlOverride,
     schema,
+    transport,
     ...otherOptions
   } = (options || {}) as CallerRequestOptions;
 
@@ -227,6 +244,7 @@ export function extractCallerRequestOptions(options: CallerRequestOptions | unde
     rawUrl,
     urlOverride,
     schema,
+    transport,
     forwardable: pickForwardableRequestOptions(otherOptions as Record<string, unknown>),
   };
 }
