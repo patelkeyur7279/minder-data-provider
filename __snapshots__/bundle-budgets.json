@@ -11,7 +11,7 @@
   "auth": 30.1,
   "upload": 29,
   "websocket": 28,
-  "crud": 26.7,
+  "crud": 28.0,
   "cache": 26.5,
   "config": 26.2,
   "realtime": 8.6,

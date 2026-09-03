@@ -71,6 +71,7 @@ export async function run(ctx) {
   results.push(...(await runWebSocketCase(ctx)));
   results.push(...(await runSseDirectCase(ctx)));
   results.push(...(await runSseContextCase(ctx)));
+  results.push(...(await runWebSocketClientDirectCase(ctx)));
   return results;
 }
 
@@ -630,6 +631,176 @@ async function runSseContextCase(ctx) {
           pass: caughtOk,
           message: caughtOk
             ? `a caller that DOES attach .catch() to useMinderContext().realtimeManager.connect() still observes the real dead-port rejection (error: "${parsed.caughtMessage}") — the internal safety net does not mask genuine failures`
+            : `expected connect() to still hand back a promise that rejects for an explicit .catch(); got ${JSON.stringify(parsed)}`,
+        });
+      }
+    }
+  } catch (err) {
+    results.push({
+      id: discardedId,
+      pass: false,
+      message: `driver threw before completing: ${err?.message ?? err}`,
+    });
+    results.push({
+      id: caughtId,
+      pass: false,
+      message: `driver threw before completing: ${err?.message ?? err}`,
+    });
+  }
+
+  return results;
+}
+
+/**
+ * fix-b-transport-storage-websocket (HIGH 8): `WebSocketClient`
+ * (src/websocket/WebSocketClient.ts) — the STANDALONE class exported
+ * directly from the `minder-data-provider/websocket` subpath
+ * (`new WebSocketClient(config)` / `createWebSocketClient(config)`, ZERO
+ * hook and ZERO `MinderContext` in between) — is the LAST known site of the
+ * exact same unhandled-rejection bug class already fixed for
+ * `WebSocketManager`, `SseTransport`, `LazySseTransport`,
+ * `GlobalAuthManager.setToken`, and the GET auto-fetch path: `connect()`
+ * built `new Promise((resolve, reject) => {...})` and returned it AS-IS —
+ * a discarded `client.connect()` against a dead port rejected with NO
+ * handler attached anywhere in this class, which is Node's exact
+ * `unhandledRejection` crash trigger (mode `'throw'` since Node 15).
+ *
+ * FIX: `connect()` now attaches a permanent, silent no-op `.catch()`
+ * directly to the promise it hands back BEFORE returning it — mirrors
+ * `WebSocketManager.connect()`'s identical `connectPromise.catch(() => {})`
+ * fix. Proven both ways, same as every other case in this file: (1) a
+ * DISCARDED `connect()` promise against a real dead port must not crash the
+ * process, and (2) a caller that DOES attach `.catch()` must still observe
+ * the real rejection.
+ *
+ * Runs in an isolated child process for the SAME reason as the other cases
+ * here — an unhandled rejection in the driver's own process would kill
+ * scripts/wire/run.mjs mid-suite. No React/JSDOM needed: `WebSocketClient`
+ * has no hook dependency at all, so this is a bare `require()` + call.
+ */
+async function runWebSocketClientDirectCase(ctx) {
+  const { scratchDir } = ctx;
+  const { requireFromScratch } = ctx.load;
+  const results = [];
+  const discardedId = 'hi8-websocketclient-direct-connect-dead-port-discarded-no-crash';
+  const caughtId = 'hi8-websocketclient-direct-connect-dead-port-caught-still-rejects';
+
+  try {
+    requireFromScratch(scratchDir, 'minder-data-provider/package.json');
+
+    const deadPort = await getDeadPort();
+
+    const childScript = `
+      const path = require('path');
+      const scratchDir = ${JSON.stringify(scratchDir)};
+      const resolveFromScratch = (spec) => require.resolve(spec, { paths: [scratchDir] });
+
+      const pkgRoot = path.dirname(resolveFromScratch('minder-data-provider/package.json'));
+      const pkg = require(path.join(pkgRoot, 'package.json'));
+      // Deliberately the './websocket' subpath, NOT the root entry — the
+      // exact hook-free, context-free import a consumer would use.
+      const websocketEntry = path.join(pkgRoot, pkg.exports['./websocket'].require);
+      const { WebSocketClient } = require(websocketEntry);
+
+      // Deliberately NO process.on('unhandledRejection', ...) handler — see
+      // the header comment above runWebSocketCase for why: the goal is to
+      // observe Node's REAL default behavior, not mask it. Node's own global
+      // WebSocket (undici-backed) is what actually dials the dead port.
+
+      // PHASE 1 (the bug report's exact hostile pattern): construct directly
+      // and call connect(), DROP the returned promise entirely.
+      const client1 = new WebSocketClient({ url: 'ws://127.0.0.1:${deadPort}', reconnect: false });
+      client1.connect();
+
+      setTimeout(() => {
+        // PHASE 2: a FRESH instance, same call pattern, but this caller DOES
+        // attach its own rejection handler — must still observe the real
+        // dead-port failure.
+        const client2 = new WebSocketClient({ url: 'ws://127.0.0.1:${deadPort}', reconnect: false });
+        let caughtRejected = false;
+        let caughtMessage = null;
+        const p = client2.connect();
+        const caughtPromise = p
+          ? p.then(
+              () => { caughtRejected = false; },
+              (err) => { caughtRejected = true; caughtMessage = String(err && err.message || err); }
+            )
+          : Promise.resolve();
+
+        caughtPromise.finally(() => {
+          const out = {
+            discardedSurvived: true, // reaching this line at all proves it
+            gotConnectPromise: !!p,
+            caughtRejected,
+            caughtMessage,
+          };
+          process.stdout.write(JSON.stringify(out));
+          process.exit(0);
+        });
+      }, 1500);
+    `;
+
+    let stdout = null;
+    let crashed = false;
+    let crashDetail = '';
+    try {
+      stdout = execFileSync(process.execPath, ['-e', childScript], {
+        encoding: 'utf8',
+        timeout: 15000,
+        killSignal: 'SIGKILL',
+        cwd: scratchDir,
+      });
+    } catch (err) {
+      crashed = true;
+      crashDetail =
+        (err?.signal ? `killed by signal ${err.signal}` : `exit code ${err?.status}`) +
+        (err?.stderr ? ` — stderr: ${String(err.stderr).slice(0, 800)}` : '');
+    }
+
+    if (crashed) {
+      results.push({
+        id: discardedId,
+        pass: false,
+        message: `child process CRASHED on a discarded direct WebSocketClient.connect() against a real dead port (${crashDetail}) — an unhandled rejection in the standalone /websocket subpath took the whole process down`,
+      });
+      results.push({
+        id: caughtId,
+        pass: false,
+        message: `driver could not evaluate the caught-path — the child process already crashed on the discarded-path (${crashDetail})`,
+      });
+    } else {
+      let parsed = null;
+      try {
+        parsed = JSON.parse(stdout.trim().split('\n').pop());
+      } catch (e) {
+        results.push({
+          id: discardedId,
+          pass: false,
+          message: `child process exited cleanly but produced unparsable output: ${JSON.stringify(stdout)} (${e?.message ?? e})`,
+        });
+        results.push({
+          id: caughtId,
+          pass: false,
+          message: `driver could not evaluate the caught-path — output was unparsable`,
+        });
+        parsed = undefined;
+      }
+      if (parsed) {
+        const survived = parsed.discardedSurvived === true;
+        results.push({
+          id: discardedId,
+          pass: survived,
+          message: survived
+            ? 'child process survived a DISCARDED direct WebSocketClient.connect() promise against a real dead port with NO unhandled rejection'
+            : `child process did not crash, but did not reach the expected checkpoint: ${JSON.stringify(parsed)}`,
+        });
+
+        const caughtOk = survived && parsed.gotConnectPromise === true && parsed.caughtRejected === true && !!parsed.caughtMessage;
+        results.push({
+          id: caughtId,
+          pass: caughtOk,
+          message: caughtOk
+            ? `a caller that DOES attach .catch() to the direct WebSocketClient.connect() still observes the real dead-port rejection (error: "${parsed.caughtMessage}") — the internal safety net does not mask genuine failures`
             : `expected connect() to still hand back a promise that rejects for an explicit .catch(); got ${JSON.stringify(parsed)}`,
         });
       }

@@ -13,11 +13,69 @@ const logger = /*#__PURE__*/ new Logger('ExpoStorageAdapter', { level: LogLevel.
 export class ExpoStorageAdapter extends BaseStorageAdapter {
   private SecureStore: any;
   private keysKey: string;
-  
+
+  /**
+   * fix-b-transport-storage-websocket (BLOCKER 4, DATA-LOSS — see
+   * CHANGELOG.md): expo-secure-store's REAL key constraint — verified
+   * directly against the installed package's own source
+   * (expo-secure-store/build/SecureStore.js: `isValidKey`) — is
+   * `/^[\w.-]+$/` (letters, digits, underscore, `.`, `-` ONLY; checked
+   * synchronously by `ensureValidKey()` BEFORE the call ever reaches the
+   * native module). `BaseStorageAdapter.getPrefixedKey()` (the shared
+   * default every OTHER adapter here uses unmodified) joins `namespace`
+   * and `key` with a COLON — `${namespace}:${key}` — a character
+   * SecureStore rejects outright. Every `setItemAsync`/`getItemAsync`/
+   * `deleteItemAsync` call below already catches and logs (never
+   * rethrows), so this failure was never surfaced: `setToken()` "resolved
+   * successfully" (`GlobalAuthManager.persistItem` also swallows its own
+   * error), and a SEPARATE `GlobalAuthManager` instance with the SAME
+   * `tokenKey` — i.e. the next app launch, since SecureStore is a real OS
+   * keychain that persists across process restarts while a JS instance's
+   * own in-memory `this.token` field does not — read back `null`. This is
+   * not an edge case: `getPrefixedKey`'s default `namespace` is
+   * `'minder'`, so this was the DEFAULT, out-of-the-box behavior for
+   * every Expo consumer of this package, not something a caller had to
+   * opt into.
+   *
+   * FIX: override the shared prefix builder with one whose output can
+   * never violate `/^[\w.-]+$/` — `.` (itself an allowed character)
+   * replaces `:` as the namespace/key separator, and any OTHER character
+   * outside the allowed set (in either the namespace or a caller-supplied
+   * key — a space, `/`, `@`, ... would fail identically) is replaced with
+   * `_` defensively. Deliberately scoped to THIS adapter alone —
+   * `BaseStorageAdapter`'s `:`-joined default is unchanged for
+   * Web/Native/Electron/Memory, none of which impose this restriction, so
+   * this is not a cross-platform behavior change.
+   */
+  private static readonly UNSAFE_SECURE_STORE_KEY_CHARS = /[^\w.-]/g;
+
+  private sanitizeForSecureStore(segment: string): string {
+    return segment.replace(ExpoStorageAdapter.UNSAFE_SECURE_STORE_KEY_CHARS, '_');
+  }
+
+  protected getPrefixedKey(key: string): string {
+    const safeKey = this.sanitizeForSecureStore(key);
+    const namespace = this.options.namespace;
+    return namespace ? `${this.sanitizeForSecureStore(namespace)}.${safeKey}` : safeKey;
+  }
+
+  protected removePrefixedKey(prefixedKey: string): string {
+    const namespace = this.options.namespace;
+    if (!namespace) return prefixedKey;
+
+    const prefix = `${this.sanitizeForSecureStore(namespace)}.`;
+    return prefixedKey.startsWith(prefix) ? prefixedKey.substring(prefix.length) : prefixedKey;
+  }
+
   constructor(options: StorageAdapterOptions = {}) {
     super(options);
-    this.keysKey = `${this.options.namespace}:__keys__`;
-    
+    // Built AFTER `super()` (so `this.options`/`sanitizeForSecureStore` are
+    // ready) via the SAME safe-prefixing helper `getPrefixedKey` uses,
+    // rather than a hand-rolled `${namespace}:__keys__` — the earlier
+    // version's own key-tracking key had the identical `:` defect as every
+    // other key here (see the class-level comment above).
+    this.keysKey = this.getPrefixedKey('__keys__');
+
     try {
       // Dynamic import for Expo SecureStore
        

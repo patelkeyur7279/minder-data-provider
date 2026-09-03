@@ -5,6 +5,10 @@
 export declare class ExpoStorageAdapter extends BaseStorageAdapter {
     private SecureStore;
     private keysKey;
+    private static readonly UNSAFE_SECURE_STORE_KEY_CHARS;
+    private sanitizeForSecureStore;
+    protected getPrefixedKey(_: string): string;
+    protected removePrefixedKey(_: string): string;
     constructor(_?: StorageAdapterOptions);
     getItem(_: string): Promise<string | null>;
     setItem(_: string, _: string, _?: number): Promise<void>;
@@ -20,6 +24,10 @@ export declare class ExpoStorageAdapter extends BaseStorageAdapter {
 export declare class SecureStorageAdapter extends BaseStorageAdapter {
     private SecureStore;
     private keysKey;
+    private static readonly UNSAFE_SECURE_STORE_KEY_CHARS;
+    private sanitizeForSecureStore;
+    protected getPrefixedKey(_: string): string;
+    protected removePrefixedKey(_: string): string;
     constructor(_?: StorageAdapterOptions);
     getItem(_: string): Promise<string | null>;
     setItem(_: string, _: string, _?: number): Promise<void>;

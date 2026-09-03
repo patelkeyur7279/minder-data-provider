@@ -46,6 +46,7 @@ import { normalizeApiError, sanitizeHeaders as sanitizeHeadersInternal } from '.
 import { sensitiveHeaderNames as computeSensitiveHeaderNames } from './apiClient/sensitiveHeaders.js';
 import { resolveRequest, substituteUrlParams, normalizeHttpMethod } from './apiClient/resolveRequest.js';
 import type { ResolvedRequestWithKeys } from './apiClient/resolveRequest.js';
+import { isIdempotentHttpMethod } from './apiClient/idempotency.js';
 import {
   extractCallerRequestOptions,
 } from './apiClient/requestOptions.js';
@@ -856,9 +857,23 @@ export class ApiClient {
 
         const originalRequest = error.config;
 
+        // fix-a-crud-silent-success (generalized): axios/Node's http layer can
+        // throw BEFORE attaching `error.config` — a dead-port connection
+        // failure mid-upload, or an HTTP-invalid method token. Every use below
+        // (retry bookkeeping, the idempotency gate, the 401 refresh path) needs
+        // a config to resubmit, so when there is none the correct behaviour is
+        // to skip them and fall through to `handleError` at the end of this
+        // interceptor — which already assumes `error.config` may be absent (see
+        // its `error.config?.` reads). Guarding at the READ rather than at each
+        // trigger is deliberate: the malformed-method trigger was patched at
+        // its source once (see `method` in the request builder) and a DIFFERENT
+        // trigger promptly reached this same unguarded read, replacing the real
+        // network error with `TypeError: Cannot read properties of undefined
+        // (reading '_retryCount')`.
+
         // --- Exponential Backoff Retry Logic ---
         const retries = this.config.performance?.retries ?? 0;
-        const currentRetryCount = originalRequest._retryCount || 0;
+        const currentRetryCount = originalRequest?._retryCount || 0;
         
         // Retry on Network errors (no response), 5XX server errors, or 429 Too Many Requests
         const isRetryableError = !error.response || 
@@ -867,11 +882,17 @@ export class ApiClient {
         
         // Allow custom shouldRetry function
         const customShouldRetry = this.config.performance?.retryConfig?.shouldRetry;
-        const shouldRetry = customShouldRetry 
-          ? customShouldRetry(error, currentRetryCount) 
+        const shouldRetry = customShouldRetry
+          ? customShouldRetry(error, currentRetryCount)
           : isRetryableError;
 
-        if (shouldRetry && currentRetryCount < retries) {
+        // fix-a-crud-silent-success (HIGH 5): never resubmit a non-idempotent
+        // method (POST/PATCH) automatically — see apiClient/idempotency.ts for
+        // the full rationale. This gate is independent of (and wins over)
+        // `shouldRetry`/`customShouldRetry`: those decide whether THIS error
+        // warrants another attempt of an already-safe method, not whether a
+        // write may be silently duplicated.
+        if (originalRequest && shouldRetry && currentRetryCount < retries && isIdempotentHttpMethod(originalRequest.method)) {
           originalRequest._retryCount = currentRetryCount + 1;
           
           const baseDelay = this.config.performance?.retryDelay ?? 1000;
@@ -893,7 +914,7 @@ export class ApiClient {
         // --- End Retry Logic ---
 
         // Handle 401 Unauthorized
-        if (error.response?.status === 401 && !originalRequest._retry) {
+        if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
           telemetry.recordAuthFailure();
           originalRequest._retry = true;
           // Check if refresh is configured
@@ -1157,7 +1178,41 @@ export class ApiClient {
     // config a few lines down (see `resolveRequest`); this raw declared
     // value is only used to build that resolution and, further down, as the
     // `ApiRoute` argument `proxyManager.rewriteUrl` still expects.
-    const registeredRoute = this.config.routes?.[routeName];
+    //
+    // fix-a-crud-silent-success (BLOCKER 3): declared type is `ApiRoute`, but
+    // at runtime a hand-built config (never passed through configureMinder()'s
+    // `generateCrudRoutes`) can still carry a bare shorthand STRING — see the
+    // identical widening/rationale on `resolveCrudOperationRoute`'s `baseRoute`
+    // (useMinder.helpers.ts, its "N4" comment). configureMinder() always
+    // expands `{ things: '/things' }` into a full `{ method, url }` object,
+    // but `<MinderDataProvider config={...}>` documented — and, per N4,
+    // supported — accepting "configureMinder(), or hand-built", so a raw
+    // string can genuinely still reach here.
+    const registeredRoute = this.config.routes?.[routeName] as ApiRoute | string | undefined;
+
+    // BLOCKER 3: a registered value that is STILL a raw string IS ITSELF the
+    // URL — `resolveFetchRouteName`/`resolveCrudOperationRoute` already treat
+    // this shape as "dispatch the string as a raw path" for the fetch/CRUD
+    // hook paths, but THIS method (the one `uploadFile()` and any direct
+    // `apiClient.request(routeName, ...)` call go through) had no equivalent
+    // guard at all. Falling through into the `ApiRoute`-only resolution below
+    // reads `.url`/`.method` off a string primitive — both silently
+    // `undefined` — so `resolveRequest` resolved an UNDEFINED url with a
+    // default-GET method regardless of the caller's body. Confirmed on a real
+    // server: `useMediaUpload('thing').uploadFile(file)` against
+    // `routes: { thing: '/upload' }` (hand-built, no configureMinder) sent a
+    // bodyless GET with no Content-Type/Content-Length — the file content was
+    // never transmitted — while `uploadFile()` still resolved successfully.
+    // Dispatching through the SAME ad-hoc raw-path escape hatch the
+    // leading-'/'-unregistered-name branch (just below) already uses fixes
+    // this at the one shared choke point every non-absolute-URL call passes
+    // through: `requestRaw` infers POST for a body-carrying call (uploadFile's
+    // FormData) and GET for a bodyless one, exactly the fallback a real route
+    // declaration would have given it.
+    if (typeof registeredRoute === 'string') {
+      return this.requestRaw<T>(registeredRoute, data, params, options, false);
+    }
+
     if (!registeredRoute) {
       // An ad-hoc relative PATH (leading "/") that is not a registered route
       // NAME is treated as a raw path resolved against baseURL. This lets

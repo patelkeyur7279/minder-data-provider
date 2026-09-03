@@ -96,7 +96,7 @@ export class WebSocketClient {
    * Connect to WebSocket server
    */
   connect(): Promise<void> {
-    return new Promise((resolve, reject) => {
+    const connectPromise = new Promise<void>((resolve, reject) => {
       try {
         if (this.ws?.readyState === WebSocket.OPEN) {
           this.log('WebSocket already connected');
@@ -155,6 +155,25 @@ export class WebSocketClient {
         reject(error);
       }
     });
+
+    // fix-b-transport-storage-websocket (HIGH 8): guarantee at least one
+    // rejection handler is attached to THIS promise, so a connect() failure
+    // (dead port, restarted server, network blip, ...) can never surface as
+    // an unhandled rejection — fatal to a Node-hosted consumer and an
+    // "Uncaught (in promise)" in browsers. `WebSocketClient` is the
+    // standalone class exported directly from the `minder-data-provider/
+    // websocket` subpath (`createWebSocketClient`/`new WebSocketClient(...)`
+    // with ZERO hook/provider in between), so a caller's fire-and-forget
+    // `client.connect()` — the exact same hostile pattern already fixed for
+    // `WebSocketManager.connect()` (src/core/WebSocketManager.ts), whose
+    // identical `connectPromise.catch(() => {})` this mirrors — previously
+    // had no handler attached anywhere in this class. This is a silent
+    // no-op — it does NOT swallow or alter the rejection for a caller that
+    // DOES attach its own `.catch()`/`await`: every handler attached to a
+    // promise fires independently when the promise settles.
+    connectPromise.catch(() => { /* see comment above */ });
+
+    return connectPromise;
   }
 
   /**

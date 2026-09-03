@@ -10,6 +10,12 @@ import { CacheManager } from '../core/CacheManager.js';
 import type { AuthManager } from '../core/AuthManager.js';
 import { globalAuthManager } from '../auth/GlobalAuthManager.js';
 import type { GlobalAuthManager } from '../auth/GlobalAuthManager.js';
+// fix-a-crud-silent-success (BLOCKER 1): `resolveCrudOperationRoute` and
+// `assertValidResourceId` are the SAME choke-point helpers `useMinder.ts`'s
+// (non-deprecated) create/update/delete mutations already go through — see
+// their use below for why this deprecated sibling hook needs the identical
+// fix.
+import { resolveCrudOperationRoute, assertValidResourceId } from './useMinder.helpers.js';
 
 // Main hook for CRUD operations
 /**
@@ -49,7 +55,7 @@ export function useOneTouchCrud<T = any>(
     cacheTime?: number;
   } = {}
 ): CrudOperations<T> {
-  const { apiClient, cacheManager } = useMinderContext();
+  const { apiClient, cacheManager, config } = useMinderContext();
   const queryClient = useQueryClient();
 
   // Fetch data with configurable options
@@ -67,37 +73,101 @@ export function useOneTouchCrud<T = any>(
     refetchOnReconnect: options.enableAutoRefetch,
   });
 
-  // Create mutation
+  // Create mutation.
+  //
+  // fix-a-crud-silent-success (BLOCKER 1): this used to be
+  // `apiClient.request<T>(routeName, item)` — no method override — which
+  // resolves through `resolveRequest`'s declared-method fallback: with no
+  // override, dispatch falls back to the REGISTERED route's OWN declared
+  // method, and a base collection route (e.g. `{ items: { url: '/items',
+  // method: 'GET' } }`, the normal shape for a single route reused by
+  // fetch/create/update/delete) declares GET. create() therefore dispatched
+  // as a GET — hitting the SAME GET handler the initial list fetch used —
+  // never a POST, while still resolving successfully with that GET
+  // response's body standing in for "the created item". `resolveCrudOperationRoute`
+  // (the exact function `useMinder.ts`'s own create mutation already uses)
+  // redirects to a registered `create<Singular>` sibling route when one
+  // exists, or otherwise forces the POST method explicitly on the base
+  // route — so a resolved promise here now always means a real POST reached
+  // the server.
   const createMutation = useMutation({
-    mutationFn: (item: Partial<T>) => apiClient.request<T>(routeName, item),
+    mutationFn: (item: Partial<T>) => {
+      const { routeName: resolvedRouteName, method, urlOverride } = resolveCrudOperationRoute(
+        routeName, 'create', config?.routes
+      );
+      return apiClient.request<T>(resolvedRouteName, item, undefined, {
+        ...(method ? { method } : {}),
+        ...(urlOverride ? { urlOverride } : {}),
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [routeName] });
     },
+    // fix-a-crud-silent-success (HIGH 5): see the identical `retry: false` +
+    // full rationale on useMinder.ts's own createMutation. This mutationFn
+    // throws on failure, so TanStack Query's OWN mutation-retry engine (a
+    // SEPARATE mechanism from ApiClient's axios-interceptor idempotent-only
+    // gate) would otherwise re-invoke this whole function — including a
+    // fresh `apiClient.request()` call — and silently resubmit the POST a
+    // second time regardless of what the axios layer decided.
+    retry: false,
   });
 
-  // Update mutation
+  // Update mutation. BLOCKER 1 (see createMutation above): same declared-
+  // method-fallback defect — an unadorned `apiClient.request(routeName, item,
+  // { id })` dispatched through the base route's declared GET instead of
+  // PUT. Also validates the id VALUE first (assertValidResourceId), matching
+  // useMinder.ts's own updateMutation, so a hostile id never reaches the wire.
   const updateMutation = useMutation({
-    mutationFn: ({ id, item }: { id: string | number; item: Partial<T> }) =>
-      apiClient.request<T>(routeName, item, { id }),
+    mutationFn: ({ id, item }: { id: string | number; item: Partial<T> }) => {
+      assertValidResourceId('update', id);
+      const { routeName: resolvedRouteName, method } = resolveCrudOperationRoute(
+        routeName, 'update', config?.routes
+      );
+      return apiClient.request<T>(resolvedRouteName, item, { id }, method ? { method } : undefined);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [routeName] });
     },
   });
 
-  // Delete mutation
+  // Delete mutation. BLOCKER 1 (see createMutation above): same fix.
   const deleteMutation = useMutation({
-    mutationFn: (id: string | number) => apiClient.request(routeName, undefined, { id }),
+    mutationFn: (id: string | number) => {
+      assertValidResourceId('delete', id);
+      const { routeName: resolvedRouteName, method } = resolveCrudOperationRoute(
+        routeName, 'delete', config?.routes
+      );
+      return apiClient.request(resolvedRouteName, undefined, { id }, method ? { method } : undefined);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [routeName] });
     },
   });
 
   const operations = {
-    // Manual fetch function that uses refetch from useQuery
+    // Manual fetch function that uses refetch from useQuery.
+    //
+    // fix-a-crud-silent-success (BLOCKER 2): this used to be
+    // `return (result.data || []) as T[]` unconditionally — on a genuine
+    // server failure (e.g. a real 5xx), TanStack Query's `refetch()` settles
+    // with `data: undefined` (no prior successful fetch to fall back to) and
+    // `isError: true`, so the old code silently coerced that into an empty
+    // array and RESOLVED as if the fetch had simply found nothing. The
+    // destructured `fetchError` above is a snapshot from the PREVIOUS render
+    // and is not guaranteed to reflect this refetch by the time this promise
+    // settles, so a caller awaiting `fetch()` had no way to observe the
+    // failure at all. `refetch()`'s own OWN returned result carries
+    // `isError`/`error` synchronously and accurately — checking THAT (not the
+    // stale closure variable) and rethrowing is what makes a resolved promise
+    // here actually mean "the fetch succeeded".
     fetch: useCallback(async () => {
       const result = await refetch();
+      if (result.isError) {
+        throw result.error ?? new Error(`useOneTouchCrud('${routeName}').operations.fetch() failed`);
+      }
       return (result.data || []) as T[];  // ✅ Return T[] instead of T
-    }, [refetch]),
+    }, [refetch, routeName]),
     // Create new item
     create: useCallback((item: Partial<T>) => createMutation.mutateAsync(item), [createMutation]),
     // Update existing item

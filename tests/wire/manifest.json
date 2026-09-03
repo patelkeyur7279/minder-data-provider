@@ -1720,6 +1720,142 @@
       "pattern": "two-path-parity: minder()/configureMinder() vs <MinderDataProvider>+ApiClient",
       "module": "esm",
       "description": "ALLOWLISTED known divergence, timing/outcome not wire-bytes: an AbortSignal fired shortly after dispatch is honoured by the provider path (settles quickly) but ignored by minder() (MinderOptions has no signal field, the call runs to full completion)"
+    },
+    {
+      "id": "blocker1-onetouchcrud-create-sends-real-post",
+      "acceptance": "BLOCKER1",
+      "driver": "crud-silent-success",
+      "pattern": "useOneTouchCrud().operations.create()",
+      "module": "esm",
+      "description": "create() must dispatch a real POST (via resolveCrudOperationRoute), never fall back to the base route declared GET, and resolve from the POST handler response, not a stale GET response"
+    },
+    {
+      "id": "blocker1-onetouchcrud-update-sends-real-put",
+      "acceptance": "BLOCKER1",
+      "driver": "crud-silent-success",
+      "pattern": "useOneTouchCrud().operations.update()",
+      "module": "cjs",
+      "description": "update(id, item) must dispatch a real PUT to the id-substituted URL, never the base route declared GET"
+    },
+    {
+      "id": "blocker1-onetouchcrud-delete-sends-real-delete",
+      "acceptance": "BLOCKER1",
+      "driver": "crud-silent-success",
+      "pattern": "useOneTouchCrud().operations.delete()",
+      "module": "esm",
+      "description": "delete(id) must dispatch a real DELETE to the id-substituted URL, never the base route declared GET"
+    },
+    {
+      "id": "blocker2-onetouchcrud-fetch-rejects-on-real-500",
+      "acceptance": "BLOCKER2",
+      "driver": "crud-silent-success",
+      "pattern": "useOneTouchCrud().operations.fetch()",
+      "module": "esm",
+      "description": "FAILURE PATH: fetch() against a real 500 must reject, never silently resolve an empty array"
+    },
+    {
+      "id": "blocker2-onetouchcrud-fetch-resolves-on-success-positive-control",
+      "acceptance": "BLOCKER2",
+      "driver": "crud-silent-success",
+      "pattern": "useOneTouchCrud().operations.fetch()",
+      "module": "esm",
+      "description": "POSITIVE CONTROL: fetch() against a real 200 still resolves the real array (the 5xx fix must not over-tighten the success path)"
+    },
+    {
+      "id": "blocker3-uploadfile-string-shorthand-route-sends-real-post",
+      "acceptance": "BLOCKER3",
+      "driver": "crud-silent-success",
+      "pattern": "useMediaUpload().uploadFile()",
+      "module": "esm",
+      "description": "uploadFile() against a hand-built, string-shorthand route config (never expanded by configureMinder()) must send a real POST with a real multipart body, never a bodyless GET"
+    },
+    {
+      "id": "blocker3-uploadfile-string-shorthand-route-dead-port-clean-failure",
+      "acceptance": "BLOCKER3",
+      "driver": "crud-silent-success",
+      "pattern": "useMediaUpload().uploadFile()",
+      "module": "cjs",
+      "description": "FAILURE PATH: the same string-shorthand route config against a real dead port must fail cleanly (reject), not crash"
+    },
+    {
+      "id": "high5-post-not-retried-after-network-failure",
+      "acceptance": "HIGH5",
+      "driver": "crud-silent-success",
+      "pattern": "useOneTouchCrud().operations.create()",
+      "module": "esm",
+      "description": "FAILURE PATH: a POST against a connection that accepts the body then drops mid-flight must reach the server EXACTLY ONCE -- never silently retried into a duplicate write"
+    },
+    {
+      "id": "high5-get-still-retried-after-network-failure-positive-control",
+      "acceptance": "HIGH5",
+      "driver": "crud-silent-success",
+      "pattern": "useOneTouchCrud().operations.fetch()",
+      "module": "cjs",
+      "description": "POSITIVE CONTROL: an idempotent GET against the identical connection-drop server still retries once as before -- the idempotent-only gate is method-specific, not a blanket retry regression"
+    },
+    {
+      "id": "hi7-standalone-axiosconfig-validatestatus-accepts-404",
+      "acceptance": "HIGH7",
+      "driver": "standalone-axios-config",
+      "pattern": "minder(route, undefined, { axiosConfig })",
+      "module": "esm",
+      "description": "standalone minder() axiosConfig.validateStatus:()=>true against a real 404 resolves success=true status=404 -- axiosConfig now reaches axios"
+    },
+    {
+      "id": "hi7-standalone-default-validatestatus-still-rejects-404",
+      "acceptance": "HIGH7",
+      "driver": "standalone-axios-config",
+      "pattern": "minder(route, undefined, {})",
+      "module": "esm",
+      "description": "POSITIVE CONTROL: the SAME real 404 without axiosConfig still resolves success=false status=404 -- default behavior unchanged"
+    },
+    {
+      "id": "sec-standalone-axiosconfig-rejects-origin-transport-override",
+      "acceptance": "HIGH7",
+      "driver": "standalone-axios-config",
+      "pattern": "minder(route, undefined, { axiosConfig })",
+      "module": "esm",
+      "description": "SECURITY NEGATIVE CONTROL: axiosConfig.baseURL/proxy are refused with UNSAFE_REQUEST_OPTION_OVERRIDE before dispatch -- zero requests reach the real server, proving the allowlist reuse did not reopen the credential-exfiltration channel"
+    },
+    {
+      "id": "hi8-websocketclient-direct-connect-dead-port-discarded-no-crash",
+      "acceptance": "HIGH8",
+      "driver": "realtime-safety",
+      "pattern": "new WebSocketClient(config).connect()",
+      "module": "cjs",
+      "description": "a discarded WebSocketClient.connect() promise (standalone /websocket subpath, no hook) against a real dead port must not crash the Node host via an unhandled rejection"
+    },
+    {
+      "id": "hi8-websocketclient-direct-connect-dead-port-caught-still-rejects",
+      "acceptance": "HIGH8",
+      "driver": "realtime-safety",
+      "pattern": "new WebSocketClient(config).connect()",
+      "module": "cjs",
+      "description": "a caller that DOES attach .catch() to WebSocketClient.connect() still observes the real dead-port rejection -- the internal safety net does not mask genuine failures"
+    },
+    {
+      "id": "blocker4-expo-securestore-real-constraint-rejects-colon-key",
+      "acceptance": "BLOCKER4",
+      "driver": "expo-storage-persistence",
+      "pattern": "ExpoStorageAdapter (SecureStore key validation)",
+      "module": "cjs",
+      "description": "ROOT CAUSE: the real expo-secure-store key-validation contract (/^[\\w.-]+$/, verified against the published package's own source) genuinely rejects the OLD default-namespace ':'-joined key shape"
+    },
+    {
+      "id": "blocker4-expo-storage-default-namespace-cross-instance-persistence",
+      "acceptance": "BLOCKER4",
+      "driver": "expo-storage-persistence",
+      "pattern": "new ExpoStorageAdapter().setItem()/getItem()",
+      "module": "cjs",
+      "description": "a token set via setItem() on one ExpoStorageAdapter instance (DEFAULT namespace, no caller opt-in) is readable from a SEPARATE instance sharing only the durable backing store -- proves cross-instance (app-restart) persistence, not just same-instance in-memory state"
+    },
+    {
+      "id": "blocker4-expo-storage-hostile-namespace-and-key-sanitized",
+      "acceptance": "BLOCKER4",
+      "driver": "expo-storage-persistence",
+      "pattern": "new ExpoStorageAdapter({ namespace }).setItem()/getItem()",
+      "module": "cjs",
+      "description": "POSITIVE CONTROL: a caller-supplied namespace/key containing OTHER SecureStore-unsafe characters (space, '@', '/') is sanitized too, not just the default ':' separator, and still round-trips correctly across a separate instance"
     }
   ]
 }

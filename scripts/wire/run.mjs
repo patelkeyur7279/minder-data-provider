@@ -187,6 +187,29 @@ const repoRoot = join(__dirname, '..', '..');
 // receives the header normally (redirect-following itself isn't broken),
 // the evil host receives the followed request, but never the header.
 //
+// fix-a-crud-silent-success (BLOCKER 1 + BLOCKER 2 + BLOCKER 3 + HIGH 5):
+// raised from 215 to 224 — 9 new real cases (tests/wire/crud-silent-
+// success.mjs). Three close BLOCKER 1: `useOneTouchCrud('items').operations
+// .create()/update()/delete()` previously dispatched with NO method
+// override, falling back to the registered route's OWN declared method
+// (GET) instead of POST/PUT/DELETE — each case proves the real verb now
+// reaches the server and the resolved value comes from that verb's own
+// handler, not the GET handler's stale response. Two close BLOCKER 2:
+// `operations.fetch()` against a real 500 now REJECTS instead of silently
+// resolving `[]` (failure path), and a positive control proves a genuine
+// 200 still resolves the real array (not over-tightened). Two close
+// BLOCKER 3: `useMediaUpload('thing').uploadFile()` against a hand-built,
+// string-shorthand route config (bypassing configureMinder()'s route
+// expansion — the documented `<MinderDataProvider config={...}>` hand-built
+// shape) now sends a real POST with a real multipart body instead of a
+// bodyless GET, both on a real server (happy path) and a real dead port
+// (failure path, proving the fix didn't trade broken-success for a crash).
+// Two close HIGH 5: a POST against a connection that accepts the body then
+// drops mid-flight now reaches the server EXACTLY ONCE (previously silently
+// retried, duplicating the write) while a positive control proves an
+// idempotent GET against the identical server still retries as before — the
+// fix is method-specific, not a blanket retry regression.
+//
 // test-wire-two-path-parity-suite (durable regression guard, not a bug fix):
 // raised from 178 to 215 -- 37 new real cases (tests/wire/two-path-
 // parity.mjs), seeding the full standalone-vs-provider divergence audit
@@ -207,7 +230,44 @@ const repoRoot = join(__dirname, '..', '..');
 // remaining 21 cases assert genuine byte-for-byte parity today, acting as a
 // regression guard for every previously-closed defect this driver could
 // express as a two-path wire comparison.
-const MIN_WIRE_CASES = 215;
+//
+// fix-b-transport-storage-websocket (HIGH 6 + HIGH 7 + BLOCKER 4 + HIGH 8):
+// raised from 224 to 232 — 8 new real cases. Three (tests/wire/standalone-
+// axios-config.mjs) close HIGH 7: standalone `minder()` now reads
+// `options.axiosConfig` at all — `validateStatus:()=>true` against a real
+// 404 now resolves `success:true status:404` (previously always
+// `success:false`, axiosConfig had zero effect), a positive control proves
+// the DEFAULT (no axiosConfig) call against the SAME 404 is unchanged, and a
+// security negative control proves `axiosConfig.baseURL`/`proxy` are still
+// refused with `UNSAFE_REQUEST_OPTION_OVERRIDE` BEFORE dispatch (zero
+// requests reach the real server) — routing `axiosConfig` through the same
+// allowlist choke point the provider path uses did not reopen the
+// credential-exfiltration channel that choke point exists to close. HIGH 6
+// (`axiosConfig.signal`/`abort()`) is proven by HARDENING the pre-existing
+// `p-ab1-abort-cancellation-timing` case in tests/wire/two-path-parity.mjs
+// from an always-pass "known divergence" record into a real assertion that
+// both paths now settle promptly on abort (its ALLOWLIST entry removed) —
+// not a new case, so it does not add to this count. Two (tests/wire/
+// realtime-safety.mjs) close HIGH 8: `WebSocketClient.connect()` (the
+// standalone class exported from the `/websocket` subpath, the last known
+// site of the unhandled-rejection class already fixed for WebSocketManager/
+// SseTransport/LazySseTransport/GlobalAuthManager.setToken/the GET
+// auto-fetch path) no longer crashes a Node host on a discarded promise
+// against a real dead port, and a caller that DOES attach `.catch()` still
+// observes the real rejection. Three (tests/wire/expo-storage-
+// persistence.mjs) close BLOCKER 4: `ExpoStorageAdapter`'s DEFAULT namespace
+// previously produced a `:`-containing key REJECTED by the real
+// expo-secure-store key-validation contract (`/^[\w.-]+$/`, verified against
+// the published package's own source) on every write, silently, because
+// every write already caught-and-logged the resulting error — a token
+// "successfully" set via one instance was invisible to a SEPARATE instance
+// with the same tokenKey (i.e. the next app launch). One case proves the
+// real constraint rejects the OLD key shape directly (root-cause evidence);
+// one proves the FIX's DEFAULT options now persist across two separate
+// adapter instances sharing only the durable backing store; one proves a
+// caller-supplied namespace/key with OTHER unsafe characters (space, `@`,
+// `/`) is sanitized too, not just the default `:` separator.
+const MIN_WIRE_CASES = 232;
 
 const DRIVER_FILES = {
   'method-contract': join(repoRoot, 'tests/wire/method-contract.mjs'),
@@ -228,7 +288,15 @@ const DRIVER_FILES = {
   'app-router-plugin-manager': join(repoRoot, 'tests/wire/app-router-plugin-manager.mjs'),
   'standalone-redirect-header-leak': join(repoRoot, 'tests/wire/standalone-redirect-header-leak.mjs'),
   'two-path-parity': join(repoRoot, 'tests/wire/two-path-parity.mjs'),
+  'crud-silent-success': join(repoRoot, 'tests/wire/crud-silent-success.mjs'),
+  'standalone-axios-config': join(repoRoot, 'tests/wire/standalone-axios-config.mjs'),
+  'expo-storage-persistence': join(repoRoot, 'tests/wire/expo-storage-persistence.mjs'),
 };
+
+// Signature of an unguarded property read escaping as the library's error.
+// Deliberately narrow: matches the internal-crash shape only, so a case that
+// legitimately asserts a consumer-thrown TypeError is unaffected.
+const INTERNAL_CRASH_RE = /TypeError: Cannot read properties of (?:undefined|null)/;
 
 function fail(message) {
   console.error(`\n[wire] FAIL: ${message}\n`);
@@ -315,6 +383,24 @@ async function main() {
         fail(`driver '${driverName}' did not return an array of results.`);
       }
       for (const r of results) allResults.push({ ...r, driver: driverName });
+      // A raw internal TypeError must NEVER reach a consumer as this library's
+      // error: it means an unguarded property read replaced the real failure
+      // with a crash message. Enforced here, at the runner, rather than in any
+      // one driver — this exact bug class (an unguarded `error.config` read in
+      // ApiClient's retry interceptor) was patched once at ONE trigger and a
+      // DIFFERENT trigger promptly reached the same read, while every case
+      // stayed green because the parity comparator only diffs wire records and
+      // carries error text as an unasserted note. Applied to EVERY case,
+      // allowlisted ones included: an allowlist covers wire-shape divergence
+      // between the two paths, never an internal crash.
+      for (const r of results) {
+        const text = typeof r.message === 'string' ? r.message : '';
+        if (INTERNAL_CRASH_RE.test(text)) {
+          const hit = allResults.find((x) => x.id === r.id && x.driver === driverName);
+          hit.pass = false;
+          hit.message = `INTERNAL CRASH LEAKED TO CONSUMER — a raw TypeError surfaced instead of a directed error: ${text}`;
+        }
+      }
     }
   } catch (err) {
     hardError = err;

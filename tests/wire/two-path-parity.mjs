@@ -84,7 +84,13 @@ const ALLOWLIST = [
   { id: 'p-r3-retry-under-fetch-transport', probe: 'R3', reason: "minder()'s retry loop wraps both transports (n=3 under transport:'fetch'); the provider's retry logic lives only in the axios response interceptor, so retries silently stop applying once transport:'fetch' is selected (n=1) (MEDIUM, provider-only)." },
   { id: 'p-d1-inflight-deduplication', probe: 'D1', reason: "performance.deduplication is honoured by the provider's ApiClient (n=1 for two concurrent identical GETs) and is a silent no-op for the identical configureMinder() config on the standalone path (n=2) (LOW, standalone-only)." },
   { id: 'p-t1-percall-transport-fetch-fingerprint', probe: 'T1', reason: "transport:'fetch' is a documented per-call MinderOptions field; minder() honours it (dispatches via undici/fetch), useMinder()/ApiClient never forwards it (config.transport is read but the per-call option is not in the forwardable allowlist), so it is silently dropped rather than applied or refused (MEDIUM, provider-only). User-Agent is normally ignored by this comparator; it is the deliberate signal for THIS case only — see the case body." },
-  { id: 'p-ab1-abort-cancellation-timing', probe: 'AB1', reason: "MinderOptions has no 'signal' field and minder() never reads axiosConfig, so an aborted standalone call still runs to full completion; the provider's ApiClient honours AbortSignal and settles promptly (HIGH, standalone-only, cancellation cannot stop in-flight work)." },
+  // p-ab1-abort-cancellation-timing REMOVED (fix-b-transport-storage-websocket,
+  // HIGH 6): minder() now reads `options.axiosConfig` through the same
+  // allowlist choke point the provider path uses (src/core/minder.ts +
+  // src/core/apiClient/requestOptions.ts) — an `axiosConfig.signal` on the
+  // standalone path now aborts in-flight work exactly like the provider
+  // path. The case below now ASSERTS convergence (both settle promptly)
+  // instead of merely documenting the divergence — see its body.
 ];
 const ALLOWLIST_IDS = new Set(ALLOWLIST.map((a) => a.id));
 console.log(`[two-path-parity] allowlist size: ${ALLOWLIST.length} known-divergent case(s) — shrinking this list is the measure of convergence toward one shared dispatch pipeline`);
@@ -924,6 +930,14 @@ export async function run(ctx) {
 
   // =========================================================================
   // ABORT / CANCELLATION (AB1) — a timing/outcome case, not a byte-diff case.
+  //
+  // fix-b-transport-storage-websocket (HIGH 6): PREVIOUSLY documented (via
+  // ALLOWLIST) as a known divergence — minder() ignored `axiosConfig.signal`
+  // entirely and always ran to full completion. Now that minder() forwards
+  // `axiosConfig.signal` through the same allowlist choke point the provider
+  // path uses, this asserts CONVERGENCE: both paths must settle promptly
+  // (well before the server's 400ms delay) once aborted at 40ms, not merely
+  // "eventually, however long the server takes".
   // =========================================================================
   {
     main.clear();
@@ -933,10 +947,9 @@ export async function run(ctx) {
     setTimeout(() => ac1.abort(), 40);
     const t0 = Date.now();
     // Deliberately using the route with NO configured timeout — a route-level
-    // timeout would itself cut the standalone call short and mask the AB1
-    // finding (standalone ignores `signal` entirely and only a route timeout
-    // would ever stop it).
-    const s0 = await safeCall(() => mdp.minder('slowNoTimeout', undefined, { signal: ac1.signal, axiosConfig: { signal: ac1.signal } }));
+    // timeout would itself cut the standalone call short and mask whether
+    // `axiosConfig.signal` (not the route timeout) is what actually stopped it.
+    const s0 = await safeCall(() => mdp.minder('slowNoTimeout', undefined, { axiosConfig: { signal: ac1.signal } }));
     const sElapsed = Date.now() - t0;
 
     const ac2 = new AbortController();
@@ -946,11 +959,19 @@ export async function run(ctx) {
     const pElapsed = Date.now() - t1;
     mode = { kind: 'ok' };
 
-    const entry = ALLOWLIST.find((a) => a.id === 'p-ab1-abort-cancellation-timing');
+    // "Settled promptly" = well under the 400ms server delay, with generous
+    // headroom above the 40ms abort point for CI scheduling jitter.
+    const SETTLE_CEILING_MS = 250;
+    const standaloneAborted = s0.ok === true && s0.value?.success === false && sElapsed < SETTLE_CEILING_MS;
+    const providerAborted = p0.ok === false && pElapsed < SETTLE_CEILING_MS;
+    const pass = standaloneAborted && providerAborted;
+
     results.push({
       id: 'p-ab1-abort-cancellation-timing',
-      pass: true,
-      message: `[ALLOWLISTED probe ${entry.probe}: ${entry.reason}] standalone settled in ${sElapsed}ms (server delay=400ms, abort at 40ms) success=${s0.ok && s0.value?.success} | provider settled in ${pElapsed}ms threw=${!p0.ok}`,
+      pass,
+      message: pass
+        ? `PARITY HOLDS (probe AB1, convergence): standalone axiosConfig.signal abort settled in ${sElapsed}ms with success=false (server delay=400ms, abort at 40ms) | provider signal abort settled in ${pElapsed}ms (threw=${!p0.ok}) — standalone no longer runs to full completion`
+        : `AB1 REGRESSION: expected BOTH paths to abort promptly (<${SETTLE_CEILING_MS}ms) after axiosConfig.signal/signal fires at 40ms against a 400ms-delayed response. standalone: elapsed=${sElapsed}ms ok=${s0.ok} success=${s0.ok ? s0.value?.success : '(threw)'} | provider: elapsed=${pElapsed}ms threw=${!p0.ok}`,
     });
   }
 

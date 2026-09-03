@@ -270,6 +270,48 @@ place, `package/dist/bundle-sizes.json` is present.
   included/excluded and how to reproduce the numbers yourself) is now stated directly beside the
   figures in the README instead of left implicit.
 
+### Fixed — second adversarial validation batch (wire-level, against the packed tarball)
+
+A second adversarial pass ran the two dispatch paths against real `node:http` servers,
+asserting the actual method, path, body and headers rather than mocked calls. Every defect
+below reported success while doing nothing — the failure shape this release keeps producing —
+and each fix is backed by a negative control (revert the fix, confirm the new test genuinely
+fails, restore).
+
+- **`create()` never sent a POST.** Request resolution fell back to the base route's `GET`, so
+  a create returned `success: true` having issued zero POSTs. The record was never written.
+- **`fetch()` swallowed 5xx into an empty list.** A `result.data || []` fallback turned a server
+  error into a successful empty result, so callers saw "no rows" instead of an error.
+- **`uploadFile()` sent a bodyless GET** when its route was declared as a plain string shorthand;
+  the upload silently uploaded nothing.
+- **Expo auth tokens never persisted.** The SecureStore key validator (`/^[\w.-]+$/`) rejected the
+  `:`-joined storage prefix, so every write was refused and users were logged out on restart.
+- **A POST could be resubmitted automatically.** Two independent retry layers could both fire;
+  retries are now gated on idempotent methods only (`src/core/apiClient/idempotency.ts`).
+- **`axiosConfig` bypassed the per-call request-option allowlist**, reopening on the standalone
+  path the credential-forwarding hole the allowlist closes (see the Security section above).
+- **`WebSocketClient.connect()` rejected without a handler**, killing the host Node process on an
+  unreachable endpoint.
+- **A raw `TypeError` replaced the real network error.** `ApiClient`'s response-error interceptor
+  read `error.config._retryCount` unguarded, but axios/Node can throw *before* attaching
+  `error.config` (a dead-port failure mid-upload; an HTTP-invalid method token). Consumers saw
+  `TypeError: Cannot read properties of undefined (reading '_retryCount')` instead of the actual
+  failure. This exact bug class had been patched once at a single trigger; a different trigger
+  reached the same unguarded read, so the guard now sits at the *read* and covers the retry
+  bookkeeping, the idempotency gate and the 401-refresh path alike.
+
+The wire runner now fails any case whose error text carries an internal-crash signature
+(`TypeError: Cannot read properties of undefined|null`), for every driver and including
+allowlisted cases — an allowlist covers wire-shape divergence between the two paths, never an
+internal crash. Without it the defect above stayed invisible: the parity comparator comes to a
+verdict on recorded requests only and carried the crash text as an unasserted note, so the suite
+reported 232/232 green both with and without the bug.
+
+`crud`'s bundle budget moved 26.7 → 28.0 KB min+gz. The +1.89 KB is the shared request path
+gaining the allowlist, route-param and request-resolution modules these fixes introduced; the
+eager chunk graph is unchanged (17 chunks before and after), so nothing became eagerly loaded
+that was previously lazy. Headroom is ~3%, in line with neighbouring entries.
+
 ### Known open defect — NOT fixed in this pass
 
 - **Offline auto-queue does not fire on a genuine network failure.** With `offline: { enabled:

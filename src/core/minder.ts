@@ -59,6 +59,10 @@ import {
 } from './minder/utils.js';
 import { normalizeHttpMethod, substituteUrlParams } from './apiClient/resolveRequest.js';
 import { sensitiveHeaderNames } from './apiClient/sensitiveHeaders.js';
+import {
+  assertNoOriginOrTransportOptions,
+  pickForwardableRequestOptions,
+} from './apiClient/requestOptions.js';
 import { MinderSecurityError } from '../errors/index.js';
 
 // Re-export types for backward compatibility
@@ -607,6 +611,36 @@ export async function minder<TData = any>(
             )
           : options?.params,
     };
+
+    // fix-b-transport-storage-websocket (HIGH 6 + HIGH 7): `options.axiosConfig`
+    // is documented (minder/types.ts) as the standalone path's escape hatch
+    // for `signal`/`timeout`/`responseType`/`onUploadProgress`/
+    // `onDownloadProgress`/`withCredentials`/`validateStatus`/
+    // `paramsSerializer`/`decompress` — but this function never actually read
+    // it. `abort()` (an `AbortController.abort()` wired to `axiosConfig.signal`)
+    // had ZERO effect: the request ran to completion regardless, because
+    // axios never received a `signal` at all. Same story for
+    // `validateStatus` — axios always fell back to its own default
+    // (2xx-only) success classification. Reuses the EXACT SAME choke point
+    // the provider (`ApiClient`) path already applies to its own per-call
+    // option bag (`apiClient/requestOptions.ts`) rather than a second,
+    // independently-maintained allowlist: `assertNoOriginOrTransportOptions`
+    // throws a directed `MinderSecurityError` if `axiosConfig` tries to smuggle
+    // `url`/`baseURL`/`proxy`/`adapter`/... (the exact origin/transport-hijack
+    // family that module's own doc comment explains), then
+    // `pickForwardableRequestOptions` returns a BRAND NEW object containing
+    // ONLY the vetted keys — nothing else can reach `config` through this
+    // path, so a caller can never use `axiosConfig` to reintroduce the very
+    // credential-exfiltration channels `options.baseURL` is separately
+    // guarded against above. Applied AFTER the hand-built fields above (so an
+    // explicit `axiosConfig.timeout` can override the auto-detected
+    // route/global timeout — the documented "per-call timeout override") but
+    // its TYPE has no `url`/`baseURL`/`method`/`headers`/`params` member at
+    // all, so it can never clobber them regardless of merge order.
+    if (options?.axiosConfig) {
+      assertNoOriginOrTransportOptions(options.axiosConfig);
+      Object.assign(config, pickForwardableRequestOptions(options.axiosConfig));
+    }
 
     // 3. Add authentication token
     const token = options?.token || urlConfig.token;

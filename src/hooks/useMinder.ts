@@ -1110,6 +1110,26 @@ export function useMinder<TData = any>(
       });
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+    // fix-a-crud-silent-success (HIGH 5): `retry: false` here is INDEPENDENT
+    // of (and just as load-bearing as) ApiClient's own axios-interceptor
+    // idempotent-only retry gate (apiClient/idempotency.ts). This mutationFn
+    // THROWS on failure (the `context.apiClient.request(...)` rejection
+    // propagates uncaught) — TanStack Query's OWN `useMutation` retry engine
+    // (a SEPARATE mechanism from the axios interceptor, driven by
+    // `MinderDataProvider`'s QueryClient default `mutations.retry:
+    // config.performance?.retries ?? 1` — see getQueryClientConfig,
+    // MinderDataProvider.tsx) then re-invokes this ENTIRE mutationFn again on
+    // a retryable failure, dispatching a SECOND real POST regardless of what
+    // the axios layer decided. Confirmed on a real server: with the axios
+    // layer's own retry correctly refusing to resubmit POST, the server
+    // STILL received the create() body twice, from this second, independent
+    // retry layer. `create()` always resolves through
+    // `resolveCrudOperationRoute`'s `CRUD_METHOD_BY_ACTION.create` — always
+    // POST, never conditionally idempotent — so refusing retry here
+    // unconditionally is correct. update()/delete() are deliberately left at
+    // the QueryClient default: PUT/DELETE are idempotent, so either retry
+    // layer resubmitting them is safe.
+    retry: false,
   });
 
   const updateMutation = useMutation({
