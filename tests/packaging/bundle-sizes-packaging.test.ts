@@ -42,11 +42,13 @@
  */
 import { execFileSync } from 'node:child_process';
 import {
+  cpSync,
   existsSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -62,6 +64,51 @@ if (!existsSync(distDir)) {
     `tests/packaging expects dist/ to exist (found nothing at ${distDir}). ` +
       'This suite must run AFTER `npm run build`, never standalone.',
   );
+}
+
+// FIX-C (packaging-suite flake): `test:packaging` runs every file in this
+// directory as a SEPARATE, PARALLEL jest worker (see package.json's
+// `test:packaging` script — no `--runInBand`). The test below used to
+// `unlinkSync` the real, shared `dist/bundle-sizes.json`, run a real `npm
+// pack` against the REAL project root, and rely on `prepack` to regenerate
+// it there — mutating the one checked-out `dist/` every other packaging
+// worker also reads. `optional-peer-devtools.test.ts` (a sibling worker)
+// recursively `cpSync`s that entire shared `dist/` tree at module load time;
+// if its directory walk lists `bundle-sizes.json` and then, before it
+// actually copies that file, the destructive test here has already
+// `unlinkSync`'d it, the copy throws ENOENT — reproduced failing 2 of 3
+// parallel runs, clean 3 of 3 under `--runInBand` (confirming it's a
+// same-shared-directory race, not a genuine defect in either test).
+//
+// Fix: give this test its own scratch PROJECT COPY instead of mutating the
+// shared `dist/` at all. `npm pack`'s `prepack` hook only needs
+// `package.json`, `dist/`, and `scripts/` (what `generate:bundle-sizes`
+// actually reads/writes) to run for real; `bin/`, `src/cli`, `README.md`,
+// `LICENSE`, and `llms.txt` are copied too only so the packed tarball's
+// shape matches a real `npm pack` (they're `files`-glob entries `npm pack`
+// would otherwise just skip, not a hard requirement for `prepack` itself).
+// `node_modules` is SYMLINKED, not copied — `generate:bundle-sizes` needs
+// `esbuild` resolvable but copying ~400MB of node_modules per test run
+// would be its own new cost, not a fix. This is now a REAL `npm pack`
+// (lifecycle scripts run, unlike `--dry-run`) — it just runs against an
+// isolated copy of the shipped surface instead of the live, shared one, so
+// no other worker ever observes the mid-test absence of the file.
+function stagePackableProject(): string {
+  const work = mkdtempSync(join(tmpdir(), 'mdp-pack-project-'));
+  cpSync(resolve(root, 'package.json'), join(work, 'package.json'));
+  cpSync(distDir, join(work, 'dist'), { recursive: true });
+  cpSync(resolve(root, 'scripts'), join(work, 'scripts'), { recursive: true });
+  for (const optional of ['bin', 'src/cli', 'README.md', 'LICENSE', 'llms.txt']) {
+    const src = resolve(root, optional);
+    if (existsSync(src)) {
+      cpSync(src, join(work, optional), { recursive: true });
+    }
+  }
+  // 'dir' is the correct symlink type for a directory target; Node only
+  // consults this argument on Windows and ignores it on POSIX (Linux/macOS,
+  // what this repo's CI and local dev both run).
+  symlinkSync(resolve(root, 'node_modules'), join(work, 'node_modules'), 'dir');
+  return work;
 }
 
 // Regenerates dist/bundle-sizes.json directly (mirrors the `generate:bundle-sizes`
@@ -90,13 +137,19 @@ describe('H4: dist/bundle-sizes.json ships inside the packed tarball', () => {
   });
 
   test('a REAL `npm pack` (no --dry-run) regenerates and ships dist/bundle-sizes.json even when it was missing beforehand — the exact regression scenario', () => {
+    // Isolated project copy (see stagePackableProject's doc comment above) —
+    // this test mutates a scratch `dist/bundle-sizes.json`, never the real,
+    // shared one every other parallel packaging-suite worker also reads.
+    const stagedRoot = stagePackableProject();
+    const stagedBundleSizesPath = resolve(stagedRoot, 'dist', 'bundle-sizes.json');
+
     // Reproduce the regression precondition: the artifact absent on disk before
     // packing (e.g. a fresh checkout that ran `npm run build` but never manually
     // ran `generate:bundle-sizes`).
-    if (existsSync(bundleSizesPath)) {
-      unlinkSync(bundleSizesPath);
+    if (existsSync(stagedBundleSizesPath)) {
+      unlinkSync(stagedBundleSizesPath);
     }
-    expect(existsSync(bundleSizesPath)).toBe(false);
+    expect(existsSync(stagedBundleSizesPath)).toBe(false);
 
     const packDestination = mkdtempSync(join(tmpdir(), 'mdp-pack-test-'));
     try {
@@ -105,12 +158,12 @@ describe('H4: dist/bundle-sizes.json ships inside the packed tarball', () => {
       // not "packing produces the file". That gap is exactly how this regressed
       // once already, so it must not be the thing this test relies on.
       execFileSync('npm', ['pack', '--pack-destination', packDestination], {
-        cwd: root,
+        cwd: stagedRoot,
         encoding: 'utf8',
       });
 
       // `prepack` must have regenerated the file as a side effect of packing.
-      expect(existsSync(bundleSizesPath)).toBe(true);
+      expect(existsSync(stagedBundleSizesPath)).toBe(true);
 
       const tarballName = readdirSync(packDestination).find((f) => f.endsWith('.tgz'));
       expect(tarballName).toBeDefined();
@@ -121,7 +174,11 @@ describe('H4: dist/bundle-sizes.json ships inside the packed tarball', () => {
       expect(tarList.split('\n')).toContain('package/dist/bundle-sizes.json');
     } finally {
       rmSync(packDestination, { recursive: true, force: true });
-      ensureBundleSizesExists();
+      // node_modules is a symlink into the real, shared install — rmSync
+      // without `recursive` following into it would delete the real thing.
+      // `force: true` alone is safe here: Node's recursive rm removes the
+      // symlink entry itself, never dereferences it into the target directory.
+      rmSync(stagedRoot, { recursive: true, force: true });
     }
   });
 

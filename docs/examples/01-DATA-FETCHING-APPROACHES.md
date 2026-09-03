@@ -124,16 +124,20 @@ export default function UsersPage({ users }) {
 // scripts/fetch-users.ts
 import { minder, configureMinder } from "minder-data-provider";
 
-// Configure base URL
+// Configure the API's base URL. `apiUrl` is the current, required field
+// (previously shown here as `baseURL` — still accepted as a deprecated,
+// one-time-warned alias, but `apiUrl` is what to write in new code; see
+// docs/MIGRATION_GUIDE.md). There is no top-level `headers` field — a static
+// Authorization header is not something `configureMinder` accepts; pass a
+// per-call `token` to `minder()` instead (below).
 configureMinder({
-  baseURL: "https://api.example.com",
-  headers: {
-    Authorization: `Bearer ${process.env.API_KEY}`,
-  },
+  apiUrl: "https://api.example.com",
 });
 
 async function fetchAllUsers() {
-  const { data, error, success } = await minder("users");
+  const { data, error, success } = await minder("users", undefined, {
+    token: process.env.API_KEY,
+  });
 
   if (!success) {
     console.error("Failed:", error.message);

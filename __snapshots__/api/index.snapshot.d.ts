@@ -411,7 +411,7 @@ export { _ as minder } from './minder-HASH.js';
 export { _ as MinderAuthError, _ as MinderAuthorizationError, _ as MinderConfigError, _ as MinderConflictError, _ as MinderError, _ as MinderNetworkError, _ as MinderOfflineError, _ as MinderPlatformError, _ as MinderPluginError, _ as MinderSecurityError, _ as MinderStorageError, _ as MinderTimeoutError, _ as MinderUploadError, _ as MinderValidationError, _ as MinderWebSocketError, _ as getErrorCode, _ as getErrorMessage, _ as isMinderError } from './MinderError-HASH.js';
 export { _ as MinderRequestError, _ as UploadProgress } from './types-HASH.js';
 export { MinderResponseValidationError } from './core.js';
-export { OfflineManager, __resetNextjsDynamicWarning, configureMinder, createConfigFromPreset, getOfflineManager, getPresetInfo } from './config/index.js';
+export { OfflineManager, __resetBaseUrlAliasWarning, __resetNextjsDynamicWarning, configureMinder, createConfigFromPreset, getOfflineManager, getPresetInfo } from './config/index.js';
 export { _ as PROVIDER_CATEGORIES, _ as PROVIDER_FRAMEWORKS, _ as PROVIDER_RUNTIMES, _ as ProviderCapability, _ as ProviderCategory, _ as ProviderConfigSplit, _ as ProviderDocs, _ as ProviderFramework, _ as ProviderManifest, _ as ProviderRuntime, _ as ProviderScope, _ as ValidationResult, _ as defineProviderManifest, _ as providerManifestSchema, _ as validateProviderManifest } from './manifest-HASH.js';
 export { SSROptions, createSSRConfig, getDehydratedState, prefetchData, withCSR, withSSR } from './ssr/index.js';
 export { _ as useAuthToken, _ as useCache, _ as useCurrentUser, _ as useMediaUpload, _ as useOneTouchCrud, _ as useUIState, _ as useWebSocket } from './index-HASH.js';

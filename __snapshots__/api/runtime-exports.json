@@ -86,6 +86,7 @@
     "UploadState",
     "WebSocketClient",
     "WebSocketState",
+    "__resetBaseUrlAliasWarning",
     "__resetNextjsDynamicWarning",
     "assertNoExposedSecrets",
     "clearAllUploadProgress",
@@ -627,6 +628,7 @@
   ],
   "config": [
     "OfflineManager",
+    "__resetBaseUrlAliasWarning",
     "__resetNextjsDynamicWarning",
     "configureMinder",
     "createConfigFromPreset",

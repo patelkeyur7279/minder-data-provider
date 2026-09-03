@@ -397,7 +397,15 @@ now.
   If your app imported `configureMinder` from one of these three subpaths and
   depended on the old function's specific (non-)behavior — it registered no
   routes and only handled `baseURL`/`headers` — the routes you declare are now
-  actually registered.
+  actually registered. **Not breaking for the `baseURL` key itself:** the real
+  implementation requires `apiUrl`, but now accepts `configureMinder({
+  baseURL })` as a deprecated, one-time-warned alias for `apiUrl` (also true
+  for the always-real `/config` and `/electron` entries) — this repoint was
+  caught by CI failing on our own `examples/electron` app, which still called
+  `configureMinder({ baseURL })` and would otherwise have hard-broken on
+  `apiUrl` being required, and real consumers on the old shape are exactly as
+  likely to be affected. Migrate to `apiUrl`; `baseURL` will be removed in
+  v3.0. See docs/MIGRATION_GUIDE.md.
 
 **Fixed, non-breaking:**
 

@@ -47,6 +47,11 @@ export interface ValidateConfigResult {
 export const KNOWN_TOP_LEVEL_KEYS = [
   'apiUrl',
   'apiBaseUrl',
+  // Deprecated alias for `apiUrl`, accepted by `configureMinder` (backward
+  // compatibility for the M3 platform-subpath repoint) — see
+  // config/index.ts's UnifiedMinderConfig.baseURL and CHANGELOG.md. Listed
+  // here so it does not trip the "unknown configuration key" warning below.
+  'baseURL',
   'routes',
   'dynamic',
   'plugins',

@@ -40,11 +40,21 @@ jobs:
       - name: Run type check
         run: npm run type-check
 
-      - name: Run tests
-        run: npm test -- --coverage
-      
+      # Build MUST precede "Run tests": the main jest suite includes tests
+      # that shell out to a real `npm pack` (tests/cli-minder.test.ts, "npm
+      # pack --dry-run ships the CLI"), which triggers the `prepack` ->
+      # `generate:bundle-sizes` lifecycle hook. That hook hard-fails BY
+      # DESIGN when dist/ doesn't exist (see its guard in package.json) —
+      # that guard must stay. On a clean CI checkout there is no warm dist/
+      # from a prior local run, so "tests before build" was silently correct
+      # on a dev machine and reliably red here. This is a repeat of a bug
+      # already fixed once for the wire/packaging suites but missed for this
+      # job — do not reorder this back without re-reading this comment.
       - name: Build
         run: npm run build
+
+      - name: Run tests
+        run: npm test -- --coverage
 
       - name: Run packaging tests (dist-artifact invariants)
         run: npm run test:packaging
@@ -119,6 +129,14 @@ jobs:
 
       - name: Swap in React 18
         run: npm install --no-save react@18 react-dom@18
+
+      # Same dist/-must-exist requirement as the main `test` job (see its
+      # "Build" step comment): this suite also runs tests/cli-minder.test.ts's
+      # real `npm pack`, which prepack -> generate:bundle-sizes refuses to run
+      # without a built dist/. This job never built at all before, so it hit
+      # the identical failure independently of the `test` job's ordering bug.
+      - name: Build
+        run: npm run build
 
       - name: Run full test suite under React 18
         run: npx jest

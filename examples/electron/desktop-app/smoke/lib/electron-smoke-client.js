@@ -37,13 +37,13 @@ function formatMarker(users) {
 }
 
 /**
- * Configures the electron-entry minder client against `baseURL` and fetches
+ * Configures the electron-entry minder client against `apiUrl` and fetches
  * GET /users, returning the formatted marker string on success. Throws on
  * any failure (network error, non-2xx, empty payload) — callers are
  * responsible for turning that into a nonzero exit + stderr message.
  */
-async function fetchUsersMarker(baseURL) {
-  configureMinder({ baseURL });
+async function fetchUsersMarker(apiUrl) {
+  configureMinder({ apiUrl });
   // minder()'s signature is (route, data, options) — GET has no body, so
   // `data` is explicitly `undefined` and `method` goes in the options
   // (3rd) argument. Passing `{ method: "GET" }` as the 2nd (data) argument

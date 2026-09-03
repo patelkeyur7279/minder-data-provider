@@ -313,10 +313,11 @@ npm run mock-server
 
 ```typescript
 configureMinder({
-  baseURL: "https://your-api.com",
-  headers: {
-    "Content-Type": "application/json",
-  },
+  apiUrl: "https://your-api.com",
+  // Content-Type/Accept are already the default request headers — no
+  // top-level `headers` field to set here (`configureMinder` doesn't have
+  // one; a static header goes on the route definition or a per-call
+  // `minder()` option instead).
 });
 ```
 

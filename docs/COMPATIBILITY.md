@@ -104,9 +104,12 @@ import { useMinder } from 'minder-data-provider';
 ```
 
 > **Note (server config):** the current unified `configureMinder({ apiUrl, routes, … })` is
-> available React-free from **`minder-data-provider/config`** (measured: pulls no React, no
-> deprecation warning). `/node` also exports a `configureMinder`, but that is the older
-> `{ baseURL }` configurator — for a pure-Node/server app, prefer `/config`.
+> available React-free from **`minder-data-provider/config`**. `/node` also exports
+> `configureMinder` — as of the M3 fix (see CHANGELOG.md / MIGRATION_GUIDE.md), it is the
+> **same real, `apiUrl`-based implementation** as `/config`, not the older `{ baseURL }`-only
+> function it used to silently fall back to. Either import works for configuring; `/config`
+> is still measured as pulling no React and emitting no deprecation warning, so prefer it when
+> you only need `configureMinder` and not the rest of `/node`'s server-side surface.
 
 (Re-run the numbers any time with `node benchmarks/overhead.mjs`-style bundling; the guidance is
 "data/server/edge → a subpath entry; React UI → root".)

@@ -42,6 +42,7 @@ needed" tells you whether your code has to change.
 | 14 | `@tanstack/react-query-devtools` is never auto-imported by any main entry; mounting it is now an explicit opt-in via `minder-data-provider/devtools-rq` | Only if you relied on devtools auto-mounting — import `ReactQueryDevtools` from the new entry and mount it yourself | [DevTools moved to an opt-in entry](#5b-devtools-moved-to-an-opt-in-entry) |
 | 15 | Standalone `minder()`'s per-call `baseURL` is now refused (resolves `{ success: false, error: { code: 'UNSAFE_REQUEST_OPTION_OVERRIDE' } }` — it does **not** throw by default) when combined with a registered route's own declared headers or an ambient bearer token | Only if you passed a per-call `baseURL` alongside a registered route/token that carries a credential — reconfigure the destination via `configureMinder()` instead, or supply your own `options.token`/`options.headers` explicitly. Check `result.success`/`result.error.code`, not a `try/catch`, unless you also pass `options.throwOnError: true` | [minder()'s per-call baseURL now refuses to redirect credentials](#minders-per-call-baseurl-now-refuses-to-redirect-credentials) |
 | 16 | Standalone `minder()`'s `options.params` values substituted into a registered route's `:param` URL segment are now validated (resolves `{ success: false, error: { code: 'UNSAFE_ROUTE_PARAM_VALUE' } }` — it does **not** throw by default) — `null`/`undefined`, non-string/number/bigint values, non-finite numbers, an empty/whitespace-only string, or a value containing `..`, `/`, `\`, `?`, `#`, or a control character (raw or percent-encoded) is refused before dispatch instead of being spliced into the URL unencoded | Only if you passed an unvalidated, externally-sourced value (e.g. straight from a URL/query string) as a route param without checking it first — validate/whitelist the value yourself before calling `minder()`, or catch `result.error.code === 'UNSAFE_ROUTE_PARAM_VALUE'`. Legitimate ids (numbers, leading-zero strings, UUIDs, nested-route ids) are unaffected | [minder()'s route params are now validated before URL substitution](#minders-route-params-are-now-validated-before-url-substitution) |
+| 17 | `configureMinder` imported from `/web`, `/native`, `/node`, or `/electron` now resolves to the real, routes-aware, `apiUrl`-based implementation, not the `@deprecated` `{ baseURL }`-only function it silently fell back to before | Only if you relied on the old function's specific behavior (no routes registered) — your routes are now actually registered. If you called `configureMinder({ baseURL })`, it keeps working unchanged: `baseURL` is accepted as a deprecated, one-time-warned alias for `apiUrl` — but migrate to `apiUrl` since `baseURL` is removed in v3.0 | [configureMinder on /web, /native, /node, /electron now resolves to the real implementation](#configureminder-on-web-native-node-electron-now-resolves-to-the-real-implementation) |
 
 None of this requires a code change if you weren't using the specific behavior
 listed — but items 4–8 are silent-until-runtime (no type error, no test failure
@@ -396,6 +397,49 @@ any other refused request. `operations.update`/`operations.delete` (the
 before this release — this brings the standalone `minder()` path to parity,
 it does not introduce a NEW restriction beyond what CRUD operations already
 enforced.
+
+### `configureMinder` on `/web`, `/native`, `/node`, `/electron` now resolves to the real implementation
+
+**What changed.** `configureMinder` imported from the `minder-data-provider/web`,
+`/native`, `/node`, or `/electron` subpaths used to silently resolve to the
+`@deprecated` implementation in `src/core/minder.ts` — a minimal `{ baseURL,
+headers }` bag that registered no routes at all (its own deprecation warning
+told you to import the very thing you already imported). These subpaths now
+export the real, unified implementation — the same one `minder-data-provider`
+(root) and `minder-data-provider/config` already exported — which is
+routes-aware and requires `apiUrl` instead of `baseURL`.
+
+```typescript
+// Before (2.1.4, any of /web /native /node /electron): registered NO routes.
+import { configureMinder } from "minder-data-provider/node";
+configureMinder({ baseURL: "https://api.example.com" }); // routes silently ignored
+
+// Now: the real implementation — routes actually register, apiUrl required.
+import { configureMinder } from "minder-data-provider/node";
+configureMinder({
+  apiUrl: "https://api.example.com",
+  routes: { users: "/users" }, // now actually registered
+});
+```
+
+**Migration.** If you never declared `routes` and only used `baseURL`, no
+behavior change beyond what's below — your calls keep working. If you *did*
+declare `routes` on one of these subpaths expecting them to be ignored (the
+old behavior), they are now live; check `src/core/types.ts`'s `ApiRoute`
+shape if any route definition needs adjusting.
+
+**The `baseURL` key itself is not a hard break.** The real implementation
+still requires an effective `apiUrl`, but as of this release it also accepts
+`baseURL` as a deprecated, one-time-warned alias — `configureMinder({
+baseURL: "..." })` keeps working exactly as before, with a single console
+warning per process pointing you at `apiUrl`. `apiUrl` always wins when both
+are given. This alias exists because CI caught our own
+`examples/electron/desktop-app` still calling `configureMinder({ baseURL })`
+against the repointed `/electron`/`/node` entries — real consumers upgrading
+from 2.1.4 are exactly as likely to still be on that shape, and a config that
+silently produced a broken client would have been strictly worse than either
+a loud throw or a working alias. `baseURL` is removed entirely in v3.0 —
+migrate to `apiUrl` now rather than later.
 
 ## v2.x → v3.0 — Redux integration removed (BREAKING)
 

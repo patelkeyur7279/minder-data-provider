@@ -4,6 +4,7 @@
 // #region Interfaces
 export interface UnifiedMinderConfig {
     apiUrl: string;
+    baseURL?: string;
     routes?: Record<string, string | ApiRoute>;
     providers?: Record<string, unknown>;
     dynamic?: any;
@@ -140,6 +141,7 @@ export declare class OfflineManager {
 // #endregion
 
 // #region Functions
+export declare function __resetBaseUrlAliasWarning(): void;
 export declare function __resetNextjsDynamicWarning(): void;
 export declare function configureMinder(_: UnifiedMinderConfig): MinderConfig;
 export declare function createConfigFromPreset(_: ConfigPreset, _?: Partial<MinderConfig>): Partial<MinderConfig>;

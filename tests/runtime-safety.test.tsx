@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { useMinder, MinderDataProvider } from '../src/index';
-import { configureMinder } from '../src/config/index';
+import { configureMinder, __resetBaseUrlAliasWarning } from '../src/config/index';
 
 // Mock console.error to avoid polluting test output
 const originalError = console.error;
@@ -63,5 +63,50 @@ describe('Runtime Safety Checks', () => {
     it('should throw error for invalid configuration', () => {
         // @ts-ignore - Testing runtime JS usage
         expect(() => configureMinder({})).toThrow(/Missing required "apiUrl"/);
+    });
+
+    describe('configureMinder({ baseURL }) backward-compat alias', () => {
+        let warnSpy: jest.SpiedFunction<typeof console.warn>;
+
+        beforeEach(() => {
+            __resetBaseUrlAliasWarning();
+            warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+        });
+
+        afterEach(() => {
+            warnSpy.mockRestore();
+        });
+
+        it('accepts baseURL as an alias for apiUrl instead of throwing', () => {
+            // @ts-ignore - baseURL is the deprecated alias, not the primary typed field
+            const config = configureMinder({ baseURL: 'http://api.test' });
+            expect(config.apiBaseUrl).toBe('http://api.test');
+        });
+
+        it('warns exactly once per process about the deprecated baseURL alias', () => {
+            // @ts-ignore
+            configureMinder({ baseURL: 'http://api.test' });
+            // @ts-ignore
+            configureMinder({ baseURL: 'http://api.test' });
+
+            const deprecationWarnings = warnSpy.mock.calls.filter(([msg]) =>
+                typeof msg === 'string' && msg.includes('configureMinder({ baseURL })')
+            );
+            expect(deprecationWarnings).toHaveLength(1);
+        });
+
+        it('prefers an explicit apiUrl over baseURL when both are given', () => {
+            const config = configureMinder({
+                // @ts-ignore
+                baseURL: 'http://ignored.test',
+                apiUrl: 'http://api.test',
+            });
+            expect(config.apiBaseUrl).toBe('http://api.test');
+            expect(warnSpy).not.toHaveBeenCalled();
+        });
+
+        it('still throws loudly when neither apiUrl nor baseURL is given', () => {
+            expect(() => configureMinder({} as any)).toThrow(/Missing required "apiUrl"/);
+        });
     });
 });

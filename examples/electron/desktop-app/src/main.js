@@ -10,9 +10,11 @@ let mainWindow;
 
 // Initialize Minder for main process
 function initializeMinder() {
-  // The /node configureMinder is the minimal { baseURL, timeout, headers } bag.
+  // The /node configureMinder is the same unified, apiUrl-based
+  // implementation as `minder-data-provider/config` (see CHANGELOG.md's M3
+  // entry) — it is no longer the older `{ baseURL }`-only bag.
   configureMinder({
-    baseURL: "http://localhost:3001",
+    apiUrl: "http://localhost:3001",
   });
 
   console.log("✅ Minder initialized for main process");

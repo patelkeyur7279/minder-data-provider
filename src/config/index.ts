@@ -62,6 +62,19 @@ export interface UnifiedMinderConfig {
   /** Your API base URL - required */
   apiUrl: string;
 
+  /**
+   * @deprecated Alias for `apiUrl`, accepted for backward compatibility only.
+   * Before the M3 fix (see CHANGELOG.md), `configureMinder` imported from the
+   * `/web`, `/native`, `/node`, and `/electron` subpaths silently resolved to
+   * the deprecated core implementation, which only understood `{ baseURL }`
+   * (no `apiUrl`, no routes). Consumers who wrote `configureMinder({ baseURL
+   * })` against that old behavior would otherwise hard-break on upgrade with
+   * no working alternative to reach for. Ignored whenever `apiUrl` is also
+   * given; emits a one-time deprecation warning. Will be removed in v3.0 —
+   * migrate to `apiUrl`.
+   */
+  baseURL?: string;
+
   /** API routes - auto-generates CRUD operations */
   routes?: Record<string, string | ApiRoute>;
 
@@ -229,6 +242,35 @@ export function configureMinder(config: UnifiedMinderConfig): MinderConfig {
   // Auto-detect platform and environment
   const platform = PlatformDetector.detect();
   const isDevelopment = process.env.NODE_ENV === 'development';
+
+  // Backward-compat alias (M3 follow-up): `configureMinder` imported from the
+  // `/web`, `/native`, `/node`, and `/electron` subpaths used to silently
+  // resolve to the `@deprecated` core implementation, which only understood
+  // `{ baseURL }` (see CHANGELOG.md's M3 entry). That commit repointed those
+  // subpaths to THIS real, `apiUrl`-based implementation, so any consumer who
+  // upgraded and still called `configureMinder({ baseURL })` would hard-break
+  // on the very next line below (`Missing required "apiUrl"`) with no working
+  // alternative to reach for — our own electron example was one of them.
+  // Accept `baseURL` as a one-time-warned alias for `apiUrl` instead of
+  // forcing every such caller through a breaking change: `apiUrl` always wins
+  // when both are given, and the warning fires exactly once per process (same
+  // pattern as `nextjsDynamicWarningShown` below) so it doesn't spam a
+  // long-running server on every `configureMinder()` re-call.
+  if (!config.apiUrl && config.baseURL) {
+    config = { ...config, apiUrl: config.baseURL };
+    if (!baseUrlAliasWarningShown && typeof console !== 'undefined' && console.warn) {
+      baseUrlAliasWarningShown = true;
+      console.warn(
+        '[Minder] DEPRECATION WARNING: configureMinder({ baseURL }) is deprecated.\n' +
+          'Use configureMinder({ apiUrl }) instead — `baseURL` will be removed in v3.0.\n\n' +
+          'Change:\n' +
+          '  configureMinder({ baseURL: "..." })\n' +
+          'To:\n' +
+          '  configureMinder({ apiUrl: "..." })\n\n' +
+          'See CHANGELOG.md and docs/MIGRATION_GUIDE.md for details.'
+      );
+    }
+  }
 
   // Next.js auto-detection and validation
   if (platform === Platform.NEXT_JS) {
@@ -883,6 +925,23 @@ let nextjsDynamicWarningShown = false;
  */
 export function __resetNextjsDynamicWarning(): void {
   nextjsDynamicWarningShown = false;
+}
+
+/**
+ * Whether the `configureMinder({ baseURL })` backward-compat alias warning
+ * (see the top of `configureMinder` above) has already fired in this
+ * process. Same warn-once rationale as `nextjsDynamicWarningShown`. Reset via
+ * `__resetBaseUrlAliasWarning` (test-only).
+ */
+let baseUrlAliasWarningShown = false;
+
+/**
+ * Test-only: reset the `baseURL` alias warn-once flag so a fresh test can
+ * observe the warning firing again.
+ * @internal
+ */
+export function __resetBaseUrlAliasWarning(): void {
+  baseUrlAliasWarningShown = false;
 }
 
 /**
