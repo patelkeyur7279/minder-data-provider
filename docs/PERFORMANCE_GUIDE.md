@@ -1,6 +1,6 @@
 # Performance Guide
 
-Comprehensive guide to optimizing your application with Minder Data Provider v2.0.
+Comprehensive guide to optimizing your application with Minder Data Provider 2.2.0.
 
 ## Table of Contents
 

@@ -2,14 +2,26 @@
 
 > ## Correction — 2026-08-26 (`fix-2.2.0-blockers` matrix)
 > The "1 high" bullet directly below this line ("`onSync`/`onConnectivityChange` now fire for REAL
-> auto-queued failed requests") is **false** for the case that matters most: a mutation that fails
-> with a genuine, unmocked network error (real dead port) through a provider's `ApiClient` is still
-> never auto-queued at all — `onSync` has nothing to fire for, because `addToQueue()` is never
+> auto-queued failed requests") was **false** for the case that matters most: a mutation that fails
+> with a genuine, unmocked network error (real dead port) through a provider's `ApiClient` was
+> never auto-queued at all — `onSync` had nothing to fire for, because `addToQueue()` was never
 > called on that path. The unit-test evidence this bullet was based on mocked the error rather than
-> causing a real one, which is exactly how it passed CI while staying broken. Tracked as C3; full
-> root-cause + evidence trail in [SUPPORT_MATRIX.md → Offline](./SUPPORT_MATRIX.md) and
-> [docs/FEATURES.md → Offline](../FEATURES.md). This report's other findings are unaffected and this
-> note does not retract them — only the offline-auto-queue claim below.
+> causing a real one, which is exactly how it passed CI while staying broken. Tracked as C3.
+>
+> **Follow-up — Fixed (commit `5ea1915`).** The offline auto-queue now fires on genuine network
+> failures: with `offline: { enabled: true }`, a mutation through a provider's `ApiClient` that hits
+> a real dead port auto-enqueues — `getOfflineManager().getQueueSize()` goes 0→1 and the failed
+> mutation replays on reconnect. Wire-verified against a real dead port by four test cases in
+> [`tests/wire/offline-contract.mjs`](../../tests/wire/offline-contract.mjs):
+> `c3-provider-mutate-dead-port-reports-failure-and-enqueues`,
+> `c3-queued-request-replays-on-sync-against-real-server`,
+> `c3-no-offline-config-dead-port-stays-plain-network-error` (control), and
+> `c3-get-request-dead-port-is-not-auto-queued` (control). See
+> [SUPPORT_MATRIX.md → Offline](./SUPPORT_MATRIX.md) (C3 row: Fixed) and
+> [docs/FEATURES.md → Offline](../FEATURES.md), and `CHANGELOG.md`'s "Fixed — offline auto-queue on
+> real network failure" entry, for the full evidence trail. This report's other findings are
+> unaffected and this note does not retract them — only the offline-auto-queue claim below, which is
+> now resolved.
 
 > ## Update — 2026-07-20 (post-review fix program, branch `fix/mdpd-workspace-findings`)
 > A follow-up review of 18 subsequent commits found and FIXED (all parent-verified, committed
@@ -28,22 +40,25 @@
 > - Items #5 (immer removed? no — still pending) — see §7; **hook items #6 are now RESOLVED**
 >   (onCacheHit/onCacheMiss implemented; offline hooks reachable; onUpload on both paths).
 > - Gate at this state: **suite 2357 passed / 0 failed**, tsc clean, lint 0 errors, build OK,
->   Rollup treeshake guard OK. Version still `2.2.0-beta.0` (bump awaits owner approval).
+>   Rollup treeshake guard OK. Version has since been bumped to `2.2.0` and published to npm as
+>   `latest` (owner-approved).
 >
 > The sections below are the original report snapshot (branch `dev`, commit `98e1e76`) and remain
 > accurate for that baseline except where this update supersedes them.
 
 **Program:** full release-readiness + end-to-end package-consumer validation.
-**Decision: READY AFTER BLOCKERS** — code, package, and security are release-worthy (all quality
-gates green, the packed tarball installs and works in clean consumer fixtures, security clean). The
-remaining blockers are **owner-gated release actions, not code defects** (version bump, publish-workflow
-gating, unblock/push `dev`). Nothing was published, pushed, tagged, released, or deployed.
+**Status: RELEASED.** All findings below are historical (this report predates the release). The three
+blockers this report originally tracked as owner-gated (version bump, publish-workflow gating,
+unblock/push) have all since cleared: `minder-data-provider@2.2.0` is published on npm, dist-tag
+`latest` is `2.2.0`, tag `v2.2.0` is on `origin`, and a non-prerelease GitHub Release exists. See
+`CHANGELOG.md` for the released state and `RELEASING.md` for the process that was followed.
 
 - **Tested at:** branch `dev`, working tree on top of commit `98e1e76` (the release-audit fixes are a
-  local commit on top; see "Fixed defects"). **Not pushed** (`origin/dev` is behind; owner GitHub
-  secret-scanning unblock still pending per STATUS.md).
+  local commit on top; see "Fixed defects"). Historical note: at the time this report was written the
+  branch was not yet pushed pending a GitHub secret-scanning unblock; that unblock has since happened
+  and the release shipped from `main` (see `.github/BRANCH_STRATEGY.md`).
 - **Environment:** node v22.19.0 / npm 11.x on darwin-arm64; CI matrix is node [20, 22].
-- **Package:** `minder-data-provider`, in-repo version `2.2.0-beta.0`, published `latest` on npm = `2.1.4`.
+- **Package:** `minder-data-provider`, in-repo version `2.2.0`, published `latest` on npm = `2.2.0`.
 
 ---
 
@@ -133,10 +148,13 @@ tree-shaking survival is guarded by `tests/dist-entry-exports.test.ts` (now pass
 
 ## 7. Remaining blockers & owner decisions (NOT code defects)
 
-**Publish blockers (owner-gated):**
-1. **Version is now `2.2.0`** — the package carries the entire v3.0 feature set (including breaking changes, notably Redux removal) in this minor by explicit owner decision. The in-repo version has been updated to `2.2.0`. Recommended: ship as **2.2.0**, dist-tag `latest` (or `next`/`beta` for a pre-release first).
-2. **`dev` is unpushed** (owner GitHub secret-scanning unblock pending) — the audit fixes are local only;
-   publishing cannot happen until push is unblocked.
+**Publish blockers (owner-gated) — all cleared, historical:**
+1. ~~**Version is now `2.2.0`**~~ **Done.** The package shipped as `2.2.0` (carrying the entire v3.0
+   feature set, including breaking changes, notably Redux removal, in this minor by explicit owner
+   decision), dist-tag `latest`.
+2. ~~**`dev` is unpushed**~~ **Done.** The release shipped from `main` (dev→test→main per
+   `.github/BRANCH_STRATEGY.md`); the GitHub secret-scanning unblock this item was waiting on has
+   happened and CI is green on the released commit.
 
 **Release-process risks (owner decision recommended before release):**
 3. ~~**`publish.yml` auto-publishes**...~~ **Superseded (2026-08-17):** `publish.yml` has been removed.
@@ -153,7 +171,10 @@ tree-shaking survival is guarded by `tests/dist-entry-exports.test.ts` (now pass
 8. Document the `ApiError.raw` unredacted-original footgun in SECURITY docs.
 9. **150 stray `node_modules/*` files are tracked in git** (despite `.gitignore`) — `git rm -r --cached node_modules`. Does not ship (not in `files`), but repo hygiene.
 10. Stale example lockfiles (`web/e-commerce`, `nodejs/api`, `nextjs-app`) still embed pre-removal Redux peer metadata → regenerate.
-11. GitHub Wiki (README's "full documentation" link) predates recent work because `dev` is unpushed → resolves once push is unblocked.
+11. GitHub Wiki (README's "full documentation" link) is stale — not because `dev` is unpushed (it
+    shipped from `main`), but because `.github/workflows/wiki-sync.yml` only triggers on pushes to
+    `dev` under `docs/**`, and the 2.2.0 release commits all landed on `main`. See the wiki-sync
+    workflow fix for the resolution.
 
 ## Completion-criteria status
 
@@ -167,8 +188,11 @@ tree-shaking survival is guarded by `tests/dist-entry-exports.test.ts` (now pass
 | Docs/support claims match verified reality | ✅ (corrected) |
 | No unresolved high-severity/release-blocking **code** issue | ✅ (axios/dompurify fixed) |
 | Release process documented & reproducible | ✅ `release:check` green; ⚠️ CI gate divergence + publish auto-gate are owner items |
-| **Version bumped + publishable** | ✅ (2.2.0 with breaking changes by owner decision) + unblock/push `dev` |
+| **Version bumped + publishable** | ✅ 2.2.0, published (breaking changes by owner decision) |
 
-**Final recommendation: READY AFTER BLOCKERS** — ship-worthy the moment the owner (a) confirms the version is 2.2.0 (carrying breaking changes by explicit decision),
-(b) decides the publish-workflow gate, and (c) unblocks/pushes `dev`. Recommended version **2.2.0**, dist-tag
-**`latest`** (this minor deliberately carries v3.0 breaking changes). This is a recommendation only — no publish action was taken.
+**Final status: RELEASED.** All three conditions this report originally gated on — (a) version
+confirmed 2.2.0 (carrying breaking changes by explicit decision), (b) the publish-workflow gate
+decided (manual, owner-run `npm publish`; see `RELEASING.md`), and (c) unblock/push — have been
+satisfied. `minder-data-provider@2.2.0` is published to npm as dist-tag `latest`, tagged `v2.2.0` on
+`origin`, and released via a non-prerelease GitHub Release. See `CHANGELOG.md` for the released
+state; this report is preserved as the historical readiness record that preceded the release.

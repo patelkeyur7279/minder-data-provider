@@ -21,12 +21,16 @@ better identity to carry into 3.0, and is the cost worth it?" The natural forcin
 `core`/`react`/`server`/`providers/*`, with a migration guide + codemod — task **M2-03**,
 `backlog`). Any rename is cheapest if it rides that one break rather than spending a separate one.
 
-**⚠️ Network/owner to-check (blocks a final commitment, not this analysis):** npm name/scope
-availability is **[Unknown]** — verifying whether `minder-data-provider` remains ours to publish
-(it is unpublished at `2.2.0-beta.0`) and whether the **`@minder`** org scope (or alternatives like
-`@minder-dev`, `@minderjs`) is free **requires a network check and an npm account the owner
-controls.** Do not finalize B or a scoped-C without it. GitHub org/handle and domain availability
-(mindertech.in is already referenced in package.json) are in the same to-check bucket.
+**Update:** `minder-data-provider` is now **[Confirmed]** ours — the package publishes successfully
+under this exact name (`minder-data-provider@2.2.0` on npm, dist-tag `latest`), so the "remains ours
+to publish" question for Option A is resolved. The unscoped-name availability question below is
+therefore settled for A; the open network/owner to-check is narrower now.
+
+**⚠️ Network/owner to-check (blocks a final commitment on B/C, not this analysis):** whether the
+**`@minder`** org scope (or alternatives like `@minder-dev`, `@minderjs`) is free **requires a
+network check and an npm account the owner controls.** Do not finalize B or a scoped-C without it.
+GitHub org/handle and domain availability (mindertech.in is already referenced in package.json) are
+in the same to-check bucket.
 
 ---
 
@@ -37,8 +41,8 @@ controls.** Do not finalize B or a scoped-C without it. GitHub org/handle and do
   array already includes `data-provider`). **Con:** "provider" collides with React's own
   `Context.Provider` and with `react-admin`'s `dataProvider` concept — mild namespace confusion in
   search.
-- **npm availability:** *Best.* It is the current (unpublished) identity; **[to-check]** but almost
-  certainly still claimable by the owner. Zero risk of a naming land-grab surprise.
+- **npm availability:** *Best.* It is the current, **[Confirmed] published** identity
+  (`minder-data-provider@2.2.0`, dist-tag `latest`). Zero risk of a naming land-grab surprise.
 - **Migration cost:** *Zero.* No existing published users to move (near-zero adoption; the one
   documented user abandoned, 2026-06 — BRIEF.md). Nothing to codemod for the name itself.
 - **Brand clarity:** *Weakest of the three.* "data-provider" undersells the actual surface (auth,

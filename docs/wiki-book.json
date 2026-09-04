@@ -84,7 +84,6 @@
     }
   ],
   "excluded": [
-    "TEST_COVERAGE_PLAN.md",
     "_Sidebar.md",
     "product/LAUNCH_PLAN.md",
     "product/NAMING_DECISION.md",

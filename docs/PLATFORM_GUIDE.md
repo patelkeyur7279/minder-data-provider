@@ -15,14 +15,12 @@ Comprehensive guide for cross-platform development with Minder Data Provider.
 
 Minder provides platform-specific entry points to optimize bundle size.
 
-| Platform | Import Path | Size | Features Included |
-| :--- | :--- | :--- | :--- |
-| **Web** | `minder-data-provider/web` | ~200KB | Browser APIs, WebSocket, Auth |
-| **Next.js** | `minder-data-provider/nextjs` | ~200KB | SSR Utils + Web features |
-| **Native** | `minder-data-provider/native` | ~200KB | AsyncStorage, Native Utils |
-| **Electron**| `minder-data-provider/electron`| ~200KB | FileSystem, ElectronStore |
-| **Node.js** | `minder-data-provider/node` | ~150KB | Server Utils (No hooks) |
-| **Universal**| `minder-data-provider` | ~240KB | Everything |
+Bundle-size figures move with every release and are never hand-maintained here — see the
+[README "Bundle Cost" section](../README.md#bundle-cost--measured-budgeted-enforced) for
+current, reproducible numbers (`npm run measure:bundles`), and
+[`docs/product/SUPPORT_MATRIX.md`](./product/SUPPORT_MATRIX.md) for what's covered per
+platform. Run `npx minder doctor --bundle` in your own app for a number that reflects your
+bundler's real resolution.
 
 ### Usage Example
 ```typescript
@@ -60,16 +58,13 @@ const caps = PlatformCapabilityDetector.getCurrentCapabilities();
 
 ## Platform Support Matrix
 
-Current status of platform support in v2.1.
-
-| Platform | Type | Status | Features |
-| :--- | :--- | :--- | :--- |
-| **Web (React)** | SPA | ✅ Production | Full support |
-| **Next.js** | Fullstack | ✅ Production | SSR, SSG, ISR |
-| **Node.js** | Backend | ✅ Production | API Client, Scripts |
-| **Electron** | Desktop | ✅ Production | File I/O, Dialogs |
-| **React Native** | Mobile | 🟡 Beta | Offline, AsyncStore |
-| **Expo** | Mobile | 🟡 Beta | SecureStore |
+Current status of platform support as of `2.2.0`. This table used to hand-maintain its own
+status labels and went stale; the accurate, evidence-cited status per platform now lives in
+one place — [`docs/product/SUPPORT_MATRIX.md`](./product/SUPPORT_MATRIX.md) (also mirrored in
+the [README "Platform Support" table](../README.md#platform-support)). At last check, that
+includes React 19 (web), Next.js (Pages + App Router), Vite + React, React 18, Remix / React
+Router 7, Astro + React islands, React Native / Expo, Electron, Node (server), and Edge
+runtimes (Workers, Vercel Edge) — see the linked matrix for exact status labels and evidence.
 
 ---
 

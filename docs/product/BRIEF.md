@@ -14,8 +14,14 @@ in through typed adapters, secure server handlers, and validated config.
 secret-safety boundary (`src/security/secrets.ts`: non-stringifiable refs,
 `assertNoExposedSecrets` blocking secret-shaped values in client config, `redactSecrets`),
 platform adapters for 6 targets, config validation, and a hardened auth layer (fail-closed as of
-2.2.0-beta.1). **[Confirmed]** gap: no third-party provider integration (Firebase, Stripe, Supabase,
-etc.) exists in the codebase today — the provider layer is new build.
+2.2.0-beta.1). ~~**[Confirmed]** gap: no third-party provider integration (Firebase, Stripe, Supabase,
+etc.) exists in the codebase today — the provider layer is new build.~~ **Superseded — this was
+true at the time this brief was written, before the provider-platform work started.** As of `2.2.0`,
+the provider layer has shipped: 9 certified providers (Auth.js, Auth0, Clerk, Cognito, Firebase,
+Razorpay, Sentry, Stripe, Supabase), each passing the 10-point certification gate with a mock-mode
+example (`docs/providers/CATALOG.md`, `docs/product/SUPPORT_MATRIX.md`). This document otherwise
+predates that build and should be read as an early planning artifact, not current state — see
+`docs/product/STATUS.md` and `CHANGELOG.md` for what has actually shipped.
 
 ## Non-Goals
 

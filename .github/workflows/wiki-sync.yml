@@ -3,9 +3,11 @@ name: Sync Wiki
 on:
   push:
     branches:
-      - dev
+      - main
     paths:
       - 'docs/**'
+      - 'README.md'
+  workflow_dispatch: {}
 
 jobs:
   sync:
@@ -42,14 +44,20 @@ jobs:
           # generator itself fails the job (non-zero exit) if a docs/*.md file
           # is uncurated (neither listed nor excluded in wiki-book.json) or if
           # any generated link is broken — see scripts/build-wiki.mjs.
-          node scripts/build-wiki.mjs --out wiki_repo
+          # --branch must match the branch this workflow syncs FROM (main is
+          # production per .github/BRANCH_STRATEGY.md) — it feeds cross-repo
+          # blob links and the Home page's CI-status badge. Passing
+          # github.ref_name keeps it correct even if the production branch is
+          # ever renamed, and for a manual workflow_dispatch run it reflects
+          # whichever ref the run was triggered on.
+          node scripts/build-wiki.mjs --out wiki_repo --branch "${{ github.ref_name }}"
 
           echo "Committing changes..."
           cd wiki_repo
           git add .
           # Only commit if there are changes
           if ! git diff-index --quiet HEAD; then
-            git commit -m "docs: sync from dev [skip ci]"
+            git commit -m "docs: sync from ${{ github.ref_name }} [skip ci]"
             git push origin master
             echo "Wiki updated successfully."
           else

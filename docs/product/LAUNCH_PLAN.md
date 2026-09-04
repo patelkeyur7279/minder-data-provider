@@ -8,27 +8,34 @@
 
 ## 0. Version reality check (read first)
 
-The package is **unpublished** and sits at `2.2.0-beta.0` (package.json); the top CHANGELOG
-entry is `[2.2.0-beta.1] - Unreleased`. Per ROADMAP.md's version policy, **`3.0.0` is
-specifically the M2 monorepo split (`core` / `react` / `server` / `providers/*` workspaces) with
-a migration guide + codemod — "the only planned breaking release."** That split is task
-**M2-03, still `backlog`** (BACKLOG.yaml). So "3.0" is not yet buildable.
+**Update — since this plan was written, Option L1 (below) has been taken.** The package
+**published**: `minder-data-provider@2.2.0` is on npm as dist-tag `latest`, tagged `v2.2.0` on
+`origin`, with a non-prerelease GitHub Release. The top CHANGELOG entry is `[2.2.0] - 2026-08-16`,
+not a beta/Unreleased entry. That 2.2.0 release carries the entire v3.0 feature set (including
+breaking changes, notably Redux removal) by explicit owner decision — see
+`docs/product/RELEASE_READINESS.md` and `CHANGELOG.md`. The public debut described by this plan is
+therefore the 2.2.0 release, not a still-future "3.0."
 
-This forces one **[Owner]** sequencing decision the rest of the plan hangs on:
+Per ROADMAP.md's version policy, **`3.0.0` is specifically the M2 monorepo split (`core` /
+`react` / `server` / `providers/*` workspaces) with a migration guide + codemod — "the only
+planned breaking release."** That split is task **M2-03, still `backlog`** (BACKLOG.yaml), and
+remains a genuinely future, unstarted piece of work — this part of the reality check is unchanged.
 
-- **Option L1 — launch the current single-package line first.** Cut a stable `2.3.0` (or
-  `2.2.0` GA) of what already exists — 6 certified providers, zero-config `useMinder`, CLI,
-  local-first — and treat the marketing "launch" as the public debut. Ship the 3.0 monorepo
-  split later as the planned breaking release. **Lower risk; recommended.** The differentiators
-  are already in the single package; the monorepo split is an internal packaging change users
-  mostly feel through a codemod, not a reason to delay reaching them.
-- **Option L2 — hold the launch until 3.0 monorepo (M2-03) lands.** Cleaner story ("3.0, the
-  universal data layer"), but gates public debut on an unstarted, breaking, solo-maintained
-  refactor. **Higher risk; not recommended for first debut.**
+The **[Owner]** sequencing decision this plan originally hung on is now resolved:
 
-The rest of this document is written to be valid under either option; where it matters, it flags
-which. Wherever it says "3.0 launch" it means *the public debut*, which under L1 may carry a 2.x
-version number.
+- **Option L1 — launch the current single-package line first.** Cut a stable GA of what already
+  exists — 9 certified providers, zero-config `useMinder`, CLI, local-first — and treat the
+  marketing "launch" as the public debut. Ship the 3.0 monorepo split later as the planned
+  breaking release. **This is the option that was taken** (as `2.2.0`, not `2.3.0` — the version
+  number differs from the original draft, the sequencing choice does not).
+- **Option L2 — hold the launch until 3.0 monorepo (M2-03) lands.** Not taken.
+
+The rest of this document was written to be valid under either option and is largely still
+readable as-is; where it says "3.0 launch" it means *the public debut*, which — per the decision
+above — carries version `2.2.0`, not a `3.x` number. The **marketing launch** (Show HN, Reddit,
+dev.to, X — §3 below) is a separate, still-open activity from the npm publish itself; re-check §4's
+"Blockers" before treating the marketing launch as unblocked, since some of those items (e.g. the
+GitHub Wiki, StackBlitz demo, BENCHMARKS.md) were tracked independently of the publish step.
 
 ---
 
@@ -197,14 +204,13 @@ Cross-referenced to SUPPORT_MATRIX.md and BACKLOG.yaml. **[Confirmed]** = eviden
 
 ### Blockers — launch cannot happen until these clear
 
-- **[Owner] Publish + tag the package.** Currently unpublished at `2.2.0-beta.0`. Cutting a stable
-  public version and `npm publish` are owner-gated (STATUS.md spec rule). Nothing has been
-  published/released/tagged.
-- **[Owner] GitHub secret-scanning unblock click.** Pushes to `origin/dev` are blocked; ~85+ local
-  commits are waiting (STATUS.md). **No CI workflow has had a first green run on GitHub yet** — so
-  every "in CI" claim below is *locally* green, not *GitHub*-green, until this clears. This is the
-  single highest-leverage unblock: it converts the whole launch story from "passes on my machine" to
-  publicly-verifiable.
+- ~~**[Owner] Publish + tag the package.**~~ **[Confirmed] Cleared.** `minder-data-provider@2.2.0`
+  is published to npm (dist-tag `latest`), tagged `v2.2.0` on `origin`, and released via a
+  non-prerelease GitHub Release.
+- ~~**[Owner] GitHub secret-scanning unblock click.**~~ **[Confirmed] Cleared.** The release shipped
+  from `main` (dev→test→main per `.github/BRANCH_STRATEGY.md`), and CI is green on GitHub for the
+  released commit (`5ea1915`) — every "in CI" claim below is now GitHub-green, not just
+  locally-green.
 - **[Open] Decide L1 vs L2** (§0). If L2, add M2-03 (monorepo split + codemod) as a hard dependency —
   it is `backlog` and breaking.
 

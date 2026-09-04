@@ -1,5 +1,17 @@
 # Project Status — updated 2026-07-19
 
+> **RELEASE UPDATE (2026-09-04, supersedes the "CURRENT STATE" and "Open blockers" entries
+> below on the two items it names).** `minder-data-provider@2.2.0` has been **published, tagged,
+> and released**: npm dist-tag `latest` is `2.2.0`, tag `v2.2.0` is on `origin`, and a
+> non-prerelease GitHub Release exists (CHANGELOG.md `[2.2.0] - 2026-08-16`, with follow-up fix
+> commits through `5ea1915` on 2026-09-04). This resolves two items tracked below as open:
+> the **"publish/release"** owner-gated remainder in the CURRENT STATE block, and the
+> **"GitHub secret-scanning unblock click"** open blocker (§ Open blockers) — the unblock
+> happened and the release shipped from `main` (dev→test→main per
+> `.github/BRANCH_STRATEGY.md`), with CI green on GitHub for the released commit. Remaining
+> owner-gated items (OSS-01 naming, OSS-07 funding, mobile/desktop/edge on-device CI (H-05)) are
+> unaffected by this update and stay open.
+>
 > **CURRENT STATE (2026-07-19, supersedes the milestone notes below, which are historical).**
 > All 6 initial providers Certified; M0 complete; CI green on Node 20+22 (Node 18 dropped — EOL +
 > webhook WebCrypto needs Node 20+). Backlog 51/61 done. Recent work (all committed locally; **NOT
@@ -149,8 +161,9 @@ npm install churn) — use worktree isolation for overlapping-file waves in M1.
 
 ## Open blockers (owner-only)
 
-1. **GitHub secret-scanning unblock click** — pushes to origin/dev blocked until done; all work
-   continues locally. (Historic decisions SEC-01/R-01: resolved 2026-07-18 — merged to dev,
+1. ~~**GitHub secret-scanning unblock click**~~ — **Resolved (see the 2026-09-04 Release Update
+   banner at the top of this file).** The unblock happened and `minder-data-provider@2.2.0`
+   shipped from `main`. (Historic decisions SEC-01/R-01: resolved 2026-07-18 — merged to dev,
    evolve-in-place confirmed.)
 
 ## Next exact task (autonomous cycle)

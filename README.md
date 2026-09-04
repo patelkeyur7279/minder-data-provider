@@ -334,8 +334,9 @@ match what a browser downloads.
 library's own code, min+gzip, with `peerDependencies` (React, TanStack Query, …) *and*
 axios/dompurify external. A PR that regresses these fails CI:
 
-- Feature subpaths (`/crud`, `/cache`, `/websocket`, `/upload`, `/auth`): **17–23 KB** each
-- Certified providers: **5–7.5 KB** each · `/ssr` 1.4 KB · `/logger` &lt;1 KB
+- Feature subpaths (`/crud`, `/cache`, `/websocket`, `/upload`, `/auth`): **9–23 KB** each
+  (websocket 9.4 KB, crud 11.4 KB, upload 11.5 KB, auth 13.9 KB, cache 22.7 KB)
+- Certified providers: **1.6–4.9 KB** each · `/ssr` 1.46 KB · `/logger` &lt;1 KB
 
 **What you actually ship** (measured against this build's real `dist/`, min+gzip, entry
 plus every statically-imported chunk, via `npm run measure:bundles`). `measure:bundles`
@@ -348,11 +349,11 @@ bundler's real resolution:
 
 - `import { useMinder } from 'minder-data-provider/hook'` alone — no `MinderDataProvider`
   (e.g. routes registered via the global `configureMinder()`, which `useMinder` supports
-  standalone): **~48.7 KB** (`hook` row).
+  standalone): **~47.7 KB** (`hook` row).
 - `import { minder } from 'minder-data-provider/core'` (the standalone function):
-  **~53.8 KB** (`core` row).
+  **~52.8 KB** (`core` row).
 - `import { MinderDataProvider, useMinder }` from the package root (the realistic
-  full-provider import): **~84.2 KB** (`. (main)` row) — importing anything from the
+  full-provider import): **~83.3 KB** (`. (main)` row) — importing anything from the
   root pays the closure of every statically-reachable chunk on that entry, not just
   the two names you asked for. A bundler that tree-shakes named ESM imports aggressively
   (esbuild, Rollup, most modern setups) can bring the *effective* cost of importing only

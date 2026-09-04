@@ -1,7 +1,7 @@
 # Features & Capabilities (v2.2)
 
 The single authoritative reference of everything **minder-data-provider** can do as of
-`2.2.0-beta.0`. The library is a data provider for React / Next.js / React Native / Electron
+`2.2.0`. The library is a data provider for React / Next.js / React Native / Electron
 built over **TanStack Query** + **axios**, with first-class auth, caching,
 real-time, offline, file upload, a plugin/integration system, and secret-key safety.
 

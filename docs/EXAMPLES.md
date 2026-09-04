@@ -1,6 +1,6 @@
 # Examples
 
-Comprehensive examples for Minder Data Provider v2.0.
+Comprehensive examples for Minder Data Provider 2.2.0.
 
 ## Table of Contents
 
